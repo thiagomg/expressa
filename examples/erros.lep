@@ -1,0 +1,5 @@
+linhas = leia_arquivo("arquivo.txt") senao []
+
+valor = 10 / 0 senao 0
+
+item = lista[99] senao "não existe"

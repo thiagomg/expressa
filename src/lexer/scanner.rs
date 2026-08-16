@@ -147,7 +147,8 @@ impl<'src> Scanner<'src> {
 
         // String
         if ch == '"' {
-            // return self.string(line, column, start);
+            let value = self.scan_string(line, col, start)?;
+            return token!(TokenKind::String(value));
         }
 
         match ch {
@@ -307,6 +308,178 @@ impl<'src> Scanner<'src> {
             }
         }
         Ok(())
+    }
+
+    /// Scan a string literal starting at the current `"`.
+    ///
+    /// Supports escapes: `\\` `\"` `\n` `\r` `\t` `\u{...}`.
+    /// Raw newlines inside the string are allowed (spec).
+    /// Returns the unescaped contents (without surrounding quotes).
+    fn scan_string(
+        &mut self,
+        line: u32,
+        col: u32,
+        start: usize,
+    ) -> Result<String, LexError> {
+        self.remove(); // opening "
+
+        let mut value = String::new();
+
+        loop {
+            match self.peek() {
+                None => {
+                    return Err(LexError {
+                        message: "string não fechada".to_string(),
+                        span: Span {
+                            line,
+                            col,
+                            start,
+                            end: self.pos,
+                        },
+                    });
+                }
+                Some('"') => {
+                    self.remove(); // closing "
+                    break;
+                }
+                Some('\\') => {
+                    self.remove(); // backslash
+                    let esc_line = self.line;
+                    let esc_col = self.col;
+                    let esc_start = self.pos;
+
+                    let Some(esc) = self.remove() else {
+                        return Err(LexError {
+                            message: "escape incompleto no fim do arquivo".to_string(),
+                            span: Span {
+                                line,
+                                col,
+                                start,
+                                end: self.pos,
+                            },
+                        });
+                    };
+
+                    match esc {
+                        '\\' => value.push('\\'),
+                        '"' => value.push('"'),
+                        'n' => value.push('\n'),
+                        'r' => value.push('\r'),
+                        't' => value.push('\t'),
+                        'u' => {
+                            value.push(self.scan_unicode_escape(esc_line, esc_col, esc_start)?);
+                        }
+                        other => {
+                            return Err(LexError {
+                                message: format!("escape inválido: \\{other}"),
+                                span: Span {
+                                    line: esc_line,
+                                    col: esc_col,
+                                    start: esc_start,
+                                    end: self.pos,
+                                },
+                            });
+                        }
+                    }
+                }
+                Some(c) => {
+                    // Includes raw newlines (multiline strings).
+                    self.remove();
+                    value.push(c);
+                }
+            }
+        }
+
+        Ok(value)
+    }
+
+    /// Parse `\u{HEX}` after the `u` has already been consumed.
+    fn scan_unicode_escape(
+        &mut self,
+        esc_line: u32,
+        esc_col: u32,
+        esc_start: usize,
+    ) -> Result<char, LexError> {
+        if self.peek() != Some('{') {
+            return Err(LexError {
+                message: "escape \\u deve ser \\u{...}".to_string(),
+                span: Span {
+                    line: esc_line,
+                    col: esc_col,
+                    start: esc_start,
+                    end: self.pos,
+                },
+            });
+        }
+        self.remove(); // {
+
+        let hex_start = self.pos;
+        while let Some(c) = self.peek() {
+            if c == '}' {
+                break;
+            }
+            if c.is_ascii_hexdigit() {
+                self.remove();
+            } else {
+                return Err(LexError {
+                    message: "dígito hexadecimal inválido em \\u{...}".to_string(),
+                    span: Span {
+                        line: self.line,
+                        col: self.col,
+                        start: self.pos,
+                        end: self.pos + c.len_utf8(),
+                    },
+                });
+            }
+        }
+
+        if self.peek() != Some('}') {
+            return Err(LexError {
+                message: "\\u{...} não fechado".to_string(),
+                span: Span {
+                    line: esc_line,
+                    col: esc_col,
+                    start: esc_start,
+                    end: self.pos,
+                },
+            });
+        }
+
+        let hex = &self.source[hex_start..self.pos];
+        if hex.is_empty() {
+            self.remove(); // }
+            return Err(LexError {
+                message: "\\u{} vazio".to_string(),
+                span: Span {
+                    line: esc_line,
+                    col: esc_col,
+                    start: esc_start,
+                    end: self.pos,
+                },
+            });
+        }
+
+        self.remove(); // }
+
+        let code = u32::from_str_radix(hex, 16).map_err(|_| LexError {
+            message: "código Unicode inválido".to_string(),
+            span: Span {
+                line: esc_line,
+                col: esc_col,
+                start: esc_start,
+                end: self.pos,
+            },
+        })?;
+
+        char::from_u32(code).ok_or_else(|| LexError {
+            message: "código Unicode inválido".to_string(),
+            span: Span {
+                line: esc_line,
+                col: esc_col,
+                start: esc_start,
+                end: self.pos,
+            },
+        })
     }
 
     fn is_ident_start(c: char) -> bool {
@@ -619,5 +792,277 @@ repita vezes mapa importe contem verdadeiro falso se_falhar";
                 TokenKind::Eof,
             ]
         );
+    }
+
+    #[test]
+    fn string_simple() {
+        assert_eq!(
+            kinds(r#""olá""#),
+            vec![TokenKind::String("olá".into()), TokenKind::Eof]
+        );
+        assert_eq!(
+            kinds(r#""""#),
+            vec![TokenKind::String("".into()), TokenKind::Eof]
+        );
+    }
+
+    #[test]
+    fn string_escapes() {
+        assert_eq!(
+            kinds(r#""a\nb\tc\\d\"e""#),
+            vec![
+                TokenKind::String("a\nb\tc\\d\"e".into()),
+                TokenKind::Eof,
+            ]
+        );
+    }
+
+    #[test]
+    fn string_unicode_escape() {
+        // 😀 = U+1F600
+        assert_eq!(
+            kinds(r#""oi\u{1F600}""#),
+            vec![TokenKind::String("oi😀".into()), TokenKind::Eof]
+        );
+        assert_eq!(
+            kinds(r#""\u{41}""#),
+            vec![TokenKind::String("A".into()), TokenKind::Eof]
+        );
+    }
+
+    #[test]
+    fn string_multiline() {
+        let src = "\"linha1\nlinha2\"";
+        assert_eq!(
+            kinds(src),
+            vec![
+                TokenKind::String("linha1\nlinha2".into()),
+                TokenKind::Eof,
+            ]
+        );
+    }
+
+    #[test]
+    fn string_in_assignment() {
+        assert_eq!(
+            kinds(r#"nome = "Ana""#),
+            vec![
+                TokenKind::Ident("nome".into()),
+                TokenKind::Eq,
+                TokenKind::String("Ana".into()),
+                TokenKind::Eof,
+            ]
+        );
+    }
+
+    #[test]
+    fn string_unclosed_is_error() {
+        let err = tokenize(r#""sem fechar"#).expect_err("unclosed string");
+        assert!(err.message.contains("não fechada"));
+    }
+
+    #[test]
+    fn string_invalid_escape_is_error() {
+        let err = tokenize(r#""\q""#).expect_err("bad escape");
+        assert!(err.message.contains("escape inválido"));
+    }
+
+    #[test]
+    fn string_bad_unicode_escape_is_error() {
+        assert!(tokenize(r#""\u41""#).is_err());
+        assert!(tokenize(r#""\u{}"#).is_err());
+        assert!(tokenize(r#""\u{110000}"#).is_err()); // beyond Unicode scalar
+        assert!(tokenize(r#""\u{zz}"#).is_err());
+    }
+
+    #[test]
+    fn string_cr_escape() {
+        assert_eq!(
+            kinds(r#""a\rb""#),
+            vec![TokenKind::String("a\rb".into()), TokenKind::Eof]
+        );
+    }
+
+    #[test]
+    fn string_adjacent_to_punct() {
+        assert_eq!(
+            kinds(r#"escreva("oi")"#),
+            vec![
+                TokenKind::Ident("escreva".into()),
+                TokenKind::LParen,
+                TokenKind::String("oi".into()),
+                TokenKind::RParen,
+                TokenKind::Eof,
+            ]
+        );
+    }
+
+    #[test]
+    fn string_escape_at_eof_is_error() {
+        let err = tokenize("\"\\").expect_err("backslash at eof");
+        assert!(
+            err.message.contains("escape") || err.message.contains("não fechada"),
+            "unexpected message: {}",
+            err.message
+        );
+    }
+
+    #[test]
+    fn string_span_covers_quotes() {
+        let src = r#"  "hi""#;
+        let tokens = tokenize(src).unwrap();
+        let t = &tokens[0];
+        assert_eq!(t.kind, TokenKind::String("hi".into()));
+        assert_eq!(t.span.line, 1);
+        assert_eq!(t.span.col, 3);
+        assert_eq!(&src[t.span.start..t.span.end], r#""hi""#);
+    }
+
+    #[test]
+    fn numbers_integers_decimals_underscores() {
+        assert_eq!(
+            kinds("0 42 3.14 1_000 10.5"),
+            vec![
+                TokenKind::Number("0".into()),
+                TokenKind::Number("42".into()),
+                TokenKind::Number("3.14".into()),
+                TokenKind::Number("1_000".into()),
+                TokenKind::Number("10.5".into()),
+                TokenKind::Eof,
+            ]
+        );
+    }
+
+    #[test]
+    fn number_negative_is_minus_plus_number() {
+        assert_eq!(
+            kinds("-8"),
+            vec![
+                TokenKind::Minus,
+                TokenKind::Number("8".into()),
+                TokenKind::Eof,
+            ]
+        );
+    }
+
+    #[test]
+    fn line_comment_is_skipped() {
+        assert_eq!(
+            kinds("x // comentário\ny"),
+            vec![
+                TokenKind::Ident("x".into()),
+                TokenKind::Ident("y".into()),
+                TokenKind::Eof,
+            ]
+        );
+    }
+
+    #[test]
+    fn block_comment_is_skipped() {
+        assert_eq!(
+            kinds("a /* multi\nlinha */ b"),
+            vec![
+                TokenKind::Ident("a".into()),
+                TokenKind::Ident("b".into()),
+                TokenKind::Eof,
+            ]
+        );
+    }
+
+    #[test]
+    fn unclosed_block_comment_is_error() {
+        let err = tokenize("a /* sem fechar").expect_err("unclosed block comment");
+        assert!(err.message.contains("comentário"));
+    }
+
+    #[test]
+    fn delimiters() {
+        assert_eq!(
+            kinds("( ) [ ] { } ,"),
+            vec![
+                TokenKind::LParen,
+                TokenKind::RParen,
+                TokenKind::LBracket,
+                TokenKind::RBracket,
+                TokenKind::LBrace,
+                TokenKind::RBrace,
+                TokenKind::Comma,
+                TokenKind::Eof,
+            ]
+        );
+    }
+
+    #[test]
+    fn mapa_vazio_tokens() {
+        assert_eq!(
+            kinds("mapa {}"),
+            vec![
+                TokenKind::Mapa,
+                TokenKind::LBrace,
+                TokenKind::RBrace,
+                TokenKind::Eof,
+            ]
+        );
+    }
+
+    #[test]
+    fn empty_source_is_only_eof() {
+        assert_eq!(kinds(""), vec![TokenKind::Eof]);
+        assert_eq!(kinds("   \n\t  "), vec![TokenKind::Eof]);
+    }
+
+    #[test]
+    fn only_comments_is_only_eof() {
+        assert_eq!(kinds("// só comentário"), vec![TokenKind::Eof]);
+        assert_eq!(kinds("/* bloco */"), vec![TokenKind::Eof]);
+    }
+
+    #[test]
+    fn realistic_snippet() {
+        let src = r#"
+// média
+notas = [7.5, 8.0]
+nome = "Ana"
+se media >= 7
+inicio
+    escreva("ok") se_falhar falso
+fim
+"#;
+        assert_eq!(
+            kinds(src),
+            vec![
+                TokenKind::Ident("notas".into()),
+                TokenKind::Eq,
+                TokenKind::LBracket,
+                TokenKind::Number("7.5".into()),
+                TokenKind::Comma,
+                TokenKind::Number("8.0".into()),
+                TokenKind::RBracket,
+                TokenKind::Ident("nome".into()),
+                TokenKind::Eq,
+                TokenKind::String("Ana".into()),
+                TokenKind::Se,
+                TokenKind::Ident("media".into()),
+                TokenKind::GtEq,
+                TokenKind::Number("7".into()),
+                TokenKind::Inicio,
+                TokenKind::Ident("escreva".into()),
+                TokenKind::LParen,
+                TokenKind::String("ok".into()),
+                TokenKind::RParen,
+                TokenKind::SeFalhar,
+                TokenKind::Falso,
+                TokenKind::Fim,
+                TokenKind::Eof,
+            ]
+        );
+    }
+
+    #[test]
+    fn invalid_char_is_error() {
+        let err = tokenize("@").expect_err("invalid char");
+        assert!(err.message.contains("inválido"));
+        assert_eq!(err.span.line, 1);
+        assert_eq!(err.span.col, 1);
     }
 }

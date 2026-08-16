@@ -1,0 +1,23 @@
+// Calcula a média de uma lista de notas
+
+notas = [7.5, 8.0, 6.5, 9.0, 5.5]
+
+soma = 0
+para nota em notas
+inicio
+    soma = soma + nota
+fim
+
+media = soma / tamanho(notas)
+
+resultado = se media >= 7
+inicio
+    "Aprovado"
+fim
+senao
+inicio
+    "Reprovado"
+fim
+
+escreva("Média: " + media)
+escreva("Resultado: " + resultado)
