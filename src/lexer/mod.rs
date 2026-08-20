@@ -4,4 +4,4 @@ pub mod scanner;
 
 pub use span::Span;
 pub use tokens::TokenKind;
-pub use scanner::tokenize;
+pub use scanner::{tokenize, LexError, Token};

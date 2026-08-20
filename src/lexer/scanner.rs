@@ -14,10 +14,10 @@ pub struct LexError {
     pub span: Span,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Token {
-    kind: TokenKind,
-    span: Span,
+    pub kind: TokenKind,
+    pub span: Span,
 }
 
 pub fn tokenize(source: &str) -> Result<Vec<Token>, LexError> {
@@ -132,12 +132,24 @@ impl<'src> Scanner<'src> {
         }
 
         // Number (does not include leading '-')
-        if ch.is_numeric() {
+        // Do not consume `..` (range) as part of a number.
+        if ch.is_ascii_digit() {
             while let Some(c) = self.peek() {
-                if c.is_numeric() || c == '_' || c == '.' {
+                if c.is_ascii_digit() || c == '_' {
                     self.remove();
                 } else {
                     break;
+                }
+            }
+            // Optional fractional part: '.' only if followed by a digit
+            if self.peek() == Some('.') && self.skip_peek(1).is_some_and(|c| c.is_ascii_digit()) {
+                self.remove(); // .
+                while let Some(c) = self.peek() {
+                    if c.is_ascii_digit() || c == '_' {
+                        self.remove();
+                    } else {
+                        break;
+                    }
                 }
             }
             let word = &self.source[start..self.pos];
