@@ -45,36 +45,36 @@ pub enum TokenKind {
     SeFalhar,   // se_falhar   (ONE keyword, not Se + Ident)
 
     // ── Arithmetic ────────────────────────────────────────────────
-    Plus,       // +
-    Minus,      // -   (binary or unary — parser decides)
-    Star,       // *
-    Slash,      // /
-    Percent,    // %
+    Plus,    // +
+    Minus,   // -   (binary or unary — parser decides)
+    Star,    // *
+    Slash,   // /
+    Percent, // %
 
     // ── Comparison ────────────────────────────────────────────────
-    EqEq,       // ==
-    BangEq,     // !=
-    Lt,         // <
-    Gt,         // >
-    LtEq,       // <=
-    GtEq,       // >=
+    EqEq,   // ==
+    BangEq, // !=
+    Lt,     // <
+    Gt,     // >
+    LtEq,   // <=
+    GtEq,   // >=
 
     // ── Assignment & map arrow ────────────────────────────────────
-    Eq,         // =
-    Arrow,      // ->
+    Eq,    // =
+    Arrow, // ->
 
     // ── Range / access ────────────────────────────────────────────
-    DotDot,     // ..   (only used inside [i..j])
-    Dot,        // .    (module field: mat.soma)
+    DotDot, // ..   (only used inside [i..j])
+    Dot,    // .    (module field: mat.soma)
 
     // ── Delimiters ────────────────────────────────────────────────
-    LParen,     // (
-    RParen,     // )
-    LBracket,   // [
-    RBracket,   // ]
-    LBrace,     // {
-    RBrace,     // }
-    Comma,      // ,
+    LParen,   // (
+    RParen,   // )
+    LBracket, // [
+    RBracket, // ]
+    LBrace,   // {
+    RBrace,   // }
+    Comma,    // ,
 
     // ── End ───────────────────────────────────────────────────────
     Eof,

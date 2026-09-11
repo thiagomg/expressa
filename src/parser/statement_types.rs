@@ -5,10 +5,7 @@ use crate::parser::expression_types::Expr;
 #[derive(Debug, Clone, PartialEq)]
 pub enum Stmt {
     /// Expression used only for effect (e.g. escreva("Thiago") or any other call); value discarded.
-    Expr {
-        expr: Expr,
-        span: Span,
-    },
+    Expr { expr: Expr, span: Span },
 
     /// `alvo = valor`
     Assign {

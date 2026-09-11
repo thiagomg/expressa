@@ -200,7 +200,21 @@ nome[1..5]
 
 ---
 
-## 12. Arquivos
+## 12. Entrada do teclado
+
+`leia()` lê uma linha do teclado (sem a quebra de linha).  
+`leia(prompt)` imprime o texto do prompt e em seguida espera a linha.
+
+```text
+nome = leia("Qual o seu nome? ")
+escreva("Olá, " + nome)
+```
+
+Fim da entrada (Ctrl+D / Ctrl+Z) é um erro, tratável com `se_falhar`.
+
+---
+
+## 13. Arquivos
 
 ```text
 linhas = leia_arquivo("dados.txt")          // retorna lista de linhas
@@ -216,22 +230,22 @@ salve_csv("saida.csv", dados)
 
 ---
 
-## 13. Tratamento de Erros
+## 14. Tratamento de Erros
 
 - Qualquer erro causa **crash** (com valores + call stack)
-- Para tratar, usa-se `senao`
+- Para tratar, usa-se `se_falhar`
 
 ```text
-linhas = leia_arquivo("arquivo.txt") senao []
+linhas = leia_arquivo("arquivo.txt") se_falhar []
 
-valor = 10 / 0 senao 0
+valor = 10 / 0 se_falhar 0
 
-item = lista[99] senao "não existe"
+item = lista[99] se_falhar "não existe"
 ```
 
 ---
 
-## 14. Módulos / Importação
+## 15. Módulos / Importação
 
 ```text
 mat = importe "matematica"     // com namespace
@@ -243,7 +257,7 @@ soma(10, 5)
 
 ---
 
-## 15. Execução do Programa
+## 16. Execução do Programa
 
 O código executa **de cima para baixo**, linha por linha.  
 Não existe função `main` obrigatória.

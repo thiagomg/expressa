@@ -1,5 +1,5 @@
-use crate::lexer::{Span, TokenKind};
 use crate::lexer::tokens::keyword;
+use crate::lexer::{Span, TokenKind};
 
 struct Scanner<'src> {
     source: &'src str,
@@ -40,7 +40,7 @@ impl<'src> Scanner<'src> {
             source,
             pos: 0,
             line: 1,
-            col: 1
+            col: 1,
         }
     }
 
@@ -77,15 +77,17 @@ impl<'src> Scanner<'src> {
         let start = self.pos;
 
         let ch = match self.peek() {
-            None => return Ok(Token {
-                kind: TokenKind::Eof,
-                span: Span {
-                    line,
-                    col,
-                    start,
-                    end: self.pos,
-                },
-            }),
+            None => {
+                return Ok(Token {
+                    kind: TokenKind::Eof,
+                    span: Span {
+                        line,
+                        col,
+                        start,
+                        end: self.pos,
+                    },
+                });
+            }
             Some(c) => c,
         };
 
@@ -98,7 +100,7 @@ impl<'src> Scanner<'src> {
                         col,
                         start,
                         end: self.pos,
-                    }
+                    },
                 })
             };
         }
@@ -302,7 +304,7 @@ impl<'src> Scanner<'src> {
                                         col,
                                         start,
                                         end: self.pos,
-                                    }
+                                    },
                                 });
                             }
                             Some('*') if self.skip_peek(1) == Some('/') => {
@@ -327,12 +329,7 @@ impl<'src> Scanner<'src> {
     /// Supports escapes: `\\` `\"` `\n` `\r` `\t` `\u{...}`.
     /// Raw newlines inside the string are allowed (spec).
     /// Returns the unescaped contents (without surrounding quotes).
-    fn scan_string(
-        &mut self,
-        line: u32,
-        col: u32,
-        start: usize,
-    ) -> Result<String, LexError> {
+    fn scan_string(&mut self, line: u32, col: u32, start: usize) -> Result<String, LexError> {
         self.remove(); // opening "
 
         let mut value = String::new();
@@ -822,10 +819,7 @@ repita vezes mapa importe contem verdadeiro falso se_falhar";
     fn string_escapes() {
         assert_eq!(
             kinds(r#""a\nb\tc\\d\"e""#),
-            vec![
-                TokenKind::String("a\nb\tc\\d\"e".into()),
-                TokenKind::Eof,
-            ]
+            vec![TokenKind::String("a\nb\tc\\d\"e".into()), TokenKind::Eof,]
         );
     }
 
@@ -847,10 +841,7 @@ repita vezes mapa importe contem verdadeiro falso se_falhar";
         let src = "\"linha1\nlinha2\"";
         assert_eq!(
             kinds(src),
-            vec![
-                TokenKind::String("linha1\nlinha2".into()),
-                TokenKind::Eof,
-            ]
+            vec![TokenKind::String("linha1\nlinha2".into()), TokenKind::Eof,]
         );
     }
 

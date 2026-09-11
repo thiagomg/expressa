@@ -1,6 +1,6 @@
 //! Recursive-descent / Pratt parser: tokens → AST.
 
-use crate::lexer::scanner::{tokenize, Token};
+use crate::lexer::scanner::{Token, tokenize};
 use crate::lexer::{Span, TokenKind};
 use crate::parser::block_types::Block;
 use crate::parser::core_types::{Import, Item, Program};
@@ -125,10 +125,7 @@ impl Parser {
                 path,
                 span: start.join(path_tok.span),
             }),
-            _ => Err(self.err_at(
-                "esperado caminho string após 'importe'",
-                path_tok.span,
-            )),
+            _ => Err(self.err_at("esperado caminho string após 'importe'", path_tok.span)),
         }
     }
 
@@ -178,10 +175,7 @@ impl Parser {
         let start = self.remove().span; // para
         let var_tok = self.remove();
         let TokenKind::Ident(var) = var_tok.kind else {
-            return Err(self.err_at(
-                "esperado nome da variável do 'para'",
-                var_tok.span,
-            ));
+            return Err(self.err_at("esperado nome da variável do 'para'", var_tok.span));
         };
 
         match self.peek_kind() {
@@ -224,10 +218,7 @@ impl Parser {
         }
         let end = self.expect_kind(|k| matches!(k, TokenKind::Fim), "esperado 'fim'")?;
         if stmts.is_empty() {
-            return Err(self.err_at(
-                "bloco não pode ser vazio",
-                start.join(end.span),
-            ));
+            return Err(self.err_at("bloco não pode ser vazio", start.join(end.span)));
         }
         Ok(Block {
             stmts,
@@ -272,25 +263,6 @@ impl Parser {
         let mut lhs = self.parse_unary()?;
 
         loop {
-            // --- postfix (tighter than every infix) ---
-            // Attach call / index / field to the current lhs before
-            // considering `+`, `*`, etc. So `f(1)+2` is (f(1))+2.
-            match self.peek_kind() {
-                TokenKind::LParen => {
-                    lhs = self.finish_call(lhs)?;
-                    continue;
-                }
-                TokenKind::LBracket => {
-                    lhs = self.finish_index_or_slice(lhs)?;
-                    continue;
-                }
-                TokenKind::Dot => {
-                    lhs = self.finish_field(lhs)?;
-                    continue;
-                }
-                _ => {}
-            }
-
             // --- infix operator? ---
             // Returns (operator token kind, left_bp, right_bp).
             // If the next token is not an infix (e.g. `)`, `fim`, Eof), stop.
@@ -350,8 +322,9 @@ impl Parser {
 
     /// Prefix operators and the primary underneath.
     ///
-    /// Unary binds tighter than infix: `nao a e b` → `(nao a) e b`.
-    /// Recursive so `nao nao x` and `--x` work.
+    /// Call / index / field bind *tighter* than prefix, so
+    /// `nao f(x)` is `nao (f(x))` and `-xs[1]` is `-(xs[1])`.
+    /// Unary still binds tighter than infix: `nao a e b` → `(nao a) e b`.
     fn parse_unary(&mut self) -> Result<Expr, ParseError> {
         match self.peek_kind() {
             TokenKind::Minus => {
@@ -374,8 +347,22 @@ impl Parser {
                     span,
                 })
             }
-            _ => self.parse_primary(),
+            _ => self.parse_postfix(),
         }
+    }
+
+    /// `f(a)[i].campo` — postfix attaches to the primary, not to a prefix op.
+    fn parse_postfix(&mut self) -> Result<Expr, ParseError> {
+        let mut lhs = self.parse_primary()?;
+        loop {
+            match self.peek_kind() {
+                TokenKind::LParen => lhs = self.finish_call(lhs)?,
+                TokenKind::LBracket => lhs = self.finish_index_or_slice(lhs)?,
+                TokenKind::Dot => lhs = self.finish_field(lhs)?,
+                _ => break,
+            }
+        }
+        Ok(lhs)
     }
 
     fn parse_primary(&mut self) -> Result<Expr, ParseError> {
@@ -577,17 +564,17 @@ impl Parser {
         let start = self
             .expect_kind(|k| matches!(k, TokenKind::Funcao), "esperado 'funcao'")?
             .span;
-        self.expect_kind(|k| matches!(k, TokenKind::LParen), "esperado '(' após 'funcao'")?;
+        self.expect_kind(
+            |k| matches!(k, TokenKind::LParen),
+            "esperado '(' após 'funcao'",
+        )?;
 
         let mut params = Vec::new();
         if !matches!(self.peek_kind(), TokenKind::RParen) {
             loop {
                 let p = self.remove();
                 match p.kind {
-                    TokenKind::Ident(name) => params.push(Param {
-                        name,
-                        span: p.span,
-                    }),
+                    TokenKind::Ident(name) => params.push(Param { name, span: p.span }),
                     _ => {
                         return Err(self.err_at("esperado nome de parâmetro", p.span));
                     }
@@ -848,10 +835,7 @@ mod tests {
             Expr::String { value, .. } if value == "oi"
         ));
         let p = parse_ok("verdadeiro");
-        assert!(matches!(
-            expr_stmt(&p),
-            Expr::Bool { value: true, .. }
-        ));
+        assert!(matches!(expr_stmt(&p), Expr::Bool { value: true, .. }));
     }
 
     #[test]
@@ -947,6 +931,30 @@ fim
                 assert!(matches!(args[0], Expr::List { .. }));
             }
             other => panic!("{other:?}"),
+        }
+    }
+
+    #[test]
+    fn prefix_does_not_steal_postfix() {
+        match expr_stmt(&parse_ok("nao eh_par(n)")) {
+            Expr::Unary {
+                op: UnaryOp::Not,
+                expr,
+                ..
+            } => {
+                assert!(matches!(expr.as_ref(), Expr::Call { .. }));
+            }
+            other => panic!("expected nao (call), got {other:?}"),
+        }
+        match expr_stmt(&parse_ok("-xs[1]")) {
+            Expr::Unary {
+                op: UnaryOp::Neg,
+                expr,
+                ..
+            } => {
+                assert!(matches!(expr.as_ref(), Expr::Index { .. }));
+            }
+            other => panic!("expected -(index), got {other:?}"),
         }
     }
 

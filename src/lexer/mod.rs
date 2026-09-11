@@ -1,7 +1,7 @@
+pub mod scanner;
 pub mod span;
 pub mod tokens;
-pub mod scanner;
 
+pub use scanner::{LexError, Token, tokenize};
 pub use span::Span;
 pub use tokens::TokenKind;
-pub use scanner::{tokenize, LexError, Token};

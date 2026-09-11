@@ -1,5 +1,5 @@
-linhas = leia_arquivo("arquivo.txt") senao []
+linhas = leia_arquivo("arquivo.txt") se_falhar []
 
-valor = 10 / 0 senao 0
+valor = 10 / 0 se_falhar 0
 
-item = lista[99] senao "não existe"
+item = lista[99] se_falhar "não existe"
