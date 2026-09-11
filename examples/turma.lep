@@ -1,0 +1,78 @@
+// Boletim de uma turma: média, situação e os aprovados.
+
+media = funcao(notas)
+inicio
+    soma = 0
+    para n em notas
+    inicio
+        soma = soma + n
+    fim
+    soma / tamanho(notas)
+fim
+
+situacao = funcao(m)
+inicio
+    se m >= 7
+    inicio
+        "aprovado"
+    fim
+    ou se m >= 5
+    inicio
+        "recuperação"
+    fim
+    senao
+    inicio
+        "reprovado"
+    fim
+fim
+
+maximo = funcao(lista)
+inicio
+    m = primeiro(lista)
+    para x em lista
+    inicio
+        se x > m
+        inicio
+            m = x
+        fim
+    fim
+    m
+fim
+
+minimo = funcao(lista)
+inicio
+    m = primeiro(lista)
+    para x em lista
+    inicio
+        se x < m
+        inicio
+            m = x
+        fim
+    fim
+    m
+fim
+
+nomes = ["Ana", "Bruno", "Carla", "Davi"]
+notas = [8.5, 4.5, 6, 9]
+
+i = 1
+aprovados = []
+repita tamanho(nomes) vezes
+inicio
+    nome = nomes[i]
+    m = notas[i]
+    // aqui `m` já é a nota única; a média da turma vem depois
+    resultado = situacao(m)
+    escreva(nome + "  " + m + "  " + resultado)
+    se resultado == "aprovado"
+    inicio
+        aprovados = aprovados + [nome]
+    fim
+    i = i + 1
+fim
+
+escreva("---")
+escreva("média da turma: " + media(notas))
+escreva("maior nota: " + maximo(notas))
+escreva("menor nota: " + minimo(notas))
+escreva("aprovados: " + junte(aprovados, ", "))

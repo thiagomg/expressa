@@ -1,0 +1,20 @@
+// Caderno de bordo: grava, acrescenta e relê um arquivo de texto.
+
+arquivo = "saida/diario.txt"
+
+salve_arquivo(arquivo, [
+    "segunda: amassei o pão às 5h",
+    "terça: o café queimou um pouco"
+])
+
+adicione_arquivo(arquivo, ["quarta: chegou farinha nova"])
+
+linhas = leia_arquivo(arquivo)
+escreva("entradas no diário: " + tamanho(linhas))
+escreva("primeira: " + primeiro(linhas))
+escreva("última: " + ultimo(linhas))
+escreva("---")
+para linha em linhas
+inicio
+    escreva("• " + maiuscula(linha[1..1]) + linha[2..tamanho(linha)])
+fim

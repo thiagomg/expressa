@@ -947,6 +947,67 @@ mod tests {
     }
 
     #[test]
+    fn example_programs_run() {
+        let examples = [
+            (
+                "examples/tabuada.lep",
+                include_str!("../../examples/tabuada.lep"),
+            ),
+            (
+                "examples/fatorial.lep",
+                include_str!("../../examples/fatorial.lep"),
+            ),
+            (
+                "examples/filtra.lep",
+                include_str!("../../examples/filtra.lep"),
+            ),
+            (
+                "examples/receita.lep",
+                include_str!("../../examples/receita.lep"),
+            ),
+            (
+                "examples/poema.lep",
+                include_str!("../../examples/poema.lep"),
+            ),
+            (
+                "examples/turma.lep",
+                include_str!("../../examples/turma.lep"),
+            ),
+            (
+                "examples/palindromo.lep",
+                include_str!("../../examples/palindromo.lep"),
+            ),
+            (
+                "examples/ascii.lep",
+                include_str!("../../examples/ascii.lep"),
+            ),
+            (
+                "examples/caixa.lep",
+                include_str!("../../examples/caixa.lep"),
+            ),
+            (
+                "examples/diario.lep",
+                include_str!("../../examples/diario.lep"),
+            ),
+            (
+                "examples/contatos.lep",
+                include_str!("../../examples/contatos.lep"),
+            ),
+            (
+                "examples/usa_matematica.lep",
+                include_str!("../../examples/usa_matematica.lep"),
+            ),
+            (
+                "examples/closures.lep",
+                include_str!("../../examples/closures.lep"),
+            ),
+        ];
+        for (file, src) in examples {
+            run_to_string(src, file).unwrap_or_else(|e| panic!("{file} failed: {e}"));
+        }
+    }
+
+    #[test]
     fn erros_example_does_not_crash() {
         let src = include_str!("../../examples/erros.lep");
         let out = run_to_string(src, "erros.lep").unwrap();

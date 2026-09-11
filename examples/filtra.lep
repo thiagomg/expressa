@@ -1,0 +1,68 @@
+// Funções que recebem funções: filtrar, transformar e reduzir uma lista.
+
+filtra = funcao(lista, teste)
+inicio
+    saida = []
+    para item em lista
+    inicio
+        se teste(item)
+        inicio
+            saida = saida + [item]
+        fim
+    fim
+    saida
+fim
+
+transforma = funcao(lista, f)
+inicio
+    saida = []
+    para item em lista
+    inicio
+        saida = saida + [f(item)]
+    fim
+    saida
+fim
+
+reduz = funcao(lista, inicio_acc, f)
+inicio
+    acc = inicio_acc
+    para item em lista
+    inicio
+        acc = f(acc, item)
+    fim
+    acc
+fim
+
+eh_par = funcao(n)
+inicio
+    n % 2 == 0
+fim
+
+eh_impar = funcao(n)
+inicio
+    nao eh_par(n)
+fim
+
+dobra = funcao(n)
+inicio
+    n * 2
+fim
+
+soma = funcao(a, b)
+inicio
+    a + b
+fim
+
+numeros = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+
+pares = filtra(numeros, eh_par)
+impares = filtra(numeros, eh_impar)
+dobrados = transforma(pares, dobra)
+total = reduz(numeros, 0, soma)
+
+escreva("pares: " + pares)
+escreva("ímpares: " + impares)
+escreva("pares dobrados: " + dobrados)
+escreva("soma: " + total)
+escreva("primeiro par: " + primeiro(pares))
+escreva("último ímpar: " + ultimo(impares))

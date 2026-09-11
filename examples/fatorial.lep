@@ -1,0 +1,22 @@
+// Recursão: fatorial e combinações C(n, k) = n! / (k! · (n-k)!).
+
+fatorial = funcao(n)
+inicio
+    se n <= 1
+    inicio
+        1
+    fim
+    senao
+    inicio
+        n * fatorial(n - 1)
+    fim
+fim
+
+combinacoes = funcao(n, k)
+inicio
+    fatorial(n) / (fatorial(k) * fatorial(n - k))
+fim
+
+escreva("6! = " + fatorial(6))
+escreva("C(5, 2) = " + combinacoes(5, 2))
+escreva("C(10, 3) = " + combinacoes(10, 3))

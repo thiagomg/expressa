@@ -1,0 +1,20 @@
+// Oficina de texto: limpe, maiúsculas, fatias, separe/junte, contem.
+
+verso = "  O rio da minha aldeia não faz sentido  "
+verso = limpe(verso)
+
+palavras = separe(verso, " ")
+escreva("original: " + verso)
+escreva("caracteres: " + tamanho(verso))
+escreva("palavras: " + tamanho(palavras))
+escreva("primeira: " + primeiro(palavras))
+escreva("última: " + ultimo(palavras))
+escreva("título: " + maiuscula(verso))
+escreva("sussurro: " + minuscula(verso))
+escreva("início: " + verso[1..5])
+escreva("tem rio? " + (verso contem "rio"))
+escreva("tem mar? " + (verso contem "mar"))
+
+trocado = substitua(verso, "não faz sentido", "não faz sentido: é porque não o procuramos")
+escreva("Pessoa: " + trocado)
+escreva("hashtag: " + junte(palavras, "-"))

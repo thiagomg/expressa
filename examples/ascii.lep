@@ -1,0 +1,28 @@
+// Desenho em texto: um triângulo e um histograma, só com `para` e `repita`.
+
+repete = funcao(pedaco, n)
+inicio
+    s = ""
+    repita n vezes
+    inicio
+        s = s + pedaco
+    fim
+    s
+fim
+
+escreva("triângulo")
+para i de 1 ate 6
+inicio
+    escreva(repete(" ", 6 - i) + repete("*", i * 2 - 1))
+fim
+
+escreva("")
+escreva("vendas da semana")
+dias = ["seg", "ter", "qua", "qui", "sex"]
+vendas = [4, 8, 5, 11, 7]
+i = 1
+repita tamanho(dias) vezes
+inicio
+    escreva(dias[i] + " " + repete("#", vendas[i]) + " " + vendas[i])
+    i = i + 1
+fim

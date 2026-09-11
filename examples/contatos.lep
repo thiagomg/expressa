@@ -1,0 +1,45 @@
+// Agenda em CSV: salva, lê de volta e procura um nome.
+
+agenda = [
+    ["nome", "cidade", "idade"],
+    ["Ana", "Fortaleza", 25],
+    ["Bruno", "Recife", 31],
+    ["Carla", "Natal", 22]
+]
+
+salve_csv("saida/agenda.csv", agenda)
+
+dados = leia_csv("saida/agenda.csv")
+cabeca = primeiro(dados)
+
+escreva("colunas: " + junte(cabeca, " | "))
+escreva("pessoas: " + (tamanho(dados) - 1))
+
+i = 2
+repita tamanho(dados) - 1 vezes
+inicio
+    linha = dados[i]
+    nome = linha[1]
+    cidade = linha[2]
+    idade = linha[3]
+    escreva(nome + " mora em " + cidade + " (" + idade + " anos)")
+    i = i + 1
+fim
+
+escreva("---")
+procura = "Carla"
+achou = falso
+i = 2
+repita tamanho(dados) - 1 vezes
+inicio
+    se dados[i][1] == procura
+    inicio
+        achou = verdadeiro
+        escreva("encontrei " + procura + " em " + dados[i][2])
+    fim
+    i = i + 1
+fim
+se nao achou
+inicio
+    escreva(procura + " não está na agenda")
+fim

@@ -1,0 +1,42 @@
+// Escala uma receita de bolo. O mapa guarda quantidades; uma lista
+// paralela guarda a ordem das chaves (ainda não dá para percorrer um mapa).
+
+escala = funcao(qtd, porcoes, rende)
+inicio
+    qtd * porcoes / rende
+fim
+
+formata = funcao(nome, qtd, unidade)
+inicio
+    nome + ": " + qtd + " " + unidade
+fim
+
+ingredientes = ["farinha", "açúcar", "ovos", "manteiga", "leite"]
+unidades = ["g", "g", "un", "g", "ml"]
+
+base = mapa inicio
+    "farinha" -> 200
+    "açúcar" -> 150
+    "ovos" -> 3
+    "manteiga" -> 100
+    "leite" -> 120
+fim
+
+rende = 8
+quero = 12
+
+escreva("Bolo de chocolate para " + quero + " fatias (receita original: " + rende + ")")
+escreva("")
+
+i = 1
+repita tamanho(ingredientes) vezes
+inicio
+    nome = ingredientes[i]
+    unidade = unidades[i]
+    qtd = escala(base[nome], quero, rende)
+    escreva("  - " + formata(nome, qtd, unidade))
+    i = i + 1
+fim
+
+escreva("")
+escreva("Dica: " + maiuscula("pré-aqueça") + " o forno a 180 °C.")

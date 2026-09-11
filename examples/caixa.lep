@@ -1,0 +1,68 @@
+// Caixa de padaria: itens, desconto e um recibo montado com funções.
+
+preco_de = funcao(nome)
+inicio
+    se nome == "pão"
+    inicio
+        0.8
+    fim
+    ou se nome == "café"
+    inicio
+        6.5
+    fim
+    ou se nome == "bolo"
+    inicio
+        12
+    fim
+    senao
+    inicio
+        0
+    fim
+fim
+
+subtotal = funcao(itens)
+inicio
+    total = 0
+    para nome em itens
+    inicio
+        total = total + preco_de(nome)
+    fim
+    total
+fim
+
+desconto = funcao(total)
+inicio
+    se total >= 20
+    inicio
+        total * 0.1
+    fim
+    senao
+    inicio
+        0
+    fim
+fim
+
+recibo = funcao(itens)
+inicio
+    escreva("=== Padaria Expressa ===")
+    para nome em itens
+    inicio
+        escreva("  " + maiuscula(nome) + "  R$ " + preco_de(nome))
+    fim
+    bruto = subtotal(itens)
+    desc = desconto(bruto)
+    escreva("------------------------")
+    escreva("subtotal  R$ " + bruto)
+    escreva("desconto  R$ " + desc)
+    escreva("total     R$ " + (bruto - desc))
+    se desc > 0
+    inicio
+        escreva("ganhou 10% (compra acima de R$ 20)")
+    fim
+fim
+
+pedido = ["pão", "pão", "café", "bolo", "café"]
+recibo(pedido)
+escreva("itens: " + tamanho(pedido))
+escreva("primeiro: " + primeiro(pedido) + ", último: " + ultimo(pedido))
+escreva("tem bolo? " + (pedido contem "bolo"))

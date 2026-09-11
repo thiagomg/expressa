@@ -1,0 +1,48 @@
+// Um palíndromo lê igual de trás para frente (ignorando maiúsculas e espaços).
+
+inverta = funcao(texto)
+inicio
+    saida = ""
+    n = tamanho(texto)
+    para i de 1 ate n
+    inicio
+        saida = saida + texto[n - i + 1]
+    fim
+    saida
+fim
+
+so_letras = funcao(texto)
+inicio
+    limpo = ""
+    para ch em separe(minuscula(texto), "")
+    inicio
+        se nao (ch == " " ou ch == "-")
+        inicio
+            limpo = limpo + ch
+        fim
+    fim
+    limpo
+fim
+
+eh_palindromo = funcao(texto)
+inicio
+    s = so_letras(texto)
+    s == inverta(s)
+fim
+
+mostra = funcao(frase)
+inicio
+    se eh_palindromo(frase)
+    inicio
+        escreva(frase + " → sim")
+    fim
+    senao
+    inicio
+        escreva(frase + " → não  (invertido: " + inverta(so_letras(frase)) + ")")
+    fim
+fim
+
+mostra("arara")
+mostra("Ame o poema")
+mostra("Expressa")
+mostra("Socorram-me subi no onibus em Marrocos")

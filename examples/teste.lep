@@ -1,0 +1,21 @@
+l = [1, 2, 3, 4]
+n = primeiro(l)
+escreva(l)
+escreva(primeiro(l), ultimo(l))
+
+nome = "Thiago"
+escreva(maiuscula(nome))
+escreva(minuscula(nome))
+
+frase = "Ola, tudo bem"
+frase = substitua(frase, "Ola", "Olá")
+escreva(frase)
+
+escreva(separe(frase, " "))
+escreva(junte(separe(frase, " "), "-"))
+
+nome = leia("Qual o seu nome? ")
+escreva(nome)
+
+escreva("Qual o seu nome mesmo?")
+nome = leia()

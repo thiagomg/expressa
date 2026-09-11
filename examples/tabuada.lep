@@ -1,0 +1,12 @@
+// Tabuada de um número, feita com uma função de primeira classe.
+
+tabuada = funcao(n)
+inicio
+    para i de 1 ate 10
+    inicio
+        escreva(n + " x " + i + " = " + (n * i))
+    fim
+fim
+
+escreva("Tabuada do 7")
+tabuada(7)
