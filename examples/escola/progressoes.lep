@@ -1,0 +1,51 @@
+// Progressão aritmética (PA) e geométrica (PG).
+// PA: a_n = a1 + (n−1)·r     S_n = n · (a1 + a_n) / 2
+// PG: a_n = a1 · q^(n−1)     S_n = a1 · (q^n − 1) / (q − 1)
+//
+// Altere os dados e rode: cargo run -- examples/progressoes.lep
+
+potencia = funcao(base, exp)
+inicio
+    r = 1
+    repita exp vezes
+    inicio
+        r = r * base
+    fim
+    r
+fim
+
+// PA: 3, 5, 7, 9, ...
+a1_pa = 3
+razao_pa = 2
+n_pa = 10
+
+an_pa = a1_pa + (n_pa - 1) * razao_pa
+soma_pa = n_pa * (a1_pa + an_pa) / 2
+
+escreva("PA  a1=" + a1_pa + "  r=" + razao_pa + "  n=" + n_pa)
+escreva("  10º termo: " + an_pa)
+escreva("  soma dos 10 termos: " + soma_pa)
+escreva("  sequência:")
+para i de 1 ate n_pa
+inicio
+    escreva("    a" + i + " = " + (a1_pa + (i - 1) * razao_pa))
+fim
+
+escreva("---")
+
+// PG: 2, 6, 18, 54, ...
+a1_pg = 2
+q = 3
+n_pg = 6
+
+an_pg = a1_pg * potencia(q, n_pg - 1)
+soma_pg = a1_pg * (potencia(q, n_pg) - 1) / (q - 1)
+
+escreva("PG  a1=" + a1_pg + "  q=" + q + "  n=" + n_pg)
+escreva("  6º termo: " + an_pg)
+escreva("  soma dos 6 termos: " + soma_pg)
+escreva("  sequência:")
+para i de 1 ate n_pg
+inicio
+    escreva("    a" + i + " = " + (a1_pg * potencia(q, i - 1)))
+fim

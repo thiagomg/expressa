@@ -1,0 +1,36 @@
+// MDC (algoritmo de Euclides) e MMC.
+// mdc(a, b) = mdc(b, a mod b)     mmc(a, b) = a · b / mdc(a, b)
+//
+// Altere a e b e rode: cargo run -- examples/mdc_mmc.lep
+
+a = 48
+b = 18
+
+mdc = funcao(x, y)
+inicio
+    se y == 0
+    inicio
+        x
+    fim
+    senao
+    inicio
+        mdc(y, x % y)
+    fim
+fim
+
+mmc = funcao(x, y)
+inicio
+    x * y / mdc(x, y)
+fim
+
+escreva("a = " + a + "   b = " + b)
+escreva("mdc(" + a + ", " + b + ") = " + mdc(a, b))
+escreva("mmc(" + a + ", " + b + ") = " + mmc(a, b))
+escreva("checagem: mdc · mmc = " + (mdc(a, b) * mmc(a, b)) + "  (vale a · b = " + (a * b) + ")")
+
+escreva("---")
+escreva("frações: simplificar 42/56")
+num = 42
+den = 56
+d = mdc(num, den)
+escreva(num + "/" + den + " = " + (num / d) + "/" + (den / d))

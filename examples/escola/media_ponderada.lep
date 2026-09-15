@@ -1,0 +1,55 @@
+// Média ponderada — o cálculo do boletim com pesos.
+// M = (n1·p1 + n2·p2 + …) / (p1 + p2 + …)
+//
+// Altere notas e pesos e rode: cargo run -- examples/media_ponderada.lep
+
+atividades = ["prova 1", "prova 2", "trabalho", "participação"]
+notas = [6, 9, 8, 7]
+pesos = [3, 3, 2, 2]
+
+media_ponderada = funcao(notas, pesos)
+inicio
+    soma_np = 0
+    soma_p = 0
+    k = 1
+    repita tamanho(notas) vezes
+    inicio
+        soma_np = soma_np + notas[k] * pesos[k]
+        soma_p = soma_p + pesos[k]
+        k = k + 1
+    fim
+    soma_np / soma_p
+fim
+
+situacao = funcao(m)
+inicio
+    se m >= 7
+    inicio
+        "aprovado"
+    fim
+    ou se m >= 5
+    inicio
+        "recuperação"
+    fim
+    senao
+    inicio
+        "reprovado"
+    fim
+fim
+
+escreva("boletim")
+i = 1
+repita tamanho(atividades) vezes
+inicio
+    escreva("  " + atividades[i] + ": " + notas[i] + "  (peso " + pesos[i] + ")")
+    i = i + 1
+fim
+
+m = media_ponderada(notas, pesos)
+escreva("---")
+escreva("média ponderada: " + m)
+escreva("situação: " + situacao(m))
+se m < 7
+inicio
+    escreva("para média 7, faltou: " + (7 - m))
+fim

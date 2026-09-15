@@ -18,6 +18,7 @@ Caminhos de arquivo **relativos** são resolvidos a partir da pasta do `.lep` em
 |--------|--------|
 | [`escreva`](#escreva) | Imprime valores na saída |
 | [`leia`](#leia) | Lê uma linha do teclado |
+| [`raiz`](#raiz) | Raiz quadrada |
 | [`tamanho`](#tamanho) | Quantidade de itens ou caracteres |
 | [`primeiro`](#primeiro) | Primeiro elemento de uma lista |
 | [`ultimo`](#ultimo) | Último elemento de uma lista |
@@ -80,6 +81,25 @@ linha = leia() se_falhar ""
 ```
 
 No modo `expressa debug`, a entrada do programa e os comandos do depurador compartilham o mesmo teclado.
+
+---
+
+## Matemática
+
+### `raiz`
+
+```text
+raiz(numero) -> numero
+```
+
+Raiz quadrada. `raiz(9)` vale `3`, `raiz(0)` vale `0`.
+
+**Erros:** o argumento não é número; o número é negativo (`"raiz de número negativo"`). Use `se_falhar` se o valor puder ser negativo.
+
+```text
+escreva(raiz(9 + 16))            // 5
+x = raiz(delta) se_falhar 0
+```
 
 ---
 

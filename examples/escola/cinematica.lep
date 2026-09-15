@@ -1,0 +1,32 @@
+// Cinemática (MRU e MRUV).
+// MRU:  s = s0 + v · t
+// MRUV: v = v0 + a · t
+//       s = s0 + v0 · t + a · t² / 2
+//
+// Altere os dados e rode: cargo run -- examples/cinematica.lep
+
+// Carro parte do repouso com aceleração constante.
+s0 = 0
+v0 = 0
+a = 2
+t = 8
+
+v = v0 + a * t
+s = s0 + v0 * t + a * t * t / 2
+
+escreva("MRUV  v0=" + v0 + " m/s  a=" + a + " m/s²  t=" + t + " s")
+escreva("velocidade final: " + v + " m/s")
+escreva("espaço percorrido: " + s + " m")
+escreva("---")
+
+// Depois segue em MRU com a velocidade que atingiu.
+t_mru = 5
+s_mru = s + v * t_mru
+escreva("em seguida, " + t_mru + " s em MRU a " + v + " m/s")
+escreva("posição final: " + s_mru + " m")
+escreva("---")
+
+// Tempo para atingir 20 m/s: t = (v − v0) / a
+v_alvo = 20
+t_alvo = (v_alvo - v0) / a
+escreva("tempo para chegar a " + v_alvo + " m/s: " + t_alvo + " s")

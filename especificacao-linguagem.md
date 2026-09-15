@@ -65,7 +65,8 @@ fim
 
 **Aritméticos:** `+` `-` `*` `/` `%`  
 **Comparação:** `==` `!=` `>` `<` `>=` `<=`  
-**Lógicos:** `e` `ou` `nao`
+**Lógicos:** `e` `ou` `nao`  
+**Raiz quadrada (nativa):** `raiz(n)` — erro se `n < 0` (tratável com `se_falhar`)
 
 ```text
 10 + 5

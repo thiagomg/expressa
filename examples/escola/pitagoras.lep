@@ -1,0 +1,30 @@
+// Teorema de Pitágoras e distância entre dois pontos no plano.
+// a² + b² = c²     d = √((x2−x1)² + (y2−y1)²)
+//
+// Altere os dados e rode: cargo run -- examples/escola/pitagoras.lep
+
+// Triângulo retângulo: catetos 3 e 4 → hipotenusa 5
+cateto_a = 3
+cateto_b = 4
+hipotenusa = raiz(cateto_a * cateto_a + cateto_b * cateto_b)
+
+escreva("catetos " + cateto_a + " e " + cateto_b)
+escreva("hipotenusa = " + hipotenusa)
+
+// Um cateto, conhecida a hipotenusa
+c = 13
+a = 5
+b = raiz(c * c - a * a)
+escreva("hipotenusa " + c + ", cateto " + a + " → outro cateto = " + b)
+escreva("---")
+
+// Distância entre A(1, 2) e B(4, 6) → 5
+x1 = 1
+y1 = 2
+x2 = 4
+y2 = 6
+dx = x2 - x1
+dy = y2 - y1
+dist = raiz(dx * dx + dy * dy)
+escreva("A(" + x1 + ", " + y1 + ")  B(" + x2 + ", " + y2 + ")")
+escreva("distância AB = " + dist)

@@ -18,6 +18,7 @@ impl Vm<'_> {
         match name {
             "escreva" => self.bi_escreva(args, span),
             "leia" => self.bi_leia(args, span),
+            "raiz" => self.bi_raiz(args, span),
             "tamanho" => self.bi_tamanho(args, span),
             "primeiro" => self.bi_primeiro(args, span),
             "ultimo" => self.bi_ultimo(args, span),
@@ -77,6 +78,15 @@ impl Vm<'_> {
             }
         }
         Ok(Value::Texto(line))
+    }
+
+    fn bi_raiz(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
+        self.expect_arity(args, 1, span)?;
+        let n = self.expect_numero(&args[0], span)?;
+        if n < 0.0 {
+            return Err(self.err("raiz de número negativo", span));
+        }
+        Ok(Value::Numero(n.sqrt()))
     }
 
     fn bi_tamanho(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
@@ -280,6 +290,7 @@ impl Vm<'_> {
 pub(crate) const BUILTINS: &[&str] = &[
     "escreva",
     "leia",
+    "raiz",
     "tamanho",
     "primeiro",
     "ultimo",
@@ -363,7 +374,19 @@ mod tests {
     fn builtins_are_registered() {
         assert!(BUILTINS.contains(&"escreva"));
         assert!(BUILTINS.contains(&"leia"));
-        assert_eq!(BUILTINS.len(), 16);
+        assert!(BUILTINS.contains(&"raiz"));
+        assert_eq!(BUILTINS.len(), 17);
+    }
+
+    #[test]
+    #[test]
+    fn raiz_quadrada() {
+        assert_eq!(run(r#"escreva(raiz(0))"#), "0\n");
+        assert_eq!(run(r#"escreva(raiz(9))"#), "3\n");
+        assert_eq!(run(r#"escreva(raiz(2.25))"#), "1.5\n");
+        assert_eq!(run(r#"escreva(raiz(-1) se_falhar 0)"#), "0\n");
+        assert!(run_err("raiz(-4)").contains("raiz de número negativo"));
+        assert!(run_err(r#"raiz("9")"#).contains("esperado numero"));
     }
 
     #[test]

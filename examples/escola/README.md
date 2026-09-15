@@ -32,4 +32,26 @@ cargo run -- examples/saudacao.lep
 | `lib/matematica.lep` | biblioteca (`soma`, `media`, `potencia`, …) |
 | `usa_matematica.lep` | `importe` com e sem namespace |
 
+### Ensino médio — coloque os dados no topo e rode
+
+Substitutos de conta no caderno: mude as constantes e execute de novo.
+
+| Arquivo | Matéria |
+|---------|---------|
+| `bhaskara.lep` | equação do 2º grau (Δ e raízes) |
+| `juros.lep` | juros simples e compostos |
+| `regra_de_tres.lep` | porcentagem, regra de três direta e inversa |
+| `progressoes.lep` | PA e PG (termo geral e soma) |
+| `estatistica.lep` | média, mediana, moda, amplitude |
+| `pitagoras.lep` | Pitágoras e distância entre pontos |
+| `geometria.lep` | áreas e volumes |
+| `mdc_mmc.lep` | MDC (Euclides), MMC, simplificar fração |
+| `media_ponderada.lep` | boletim com pesos |
+| `cinematica.lep` | MRU e MRUV |
+| `fatorial.lep` | arranjos / C(n, k) |
+| `tabuada.lep` | tabuada |
+| `turma.lep` | notas e situação |
+
+A raiz quadrada é a função nativa `raiz(n)`. Não há `π` nativo: `geometria.lep` define `pi` no começo.
+
 `diario.lep` e `contatos.lep` gravam em `examples/saida/` (pasta ignorada pelo git).

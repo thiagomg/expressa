@@ -1,0 +1,42 @@
+// Áreas e volumes do ensino médio.
+// Altere as medidas e rode: cargo run -- examples/geometria.lep
+
+pi = 3.1415926535
+
+area_retangulo = funcao(base, altura)
+inicio
+    base * altura
+fim
+
+area_triangulo = funcao(base, altura)
+inicio
+    base * altura / 2
+fim
+
+area_circulo = funcao(raio)
+inicio
+    pi * raio * raio
+fim
+
+area_trapezio = funcao(base_maior, base_menor, altura)
+inicio
+    (base_maior + base_menor) * altura / 2
+fim
+
+volume_cubo = funcao(lado)
+inicio
+    lado * lado * lado
+fim
+
+volume_cilindro = funcao(raio, altura)
+inicio
+    pi * raio * raio * altura
+fim
+
+escreva("retângulo 5×3: área = " + area_retangulo(5, 3))
+escreva("triângulo base 6 altura 4: área = " + area_triangulo(6, 4))
+escreva("círculo raio 2: área = " + area_circulo(2))
+escreva("trapézio 8, 4, h=3: área = " + area_trapezio(8, 4, 3))
+escreva("cubo lado 3: volume = " + volume_cubo(3))
+escreva("cilindro r=2 h=5: volume = " + volume_cilindro(2, 5))
+escreva("circunferência raio 2: 2πr = " + (2 * pi * 2))

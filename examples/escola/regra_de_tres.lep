@@ -1,0 +1,37 @@
+// Porcentagem e regra de três (direta e inversa).
+// Direta:  a está para b assim como c está para x  →  x = c · b / a
+// Inversa: quanto mais de um, menos do outro      →  x = a · b / c
+//
+// Altere os dados e rode: cargo run -- examples/regra_de_tres.lep
+
+// --- Porcentagem ---
+preco = 250
+porcento = 15
+
+parte = preco * porcento / 100
+com_aumento = preco + parte
+com_desconto = preco - parte
+
+escreva(porcento + "% de R$ " + preco + " = R$ " + parte)
+escreva("preço com " + porcento + "% de aumento: R$ " + com_aumento)
+escreva("preço com " + porcento + "% de desconto: R$ " + com_desconto)
+escreva("---")
+
+// --- Regra de três direta ---
+// 5 cadernos custam R$ 40. Quanto custam 8?
+cadernos_a = 5
+preco_a = 40
+cadernos_b = 8
+preco_b = cadernos_b * preco_a / cadernos_a
+escreva(cadernos_a + " cadernos → R$ " + preco_a)
+escreva(cadernos_b + " cadernos → R$ " + preco_b)
+escreva("---")
+
+// --- Regra de três inversa ---
+// 4 pedreiros constroem um muro em 10 dias. 8 pedreiros levam quantos dias?
+pedreiros_a = 4
+dias_a = 10
+pedreiros_b = 8
+dias_b = pedreiros_a * dias_a / pedreiros_b
+escreva(pedreiros_a + " pedreiros → " + dias_a + " dias")
+escreva(pedreiros_b + " pedreiros → " + dias_b + " dias")

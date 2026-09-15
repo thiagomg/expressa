@@ -1001,6 +1001,46 @@ mod tests {
                 "examples/closures.lep",
                 include_str!("../../examples/closures.lep"),
             ),
+            (
+                "examples/escola/bhaskara.lep",
+                include_str!("../../examples/escola/bhaskara.lep"),
+            ),
+            (
+                "examples/escola/juros.lep",
+                include_str!("../../examples/escola/juros.lep"),
+            ),
+            (
+                "examples/escola/regra_de_tres.lep",
+                include_str!("../../examples/escola/regra_de_tres.lep"),
+            ),
+            (
+                "examples/escola/progressoes.lep",
+                include_str!("../../examples/escola/progressoes.lep"),
+            ),
+            (
+                "examples/escola/estatistica.lep",
+                include_str!("../../examples/escola/estatistica.lep"),
+            ),
+            (
+                "examples/escola/pitagoras.lep",
+                include_str!("../../examples/escola/pitagoras.lep"),
+            ),
+            (
+                "examples/escola/geometria.lep",
+                include_str!("../../examples/escola/geometria.lep"),
+            ),
+            (
+                "examples/escola/mdc_mmc.lep",
+                include_str!("../../examples/escola/mdc_mmc.lep"),
+            ),
+            (
+                "examples/escola/media_ponderada.lep",
+                include_str!("../../examples/escola/media_ponderada.lep"),
+            ),
+            (
+                "examples/escola/cinematica.lep",
+                include_str!("../../examples/escola/cinematica.lep"),
+            ),
         ];
         for (file, src) in examples {
             run_to_string(src, file).unwrap_or_else(|e| panic!("{file} failed: {e}"));

@@ -1,0 +1,35 @@
+// Juros simples e compostos.
+// Simples:   M = C · (1 + i · t)
+// Compostos: M = C · (1 + i)^t
+//
+// C = capital, i = taxa (0.02 = 2%), t = número de períodos.
+// Altere os dados e rode: cargo run -- examples/juros.lep
+
+capital = 1000
+taxa = 0.02
+periodos = 6
+
+potencia = funcao(base, exp)
+inicio
+    r = 1
+    repita exp vezes
+    inicio
+        r = r * base
+    fim
+    r
+fim
+
+simples = capital * (1 + taxa * periodos)
+compostos = capital * potencia(1 + taxa, periodos)
+
+escreva("capital inicial: R$ " + capital)
+escreva("taxa: " + (taxa * 100) + "% ao período")
+escreva("períodos: " + periodos)
+escreva("---")
+escreva("juros simples")
+escreva("  montante: R$ " + simples)
+escreva("  juros:    R$ " + (simples - capital))
+escreva("juros compostos")
+escreva("  montante: R$ " + compostos)
+escreva("  juros:    R$ " + (compostos - capital))
+escreva("diferença (compostos − simples): R$ " + (compostos - simples))

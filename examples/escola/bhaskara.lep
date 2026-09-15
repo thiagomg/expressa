@@ -1,0 +1,50 @@
+// Equação do 2º grau: a·x² + b·x + c = 0
+// Fórmula de Bhaskara: x = (-b ± √Δ) / (2a),  Δ = b² - 4ac
+//
+// Altere a, b e c e rode: cargo run -- examples/escola/bhaskara.lep
+
+a = 1
+b = -5
+c = 6
+// raízes esperadas: 2 e 3
+
+absoluto = funcao(n)
+inicio
+    se n < 0
+    inicio
+        -n
+    fim
+    senao
+    inicio
+        n
+    fim
+fim
+
+escreva("equação: " + a + "x² + (" + b + ")x + (" + c + ") = 0")
+
+se a == 0
+inicio
+    escreva("não é do 2º grau (a = 0)")
+fim
+senao
+inicio
+    delta = b * b - 4 * a * c
+    escreva("Δ = " + delta)
+    se delta < 0
+    inicio
+        escreva("sem raízes reais")
+    fim
+    ou se absoluto(delta) < 0.0000001
+    inicio
+        x = -b / (2 * a)
+        escreva("raiz dupla: x = " + x)
+    fim
+    senao
+    inicio
+        r = raiz(delta)
+        x1 = (-b + r) / (2 * a)
+        x2 = (-b - r) / (2 * a)
+        escreva("x1 = " + x1)
+        escreva("x2 = " + x2)
+    fim
+fim
