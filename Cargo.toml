@@ -1,6 +1,26 @@
-[package]
-name = "expressa"
+[workspace]
+resolver = "3"
+members = [".", "aula/proto", "aula/server", "aula/ui"]
+
+[workspace.package]
 version = "0.1.0"
 edition = "2024"
+license = "MIT"
+authors = ["Thiago Massari Guedes"]
+
+[workspace.dependencies]
+expressa = { path = "." }
+expressa-aula-proto = { path = "aula/proto" }
+tonic = "0.13"
+prost = "0.13"
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "net", "signal"] }
+tokio-stream = "0.1"
+tonic-build = "0.13"
+prost-types = "0.13"
+
+[package]
+name = "expressa"
+version.workspace = true
+edition.workspace = true
 
 [dependencies]

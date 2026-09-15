@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<language id="expressa" _name="Expressa" version="2.0" _section="Source">
+  <metadata>
+    <property name="mimetypes">text/x-expressa</property>
+    <property name="globs">*.lep</property>
+    <property name="line-comment-start">//</property>
+    <property name="block-comment-start">/*</property>
+    <property name="block-comment-end">*/</property>
+  </metadata>
+  <styles>
+    <style id="comment" _name="Comment" map-to="def:comment"/>
+    <style id="string" _name="String" map-to="def:string"/>
+    <style id="escape" _name="Escape" map-to="def:special-char"/>
+    <style id="keyword" _name="Keyword" map-to="def:keyword"/>
+    <style id="boolean" _name="Boolean" map-to="def:boolean"/>
+    <style id="number" _name="Number" map-to="def:decimal"/>
+    <style id="builtin" _name="Built-in" map-to="def:function"/>
+  </styles>
+  <definitions>
+    <context id="line-comment" style-ref="comment" end-at-line-end="true">
+      <start>//</start>
+    </context>
+    <context id="block-comment" style-ref="comment">
+      <start>/\*</start>
+      <end>\*/</end>
+    </context>
+    <context id="string" style-ref="string">
+      <start>"</start>
+      <end>"</end>
+      <include>
+        <context id="escape" style-ref="escape">
+          <match>\\["\\nrt]</match>
+        </context>
+      </include>
+    </context>
+    <context id="number" style-ref="number">
+      <match>\b[0-9][0-9_]*(\.[0-9_]+)?\b</match>
+    </context>
+    <context id="boolean" style-ref="boolean">
+      <prefix>\b</prefix>
+      <suffix>\b</suffix>
+      <keyword>verdadeiro</keyword>
+      <keyword>falso</keyword>
+    </context>
+    <context id="keyword" style-ref="keyword">
+      <prefix>\b</prefix>
+      <suffix>\b</suffix>
+      <keyword>se_falhar</keyword>
+      <keyword>se</keyword>
+      <keyword>senao</keyword>
+      <keyword>ou</keyword>
+      <keyword>e</keyword>
+      <keyword>nao</keyword>
+      <keyword>inicio</keyword>
+      <keyword>fim</keyword>
+      <keyword>funcao</keyword>
+      <keyword>para</keyword>
+      <keyword>de</keyword>
+      <keyword>ate</keyword>
+      <keyword>em</keyword>
+      <keyword>repita</keyword>
+      <keyword>vezes</keyword>
+      <keyword>mapa</keyword>
+      <keyword>importe</keyword>
+      <keyword>contem</keyword>
+    </context>
+    <context id="builtin" style-ref="builtin">
+      <prefix>\b</prefix>
+      <suffix>\b</suffix>
+      <keyword>escreva</keyword>
+      <keyword>leia</keyword>
+      <keyword>raiz</keyword>
+      <keyword>tamanho</keyword>
+      <keyword>primeiro</keyword>
+      <keyword>ultimo</keyword>
+      <keyword>maiuscula</keyword>
+      <keyword>minuscula</keyword>
+      <keyword>substitua</keyword>
+      <keyword>separe</keyword>
+      <keyword>junte</keyword>
+      <keyword>limpe</keyword>
+      <keyword>leia_arquivo</keyword>
+      <keyword>salve_arquivo</keyword>
+      <keyword>adicione_arquivo</keyword>
+      <keyword>leia_csv</keyword>
+      <keyword>salve_csv</keyword>
+    </context>
+    <context id="expressa" class="no-spell-check">
+      <include>
+        <context ref="line-comment"/>
+        <context ref="block-comment"/>
+        <context ref="string"/>
+        <context ref="number"/>
+        <context ref="boolean"/>
+        <context ref="keyword"/>
+        <context ref="builtin"/>
+      </include>
+    </context>
+  </definitions>
+</language>

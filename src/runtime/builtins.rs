@@ -58,9 +58,18 @@ impl Vm<'_> {
                 span,
             ));
         }
-        if let Some(prompt) = args.first() {
-            let texto = self.expect_texto(prompt, span)?;
-            write!(self.out, "{texto}").map_err(|e| self.io_err(e, span))?;
+        let prompt = match args.first() {
+            Some(v) => self.expect_texto(v, span)?,
+            None => String::new(),
+        };
+        if let Some(host) = self.leia_host.as_mut() {
+            return host
+                .ask(&prompt)
+                .map(Value::Texto)
+                .map_err(|e| self.err(e, span));
+        }
+        if !prompt.is_empty() {
+            write!(self.out, "{prompt}").map_err(|e| self.io_err(e, span))?;
             self.out.flush().map_err(|e| self.io_err(e, span))?;
         }
         let mut line = String::new();
@@ -177,7 +186,7 @@ impl Vm<'_> {
 
     fn bi_leia_arquivo(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
         self.expect_arity(args, 1, span)?;
-        let path = self.resolve_data_path(&self.expect_texto(&args[0], span)?);
+        let path = self.resolve_data_path(&self.expect_texto(&args[0], span)?, span)?;
         let contents = fs::read_to_string(&path).map_err(|e| {
             self.err(
                 format!("não foi possível ler '{}': {e}", path.display()),
@@ -193,7 +202,7 @@ impl Vm<'_> {
 
     fn bi_salve_arquivo(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
         self.expect_arity(args, 2, span)?;
-        let path = self.resolve_data_path(&self.expect_texto(&args[0], span)?);
+        let path = self.resolve_data_path(&self.expect_texto(&args[0], span)?, span)?;
         let linhas = self.expect_lista(&args[1], span)?;
         let body = lines_to_text(&linhas.borrow(), span, self)?;
         self.ensure_parent_dir(&path, span)?;
@@ -208,7 +217,7 @@ impl Vm<'_> {
 
     fn bi_adicione_arquivo(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
         self.expect_arity(args, 2, span)?;
-        let path = self.resolve_data_path(&self.expect_texto(&args[0], span)?);
+        let path = self.resolve_data_path(&self.expect_texto(&args[0], span)?, span)?;
         let linhas = self.expect_lista(&args[1], span)?;
         let extra = lines_to_text(&linhas.borrow(), span, self)?;
         self.ensure_parent_dir(&path, span)?;
@@ -229,7 +238,7 @@ impl Vm<'_> {
 
     fn bi_leia_csv(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
         self.expect_arity(args, 1, span)?;
-        let path = self.resolve_data_path(&self.expect_texto(&args[0], span)?);
+        let path = self.resolve_data_path(&self.expect_texto(&args[0], span)?, span)?;
         let contents = fs::read_to_string(&path).map_err(|e| {
             self.err(
                 format!("não foi possível ler '{}': {e}", path.display()),
@@ -251,7 +260,7 @@ impl Vm<'_> {
 
     fn bi_salve_csv(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
         self.expect_arity(args, 2, span)?;
-        let path = self.resolve_data_path(&self.expect_texto(&args[0], span)?);
+        let path = self.resolve_data_path(&self.expect_texto(&args[0], span)?, span)?;
         let rows = self.expect_lista(&args[1], span)?;
         let mut out = String::new();
         for row in rows.borrow().iter() {
@@ -270,13 +279,18 @@ impl Vm<'_> {
         Ok(Value::Nada)
     }
 
-    pub(crate) fn resolve_data_path(&self, path: &str) -> std::path::PathBuf {
+    pub(crate) fn resolve_data_path(
+        &self,
+        path: &str,
+        span: Span,
+    ) -> Result<std::path::PathBuf, EvalError> {
         let p = Path::new(path);
-        if p.is_absolute() {
+        let joined = if p.is_absolute() {
             p.to_path_buf()
         } else {
             self.base_dir.join(p)
-        }
+        };
+        self.confine(joined, span)
     }
 
     fn ensure_parent_dir(&self, path: &Path, span: Span) -> Result<(), EvalError> {
@@ -378,7 +392,6 @@ mod tests {
         assert_eq!(BUILTINS.len(), 17);
     }
 
-    #[test]
     #[test]
     fn raiz_quadrada() {
         assert_eq!(run(r#"escreva(raiz(0))"#), "0\n");

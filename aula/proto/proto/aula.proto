@@ -1,0 +1,87 @@
+syntax = "proto3";
+
+package expressa.aula;
+
+// Student files under {root}/{student}/. Identity is a folder name, not a UUID.
+
+service Turma {
+  rpc ListFiles(ListFilesRequest) returns (ListFilesResponse);
+  rpc ReadFile(ReadFileRequest) returns (ReadFileResponse);
+  rpc WriteFile(WriteFileRequest) returns (WriteFileResponse);
+  rpc DeleteFile(DeleteFileRequest) returns (DeleteFileResponse);
+}
+
+service Runner {
+  // Interactive: first client message is `start`, later messages are
+  // replies to `leia`. Server sends stdout, leia prompts, then finished.
+  rpc Exec(stream ExecIn) returns (stream ExecOut);
+}
+
+message ListFilesRequest {
+  string student = 1;
+}
+
+message TreeEntry {
+  // Path relative to the student folder, e.g. "lib" or "lib/mat.lep".
+  string path = 1;
+  bool is_dir = 2;
+}
+
+message ListFilesResponse {
+  repeated TreeEntry entries = 1;
+}
+
+message ReadFileRequest {
+  string student = 1;
+  string path = 2;
+}
+
+message ReadFileResponse {
+  string source = 1;
+}
+
+message WriteFileRequest {
+  string student = 1;
+  string path = 2;
+  string source = 3;
+}
+
+message WriteFileResponse {}
+
+message DeleteFileRequest {
+  string student = 1;
+  string path = 2;
+}
+
+message DeleteFileResponse {}
+
+message RunRequest {
+  string student = 1;
+  string path = 2;
+  // If empty, the file is read from disk.
+  string source = 3;
+}
+
+message ExecIn {
+  oneof payload {
+    RunRequest start = 1;
+    string line = 2;
+  }
+}
+
+message ExecOut {
+  oneof payload {
+    string stdout = 1;
+    // Same text as CLI `<<<EXPRESSA-LEIA>>>{prompt}` — the prompt only.
+    string leia_prompt = 2;
+    ExecFinished finished = 3;
+  }
+}
+
+message ExecFinished {
+  bool ok = 1;
+  string error_message = 2;
+  string error_file = 3;
+  uint32 error_line = 4;
+  uint32 error_col = 5;
+}

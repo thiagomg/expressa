@@ -3,11 +3,16 @@ mod debug;
 mod env;
 mod error;
 mod eval;
+mod leia;
 mod value;
 
 pub use debug::{CliDebugger, DebugAction, DebugCtx, DebugHook, NoopHook};
 pub use error::{CallFrame, RuntimeError};
-pub use eval::{debug_source, run_source, run_to_string};
+pub use eval::{
+    debug_source, run_source, run_source_marcador, run_to_string, run_to_string_with,
+    run_with_leia_host,
+};
+pub use leia::{LEIA_MARKER, LeiaHost};
 pub use value::Value;
 
 #[cfg(test)]

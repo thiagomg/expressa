@@ -23,6 +23,8 @@ pub type RefCellEnv = std::cell::RefCell<Env>;
 pub enum DebugAction {
     Continue,
     Quit,
+    /// Stop the program as a runtime error (used for time limits).
+    Timeout,
 }
 
 pub trait DebugHook {

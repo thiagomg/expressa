@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<style-scheme id="expressa-aula" _name="Expressa Aula" version="1.0">
+  <author>Expressa</author>
+  <_description>Cores claras para o editor da aula</_description>
+  <style name="text"                       background="#fcfcfc" foreground="#3d3846"/>
+  <style name="current-line"               background="#f6f5f4"/>
+  <style name="line-numbers"               background="#fcfcfc" foreground="#9a9996"/>
+  <style name="bracket-match"              foreground="#0e8420" bold="true"/>
+  <style name="def:comment"                foreground="#762572" italic="true"/>
+  <style name="def:string"                 foreground="#c47a00"/>
+  <style name="def:special-char"           foreground="#c7162b"/>
+  <style name="def:keyword"                foreground="#0e8420" bold="true"/>
+  <style name="def:boolean"                foreground="#5e2750"/>
+  <style name="def:decimal"                foreground="#007aa6"/>
+  <style name="def:number"                 foreground="#007aa6"/>
+  <style name="def:function"               foreground="#77216f" bold="true"/>
+</style-scheme>

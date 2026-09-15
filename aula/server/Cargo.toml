@@ -1,0 +1,13 @@
+[package]
+name = "expressa-aula-server"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+[dependencies]
+expressa = { workspace = true }
+expressa-aula-proto = { workspace = true }
+tonic = { workspace = true }
+tokio = { workspace = true }
+tokio-stream = { workspace = true }
+prost = { workspace = true }

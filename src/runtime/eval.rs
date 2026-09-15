@@ -3,6 +3,7 @@ use std::collections::{HashMap, HashSet};
 use std::io::{self, BufRead, Write};
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
+use std::time::{Duration, Instant};
 
 use crate::lexer::Span;
 use crate::parser::{
@@ -13,6 +14,7 @@ use super::builtins::BUILTINS;
 use super::debug::{DebugAction, DebugCtx, DebugHook, NoopHook};
 use super::env::{AssignError, Env, FrameKind};
 use super::error::{CallFrame, EvalError, RuntimeError};
+use super::leia::LeiaHost;
 use super::value::{Closure, MapKey, Value, format_numero, parse_numero};
 
 /// Source of lines for `leia()`. Implemented for any [`BufRead`] (tests)
@@ -47,12 +49,46 @@ pub(crate) struct Vm<'a> {
     builtins: Rc<RefCell<Env>>,
     loading: HashSet<PathBuf>,
     modules: HashMap<PathBuf, Rc<RefCell<Env>>>,
+    /// If set, file I/O and `importe` must stay under this directory.
+    workspace_root: Option<PathBuf>,
+    deadline: Option<Instant>,
+    pub(crate) leia_host: Option<&'a mut dyn LeiaHost>,
 }
 
 pub fn run_source(source: &str, file: &str) -> Result<(), RuntimeError> {
     let mut input = ConsoleInput;
     let mut stdout = io::stdout();
-    run_with(source, file, Box::new(NoopHook), &mut input, &mut stdout)
+    run_with(
+        source,
+        file,
+        Box::new(NoopHook),
+        &mut input,
+        &mut stdout,
+        None,
+        None,
+        None,
+    )
+}
+
+/// Run like [`run_source`], but each `leia()` writes [`super::leia::LEIA_MARKER`]
+/// plus the prompt on stderr so an IDE can detect it.
+pub fn run_source_marcador(source: &str, file: &str) -> Result<(), RuntimeError> {
+    let stdin = io::stdin();
+    let mut host = super::leia::MarkerLeiaHost {
+        stdin: stdin.lock(),
+    };
+    let mut dummy_in = io::Cursor::new("");
+    let mut stdout = io::stdout();
+    run_with(
+        source,
+        file,
+        Box::new(NoopHook),
+        &mut dummy_in,
+        &mut stdout,
+        None,
+        None,
+        Some(&mut host),
+    )
 }
 
 pub fn debug_source(source: &str, file: &str) -> Result<(), RuntimeError> {
@@ -64,22 +100,70 @@ pub fn debug_source(source: &str, file: &str) -> Result<(), RuntimeError> {
         Box::new(super::debug::CliDebugger::new()),
         &mut input,
         &mut stdout,
+        None,
+        None,
+        None,
     )
 }
 
 pub fn run_to_string(source: &str, file: &str) -> Result<String, RuntimeError> {
-    let mut input = io::Cursor::new("");
+    run_to_string_with(source, file, "", None, None)
+}
+
+/// Run a program capturing stdout. `stdin` feeds `leia()`. When
+/// `workspace_root` is set, `leia_arquivo` / `importe` cannot leave that folder.
+pub fn run_to_string_with(
+    source: &str,
+    file: &str,
+    stdin: &str,
+    workspace_root: Option<PathBuf>,
+    time_limit: Option<Duration>,
+) -> Result<String, RuntimeError> {
+    let mut input = io::Cursor::new(stdin.to_string());
     let mut out = Vec::new();
-    run_with(source, file, Box::new(NoopHook), &mut input, &mut out)?;
+    run_with(
+        source,
+        file,
+        Box::new(NoopHook),
+        &mut input,
+        &mut out,
+        workspace_root,
+        time_limit,
+        None,
+    )?;
     Ok(String::from_utf8_lossy(&out).into_owned())
 }
 
-fn run_with(
+pub fn run_with_leia_host(
+    source: &str,
+    file: &str,
+    workspace_root: Option<PathBuf>,
+    time_limit: Option<Duration>,
+    out: &mut dyn Write,
+    leia_host: &mut dyn LeiaHost,
+) -> Result<(), RuntimeError> {
+    let mut dummy_in = io::Cursor::new("");
+    run_with(
+        source,
+        file,
+        Box::new(NoopHook),
+        &mut dummy_in,
+        out,
+        workspace_root,
+        time_limit,
+        Some(leia_host),
+    )
+}
+
+pub(crate) fn run_with<'a>(
     source: &str,
     file: &str,
     hook: Box<dyn DebugHook>,
-    input: &mut dyn LineInput,
-    out: &mut dyn Write,
+    input: &'a mut dyn LineInput,
+    out: &'a mut dyn Write,
+    workspace_root: Option<PathBuf>,
+    time_limit: Option<Duration>,
+    leia_host: Option<&'a mut dyn LeiaHost>,
 ) -> Result<(), RuntimeError> {
     let program = parse(source).map_err(|e| RuntimeError {
         message: format!("sintaxe: {}", e.message),
@@ -87,7 +171,16 @@ fn run_with(
         span: e.span,
         stack: vec![],
     })?;
-    let mut vm = Vm::new(file, source, hook, input, out);
+    let mut vm = Vm::new(
+        file,
+        source,
+        hook,
+        input,
+        out,
+        workspace_root,
+        time_limit,
+        leia_host,
+    );
     match vm.run(&program) {
         Ok(()) => Ok(()),
         Err(EvalError::Quit) => Ok(()),
@@ -102,11 +195,15 @@ impl<'a> Vm<'a> {
         hook: Box<dyn DebugHook>,
         input: &'a mut dyn LineInput,
         out: &'a mut dyn Write,
+        workspace_root: Option<PathBuf>,
+        time_limit: Option<Duration>,
+        leia_host: Option<&'a mut dyn LeiaHost>,
     ) -> Self {
         let builtins = Env::new(FrameKind::Builtins, None);
         for name in BUILTINS {
             builtins.borrow_mut().define(*name, Value::Builtin(name));
         }
+        let workspace_root = workspace_root.map(|p| lexical_normalize(&p));
         Self {
             out,
             input,
@@ -118,6 +215,9 @@ impl<'a> Vm<'a> {
             builtins,
             loading: HashSet::new(),
             modules: HashMap::new(),
+            workspace_root,
+            deadline: time_limit.map(|d| Instant::now() + d),
+            leia_host,
         }
     }
 
@@ -153,7 +253,7 @@ impl<'a> Vm<'a> {
     }
 
     fn eval_import(&mut self, import: &Import, env: &Rc<RefCell<Env>>) -> Result<(), EvalError> {
-        let path = self.resolve_import_path(&import.path);
+        let path = self.resolve_import_path(&import.path, import.span)?;
         let key = std::fs::canonicalize(&path).unwrap_or_else(|_| path.clone());
 
         if self.loading.contains(&key) {
@@ -218,16 +318,31 @@ impl<'a> Vm<'a> {
         Ok(())
     }
 
-    fn resolve_import_path(&self, spec: &str) -> PathBuf {
+    fn resolve_import_path(&self, spec: &str, span: Span) -> Result<PathBuf, EvalError> {
         let mut p = PathBuf::from(spec);
         if p.extension().is_none() {
             p.set_extension("lep");
         }
-        if p.is_relative() {
+        let joined = if p.is_relative() {
             self.base_dir.join(p)
         } else {
             p
+        };
+        self.confine(joined, span)
+    }
+
+    pub(crate) fn confine(&self, path: PathBuf, span: Span) -> Result<PathBuf, EvalError> {
+        let Some(root) = &self.workspace_root else {
+            return Ok(path);
+        };
+        let full = lexical_normalize(&path);
+        if !full.starts_with(root) {
+            return Err(self.err(
+                format!("caminho fora da pasta do aluno: {}", full.display()),
+                span,
+            ));
         }
+        Ok(full)
     }
 
     fn eval_stmt(&mut self, stmt: &Stmt, env: &Rc<RefCell<Env>>) -> Result<Value, EvalError> {
@@ -781,6 +896,11 @@ impl<'a> Vm<'a> {
     }
 
     fn pause(&mut self, span: Span, env: &Rc<RefCell<Env>>) -> Result<(), EvalError> {
+        if let Some(deadline) = self.deadline {
+            if Instant::now() >= deadline {
+                return Err(self.err("tempo esgotado", span));
+            }
+        }
         let file = self.file.clone();
         let source = self.source.clone();
         let stack = self.stack.clone();
@@ -793,6 +913,7 @@ impl<'a> Vm<'a> {
         }) {
             DebugAction::Continue => Ok(()),
             DebugAction::Quit => Err(EvalError::Quit),
+            DebugAction::Timeout => Err(self.err("tempo esgotado", span)),
         }
     }
 
@@ -881,6 +1002,23 @@ impl<'a> Vm<'a> {
     }
 }
 
+fn lexical_normalize(path: &Path) -> PathBuf {
+    use std::path::Component;
+    let mut out = PathBuf::new();
+    for c in path.components() {
+        match c {
+            Component::Prefix(p) => out.push(p.as_os_str()),
+            Component::RootDir => out.push(Component::RootDir),
+            Component::CurDir => {}
+            Component::ParentDir => {
+                out.pop();
+            }
+            Component::Normal(s) => out.push(s),
+        }
+    }
+    out
+}
+
 fn base_dir_of(file: &str) -> PathBuf {
     let path = Path::new(file);
     match path.parent() {
@@ -927,8 +1065,17 @@ mod tests {
     fn run_in(src: &str, input: &str) -> String {
         let mut input = io::Cursor::new(input.to_string());
         let mut out = Vec::new();
-        run_with(src, "teste.lep", Box::new(NoopHook), &mut input, &mut out)
-            .unwrap_or_else(|e| panic!("run failed: {e}"));
+        run_with(
+            src,
+            "teste.lep",
+            Box::new(NoopHook),
+            &mut input,
+            &mut out,
+            None,
+            None,
+            None,
+        )
+        .unwrap_or_else(|e| panic!("run failed: {e}"));
         String::from_utf8_lossy(&out).into_owned()
     }
 
@@ -1371,6 +1518,63 @@ boom()
     }
 
     #[test]
+    fn time_limit_stops_a_long_loop() {
+        let src = r#"
+repita 1000000 vezes
+inicio
+    x = 1
+fim
+"#;
+        let err = run_to_string_with(src, "t.lep", "", None, Some(Duration::from_millis(30)))
+            .expect_err("should time out");
+        assert!(err.message.contains("tempo esgotado"), "{err}");
+    }
+
+    #[test]
+    fn workspace_root_blocks_path_escape() {
+        let dir = std::env::temp_dir().join("expressa-ws-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let src = r#"leia_arquivo("../secret.txt")"#;
+        let file = dir.join("main.lep");
+        let err = run_to_string_with(src, file.to_str().unwrap(), "", Some(dir.clone()), None)
+            .expect_err("should block escape");
+        assert!(err.message.contains("fora da pasta"), "{err}");
+    }
+
+    #[test]
+    fn leia_host_receives_prompt() {
+        struct Capture {
+            prompt: String,
+            reply: String,
+        }
+        impl LeiaHost for Capture {
+            fn ask(&mut self, prompt: &str) -> Result<String, String> {
+                self.prompt = prompt.to_string();
+                Ok(self.reply.clone())
+            }
+        }
+        let mut host = Capture {
+            prompt: String::new(),
+            reply: "Ana".into(),
+        };
+        let mut input = io::Cursor::new("");
+        let mut out = Vec::new();
+        run_with(
+            r#"escreva(leia("Seu nome:"))"#,
+            "t.lep",
+            Box::new(NoopHook),
+            &mut input,
+            &mut out,
+            None,
+            None,
+            Some(&mut host),
+        )
+        .unwrap();
+        assert_eq!(host.prompt, "Seu nome:");
+        assert_eq!(String::from_utf8(out).unwrap(), "Ana\n");
+    }
+
+    #[test]
     fn debugger_hook_sees_statements() {
         use std::cell::Cell;
 
@@ -1392,6 +1596,9 @@ boom()
             Box::new(Shared(Rc::clone(&n))),
             &mut input,
             &mut buf,
+            None,
+            None,
+            None,
         )
         .unwrap();
         assert_eq!(n.get(), 3);

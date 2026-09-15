@@ -1,0 +1,14 @@
+[package]
+name = "expressa-aula"
+version.workspace = true
+edition.workspace = true
+publish = false
+description = "Editor GTK da Expressa Aula (cliente do servidor)"
+
+[dependencies]
+expressa-aula-proto = { workspace = true }
+tonic = { workspace = true }
+tokio = { workspace = true }
+tokio-stream = { workspace = true }
+gtk = { version = "0.9", package = "gtk4", features = ["v4_6"] }
+sourceview5 = { version = "0.9", features = ["v5_4"] }
