@@ -43,6 +43,14 @@ impl Value {
         Value::Mapa(Rc::new(RefCell::new(entries)))
     }
 
+    /// How the REPL prints a value (`"texto"` quoted; `escreva` stays unquoted).
+    pub fn repl_format(&self) -> String {
+        match self {
+            Value::Texto(s) => format!("\"{}\"", escape_texto(s)),
+            other => other.to_string(),
+        }
+    }
+
     pub fn type_name(&self) -> &'static str {
         match self {
             Value::Nada => "nada",

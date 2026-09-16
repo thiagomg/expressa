@@ -4,6 +4,7 @@ mod env;
 mod error;
 mod eval;
 mod leia;
+mod repl;
 mod value;
 
 pub use debug::{CliDebugger, DebugAction, DebugCtx, DebugHook, NoopHook};
@@ -13,6 +14,7 @@ pub use eval::{
     run_with_leia_host,
 };
 pub use leia::{LEIA_MARKER, LeiaHost};
+pub use repl::run_repl;
 pub use value::Value;
 
 #[cfg(test)]

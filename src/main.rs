@@ -2,7 +2,7 @@ use std::env::args;
 use std::process;
 
 use expressa::parser::parse;
-use expressa::runtime::{debug_source, run_source, run_source_marcador};
+use expressa::runtime::{debug_source, run_repl, run_source, run_source_marcador};
 
 fn main() {
     if let Err(e) = try_main() {
@@ -14,8 +14,13 @@ fn main() {
 fn try_main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = args().skip(1).collect();
     if args.is_empty() {
+        run_repl()?;
+        return Ok(());
+    }
+    if args[0] == "--help" || args[0] == "-h" {
         eprintln!(
             "Uso:\n  \
+             expressa                         REPL\n  \
              expressa <arquivo.lep>\n  \
              expressa debug <arquivo.lep>\n  \
              expressa --ast <arquivo.lep>\n  \

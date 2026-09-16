@@ -189,7 +189,7 @@ pub(crate) fn run_with<'a>(
 }
 
 impl<'a> Vm<'a> {
-    fn new(
+    pub(crate) fn new(
         file: &str,
         source: &str,
         hook: Box<dyn DebugHook>,
@@ -243,13 +243,54 @@ impl<'a> Vm<'a> {
     }
 
     fn eval_item(&mut self, item: &Item, env: &Rc<RefCell<Env>>) -> Result<(), EvalError> {
+        self.eval_item_value(item, env).map(|_| ())
+    }
+
+    fn eval_item_value(&mut self, item: &Item, env: &Rc<RefCell<Env>>) -> Result<Value, EvalError> {
         match item {
-            Item::Import(import) => self.eval_import(import, env),
+            Item::Import(import) => {
+                self.eval_import(import, env)?;
+                Ok(Value::Nada)
+            }
             Item::Stmt(stmt) => {
-                self.eval_stmt(stmt, env)?;
-                Ok(())
+                let v = self.eval_stmt(stmt, env)?;
+                if matches!(stmt, Stmt::Expr { .. }) {
+                    Ok(v)
+                } else {
+                    Ok(Value::Nada)
+                }
             }
         }
+    }
+
+    pub(crate) fn eval_items_value(
+        &mut self,
+        items: &[Item],
+        env: &Rc<RefCell<Env>>,
+    ) -> Result<Value, EvalError> {
+        let mut last = Value::Nada;
+        for item in items {
+            last = self.eval_item_value(item, env)?;
+        }
+        Ok(last)
+    }
+
+    pub(crate) fn builtins_env(&self) -> Rc<RefCell<Env>> {
+        Rc::clone(&self.builtins)
+    }
+
+    pub(crate) fn set_source(&mut self, file: &str, source: &str) {
+        self.file = file.to_string();
+        self.source = source.to_string();
+        self.base_dir = base_dir_of(file);
+    }
+
+    pub(crate) fn enter_repl(&mut self) {
+        self.stack.push(CallFrame {
+            name: "<repl>".into(),
+            file: "<repl>".into(),
+            span: Span::default(),
+        });
     }
 
     fn eval_import(&mut self, import: &Import, env: &Rc<RefCell<Env>>) -> Result<(), EvalError> {

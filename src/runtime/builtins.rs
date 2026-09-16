@@ -321,6 +321,122 @@ pub(crate) const BUILTINS: &[&str] = &[
     "salve_csv",
 ];
 
+pub(crate) struct BuiltinDoc {
+    pub name: &'static str,
+    pub sig: &'static str,
+    pub summary: &'static str,
+    pub example: &'static str,
+}
+
+pub(crate) const BUILTIN_DOCS: &[BuiltinDoc] = &[
+    BuiltinDoc {
+        name: "escreva",
+        sig: "escreva(valor, ...)",
+        summary: "Imprime os argumentos separados por espaço e quebra a linha.",
+        example: r#"escreva("Olá", 10)"#,
+    },
+    BuiltinDoc {
+        name: "leia",
+        sig: "leia()  ou  leia(prompt)",
+        summary: "Lê uma linha do teclado (sem o Enter). Prompt opcional.",
+        example: r#"nome = leia("Seu nome:")"#,
+    },
+    BuiltinDoc {
+        name: "raiz",
+        sig: "raiz(numero) -> numero",
+        summary: "Raiz quadrada. Erro se o número for negativo (use se_falhar).",
+        example: "raiz(9)    // 3",
+    },
+    BuiltinDoc {
+        name: "tamanho",
+        sig: "tamanho(texto|lista|mapa) -> numero",
+        summary: "Quantidade de caracteres, itens ou pares.",
+        example: r#"tamanho("olá")    // 3"#,
+    },
+    BuiltinDoc {
+        name: "primeiro",
+        sig: "primeiro(lista) -> valor",
+        summary: "Primeiro elemento da lista (índice 1). Erro se vazia.",
+        example: "primeiro([10, 20])    // 10",
+    },
+    BuiltinDoc {
+        name: "ultimo",
+        sig: "ultimo(lista) -> valor",
+        summary: "Último elemento da lista. Erro se vazia.",
+        example: "ultimo([10, 20])    // 20",
+    },
+    BuiltinDoc {
+        name: "maiuscula",
+        sig: "maiuscula(texto) -> texto",
+        summary: "Copia o texto em letras maiúsculas.",
+        example: r#"maiuscula("olá")    // "OLÁ""#,
+    },
+    BuiltinDoc {
+        name: "minuscula",
+        sig: "minuscula(texto) -> texto",
+        summary: "Copia o texto em letras minúsculas.",
+        example: r#"minuscula("Olá")    // "olá""#,
+    },
+    BuiltinDoc {
+        name: "substitua",
+        sig: "substitua(texto, antigo, novo) -> texto",
+        summary: "Troca todas as ocorrências de antigo por novo.",
+        example: r#"substitua("aa", "a", "b")    // "bb""#,
+    },
+    BuiltinDoc {
+        name: "separe",
+        sig: "separe(texto, separador) -> lista",
+        summary: "Parte o texto. Separador \"\" gera um item por caractere.",
+        example: r#"separe("a,b", ",")    // ["a", "b"]"#,
+    },
+    BuiltinDoc {
+        name: "junte",
+        sig: "junte(lista, separador) -> texto",
+        summary: "Junta os itens da lista com o separador no meio.",
+        example: r#"junte(["a", "b"], "-")    // "a-b""#,
+    },
+    BuiltinDoc {
+        name: "limpe",
+        sig: "limpe(texto) -> texto",
+        summary: "Remove espaços do começo e do fim.",
+        example: r#"limpe("  x  ")    // "x""#,
+    },
+    BuiltinDoc {
+        name: "leia_arquivo",
+        sig: "leia_arquivo(caminho) -> lista",
+        summary: "Lê o arquivo; cada linha vira um texto (sem \\n).",
+        example: r#"leia_arquivo("dados.txt") se_falhar []"#,
+    },
+    BuiltinDoc {
+        name: "salve_arquivo",
+        sig: "salve_arquivo(caminho, linhas)",
+        summary: "Grava a lista de textos, substituindo o arquivo.",
+        example: r#"salve_arquivo("saida.txt", ["a", "b"])"#,
+    },
+    BuiltinDoc {
+        name: "adicione_arquivo",
+        sig: "adicione_arquivo(caminho, linhas)",
+        summary: "Acrescenta linhas no fim do arquivo (cria se não existir).",
+        example: r#"adicione_arquivo("saida.txt", ["c"])"#,
+    },
+    BuiltinDoc {
+        name: "leia_csv",
+        sig: "leia_csv(caminho) -> lista",
+        summary: "Lê CSV simples (vírgula, sem aspas). Lista de listas de textos.",
+        example: r#"leia_csv("notas.csv")"#,
+    },
+    BuiltinDoc {
+        name: "salve_csv",
+        sig: "salve_csv(caminho, dados)",
+        summary: "Grava uma lista de listas como CSV.",
+        example: r#"salve_csv("saida.csv", [["Ana", 25]])"#,
+    },
+];
+
+pub(crate) fn lookup_builtin_doc(name: &str) -> Option<&'static BuiltinDoc> {
+    BUILTIN_DOCS.iter().find(|d| d.name == name)
+}
+
 fn value_as_texto(v: &Value) -> String {
     match v {
         Value::Texto(s) => s.clone(),
@@ -354,7 +470,7 @@ mod tests {
     use std::path::{Path, PathBuf};
     use std::time::{SystemTime, UNIX_EPOCH};
 
-    use super::BUILTINS;
+    use super::{BUILTIN_DOCS, BUILTINS, lookup_builtin_doc};
     use crate::runtime::run_to_string;
 
     fn run(src: &str) -> String {
@@ -390,6 +506,13 @@ mod tests {
         assert!(BUILTINS.contains(&"leia"));
         assert!(BUILTINS.contains(&"raiz"));
         assert_eq!(BUILTINS.len(), 17);
+        assert_eq!(BUILTIN_DOCS.len(), BUILTINS.len());
+        for name in BUILTINS {
+            assert!(
+                lookup_builtin_doc(name).is_some(),
+                "falta ajuda para {name}"
+            );
+        }
     }
 
     #[test]
