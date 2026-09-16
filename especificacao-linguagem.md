@@ -12,7 +12,7 @@ Extensao de arquivos: .lep
 yyy1
 
 Linguagem orientada a iniciantes, com palavras em **português brasileiro**, sintaxe simples e consistente.  
-Todo bloco (`inicio`/`fim`) é uma expressão e retorna o valor da última expressão.
+Todo bloco (`inicio`/`fim` ou `{`/`}`) é uma expressão e retorna o valor da última expressão. As duas formas são equivalentes; o par de abertura deve combinar com o de fechamento (`inicio` com `fim`, `{` com `}`).
 
 ---
 
@@ -32,7 +32,7 @@ Tipos compostos: **lista** e **mapa**.
 
 - Declaração: apenas `nome = valor`
 - Reatribuição permitida
-- Escopo de bloco: variáveis criadas dentro de `inicio...fim` só existem dentro dele
+- Escopo de bloco: variáveis criadas dentro de `inicio...fim` (ou `{...}`) só existem dentro dele
 - Funções podem **ler** variáveis de fora, mas **não podem modificá-las**
 
 ```text
@@ -83,13 +83,15 @@ resultado = inicio
     10 + 5
 fim
 // resultado = 15
+
+resultado = { 10 + 5 }    // igual
 ```
 
 ---
 
 ## 6. Condicionais
 
-Cada ramo tem seu próprio `inicio`/`fim`.
+Cada ramo tem seu próprio bloco (`inicio`/`fim` ou `{`/`}`).
 
 ```text
 se nota >= 7

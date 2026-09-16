@@ -1307,6 +1307,16 @@ escreva(x)
     }
 
     #[test]
+    fn brace_blocks_run() {
+        assert_eq!(run("f = funcao(n) { n * 2 }\nescreva(f(21))"), "42\n");
+        assert_eq!(
+            run(r#"escreva(se 2 > 1 { "sim" } senao { "nao" })"#),
+            "sim\n"
+        );
+        assert_eq!(run("m = mapa { \"a\" -> 1 }\nescreva(m[\"a\"])"), "1\n");
+    }
+
+    #[test]
     fn function_call_and_closure_read() {
         let src = r#"
 x = 10

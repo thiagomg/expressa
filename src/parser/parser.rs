@@ -209,20 +209,40 @@ impl Parser {
     }
 
     fn parse_block(&mut self) -> Result<Block, ParseError> {
-        let start = self
-            .expect_kind(|k| matches!(k, TokenKind::Inicio), "esperado 'inicio'")?
-            .span;
+        let open = self.remove();
+        let brace = match open.kind {
+            TokenKind::Inicio => false,
+            TokenKind::LBrace => true,
+            _ => {
+                return Err(self.err_at("esperado 'inicio' ou '{'", open.span));
+            }
+        };
         let mut stmts = Vec::new();
-        while !matches!(self.peek_kind(), TokenKind::Fim | TokenKind::Eof) {
-            stmts.push(self.parse_stmt()?);
+        loop {
+            match self.peek_kind() {
+                TokenKind::Eof => break,
+                TokenKind::Fim if !brace => break,
+                TokenKind::RBrace if brace => break,
+                TokenKind::Fim if brace => {
+                    return Err(self.err("esperado '}' (bloco aberto com '{')"));
+                }
+                TokenKind::RBrace if !brace => {
+                    return Err(self.err("esperado 'fim' (bloco aberto com 'inicio')"));
+                }
+                _ => stmts.push(self.parse_stmt()?),
+            }
         }
-        let end = self.expect_kind(|k| matches!(k, TokenKind::Fim), "esperado 'fim'")?;
+        let end = if brace {
+            self.expect_kind(|k| matches!(k, TokenKind::RBrace), "esperado '}'")?
+        } else {
+            self.expect_kind(|k| matches!(k, TokenKind::Fim), "esperado 'fim'")?
+        };
         if stmts.is_empty() {
-            return Err(self.err_at("bloco não pode ser vazio", start.join(end.span)));
+            return Err(self.err_at("bloco não pode ser vazio", open.span.join(end.span)));
         }
         Ok(Block {
             stmts,
-            span: start.join(end.span),
+            span: open.span.join(end.span),
         })
     }
 
@@ -394,8 +414,7 @@ impl Parser {
                 Ok(expr)
             }
             TokenKind::LBracket => self.finish_list(tok.span),
-            TokenKind::Inicio => {
-                // Put back conceptually: we already bumped Inicio — parse block body manually.
+            TokenKind::Inicio | TokenKind::LBrace => {
                 self.pos -= 1;
                 let block = self.parse_block()?;
                 Ok(Expr::Block(block))
@@ -600,44 +619,57 @@ impl Parser {
             .expect_kind(|k| matches!(k, TokenKind::Mapa), "esperado 'mapa'")?
             .span;
 
-        // `mapa {}`
-        if matches!(self.peek_kind(), TokenKind::LBrace) {
-            self.remove();
-            let end = self.expect_kind(
-                |k| matches!(k, TokenKind::RBrace),
-                "esperado '}' em mapa vazio",
-            )?;
+        let brace = match self.peek_kind() {
+            TokenKind::LBrace => true,
+            TokenKind::Inicio => false,
+            _ => {
+                return Err(self.err("esperado 'inicio' ou '{' após 'mapa'"));
+            }
+        };
+        let open = self.remove();
+
+        if brace && matches!(self.peek_kind(), TokenKind::RBrace) {
+            let end = self.remove();
             return Ok(Expr::Map {
                 entries: vec![],
                 span: start.join(end.span),
             });
         }
 
-        // `mapa inicio ... fim`
-        let block_start = self
-            .expect_kind(
-                |k| matches!(k, TokenKind::Inicio),
-                "esperado 'inicio' ou '{}' após 'mapa'",
-            )?
-            .span;
-
         let mut entries = Vec::new();
-        while !matches!(self.peek_kind(), TokenKind::Fim | TokenKind::Eof) {
-            let key = self.parse_expr()?;
-            self.expect_kind(
-                |k| matches!(k, TokenKind::Arrow),
-                "esperado '->' entre chave e valor do mapa",
-            )?;
-            let value = self.parse_expr()?;
-            let span = key.span().join(value.span());
-            entries.push(MapEntry { key, value, span });
+        loop {
+            match self.peek_kind() {
+                TokenKind::Eof => break,
+                TokenKind::Fim if !brace => break,
+                TokenKind::RBrace if brace => break,
+                TokenKind::Fim if brace => {
+                    return Err(self.err("esperado '}' (mapa aberto com '{')"));
+                }
+                TokenKind::RBrace if !brace => {
+                    return Err(self.err("esperado 'fim' (mapa aberto com 'inicio')"));
+                }
+                _ => {
+                    let key = self.parse_expr()?;
+                    self.expect_kind(
+                        |k| matches!(k, TokenKind::Arrow),
+                        "esperado '->' entre chave e valor do mapa",
+                    )?;
+                    let value = self.parse_expr()?;
+                    let span = key.span().join(value.span());
+                    entries.push(MapEntry { key, value, span });
+                }
+            }
         }
 
-        let end = self.expect_kind(|k| matches!(k, TokenKind::Fim), "esperado 'fim' do mapa")?;
+        let end = if brace {
+            self.expect_kind(|k| matches!(k, TokenKind::RBrace), "esperado '}' do mapa")?
+        } else {
+            self.expect_kind(|k| matches!(k, TokenKind::Fim), "esperado 'fim' do mapa")?
+        };
         if entries.is_empty() {
             return Err(self.err_at(
                 "literal de mapa com 'inicio'/'fim' precisa de entradas; use 'mapa {}' para vazio",
-                block_start.join(end.span),
+                open.span.join(end.span),
             ));
         }
 
@@ -894,6 +926,37 @@ mod tests {
     fn empty_block_errors() {
         let err = parse("inicio fim").unwrap_err();
         assert!(err.message.contains("vazio"));
+        let err = parse("{ }").unwrap_err();
+        assert!(err.message.contains("vazio"));
+    }
+
+    #[test]
+    fn brace_block_same_as_inicio_fim() {
+        let a = parse_ok("inicio\n  1 + 2\nfim");
+        let b = parse_ok("{ 1 + 2 }");
+        match (expr_stmt(&a), expr_stmt(&b)) {
+            (Expr::Block(x), Expr::Block(y)) => assert_eq!(x.stmts.len(), y.stmts.len()),
+            other => panic!("{other:?}"),
+        }
+        let p = parse_ok("se verdadeiro { 1 } senao { 2 }");
+        match expr_stmt(&p) {
+            Expr::If {
+                else_block: Some(_),
+                ..
+            } => {}
+            other => panic!("{other:?}"),
+        }
+        let p = parse_ok("f = funcao(n) { n * 2 }");
+        assert!(matches!(&p.items[0], Item::Stmt(Stmt::Assign { .. })));
+        let p = parse_ok(r#"mapa { "a" -> 1 }"#);
+        match expr_stmt(&p) {
+            Expr::Map { entries, .. } => assert_eq!(entries.len(), 1),
+            other => panic!("{other:?}"),
+        }
+        let err = parse("inicio 1 }").unwrap_err();
+        assert!(err.message.contains("fim"), "{err}");
+        let err = parse("{ 1 fim").unwrap_err();
+        assert!(err.message.contains("'}'"), "{err}");
     }
 
     #[test]

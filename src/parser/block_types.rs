@@ -1,7 +1,7 @@
 use crate::lexer::Span;
 use crate::parser::statement_types::Stmt;
 
-/// `inicio` … `fim` — sequence of statements; value = last *expression* stmt,
+/// `inicio` … `fim` or `{` … `}` — sequence of statements; value = last *expression* stmt,
 /// or last evaluated expr-producing piece (define precisely when implementing).
 ///
 /// Practical rule used by many languages:

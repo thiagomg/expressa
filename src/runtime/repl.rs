@@ -269,13 +269,14 @@ fn print_help_builtin(doc: &super::builtins::BuiltinDoc) {
 fn print_help_linguagem() {
     println!(
         "  se cond inicio … fim  [ou se …]  [senao …]\n  \
-         para i de 1 ate 10 inicio … fim\n  \
-         para x em lista inicio … fim\n  \
-         repita n vezes inicio … fim\n  \
-         funcao(a, b) inicio … fim     último valor é o resultado\n  \
-         expr se_falhar outro          captura erro (divisão, arquivo, índice)\n  \
-         mapa inicio \"k\" -> v fim\n  \
-         lista[1]  texto[1..3]         índices começam em 1\n  \
+         se cond {{ … }} senao {{ … }}   '{{' e '}}' valem como inicio/fim\n  \
+         para i de 1 ate 10 {{ … }}\n  \
+         para x em lista {{ … }}\n  \
+         repita n vezes {{ … }}\n  \
+         funcao(a, b) {{ … }}            último valor é o resultado\n  \
+         expr se_falhar outro            captura erro (divisão, arquivo, índice)\n  \
+         mapa {{ \"k\" -> v }}           vazio: mapa {{}}\n  \
+         lista[1]  texto[1..3]           índices começam em 1\n  \
          e  ou  nao  contem"
     );
 }

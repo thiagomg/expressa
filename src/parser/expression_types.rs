@@ -22,13 +22,13 @@ pub enum Expr {
         elements: Vec<Expr>,
         span: Span,
     },
-    /// `mapa {}` or `mapa inicio k -> v ... fim`
+    /// `mapa {}` or `mapa inicio k -> v ... fim` or `mapa { k -> v }`
     Map {
         /// Empty if `mapa {}`
         entries: Vec<MapEntry>,
         span: Span,
     },
-    /// `funcao (a, b) inicio ... fim`
+    /// `funcao (a, b) inicio ... fim` or `{ ... }`
     Function {
         params: Vec<Param>,
         body: Block,
