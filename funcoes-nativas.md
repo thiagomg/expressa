@@ -18,6 +18,7 @@ Caminhos de arquivo **relativos** são resolvidos a partir da pasta do `.lep` em
 |--------|--------|
 | [`escreva`](#escreva) | Imprime valores na saída |
 | [`leia`](#leia) | Lê uma linha do teclado |
+| [`numero`](#numero) | Transforma texto em número |
 | [`raiz`](#raiz) | Raiz quadrada |
 | [`tamanho`](#tamanho) | Quantidade de itens ou caracteres |
 | [`primeiro`](#primeiro) | Primeiro elemento de uma lista |
@@ -85,6 +86,45 @@ No modo `expressa debug`, a entrada do programa e os comandos do depurador compa
 ---
 
 ## Matemática
+
+### `numero`
+
+```text
+numero(texto) -> numero
+numero(numero) -> numero
+```
+
+Converte um texto em número, para usar o que veio de `leia()` em contas.
+
+- Aceita espaços nas pontas (`"  7 "`).
+- Aceita `_` como em literais (`"1_000"`).
+- O padrão de texto é **pt-BR** (`1.000,5`). Mude com `formato("en")` para en-US (`1,000.5`).
+- Em pt-BR: `,` é decimal; `.` em grupos de três é milhar (`"1.000"`). Um único `.` com 1–2 casas (`"3.14"`) ainda vale (texto colado do código).
+- Se o argumento já é número, devolve o mesmo valor.
+- Texto que não é número é erro (`se_falhar` ajuda).
+
+```text
+idade = numero(leia("Quantos anos você tem? ")) se_falhar 0
+escreva("ano que vem: " + (idade + 1))
+```
+
+**Erros:** argumento que não é texto nem número; texto que não representa um número.
+
+### `formato`
+
+```text
+formato("pt")
+formato("en")
+```
+
+Define como `numero()` lê texto e como `escreva` / `"a" + n` escrevem números. Padrão: pt-BR.
+
+Também: `formato("pt-br")`, `formato("en-us")`, `formato("br")`, `formato("eua")`.  
+Na linha de comando: `expressa --numeros en arquivo.lep` (ou `EXPRESSA_NUMEROS=en`).
+
+Literais no código continuam com ponto: `media = 7.3`.
+
+---
 
 ### `raiz`
 

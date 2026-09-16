@@ -12,7 +12,20 @@ fn main() {
 }
 
 fn try_main() -> Result<(), Box<dyn std::error::Error>> {
-    let args: Vec<String> = args().skip(1).collect();
+    let mut args: Vec<String> = args().skip(1).collect();
+    if let Some(i) = args.iter().position(|a| a == "--numeros") {
+        if i + 1 >= args.len() {
+            eprintln!("Uso: expressa --numeros pt|en");
+            return Ok(());
+        }
+        let name = args[i + 1].clone();
+        if expressa::runtime::NumeroLocale::from_name(&name).is_none() {
+            eprintln!("padrão desconhecido `{name}` (use pt ou en)");
+            process::exit(1);
+        }
+        unsafe { std::env::set_var("EXPRESSA_NUMEROS", &name) };
+        args.drain(i..=i + 1);
+    }
     if args.is_empty() {
         run_repl()?;
         return Ok(());
@@ -24,7 +37,8 @@ fn try_main() -> Result<(), Box<dyn std::error::Error>> {
              expressa <arquivo.lep>\n  \
              expressa debug <arquivo.lep>\n  \
              expressa --ast <arquivo.lep>\n  \
-             expressa --marcador-leia <arquivo.lep>"
+             expressa --marcador-leia <arquivo.lep>\n  \
+             expressa --numeros pt|en [arquivo.lep]"
         );
         return Ok(());
     }

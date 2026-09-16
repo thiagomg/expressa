@@ -66,7 +66,8 @@ fim
 **Aritméticos:** `+` `-` `*` `/` `%`  
 **Comparação:** `==` `!=` `>` `<` `>=` `<=`  
 **Lógicos:** `e` `ou` `nao`  
-**Raiz quadrada (nativa):** `raiz(n)` — erro se `n < 0` (tratável com `se_falhar`)
+**Raiz quadrada (nativa):** `raiz(n)` — erro se `n < 0` (tratável com `se_falhar`)  
+**Texto ↔ número:** `numero(t)` lê o padrão atual; `formato("pt")` / `formato("en")` escolhe pt-BR (`1.000,5`) ou en-US (`1,000.5`). Padrão pt-BR. Literais no código usam `.`.
 
 ```text
 10 + 5

@@ -43,10 +43,45 @@ impl Value {
         Value::Mapa(Rc::new(RefCell::new(entries)))
     }
 
-    /// How the REPL prints a value (`"texto"` quoted; `escreva` stays unquoted).
-    pub fn repl_format(&self) -> String {
+    /// How the REPL prints a value (`"texto"` quoted; numbers follow locale).
+    pub fn repl_format(&self, loc: NumeroLocale) -> String {
         match self {
             Value::Texto(s) => format!("\"{}\"", escape_texto(s)),
+            Value::Numero(n) => loc.format(*n),
+            other => other.to_string(),
+        }
+    }
+
+    /// User-facing print (`escreva`, `"a" + n`): numbers follow locale.
+    pub fn format_with(&self, loc: NumeroLocale) -> String {
+        match self {
+            Value::Numero(n) => loc.format(*n),
+            Value::Texto(s) => s.clone(),
+            Value::Lista(xs) => {
+                let inner: Vec<_> = xs
+                    .borrow()
+                    .iter()
+                    .map(|v| match v {
+                        Value::Texto(s) => format!("\"{}\"", escape_texto(s)),
+                        other => other.format_with(loc),
+                    })
+                    .collect();
+                format!("[{}]", inner.join(", "))
+            }
+            Value::Mapa(xs) => {
+                let inner: Vec<_> = xs
+                    .borrow()
+                    .iter()
+                    .map(|(k, v)| {
+                        let vs = match v {
+                            Value::Texto(s) => format!("\"{}\"", escape_texto(s)),
+                            other => other.format_with(loc),
+                        };
+                        format!("{k}: {vs}")
+                    })
+                    .collect();
+                format!("mapa{{{}}}", inner.join(", "))
+            }
             other => other.to_string(),
         }
     }
@@ -144,7 +179,56 @@ fn write_debug_value(f: &mut fmt::Formatter<'_>, v: &Value) -> fmt::Result {
     }
 }
 
+/// How `numero()` / `escreva` interpret and print numbers in text.
+/// Source literals always use `.` (`3.14`, `1_000`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum NumeroLocale {
+    /// `1.000,5` — default, matches Brazilian notebooks.
+    #[default]
+    PtBr,
+    /// `1,000.5`
+    EnUs,
+}
+
+impl NumeroLocale {
+    pub fn from_name(s: &str) -> Option<Self> {
+        match s.trim().to_ascii_lowercase().as_str() {
+            "pt" | "pt-br" | "pt_br" | "br" | "brasil" | "brasileiro" => Some(Self::PtBr),
+            "en" | "en-us" | "en_us" | "us" | "eua" | "americano" => Some(Self::EnUs),
+            _ => None,
+        }
+    }
+
+    pub fn parse_texto(self, raw: &str) -> Option<f64> {
+        let s = raw.trim();
+        if s.is_empty() {
+            return None;
+        }
+        let s: String = s.chars().filter(|c| *c != '_' && *c != ' ').collect();
+        match self {
+            Self::PtBr => parse_pt_br(&s),
+            Self::EnUs => parse_en_us(&s),
+        }
+    }
+
+    pub fn format(self, n: f64) -> String {
+        format_numero_locale(n, self)
+    }
+}
+
+pub fn default_numero_locale() -> NumeroLocale {
+    std::env::var("EXPRESSA_NUMEROS")
+        .ok()
+        .and_then(|s| NumeroLocale::from_name(&s))
+        .unwrap_or(NumeroLocale::PtBr)
+}
+
+/// Programming-form (source-like): `3.14`, no thousands. Used in CSV and errors.
 pub fn format_numero(n: f64) -> String {
+    format_numero_locale(n, None)
+}
+
+fn format_numero_locale(n: f64, loc: impl Into<Option<NumeroLocale>>) -> String {
     if n.is_nan() {
         return "nan".to_string();
     }
@@ -155,12 +239,128 @@ pub fn format_numero(n: f64) -> String {
             "-inf".to_string()
         };
     }
-    if n.fract() == 0.0 && n.abs() < 1e15 {
-        format!("{}", n as i64)
+    let loc = loc.into();
+    let neg = n < 0.0;
+    let abs = n.abs();
+    let integer = abs.fract() == 0.0 && abs < 1e15;
+    let raw = if integer {
+        format!("{}", abs as i64)
     } else {
-        let s = format!("{n}");
-        s
+        format!("{abs}")
+    };
+    let (int_part, frac) = match raw.split_once('.') {
+        Some((i, f)) => (i.to_string(), Some(f)),
+        None => (raw, None),
+    };
+    let (thou, dec) = match loc {
+        Some(NumeroLocale::PtBr) => ('.', ','),
+        Some(NumeroLocale::EnUs) => (',', '.'),
+        None => {
+            let body = match frac {
+                Some(f) => format!("{int_part}.{f}"),
+                None => int_part,
+            };
+            return if neg { format!("-{body}") } else { body };
+        }
+    };
+    let grouped = group_thousands(&int_part, thou);
+    let body = match frac {
+        Some(f) => format!("{grouped}{dec}{f}"),
+        None => grouped,
+    };
+    if neg { format!("-{body}") } else { body }
+}
+
+fn group_thousands(digits: &str, sep: char) -> String {
+    let mut out = String::new();
+    for (i, c) in digits.chars().rev().enumerate() {
+        if i > 0 && i % 3 == 0 {
+            out.push(sep);
+        }
+        out.push(c);
     }
+    out.chars().rev().collect()
+}
+
+fn parse_pt_br(s: &str) -> Option<f64> {
+    let comma = s.chars().filter(|c| *c == ',').count();
+    if comma > 1 {
+        return None;
+    }
+    if comma == 1 {
+        let (left, right) = s.split_once(',')?;
+        if right.is_empty() || !right.chars().all(|c| c.is_ascii_digit()) {
+            return None;
+        }
+        let left = strip_thousands(left, '.')?;
+        format!("{left}.{right}").parse().ok()
+    } else if looks_like_thousands(s, '.') {
+        strip_thousands(s, '.')?.parse().ok()
+    } else {
+        // single `.` as decimal (paste from code) or plain integer
+        let dots = s.chars().filter(|c| *c == '.').count();
+        if dots > 1 {
+            return None;
+        }
+        s.parse().ok()
+    }
+}
+
+fn parse_en_us(s: &str) -> Option<f64> {
+    let dots = s.chars().filter(|c| *c == '.').count();
+    if dots > 1 {
+        return None;
+    }
+    if s.contains(',') {
+        let last_comma = s.rfind(',')?;
+        if !s[last_comma + 1..].contains('.') && looks_like_thousands(s, ',') {
+            return strip_thousands(s, ',')?.parse().ok();
+        }
+        let (left, right) = if let Some((l, r)) = s.split_once('.') {
+            (l, Some(r))
+        } else {
+            (s, None)
+        };
+        let left = strip_thousands(left, ',')?;
+        match right {
+            Some(r) => format!("{left}.{r}").parse().ok(),
+            None => left.parse().ok(),
+        }
+    } else {
+        s.parse().ok()
+    }
+}
+
+fn looks_like_thousands(s: &str, sep: char) -> bool {
+    let t = s
+        .strip_prefix('-')
+        .unwrap_or(s)
+        .strip_prefix('+')
+        .unwrap_or(s);
+    if !t.contains(sep) {
+        return false;
+    }
+    let mut parts = t.split(sep);
+    let first = parts.next().unwrap_or("");
+    if first.is_empty() || !first.chars().all(|c| c.is_ascii_digit()) || first.len() > 3 {
+        return false;
+    }
+    parts.all(|p| p.len() == 3 && p.chars().all(|c| c.is_ascii_digit()))
+}
+
+fn strip_thousands(s: &str, sep: char) -> Option<String> {
+    if s.contains(sep) && !looks_like_thousands(s, sep) {
+        return None;
+    }
+    let sign = if s.starts_with('-') { "-" } else { "" };
+    let rest = s
+        .strip_prefix('-')
+        .or_else(|| s.strip_prefix('+'))
+        .unwrap_or(s);
+    Some(format!(
+        "{sign}{}",
+        rest.chars().filter(|c| *c != sep).collect::<String>()
+    ))
 }
 
 fn escape_texto(s: &str) -> String {
@@ -226,6 +426,25 @@ mod tests {
         assert_eq!(format_numero(1.25), "1.25");
         assert_eq!(format_numero(f64::NAN), "nan");
         assert_eq!(format_numero(f64::INFINITY), "inf");
+    }
+
+    #[test]
+    fn pt_br_and_en_us_string_conversion() {
+        let pt = NumeroLocale::PtBr;
+        let en = NumeroLocale::EnUs;
+        assert_eq!(pt.parse_texto("3,14"), Some(3.14));
+        assert_eq!(pt.parse_texto("1.000"), Some(1000.0));
+        assert_eq!(pt.parse_texto("1.000,5"), Some(1000.5));
+        assert_eq!(pt.parse_texto("3.14"), Some(3.14));
+        assert_eq!(en.parse_texto("1,000.5"), Some(1000.5));
+        assert_eq!(en.parse_texto("1,000"), Some(1000.0));
+        assert_eq!(en.parse_texto("3.14"), Some(3.14));
+        assert_eq!(pt.format(1000.0), "1.000");
+        assert_eq!(pt.format(7.3), "7,3");
+        assert_eq!(en.format(1000.0), "1,000");
+        assert_eq!(en.format(7.3), "7.3");
+        assert_eq!(NumeroLocale::from_name("pt-br"), Some(pt));
+        assert_eq!(NumeroLocale::from_name("en"), Some(en));
     }
 
     #[test]

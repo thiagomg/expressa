@@ -173,7 +173,7 @@ fn apply_line(session: &mut ReplSession<'_>, buf: &mut String, line: &str) -> Li
     let source = std::mem::take(buf);
     match session.eval(&source) {
         Ok(Value::Nada) => {}
-        Ok(v) => println!("{}", v.repl_format()),
+        Ok(v) => println!("{}", v.repl_format(session.vm.numero_locale)),
         Err(e) => eprintln!("{e}"),
     }
     LineResult::Ran(source.trim().to_string())
@@ -246,6 +246,7 @@ fn print_help_geral() {
          ajuda funcoes          lista as funções nativas\n  \
          ajuda linguagem        se, para, funcao, se_falhar…\n  \
          ajuda escreva          detalhe de uma função\n  \
+         formato(\"pt\") / en     padrão de números em texto\n  \
          sair                   encerra (também Ctrl+D)\n  \
          ↑ ↓                    comandos anteriores"
     );
@@ -289,7 +290,7 @@ fn eval_snippets(snippets: &[&str]) -> Result<Vec<String>, RuntimeError> {
     let mut values = Vec::new();
     for src in snippets {
         let v = session.eval(src)?;
-        values.push(v.repl_format());
+        values.push(v.repl_format(session.vm.numero_locale));
     }
     Ok(values)
 }

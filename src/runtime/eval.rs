@@ -15,7 +15,9 @@ use super::debug::{DebugAction, DebugCtx, DebugHook, NoopHook};
 use super::env::{AssignError, Env, FrameKind};
 use super::error::{CallFrame, EvalError, RuntimeError};
 use super::leia::LeiaHost;
-use super::value::{Closure, MapKey, Value, format_numero, parse_numero};
+use super::value::{
+    Closure, MapKey, NumeroLocale, Value, default_numero_locale, format_numero, parse_numero,
+};
 
 /// Source of lines for `leia()`. Implemented for any [`BufRead`] (tests)
 /// and for [`ConsoleInput`] (locks stdin only during the read, so the
@@ -53,6 +55,7 @@ pub(crate) struct Vm<'a> {
     workspace_root: Option<PathBuf>,
     deadline: Option<Instant>,
     pub(crate) leia_host: Option<&'a mut dyn LeiaHost>,
+    pub(crate) numero_locale: NumeroLocale,
 }
 
 pub fn run_source(source: &str, file: &str) -> Result<(), RuntimeError> {
@@ -218,6 +221,7 @@ impl<'a> Vm<'a> {
             workspace_root,
             deadline: time_limit.map(|d| Instant::now() + d),
             leia_host,
+            numero_locale: default_numero_locale(),
         }
     }
 
@@ -655,8 +659,8 @@ impl<'a> Vm<'a> {
                 }
                 (Value::Texto(_), _) | (_, Value::Texto(_)) => Ok(Value::Texto(format!(
                     "{}{}",
-                    stringify_value(l),
-                    stringify_value(r)
+                    self.format_value(l),
+                    self.format_value(r)
                 ))),
                 _ => Err(self.err(
                     format!(
@@ -1086,11 +1090,9 @@ fn check_unique_params(params: &[Param]) -> Result<(), String> {
     Ok(())
 }
 
-fn stringify_value(v: &Value) -> String {
-    match v {
-        Value::Texto(s) => s.clone(),
-        Value::Numero(n) => format_numero(*n),
-        other => other.to_string(),
+impl Vm<'_> {
+    pub(crate) fn format_value(&self, v: &Value) -> String {
+        v.format_with(self.numero_locale)
     }
 }
 
@@ -1131,7 +1133,7 @@ mod tests {
     fn media_example() {
         let src = include_str!("../../examples/media.lep");
         let out = run_to_string(src, "media.lep").unwrap();
-        assert_eq!(out, "Média: 7.3\nResultado: Aprovado\n");
+        assert_eq!(out, "Média: 7,3\nResultado: Aprovado\n");
     }
 
     #[test]
@@ -1387,7 +1389,7 @@ escreva(limpe("  x  "))
 
     #[test]
     fn plus_concatenates_when_either_side_is_text() {
-        assert_eq!(run(r#"escreva("Média: " + 7.5)"#), "Média: 7.5\n");
+        assert_eq!(run(r#"escreva("Média: " + 7.5)"#), "Média: 7,5\n");
         assert_eq!(run(r#"escreva(10 + " itens")"#), "10 itens\n");
         assert_eq!(run(r#"escreva("a" + "b")"#), "ab\n");
         assert_eq!(run(r#"escreva([1] + [2, 3])"#), "[1, 2, 3]\n");
@@ -1543,8 +1545,11 @@ boom()
     fn helpers_used_by_eval() {
         assert_eq!(base_dir_of("examples/media.lep").as_os_str(), "examples");
         assert_eq!(base_dir_of("media.lep").as_os_str(), ".");
-        assert_eq!(stringify_value(&Value::Numero(3.0)), "3");
-        assert_eq!(stringify_value(&Value::Texto("a".into())), "a");
+        assert_eq!(Value::Numero(3.0).format_with(NumeroLocale::PtBr), "3");
+        assert_eq!(
+            Value::Texto("a".into()).format_with(NumeroLocale::PtBr),
+            "a"
+        );
         assert!(
             check_unique_params(&[Param {
                 name: "a".into(),

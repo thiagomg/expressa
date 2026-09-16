@@ -6,7 +6,7 @@ use crate::lexer::Span;
 
 use super::error::EvalError;
 use super::eval::Vm;
-use super::value::{Value, format_numero};
+use super::value::{NumeroLocale, Value, format_numero};
 
 impl Vm<'_> {
     pub(crate) fn call_builtin(
@@ -19,6 +19,8 @@ impl Vm<'_> {
             "escreva" => self.bi_escreva(args, span),
             "leia" => self.bi_leia(args, span),
             "raiz" => self.bi_raiz(args, span),
+            "numero" => self.bi_numero(args, span),
+            "formato" => self.bi_formato(args, span),
             "tamanho" => self.bi_tamanho(args, span),
             "primeiro" => self.bi_primeiro(args, span),
             "ultimo" => self.bi_ultimo(args, span),
@@ -44,7 +46,8 @@ impl Vm<'_> {
                 write!(self.out, " ").map_err(|e| self.io_err(e, _span))?;
             }
             first = false;
-            write!(self.out, "{arg}").map_err(|e| self.io_err(e, _span))?;
+            write!(self.out, "{}", arg.format_with(self.numero_locale))
+                .map_err(|e| self.io_err(e, _span))?;
         }
         writeln!(self.out).map_err(|e| self.io_err(e, _span))?;
         self.out.flush().map_err(|e| self.io_err(e, _span))?;
@@ -87,6 +90,42 @@ impl Vm<'_> {
             }
         }
         Ok(Value::Texto(line))
+    }
+
+    fn bi_numero(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
+        self.expect_arity(args, 1, span)?;
+        match &args[0] {
+            Value::Numero(n) => Ok(Value::Numero(*n)),
+            Value::Texto(s) => match self.numero_locale.parse_texto(s) {
+                Some(n) => Ok(Value::Numero(n)),
+                None => Err(self.err(
+                    format!("não foi possível transformar `{s}` em número"),
+                    span,
+                )),
+            },
+            other => Err(self.err(
+                format!(
+                    "numero() espera texto ou numero, encontrado {}",
+                    other.type_name()
+                ),
+                span,
+            )),
+        }
+    }
+
+    fn bi_formato(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
+        self.expect_arity(args, 1, span)?;
+        let name = self.expect_texto(&args[0], span)?;
+        match NumeroLocale::from_name(&name) {
+            Some(loc) => {
+                self.numero_locale = loc;
+                Ok(Value::Nada)
+            }
+            None => Err(self.err(
+                format!("padrão desconhecido `{name}` (use \"pt\" ou \"en\")"),
+                span,
+            )),
+        }
     }
 
     fn bi_raiz(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
@@ -173,7 +212,7 @@ impl Vm<'_> {
         let sep = self.expect_texto(&args[1], span)?;
         let mut parts = Vec::new();
         for v in xs.borrow().iter() {
-            parts.push(value_as_texto(v));
+            parts.push(value_as_texto(v, self.numero_locale));
         }
         Ok(Value::Texto(parts.join(&sep)))
     }
@@ -265,7 +304,7 @@ impl Vm<'_> {
         let mut out = String::new();
         for row in rows.borrow().iter() {
             let cells = self.expect_lista(row, span)?;
-            let line: Vec<String> = cells.borrow().iter().map(value_as_texto).collect();
+            let line: Vec<String> = cells.borrow().iter().map(csv_cell).collect();
             out.push_str(&line.join(","));
             out.push('\n');
         }
@@ -304,6 +343,8 @@ impl Vm<'_> {
 pub(crate) const BUILTINS: &[&str] = &[
     "escreva",
     "leia",
+    "numero",
+    "formato",
     "raiz",
     "tamanho",
     "primeiro",
@@ -340,6 +381,18 @@ pub(crate) const BUILTIN_DOCS: &[BuiltinDoc] = &[
         sig: "leia()  ou  leia(prompt)",
         summary: "Lê uma linha do teclado (sem o Enter). Prompt opcional.",
         example: r#"nome = leia("Seu nome:")"#,
+    },
+    BuiltinDoc {
+        name: "numero",
+        sig: "numero(texto|numero) -> numero",
+        summary: "Transforma texto em número (aceita 3.14 ou 3,14). Erro se não for número.",
+        example: r#"idade = numero(leia("Idade: ")) se_falhar 0"#,
+    },
+    BuiltinDoc {
+        name: "formato",
+        sig: r#"formato("pt")  ou  formato("en")"#,
+        summary: "Escolhe o padrão de texto de números: pt-BR (1.000,5) ou en-US (1,000.5).",
+        example: r#"formato("en")"#,
     },
     BuiltinDoc {
         name: "raiz",
@@ -437,7 +490,15 @@ pub(crate) fn lookup_builtin_doc(name: &str) -> Option<&'static BuiltinDoc> {
     BUILTIN_DOCS.iter().find(|d| d.name == name)
 }
 
-fn value_as_texto(v: &Value) -> String {
+fn value_as_texto(v: &Value, loc: NumeroLocale) -> String {
+    match v {
+        Value::Texto(s) => s.clone(),
+        Value::Numero(n) => loc.format(*n),
+        other => other.to_string(),
+    }
+}
+
+fn csv_cell(v: &Value) -> String {
     match v {
         Value::Texto(s) => s.clone(),
         Value::Numero(n) => format_numero(*n),
@@ -505,7 +566,8 @@ mod tests {
         assert!(BUILTINS.contains(&"escreva"));
         assert!(BUILTINS.contains(&"leia"));
         assert!(BUILTINS.contains(&"raiz"));
-        assert_eq!(BUILTINS.len(), 17);
+        assert!(BUILTINS.contains(&"numero"));
+        assert_eq!(BUILTINS.len(), 19);
         assert_eq!(BUILTIN_DOCS.len(), BUILTINS.len());
         for name in BUILTINS {
             assert!(
@@ -516,10 +578,26 @@ mod tests {
     }
 
     #[test]
+    fn numero_from_text() {
+        assert_eq!(run(r#"escreva(numero("10"))"#), "10\n");
+        assert_eq!(run(r#"escreva(numero("  3,14  "))"#), "3,14\n");
+        assert_eq!(run(r#"escreva(numero("1_000"))"#), "1.000\n");
+        assert_eq!(run(r#"escreva(numero(-8))"#), "-8\n");
+        assert_eq!(run(r#"escreva(numero("abc") se_falhar 0)"#), "0\n");
+        assert!(run_err(r#"numero("xyz")"#).contains("transformar"));
+        assert_eq!(run(r#"escreva(numero("1.000"))"#), "1.000\n");
+        assert_eq!(
+            run(r#"formato("en")
+escreva(numero("1,000.5"))"#),
+            "1,000.5\n"
+        );
+    }
+
+    #[test]
     fn raiz_quadrada() {
         assert_eq!(run(r#"escreva(raiz(0))"#), "0\n");
         assert_eq!(run(r#"escreva(raiz(9))"#), "3\n");
-        assert_eq!(run(r#"escreva(raiz(2.25))"#), "1.5\n");
+        assert_eq!(run(r#"escreva(raiz(2.25))"#), "1,5\n");
         assert_eq!(run(r#"escreva(raiz(-1) se_falhar 0)"#), "0\n");
         assert!(run_err("raiz(-4)").contains("raiz de número negativo"));
         assert!(run_err(r#"raiz("9")"#).contains("esperado numero"));

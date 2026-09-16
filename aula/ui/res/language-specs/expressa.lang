@@ -69,6 +69,8 @@
       <suffix>\b</suffix>
       <keyword>escreva</keyword>
       <keyword>leia</keyword>
+      <keyword>numero</keyword>
+      <keyword>formato</keyword>
       <keyword>raiz</keyword>
       <keyword>tamanho</keyword>
       <keyword>primeiro</keyword>

@@ -15,7 +15,7 @@ pub use eval::{
 };
 pub use leia::{LEIA_MARKER, LeiaHost};
 pub use repl::run_repl;
-pub use value::Value;
+pub use value::{NumeroLocale, Value, default_numero_locale};
 
 #[cfg(test)]
 mod tests {
