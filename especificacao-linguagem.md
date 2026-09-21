@@ -24,7 +24,7 @@ Todo bloco (`inicio`/`fim` ou `{`/`}`) é uma expressão e retorna o valor da ú
 | `texto`  | `"olá"`, `"123"`                  |
 | `bool`   | `verdadeiro`, `falso`             |
 
-Tipos compostos: **lista** e **mapa**.
+Tipos compostos: **lista**, **mapa** e **matriz**.
 
 ---
 
@@ -86,6 +86,29 @@ fim
 // resultado = 15
 
 resultado = { 10 + 5 }    // igual
+```
+
+---
+
+## 5.1. Matrizes
+
+Retangulares, só números. Índices começam em 1: `A[linha, coluna]`. `A[i]` devolve a linha como lista.
+
+```text
+A = matriz {
+    [1, 2, 3],
+    [4, 5, 6]
+}
+
+A[1, 2]          // 2
+A + B            // mesma ordem
+3 * A
+A * B            // produto de matrizes
+transposta(A)
+det(A)           // 1×1, 2×2 ou 3×3
+identidade(3)
+tamanho(A)       // linhas
+tamanho(A[1])    // colunas
 ```
 
 ---

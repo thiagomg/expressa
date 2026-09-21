@@ -61,6 +61,7 @@
       <keyword>repita</keyword>
       <keyword>vezes</keyword>
       <keyword>mapa</keyword>
+      <keyword>matriz</keyword>
       <keyword>importe</keyword>
       <keyword>contem</keyword>
     </context>
@@ -72,6 +73,9 @@
       <keyword>numero</keyword>
       <keyword>formato</keyword>
       <keyword>raiz</keyword>
+      <keyword>transposta</keyword>
+      <keyword>det</keyword>
+      <keyword>identidade</keyword>
       <keyword>tamanho</keyword>
       <keyword>primeiro</keyword>
       <keyword>ultimo</keyword>

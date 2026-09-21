@@ -409,6 +409,17 @@ impl<'a> Vm<'a> {
                         let idx = self.eval_expr(index, env)?;
                         self.assign_index(&obj, &idx, value, *span)?;
                     }
+                    AssignTarget::Index2 {
+                        object,
+                        row,
+                        col,
+                        span,
+                    } => {
+                        let obj = self.eval_expr(object, env)?;
+                        let i = self.eval_expr(row, env)?;
+                        let j = self.eval_expr(col, env)?;
+                        self.assign_index2(&obj, &i, &j, value, *span)?;
+                    }
                 }
                 Ok(Value::Nada)
             }
@@ -509,6 +520,7 @@ impl<'a> Vm<'a> {
                 }
                 Ok(Value::mapa(map))
             }
+            Expr::Matrix { rows, span } => self.eval_matrix(rows, *span, env),
             Expr::Function { params, body, span } => {
                 check_unique_params(params)
                     .map_err(|name| self.err(format!("parâmetro duplicado `{name}`"), *span))?;
@@ -557,6 +569,17 @@ impl<'a> Vm<'a> {
                 let idx = self.eval_expr(index, env)?;
                 self.index_get(&obj, &idx, *span)
             }
+            Expr::Index2 {
+                object,
+                row,
+                col,
+                span,
+            } => {
+                let obj = self.eval_expr(object, env)?;
+                let i = self.eval_expr(row, env)?;
+                let j = self.eval_expr(col, env)?;
+                self.index_get2(&obj, &i, &j, *span)
+            }
             Expr::Slice {
                 object,
                 start,
@@ -571,7 +594,17 @@ impl<'a> Vm<'a> {
             Expr::Unary { op, expr, span } => {
                 let v = self.eval_expr(expr, env)?;
                 match op {
-                    UnaryOp::Neg => Ok(Value::Numero(-self.expect_numero(&v, *span)?)),
+                    UnaryOp::Neg => match &v {
+                        Value::Matriz(m) => {
+                            let rows: Vec<Vec<f64>> = m
+                                .borrow()
+                                .iter()
+                                .map(|r| r.iter().map(|x| -x).collect())
+                                .collect();
+                            Ok(Value::matriz(rows))
+                        }
+                        _ => Ok(Value::Numero(-self.expect_numero(&v, *span)?)),
+                    },
                     UnaryOp::Not => Ok(Value::Bool(!self.expect_bool(&v, *span)?)),
                 }
             }
@@ -657,6 +690,7 @@ impl<'a> Vm<'a> {
                     out.extend(b.borrow().clone());
                     Ok(Value::lista(out))
                 }
+                (Value::Matriz(_), Value::Matriz(_)) => self.matriz_add(l, r, span, 1.0),
                 (Value::Texto(_), _) | (_, Value::Texto(_)) => Ok(Value::Texto(format!(
                     "{}{}",
                     self.format_value(l),
@@ -671,12 +705,21 @@ impl<'a> Vm<'a> {
                     span,
                 )),
             },
-            BinaryOp::Sub => Ok(Value::Numero(
-                self.expect_numero(l, span)? - self.expect_numero(r, span)?,
-            )),
-            BinaryOp::Mul => Ok(Value::Numero(
-                self.expect_numero(l, span)? * self.expect_numero(r, span)?,
-            )),
+            BinaryOp::Sub => match (l, r) {
+                (Value::Matriz(_), Value::Matriz(_)) => self.matriz_add(l, r, span, -1.0),
+                _ => Ok(Value::Numero(
+                    self.expect_numero(l, span)? - self.expect_numero(r, span)?,
+                )),
+            },
+            BinaryOp::Mul => match (l, r) {
+                (Value::Matriz(_), Value::Matriz(_)) => self.matriz_mul(l, r, span),
+                (Value::Matriz(_), Value::Numero(k)) | (Value::Numero(k), Value::Matriz(_)) => {
+                    self.matriz_scale(l, r, *k, span)
+                }
+                _ => Ok(Value::Numero(
+                    self.expect_numero(l, span)? * self.expect_numero(r, span)?,
+                )),
+            },
             BinaryOp::Div => {
                 let a = self.expect_numero(l, span)?;
                 let b = self.expect_numero(r, span)?;
@@ -819,11 +862,166 @@ impl<'a> Vm<'a> {
                     .map(|(_, v)| v.clone())
                     .ok_or_else(|| self.err(format!("chave {key} não existe no mapa"), span))
             }
+            Value::Matriz(m) => {
+                let rows = m.borrow();
+                let i = self.to_index(index, rows.len(), span)?;
+                let row: Vec<Value> = rows[i].iter().copied().map(Value::Numero).collect();
+                Ok(Value::lista(row))
+            }
             other => Err(self.err(
                 format!("não é possível indexar {}", other.type_name()),
                 span,
             )),
         }
+    }
+
+    fn index_get2(
+        &self,
+        obj: &Value,
+        row: &Value,
+        col: &Value,
+        span: Span,
+    ) -> Result<Value, EvalError> {
+        let Value::Matriz(m) = obj else {
+            return Err(self.err(
+                format!(
+                    "[i, j] só se aplica a matriz, encontrado {}",
+                    obj.type_name()
+                ),
+                span,
+            ));
+        };
+        let rows = m.borrow();
+        let i = self.to_index(row, rows.len(), span)?;
+        let j = self.to_index(col, rows[i].len(), span)?;
+        Ok(Value::Numero(rows[i][j]))
+    }
+
+    fn assign_index2(
+        &self,
+        obj: &Value,
+        row: &Value,
+        col: &Value,
+        value: Value,
+        span: Span,
+    ) -> Result<(), EvalError> {
+        let Value::Matriz(m) = obj else {
+            return Err(self.err(
+                format!(
+                    "[i, j] só se aplica a matriz, encontrado {}",
+                    obj.type_name()
+                ),
+                span,
+            ));
+        };
+        let n = self.expect_numero(&value, span)?;
+        let mut rows = m.borrow_mut();
+        let i = self.to_index(row, rows.len(), span)?;
+        let j = self.to_index(col, rows[i].len(), span)?;
+        rows[i][j] = n;
+        Ok(())
+    }
+
+    fn eval_matrix(
+        &mut self,
+        rows: &[Expr],
+        span: Span,
+        env: &Rc<RefCell<Env>>,
+    ) -> Result<Value, EvalError> {
+        let mut grid: Vec<Vec<f64>> = Vec::new();
+        let mut width = None;
+        for row_expr in rows {
+            let v = self.eval_expr(row_expr, env)?;
+            let xs = self.expect_lista(&v, row_expr.span())?;
+            let mut nums = Vec::new();
+            for item in xs.borrow().iter() {
+                nums.push(self.expect_numero(item, row_expr.span())?);
+            }
+            if nums.is_empty() {
+                return Err(self.err("linha de matriz não pode ser vazia", row_expr.span()));
+            }
+            match width {
+                None => width = Some(nums.len()),
+                Some(w) if w != nums.len() => {
+                    return Err(self.err(
+                        format!(
+                            "linhas da matriz têm tamanhos diferentes ({w} e {})",
+                            nums.len()
+                        ),
+                        span,
+                    ));
+                }
+                _ => {}
+            }
+            grid.push(nums);
+        }
+        Ok(Value::matriz(grid))
+    }
+
+    fn matriz_add(&self, l: &Value, r: &Value, span: Span, sign: f64) -> Result<Value, EvalError> {
+        let (Value::Matriz(a), Value::Matriz(b)) = (l, r) else {
+            unreachable!();
+        };
+        let a = a.borrow();
+        let b = b.borrow();
+        if a.len() != b.len() || a.first().map(|r| r.len()) != b.first().map(|r| r.len()) {
+            return Err(self.err("matrizes de tamanhos diferentes", span));
+        }
+        let out: Vec<Vec<f64>> = a
+            .iter()
+            .zip(b.iter())
+            .map(|(ra, rb)| {
+                ra.iter()
+                    .zip(rb.iter())
+                    .map(|(x, y)| x + sign * y)
+                    .collect()
+            })
+            .collect();
+        Ok(Value::matriz(out))
+    }
+
+    fn matriz_scale(&self, l: &Value, r: &Value, k: f64, _span: Span) -> Result<Value, EvalError> {
+        let m = match (l, r) {
+            (Value::Matriz(m), _) | (_, Value::Matriz(m)) => m,
+            _ => unreachable!(),
+        };
+        let out: Vec<Vec<f64>> = m
+            .borrow()
+            .iter()
+            .map(|row| row.iter().map(|x| x * k).collect())
+            .collect();
+        Ok(Value::matriz(out))
+    }
+
+    fn matriz_mul(&self, l: &Value, r: &Value, span: Span) -> Result<Value, EvalError> {
+        let (Value::Matriz(a), Value::Matriz(b)) = (l, r) else {
+            unreachable!();
+        };
+        let a = a.borrow();
+        let b = b.borrow();
+        let n = a.len();
+        let p = a.first().map(|r| r.len()).unwrap_or(0);
+        let q = b.first().map(|r| r.len()).unwrap_or(0);
+        if p != b.len() {
+            return Err(self.err(
+                format!(
+                    "produto de matrizes exige colunas da esquerda = linhas da direita ({p} ≠ {})",
+                    b.len()
+                ),
+                span,
+            ));
+        }
+        let mut out = vec![vec![0.0; q]; n];
+        for i in 0..n {
+            for j in 0..q {
+                let mut s = 0.0;
+                for k in 0..p {
+                    s += a[i][k] * b[k][j];
+                }
+                out[i][j] = s;
+            }
+        }
+        Ok(Value::matriz(out))
     }
 
     fn slice_get(
@@ -1316,6 +1514,26 @@ escreva(x)
             "sim\n"
         );
         assert_eq!(run("m = mapa { \"a\" -> 1 }\nescreva(m[\"a\"])"), "1\n");
+    }
+
+    #[test]
+    fn matriz_ops() {
+        let src = r#"
+A = matriz {
+    [1, 2],
+    [3, 4]
+}
+escreva(A[1, 2])
+escreva(tamanho(A))
+escreva(tamanho(A[1]))
+escreva(det(A))
+B = transposta(A)
+escreva(B[1, 2])
+I = identidade(2)
+C = A * I
+escreva(C[2, 2])
+"#;
+        assert_eq!(run(src), "2\n2\n2\n-2\n3\n4\n");
     }
 
     #[test]

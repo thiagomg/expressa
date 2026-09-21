@@ -20,6 +20,9 @@ Caminhos de arquivo **relativos** são resolvidos a partir da pasta do `.lep` em
 | [`leia`](#leia) | Lê uma linha do teclado |
 | [`numero`](#numero) | Transforma texto em número |
 | [`raiz`](#raiz) | Raiz quadrada |
+| [`transposta`](#transposta) | Transposta |
+| [`det`](#det) | Determinante 1×1–3×3 |
+| [`identidade`](#identidade) | Matriz identidade |
 | [`tamanho`](#tamanho) | Quantidade de itens ou caracteres |
 | [`primeiro`](#primeiro) | Primeiro elemento de uma lista |
 | [`ultimo`](#ultimo) | Último elemento de uma lista |
@@ -123,6 +126,40 @@ Também: `formato("pt-br")`, `formato("en-us")`, `formato("br")`, `formato("eua"
 Na linha de comando: `expressa --numeros en arquivo.lep` (ou `EXPRESSA_NUMEROS=en`).
 
 Literais no código continuam com ponto: `media = 7.3`.
+
+---
+
+## Matrizes
+
+```text
+A = matriz {
+    [1, 2],
+    [3, 4]
+}
+```
+
+Índices em 1: `A[1, 2]`. `A[1]` é a linha como lista. `A + B`, `k * A`, `A * B` (produto).
+`tamanho(A)` é o número de linhas; `tamanho(A[1])` o de colunas.
+
+### `transposta`
+
+```text
+transposta(A) -> matriz
+```
+
+### `det`
+
+```text
+det(A) -> numero
+```
+
+Só 1×1, 2×2 e 3×3.
+
+### `identidade`
+
+```text
+identidade(n) -> matriz
+```
 
 ---
 

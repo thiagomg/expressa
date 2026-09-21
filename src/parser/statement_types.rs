@@ -52,6 +52,13 @@ pub enum AssignTarget {
         index: Expr,
         span: Span,
     },
+    /// `m[i, j]`
+    Index2 {
+        object: Expr,
+        row: Expr,
+        col: Expr,
+        span: Span,
+    },
 }
 
 impl Stmt {
@@ -69,7 +76,9 @@ impl Stmt {
 impl AssignTarget {
     pub fn span(&self) -> Span {
         match self {
-            AssignTarget::Name { span, .. } | AssignTarget::Index { span, .. } => *span,
+            AssignTarget::Name { span, .. }
+            | AssignTarget::Index { span, .. }
+            | AssignTarget::Index2 { span, .. } => *span,
         }
     }
 }

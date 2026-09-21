@@ -277,6 +277,7 @@ fn print_help_linguagem() {
          funcao(a, b) {{ … }}            último valor é o resultado\n  \
          expr se_falhar outro            captura erro (divisão, arquivo, índice)\n  \
          mapa {{ \"k\" -> v }}           vazio: mapa {{}}\n  \
+         matriz {{ [1, 2], [3, 4] }}     A[1, 2]  A+B  k*A  A*B\n  \
          lista[1]  texto[1..3]           índices começam em 1\n  \
          e  ou  nao  contem"
     );

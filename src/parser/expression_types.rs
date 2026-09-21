@@ -28,6 +28,11 @@ pub enum Expr {
         entries: Vec<MapEntry>,
         span: Span,
     },
+    /// `matriz { [1, 2], [3, 4] }` — each row is an expression (usually a list).
+    Matrix {
+        rows: Vec<Expr>,
+        span: Span,
+    },
     /// `funcao (a, b) inicio ... fim` or `{ ... }`
     Function {
         params: Vec<Param>,
@@ -56,6 +61,13 @@ pub enum Expr {
     Index {
         object: Box<Expr>,
         index: Box<Expr>,
+        span: Span,
+    },
+    /// `m[i, j]`
+    Index2 {
+        object: Box<Expr>,
+        row: Box<Expr>,
+        col: Box<Expr>,
         span: Span,
     },
     /// `a[i..j]`
@@ -127,11 +139,13 @@ impl Expr {
             | Expr::Bool { span, .. }
             | Expr::List { span, .. }
             | Expr::Map { span, .. }
+            | Expr::Matrix { span, .. }
             | Expr::Function { span, .. }
             | Expr::Ident { span, .. }
             | Expr::Field { span, .. }
             | Expr::Call { span, .. }
             | Expr::Index { span, .. }
+            | Expr::Index2 { span, .. }
             | Expr::Slice { span, .. }
             | Expr::Unary { span, .. }
             | Expr::Binary { span, .. }

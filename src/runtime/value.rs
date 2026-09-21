@@ -15,6 +15,7 @@ pub enum Value {
     Bool(bool),
     Lista(Rc<RefCell<Vec<Value>>>),
     Mapa(Rc<RefCell<Vec<(MapKey, Value)>>>),
+    Matriz(Rc<RefCell<Vec<Vec<f64>>>>),
     Funcao(Rc<Closure>),
     Builtin(&'static str),
     Modulo(Rc<RefCell<Env>>),
@@ -41,6 +42,10 @@ impl Value {
 
     pub fn mapa(entries: Vec<(MapKey, Value)>) -> Self {
         Value::Mapa(Rc::new(RefCell::new(entries)))
+    }
+
+    pub fn matriz(rows: Vec<Vec<f64>>) -> Self {
+        Value::Matriz(Rc::new(RefCell::new(rows)))
     }
 
     /// How the REPL prints a value (`"texto"` quoted; numbers follow locale).
@@ -82,6 +87,7 @@ impl Value {
                     .collect();
                 format!("mapa{{{}}}", inner.join(", "))
             }
+            Value::Matriz(m) => format_matriz(&m.borrow(), loc),
             other => other.to_string(),
         }
     }
@@ -94,6 +100,7 @@ impl Value {
             Value::Bool(_) => "bool",
             Value::Lista(_) => "lista",
             Value::Mapa(_) => "mapa",
+            Value::Matriz(_) => "matriz",
             Value::Funcao(_) => "funcao",
             Value::Builtin(_) => "funcao",
             Value::Modulo(_) => "modulo",
@@ -110,6 +117,7 @@ impl PartialEq for Value {
             (Value::Bool(a), Value::Bool(b)) => a == b,
             (Value::Lista(a), Value::Lista(b)) => a.borrow()[..] == b.borrow()[..],
             (Value::Mapa(a), Value::Mapa(b)) => a.borrow()[..] == b.borrow()[..],
+            (Value::Matriz(a), Value::Matriz(b)) => a.borrow()[..] == b.borrow()[..],
             (Value::Funcao(a), Value::Funcao(b)) => Rc::ptr_eq(a, b),
             (Value::Builtin(a), Value::Builtin(b)) => a == b,
             (Value::Modulo(a), Value::Modulo(b)) => Rc::ptr_eq(a, b),
@@ -158,6 +166,7 @@ impl fmt::Display for Value {
                 }
                 write!(f, "}}")
             }
+            Value::Matriz(m) => write!(f, "{}", format_matriz(&m.borrow(), NumeroLocale::PtBr)),
             Value::Funcao(_) => write!(f, "<funcao>"),
             Value::Builtin(name) => write!(f, "<funcao {name}>"),
             Value::Modulo(_) => write!(f, "<modulo>"),
@@ -269,6 +278,35 @@ fn format_numero_locale(n: f64, loc: impl Into<Option<NumeroLocale>>) -> String 
         None => grouped,
     };
     if neg { format!("-{body}") } else { body }
+}
+
+fn format_matriz(rows: &[Vec<f64>], loc: NumeroLocale) -> String {
+    if rows.is_empty() {
+        return "[]".to_string();
+    }
+    let cells: Vec<Vec<String>> = rows
+        .iter()
+        .map(|r| r.iter().map(|n| loc.format(*n)).collect())
+        .collect();
+    let cols = cells[0].len();
+    let mut widths = vec![0; cols];
+    for row in &cells {
+        for (j, c) in row.iter().enumerate() {
+            if j < widths.len() {
+                widths[j] = widths[j].max(c.len());
+            }
+        }
+    }
+    let mut lines = Vec::new();
+    for row in &cells {
+        let parts: Vec<String> = row
+            .iter()
+            .enumerate()
+            .map(|(j, c)| format!("{:>width$}", c, width = widths[j]))
+            .collect();
+        lines.push(format!("[ {} ]", parts.join("  ")));
+    }
+    lines.join("\n")
 }
 
 fn group_thousands(digits: &str, sep: char) -> String {

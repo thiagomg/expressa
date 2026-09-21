@@ -431,6 +431,10 @@ impl Parser {
                 self.pos -= 1;
                 self.parse_map()
             }
+            TokenKind::Matriz => {
+                self.pos -= 1;
+                self.parse_matrix()
+            }
             _ => Err(self.err_at(
                 format!("expressão inválida (token inesperado: {:?})", tok.kind),
                 tok.span,
@@ -497,6 +501,16 @@ impl Parser {
                 object: Box::new(object),
                 start: Box::new(first),
                 end: Box::new(end_expr),
+                span: start.join(end.span),
+            })
+        } else if matches!(self.peek_kind(), TokenKind::Comma) {
+            self.remove();
+            let col = self.parse_expr()?;
+            let end = self.expect_kind(|k| matches!(k, TokenKind::RBracket), "esperado ']'")?;
+            Ok(Expr::Index2 {
+                object: Box::new(object),
+                row: Box::new(first),
+                col: Box::new(col),
                 span: start.join(end.span),
             })
         } else {
@@ -678,6 +692,55 @@ impl Parser {
             span: start.join(end.span),
         })
     }
+
+    fn parse_matrix(&mut self) -> Result<Expr, ParseError> {
+        let start = self
+            .expect_kind(|k| matches!(k, TokenKind::Matriz), "esperado 'matriz'")?
+            .span;
+        let brace = match self.peek_kind() {
+            TokenKind::LBrace => true,
+            TokenKind::Inicio => false,
+            _ => {
+                return Err(self.err("esperado 'inicio' ou '{' após 'matriz'"));
+            }
+        };
+        self.remove();
+        let mut rows = Vec::new();
+        loop {
+            match self.peek_kind() {
+                TokenKind::Eof => break,
+                TokenKind::Fim if !brace => break,
+                TokenKind::RBrace if brace => break,
+                TokenKind::Fim if brace => {
+                    return Err(self.err("esperado '}' (matriz aberta com '{')"));
+                }
+                TokenKind::RBrace if !brace => {
+                    return Err(self.err("esperado 'fim' (matriz aberta com 'inicio')"));
+                }
+                _ => {
+                    rows.push(self.parse_expr()?);
+                    if matches!(self.peek_kind(), TokenKind::Comma) {
+                        self.remove();
+                    }
+                }
+            }
+        }
+        let end = if brace {
+            self.expect_kind(|k| matches!(k, TokenKind::RBrace), "esperado '}' da matriz")?
+        } else {
+            self.expect_kind(|k| matches!(k, TokenKind::Fim), "esperado 'fim' da matriz")?
+        };
+        if rows.is_empty() {
+            return Err(self.err_at(
+                "matriz precisa de pelo menos uma linha",
+                start.join(end.span),
+            ));
+        }
+        Ok(Expr::Matrix {
+            rows,
+            span: start.join(end.span),
+        })
+    }
 }
 
 // ── helpers ──────────────────────────────────────────────────────
@@ -814,6 +877,17 @@ fn expr_to_assign_target(expr: Expr) -> Result<AssignTarget, Span> {
         } => Ok(AssignTarget::Index {
             object: *object,
             index: *index,
+            span,
+        }),
+        Expr::Index2 {
+            object,
+            row,
+            col,
+            span,
+        } => Ok(AssignTarget::Index2 {
+            object: *object,
+            row: *row,
+            col: *col,
             span,
         }),
         other => Err(other.span()),
@@ -957,6 +1031,26 @@ mod tests {
         assert!(err.message.contains("fim"), "{err}");
         let err = parse("{ 1 fim").unwrap_err();
         assert!(err.message.contains("'}'"), "{err}");
+    }
+
+    #[test]
+    fn matriz_literal_and_index2() {
+        let p = parse_ok(
+            r#"
+A = matriz {
+    [1, 2, 3],
+    [4, 5, 6]
+}
+"#,
+        );
+        match &p.items[0] {
+            Item::Stmt(Stmt::Assign { value, .. }) => {
+                assert!(matches!(value, Expr::Matrix { rows, .. } if rows.len() == 2));
+            }
+            other => panic!("{other:?}"),
+        }
+        let p = parse_ok("A[1, 2]");
+        assert!(matches!(expr_stmt(&p), Expr::Index2 { .. }));
     }
 
     #[test]

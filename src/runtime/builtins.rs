@@ -19,6 +19,9 @@ impl Vm<'_> {
             "escreva" => self.bi_escreva(args, span),
             "leia" => self.bi_leia(args, span),
             "raiz" => self.bi_raiz(args, span),
+            "transposta" => self.bi_transposta(args, span),
+            "det" => self.bi_det(args, span),
+            "identidade" => self.bi_identidade(args, span),
             "numero" => self.bi_numero(args, span),
             "formato" => self.bi_formato(args, span),
             "tamanho" => self.bi_tamanho(args, span),
@@ -137,16 +140,83 @@ impl Vm<'_> {
         Ok(Value::Numero(n.sqrt()))
     }
 
+    fn expect_matriz(
+        &self,
+        v: &Value,
+        span: Span,
+    ) -> Result<std::rc::Rc<std::cell::RefCell<Vec<Vec<f64>>>>, EvalError> {
+        match v {
+            Value::Matriz(m) => Ok(std::rc::Rc::clone(m)),
+            _ => Err(self.err(
+                format!("esperado matriz, encontrado {}", v.type_name()),
+                span,
+            )),
+        }
+    }
+
+    fn bi_transposta(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
+        self.expect_arity(args, 1, span)?;
+        let m = self.expect_matriz(&args[0], span)?;
+        let rows = m.borrow();
+        let h = rows.len();
+        let w = rows.first().map(|r| r.len()).unwrap_or(0);
+        let mut out = vec![vec![0.0; h]; w];
+        for i in 0..h {
+            for j in 0..w {
+                out[j][i] = rows[i][j];
+            }
+        }
+        Ok(Value::matriz(out))
+    }
+
+    fn bi_identidade(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
+        self.expect_arity(args, 1, span)?;
+        let n = self.expect_int(&args[0], span)?;
+        if n < 1 {
+            return Err(self.err("identidade() espera um inteiro >= 1", span));
+        }
+        let n = n as usize;
+        let mut out = vec![vec![0.0; n]; n];
+        for i in 0..n {
+            out[i][i] = 1.0;
+        }
+        Ok(Value::matriz(out))
+    }
+
+    fn bi_det(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
+        self.expect_arity(args, 1, span)?;
+        let m = self.expect_matriz(&args[0], span)?;
+        let a = m.borrow();
+        let n = a.len();
+        if n == 0 || a.iter().any(|r| r.len() != n) {
+            return Err(self.err("det() exige matriz quadrada", span));
+        }
+        let d = match n {
+            1 => a[0][0],
+            2 => a[0][0] * a[1][1] - a[0][1] * a[1][0],
+            3 => {
+                a[0][0] * (a[1][1] * a[2][2] - a[1][2] * a[2][1])
+                    - a[0][1] * (a[1][0] * a[2][2] - a[1][2] * a[2][0])
+                    + a[0][2] * (a[1][0] * a[2][1] - a[1][1] * a[2][0])
+            }
+            _ => {
+                return Err(self.err("det() só para matrizes 1×1, 2×2 ou 3×3", span));
+            }
+        };
+        Ok(Value::Numero(d))
+    }
+
     fn bi_tamanho(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
         self.expect_arity(args, 1, span)?;
         let n = match &args[0] {
             Value::Texto(s) => s.chars().count() as f64,
             Value::Lista(xs) => xs.borrow().len() as f64,
             Value::Mapa(xs) => xs.borrow().len() as f64,
+            Value::Matriz(m) => m.borrow().len() as f64,
             other => {
                 return Err(self.err(
                     format!(
-                        "tamanho() espera texto, lista ou mapa, encontrado {}",
+                        "tamanho() espera texto, lista, mapa ou matriz, encontrado {}",
                         other.type_name()
                     ),
                     span,
@@ -346,6 +416,9 @@ pub(crate) const BUILTINS: &[&str] = &[
     "numero",
     "formato",
     "raiz",
+    "transposta",
+    "det",
+    "identidade",
     "tamanho",
     "primeiro",
     "ultimo",
@@ -393,6 +466,24 @@ pub(crate) const BUILTIN_DOCS: &[BuiltinDoc] = &[
         sig: r#"formato("pt")  ou  formato("en")"#,
         summary: "Escolhe o padrão de texto de números: pt-BR (1.000,5) ou en-US (1,000.5).",
         example: r#"formato("en")"#,
+    },
+    BuiltinDoc {
+        name: "transposta",
+        sig: "transposta(matriz) -> matriz",
+        summary: "Troca linhas por colunas.",
+        example: "transposta(A)",
+    },
+    BuiltinDoc {
+        name: "det",
+        sig: "det(matriz) -> numero",
+        summary: "Determinante (1×1, 2×2 ou 3×3).",
+        example: "det(A)",
+    },
+    BuiltinDoc {
+        name: "identidade",
+        sig: "identidade(n) -> matriz",
+        summary: "Matriz identidade n×n.",
+        example: "identidade(3)",
     },
     BuiltinDoc {
         name: "raiz",
@@ -567,7 +658,7 @@ mod tests {
         assert!(BUILTINS.contains(&"leia"));
         assert!(BUILTINS.contains(&"raiz"));
         assert!(BUILTINS.contains(&"numero"));
-        assert_eq!(BUILTINS.len(), 19);
+        assert_eq!(BUILTINS.len(), 22);
         assert_eq!(BUILTIN_DOCS.len(), BUILTINS.len());
         for name in BUILTINS {
             assert!(
@@ -620,7 +711,7 @@ escreva(numero("1,000.5"))"#),
 fim))"#),
             "2\n"
         );
-        assert!(run_err("tamanho(10)").contains("espera texto, lista ou mapa"));
+        assert!(run_err("tamanho(10)").contains("espera texto, lista, mapa ou matriz"));
     }
 
     #[test]
