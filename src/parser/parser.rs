@@ -378,7 +378,9 @@ impl Parser {
             match self.peek_kind() {
                 TokenKind::LParen => lhs = self.finish_call(lhs)?,
                 TokenKind::LBracket => lhs = self.finish_index_or_slice(lhs)?,
-                TokenKind::Dot => lhs = self.finish_field(lhs)?,
+                TokenKind::ColonColon => lhs = self.finish_module_field(lhs)?,
+                TokenKind::Colon => lhs = self.finish_map_field(lhs)?,
+                TokenKind::Dot => lhs = self.finish_ufcs(lhs)?,
                 _ => break,
             }
         }
@@ -523,9 +525,9 @@ impl Parser {
         }
     }
 
-    fn finish_field(&mut self, object: Expr) -> Result<Expr, ParseError> {
+    fn finish_module_field(&mut self, object: Expr) -> Result<Expr, ParseError> {
         let start = object.span();
-        self.remove(); // .
+        self.remove(); // ::
         let field_tok = self.remove();
         match field_tok.kind {
             TokenKind::Ident(field) => Ok(Expr::Field {
@@ -533,7 +535,56 @@ impl Parser {
                 field,
                 span: start.join(field_tok.span),
             }),
-            _ => Err(self.err_at("esperado nome após '.'", field_tok.span)),
+            _ => Err(self.err_at("esperado nome após '::'", field_tok.span)),
+        }
+    }
+
+    fn finish_map_field(&mut self, object: Expr) -> Result<Expr, ParseError> {
+        let start = object.span();
+        self.remove(); // :
+        let field_tok = self.remove();
+        match field_tok.kind {
+            TokenKind::Ident(field) => Ok(Expr::MapField {
+                object: Box::new(object),
+                field,
+                span: start.join(field_tok.span),
+            }),
+            _ => Err(self.err_at("esperado nome após ':'", field_tok.span)),
+        }
+    }
+
+    /// `xs.anexe(1)` → `anexe(xs, 1)`. Bare `xs.anexe` is an error.
+    fn finish_ufcs(&mut self, object: Expr) -> Result<Expr, ParseError> {
+        let start = object.span();
+        self.remove(); // .
+        let field_tok = self.remove();
+        let TokenKind::Ident(name) = field_tok.kind else {
+            return Err(self.err_at("esperado nome de função após '.'", field_tok.span));
+        };
+        if !matches!(self.peek_kind(), TokenKind::LParen) {
+            return Err(self.err(
+                "esperado '(' após '.' (xs.tamanho() é tamanho(xs); sem parênteses não vale)",
+            ));
+        }
+        let method_span = field_tok.span;
+        let call = self.finish_call(Expr::Ident {
+            name,
+            span: method_span,
+        })?;
+        match call {
+            Expr::Call {
+                callee,
+                mut args,
+                span,
+            } => {
+                args.insert(0, object);
+                Ok(Expr::Call {
+                    callee,
+                    args,
+                    span: start.join(span),
+                })
+            }
+            other => Ok(other),
         }
     }
 
@@ -890,6 +941,15 @@ fn expr_to_assign_target(expr: Expr) -> Result<AssignTarget, Span> {
             col: *col,
             span,
         }),
+        Expr::MapField {
+            object,
+            field,
+            span,
+        } => Ok(AssignTarget::MapField {
+            object: *object,
+            field,
+            span,
+        }),
         other => Err(other.span()),
     }
 }
@@ -1076,6 +1136,27 @@ fim
             }
             other => panic!("{other:?}"),
         }
+    }
+
+    #[test]
+    fn access_colon_ufcs_module() {
+        match expr_stmt(&parse_ok("pessoa:nome")) {
+            Expr::MapField { field, .. } => assert_eq!(field, "nome"),
+            other => panic!("{other:?}"),
+        }
+        match expr_stmt(&parse_ok("mat::soma")) {
+            Expr::Field { field, .. } => assert_eq!(field, "soma"),
+            other => panic!("{other:?}"),
+        }
+        match expr_stmt(&parse_ok("xs.tamanho()")) {
+            Expr::Call { callee, args, .. } => {
+                assert!(matches!(callee.as_ref(), Expr::Ident { name, .. } if name == "tamanho"));
+                assert_eq!(args.len(), 1);
+            }
+            other => panic!("{other:?}"),
+        }
+        let err = parse("xs.tamanho").unwrap_err();
+        assert!(err.message.contains("esper"), "{err}");
     }
 
     #[test]

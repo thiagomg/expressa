@@ -279,6 +279,9 @@ fn print_help_linguagem() {
          mapa {{ \"k\" -> v }}           vazio: mapa {{}}\n  \
          matriz {{ [1, 2], [3, 4] }}     A[1, 2]  A+B  k*A  A*B\n  \
          lista[1]  texto[1..3]           índices começam em 1\n  \
+         pessoa:nome                     chave de mapa (pessoa[\"nome\"])\n  \
+         mat::soma(1, 2)                 nome em um módulo\n  \
+         xs.tamanho()                    igual a tamanho(xs)\n  \
          e  ou  nao  contem"
     );
 }

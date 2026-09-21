@@ -45,8 +45,14 @@ pub enum Expr {
         name: String,
         span: Span,
     },
-    /// `mat.soma` (module field; only valid if `mat` is module — runtime/check).
+    /// `mat::soma` — name inside a module.
     Field {
+        object: Box<Expr>,
+        field: String,
+        span: Span,
+    },
+    /// `pessoa:nome` — identifier key of a mapa (`pessoa["nome"]`).
+    MapField {
         object: Box<Expr>,
         field: String,
         span: Span,
@@ -143,6 +149,7 @@ impl Expr {
             | Expr::Function { span, .. }
             | Expr::Ident { span, .. }
             | Expr::Field { span, .. }
+            | Expr::MapField { span, .. }
             | Expr::Call { span, .. }
             | Expr::Index { span, .. }
             | Expr::Index2 { span, .. }

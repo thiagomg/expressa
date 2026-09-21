@@ -65,8 +65,10 @@ pub enum TokenKind {
     Arrow, // ->
 
     // ── Range / access ────────────────────────────────────────────
-    DotDot, // ..   (only used inside [i..j])
-    Dot,    // .    (module field: mat.soma)
+    DotDot,     // ..   (only used inside [i..j])
+    Dot,        // .    (UFCS: xs.tamanho())
+    Colon,      // :    (mapa key: pessoa:nome)
+    ColonColon, // ::   (módulo: mat::soma)
 
     // ── Delimiters ────────────────────────────────────────────────
     LParen,   // (

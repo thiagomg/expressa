@@ -420,6 +420,38 @@ impl<'a> Vm<'a> {
                         let j = self.eval_expr(col, env)?;
                         self.assign_index2(&obj, &i, &j, value, *span)?;
                     }
+                    AssignTarget::MapField {
+                        object,
+                        field,
+                        span,
+                    } => {
+                        let obj = self.eval_expr(object, env)?;
+                        match &obj {
+                            Value::Mapa(_) => {
+                                self.assign_index(
+                                    &obj,
+                                    &Value::Texto(field.clone()),
+                                    value,
+                                    *span,
+                                )?;
+                            }
+                            Value::Modulo(_) => {
+                                return Err(self.err(
+                                    format!("módulo usa '::' — tente o_modulo::{field}"),
+                                    *span,
+                                ));
+                            }
+                            other => {
+                                return Err(self.err(
+                                    format!(
+                                        "acesso ':' espera um mapa, encontrado {}",
+                                        other.type_name()
+                                    ),
+                                    *span,
+                                ));
+                            }
+                        }
+                    }
                 }
                 Ok(Value::Nada)
             }
@@ -542,9 +574,32 @@ impl<'a> Vm<'a> {
                 match obj {
                     Value::Modulo(module) => Env::get(&module, field)
                         .ok_or_else(|| self.err(format!("módulo não contém `{field}`"), *span)),
+                    Value::Mapa(_) => {
+                        Err(self.err(format!("mapa usa ':' — tente o_mapa:{field}"), *span))
+                    }
                     other => Err(self.err(
                         format!(
-                            "acesso '.' espera um módulo, encontrado {}",
+                            "acesso '::' espera um módulo, encontrado {}",
+                            other.type_name()
+                        ),
+                        *span,
+                    )),
+                }
+            }
+            Expr::MapField {
+                object,
+                field,
+                span,
+            } => {
+                let obj = self.eval_expr(object, env)?;
+                match &obj {
+                    Value::Mapa(_) => self.index_get(&obj, &Value::Texto(field.clone()), *span),
+                    Value::Modulo(_) => {
+                        Err(self.err(format!("módulo usa '::' — tente o_modulo::{field}"), *span))
+                    }
+                    other => Err(self.err(
+                        format!(
+                            "acesso ':' espera um mapa, encontrado {}",
                             other.type_name()
                         ),
                         *span,
@@ -1581,6 +1636,18 @@ escreva(a[1])
     }
 
     #[test]
+    fn map_colon_and_ufcs() {
+        let src = r#"
+p = mapa { "nome" -> "Ana" }
+escreva(p:nome)
+p:nome = "Bia"
+escreva(p:nome)
+escreva([10, 20, 30].tamanho())
+"#;
+        assert_eq!(run(src), "Ana\nBia\n3\n");
+    }
+
+    #[test]
     fn maps_and_contem() {
         let src = r#"
 p = mapa inicio
@@ -1730,7 +1797,7 @@ fim
         let main = dir.join("main.lep");
         let src = r#"
 m = importe "mat"
-escreva(m.soma(2, 3))
+escreva(m::soma(2, 3))
 importe "mat"
 escreva(soma(4, 5))
 "#;

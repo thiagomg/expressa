@@ -67,7 +67,8 @@ fim
 **Comparação:** `==` `!=` `>` `<` `>=` `<=`  
 **Lógicos:** `e` `ou` `nao`  
 **Raiz quadrada (nativa):** `raiz(n)` — erro se `n < 0` (tratável com `se_falhar`)  
-**Texto ↔ número:** `numero(t)` lê o padrão atual; `formato("pt")` / `formato("en")` escolhe pt-BR (`1.000,5`) ou en-US (`1,000.5`). Padrão pt-BR. Literais no código usam `.`.
+**Texto ↔ número:** `numero(t)` lê o padrão atual; `formato("pt")` / `formato("en")` escolhe pt-BR (`1.000,5`) ou en-US (`1,000.5`). Padrão pt-BR. Literais no código usam `.`.  
+**Acesso:** `mat::soma` (módulo), `pessoa:nome` (chave de mapa), `xs.tamanho()` (= `tamanho(xs)`).
 
 ```text
 10 + 5
@@ -201,6 +202,8 @@ inicio
 fim
 
 pessoa["nome"]                 // "Ana"
+pessoa:nome                    // igual a pessoa["nome"]
+pessoa:nome = "Bia"            // igual a pessoa["nome"] = "Bia"
 pessoa contem "idade"          // verdadeiro
 pessoa["cidade"] = "Fortaleza"
 tamanho(pessoa)                // 4
@@ -276,7 +279,7 @@ item = lista[99] se_falhar "não existe"
 
 ```text
 mat = importe "matematica"     // com namespace
-mat.soma(10, 5)
+mat::soma(10, 5)
 
 importe "matematica"           // sem namespace (traz tudo)
 soma(10, 5)

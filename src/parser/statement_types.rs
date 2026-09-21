@@ -59,6 +59,12 @@ pub enum AssignTarget {
         col: Expr,
         span: Span,
     },
+    /// `pessoa:nome = ...`
+    MapField {
+        object: Expr,
+        field: String,
+        span: Span,
+    },
 }
 
 impl Stmt {
@@ -78,7 +84,8 @@ impl AssignTarget {
         match self {
             AssignTarget::Name { span, .. }
             | AssignTarget::Index { span, .. }
-            | AssignTarget::Index2 { span, .. } => *span,
+            | AssignTarget::Index2 { span, .. }
+            | AssignTarget::MapField { span, .. } => *span,
         }
     }
 }

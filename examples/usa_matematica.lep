@@ -3,10 +3,10 @@
 mat = importe "lib/matematica"
 
 notas = [7, 8.5, 9, 6.5]
-escreva("média (mat.media): " + mat.media(notas))
-escreva("máximo: " + mat.maximo(notas))
-escreva("2³: " + mat.potencia(2, 3))
-escreva("|-5|: " + mat.absoluto(-5))
+escreva("média (mat::media): " + mat::media(notas))
+escreva("máximo: " + mat::maximo(notas))
+escreva("2³: " + mat::potencia(2, 3))
+escreva("|-5|: " + mat::absoluto(-5))
 
 importe "lib/matematica"
 escreva("soma solta: " + soma(10, 32))

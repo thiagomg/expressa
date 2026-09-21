@@ -265,6 +265,15 @@ impl<'src> Scanner<'src> {
                 self.remove();
                 token!(TokenKind::Comma)
             }
+            ':' => {
+                self.remove();
+                if self.peek() == Some(':') {
+                    self.remove();
+                    token!(TokenKind::ColonColon)
+                } else {
+                    token!(TokenKind::Colon)
+                }
+            }
             _ => {
                 self.remove();
                 lex_err!("caractere inválido: {ch:?}")
@@ -593,6 +602,28 @@ mod tests {
                 TokenKind::Star,    // *
                 TokenKind::Slash,   // /
                 TokenKind::Percent, // %
+                TokenKind::Eof,
+            ]
+        );
+    }
+
+    #[test]
+    fn colon_and_colon_colon() {
+        assert_eq!(
+            kinds("a:b"),
+            vec![
+                TokenKind::Ident("a".into()),
+                TokenKind::Colon,
+                TokenKind::Ident("b".into()),
+                TokenKind::Eof,
+            ]
+        );
+        assert_eq!(
+            kinds("a::b"),
+            vec![
+                TokenKind::Ident("a".into()),
+                TokenKind::ColonColon,
+                TokenKind::Ident("b".into()),
                 TokenKind::Eof,
             ]
         );
