@@ -242,6 +242,13 @@ escreva("Olá, " + nome)
 
 Fim da entrada (Ctrl+D / Ctrl+Z) é um erro, tratável com `se_falhar`.
 
+`escreva` vai para a saída padrão (stdout). `escreva_erro` vai para a saída de erro (stderr).
+
+```text
+escreva("ok")
+escreva_erro("falhou")
+```
+
 ---
 
 ## 13. Arquivos

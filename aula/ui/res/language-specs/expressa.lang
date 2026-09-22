@@ -69,6 +69,7 @@
       <prefix>\b</prefix>
       <suffix>\b</suffix>
       <keyword>escreva</keyword>
+      <keyword>escreva_erro</keyword>
       <keyword>leia</keyword>
       <keyword>numero</keyword>
       <keyword>formato</keyword>

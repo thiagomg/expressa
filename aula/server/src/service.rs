@@ -192,13 +192,15 @@ impl Runner for Aula {
                 prompts: prompt_tx,
                 lines: line_rx,
             };
-            let mut out = ChannelOut { tx: out_tx };
+            let mut out = ChannelOut { tx: out_tx.clone() };
+            let mut err = ChannelOut { tx: out_tx };
             let result = run_with_leia_host(
                 &source,
                 &file,
                 Some(workspace_run),
                 Some(timeout),
                 &mut out,
+                &mut err,
                 &mut host,
             );
             let _ = done_tx.send(result);

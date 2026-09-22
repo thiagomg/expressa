@@ -42,6 +42,7 @@ impl LineInput for ConsoleInput {
 
 pub(crate) struct Vm<'a> {
     pub(crate) out: &'a mut dyn Write,
+    pub(crate) err: &'a mut dyn Write,
     pub(crate) input: &'a mut dyn LineInput,
     pub(crate) file: String,
     pub(crate) source: String,
@@ -61,12 +62,14 @@ pub(crate) struct Vm<'a> {
 pub fn run_source(source: &str, file: &str) -> Result<(), RuntimeError> {
     let mut input = ConsoleInput;
     let mut stdout = io::stdout();
+    let mut stderr = io::stderr();
     run_with(
         source,
         file,
         Box::new(NoopHook),
         &mut input,
         &mut stdout,
+        &mut stderr,
         None,
         None,
         None,
@@ -82,12 +85,14 @@ pub fn run_source_marcador(source: &str, file: &str) -> Result<(), RuntimeError>
     };
     let mut dummy_in = io::Cursor::new("");
     let mut stdout = io::stdout();
+    let mut stderr = io::stderr();
     run_with(
         source,
         file,
         Box::new(NoopHook),
         &mut dummy_in,
         &mut stdout,
+        &mut stderr,
         None,
         None,
         Some(&mut host),
@@ -97,12 +102,14 @@ pub fn run_source_marcador(source: &str, file: &str) -> Result<(), RuntimeError>
 pub fn debug_source(source: &str, file: &str) -> Result<(), RuntimeError> {
     let mut input = ConsoleInput;
     let mut stdout = io::stdout();
+    let mut stderr = io::stderr();
     run_with(
         source,
         file,
         Box::new(super::debug::CliDebugger::new()),
         &mut input,
         &mut stdout,
+        &mut stderr,
         None,
         None,
         None,
@@ -124,17 +131,45 @@ pub fn run_to_string_with(
 ) -> Result<String, RuntimeError> {
     let mut input = io::Cursor::new(stdin.to_string());
     let mut out = Vec::new();
+    let mut err = Vec::new();
     run_with(
         source,
         file,
         Box::new(NoopHook),
         &mut input,
         &mut out,
+        &mut err,
         workspace_root,
         time_limit,
         None,
     )?;
     Ok(String::from_utf8_lossy(&out).into_owned())
+}
+
+/// Like [`run_to_string_with`], also capturing stderr (`escreva_erro`).
+pub fn run_to_strings_with(
+    source: &str,
+    file: &str,
+    stdin: &str,
+) -> Result<(String, String), RuntimeError> {
+    let mut input = io::Cursor::new(stdin.to_string());
+    let mut out = Vec::new();
+    let mut err = Vec::new();
+    run_with(
+        source,
+        file,
+        Box::new(NoopHook),
+        &mut input,
+        &mut out,
+        &mut err,
+        None,
+        None,
+        None,
+    )?;
+    Ok((
+        String::from_utf8_lossy(&out).into_owned(),
+        String::from_utf8_lossy(&err).into_owned(),
+    ))
 }
 
 pub fn run_with_leia_host(
@@ -143,6 +178,7 @@ pub fn run_with_leia_host(
     workspace_root: Option<PathBuf>,
     time_limit: Option<Duration>,
     out: &mut dyn Write,
+    err: &mut dyn Write,
     leia_host: &mut dyn LeiaHost,
 ) -> Result<(), RuntimeError> {
     let mut dummy_in = io::Cursor::new("");
@@ -152,6 +188,7 @@ pub fn run_with_leia_host(
         Box::new(NoopHook),
         &mut dummy_in,
         out,
+        err,
         workspace_root,
         time_limit,
         Some(leia_host),
@@ -164,6 +201,7 @@ pub(crate) fn run_with<'a>(
     hook: Box<dyn DebugHook>,
     input: &'a mut dyn LineInput,
     out: &'a mut dyn Write,
+    err: &'a mut dyn Write,
     workspace_root: Option<PathBuf>,
     time_limit: Option<Duration>,
     leia_host: Option<&'a mut dyn LeiaHost>,
@@ -180,6 +218,7 @@ pub(crate) fn run_with<'a>(
         hook,
         input,
         out,
+        err,
         workspace_root,
         time_limit,
         leia_host,
@@ -198,6 +237,7 @@ impl<'a> Vm<'a> {
         hook: Box<dyn DebugHook>,
         input: &'a mut dyn LineInput,
         out: &'a mut dyn Write,
+        err: &'a mut dyn Write,
         workspace_root: Option<PathBuf>,
         time_limit: Option<Duration>,
         leia_host: Option<&'a mut dyn LeiaHost>,
@@ -209,6 +249,7 @@ impl<'a> Vm<'a> {
         let workspace_root = workspace_root.map(|p| lexical_normalize(&p));
         Self {
             out,
+            err,
             input,
             file: file.to_string(),
             source: source.to_string(),
@@ -1361,12 +1402,14 @@ mod tests {
     fn run_in(src: &str, input: &str) -> String {
         let mut input = io::Cursor::new(input.to_string());
         let mut out = Vec::new();
+        let mut err = Vec::new();
         run_with(
             src,
             "teste.lep",
             Box::new(NoopHook),
             &mut input,
             &mut out,
+            &mut err,
             None,
             None,
             None,
@@ -1900,12 +1943,14 @@ fim
         };
         let mut input = io::Cursor::new("");
         let mut out = Vec::new();
+        let mut err = Vec::new();
         run_with(
             r#"escreva(leia("Seu nome:"))"#,
             "t.lep",
             Box::new(NoopHook),
             &mut input,
             &mut out,
+            &mut err,
             None,
             None,
             Some(&mut host),
@@ -1930,6 +1975,7 @@ fim
         let src = "x = 1\ny = 2\nescreva(x + y)\n";
         let n = Rc::new(Cell::new(0));
         let mut buf = Vec::new();
+        let mut err = Vec::new();
         let mut input = io::Cursor::new("");
         run_with(
             src,
@@ -1937,6 +1983,7 @@ fim
             Box::new(Shared(Rc::clone(&n))),
             &mut input,
             &mut buf,
+            &mut err,
             None,
             None,
             None,

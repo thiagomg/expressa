@@ -17,6 +17,7 @@ impl Vm<'_> {
     ) -> Result<Value, EvalError> {
         match name {
             "escreva" => self.bi_escreva(args, span),
+            "escreva_erro" => self.bi_escreva_erro(args, span),
             "leia" => self.bi_leia(args, span),
             "raiz" => self.bi_raiz(args, span),
             "transposta" => self.bi_transposta(args, span),
@@ -54,6 +55,21 @@ impl Vm<'_> {
         }
         writeln!(self.out).map_err(|e| self.io_err(e, _span))?;
         self.out.flush().map_err(|e| self.io_err(e, _span))?;
+        Ok(Value::Nada)
+    }
+
+    fn bi_escreva_erro(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
+        let mut first = true;
+        for arg in args {
+            if !first {
+                write!(self.err, " ").map_err(|e| self.io_err(e, span))?;
+            }
+            first = false;
+            write!(self.err, "{}", arg.format_with(self.numero_locale))
+                .map_err(|e| self.io_err(e, span))?;
+        }
+        writeln!(self.err).map_err(|e| self.io_err(e, span))?;
+        self.err.flush().map_err(|e| self.io_err(e, span))?;
         Ok(Value::Nada)
     }
 
@@ -412,6 +428,7 @@ impl Vm<'_> {
 
 pub(crate) const BUILTINS: &[&str] = &[
     "escreva",
+    "escreva_erro",
     "leia",
     "numero",
     "formato",
@@ -448,6 +465,12 @@ pub(crate) const BUILTIN_DOCS: &[BuiltinDoc] = &[
         sig: "escreva(valor, ...)",
         summary: "Imprime os argumentos separados por espaço e quebra a linha.",
         example: r#"escreva("Olá", 10)"#,
+    },
+    BuiltinDoc {
+        name: "escreva_erro",
+        sig: "escreva_erro(valor, ...)",
+        summary: "Como escreva, mas na saída de erro (stderr). Não vai para arquivos com >.",
+        example: r#"escreva_erro("nome vazio")"#,
     },
     BuiltinDoc {
         name: "leia",
@@ -658,7 +681,7 @@ mod tests {
         assert!(BUILTINS.contains(&"leia"));
         assert!(BUILTINS.contains(&"raiz"));
         assert!(BUILTINS.contains(&"numero"));
-        assert_eq!(BUILTINS.len(), 22);
+        assert_eq!(BUILTINS.len(), 23);
         assert_eq!(BUILTIN_DOCS.len(), BUILTINS.len());
         for name in BUILTINS {
             assert!(
@@ -698,6 +721,20 @@ escreva(numero("1,000.5"))"#),
     fn escreva_joins_args_with_space() {
         assert_eq!(run(r#"escreva("a", 1, verdadeiro)"#), "a 1 verdadeiro\n");
         assert_eq!(run(r#"escreva()"#), "\n");
+    }
+
+    #[test]
+    fn escreva_erro_goes_to_stderr() {
+        use crate::runtime::run_to_strings_with;
+        let (out, err) = run_to_strings_with(
+            r#"escreva("ok")
+escreva_erro("falhou")"#,
+            "t.lep",
+            "",
+        )
+        .unwrap();
+        assert_eq!(out, "ok\n");
+        assert_eq!(err, "falhou\n");
     }
 
     #[test]

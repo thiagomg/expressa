@@ -19,13 +19,18 @@ pub struct ReplSession<'a> {
 }
 
 impl<'a> ReplSession<'a> {
-    pub fn new(input: &'a mut dyn LineInput, out: &'a mut dyn Write) -> Self {
+    pub fn new(
+        input: &'a mut dyn LineInput,
+        out: &'a mut dyn Write,
+        err: &'a mut dyn Write,
+    ) -> Self {
         let mut vm = Vm::new(
             "<repl>",
             "",
             Box::new(NoopHook),
             input,
             out,
+            err,
             None,
             None,
             None,
@@ -81,8 +86,9 @@ fn run_repl_editor(rl: &mut DefaultEditor) -> io::Result<()> {
         let _ = rl.load_history(&path);
     }
     let mut stdout = io::stdout();
+    let mut stderr = io::stderr();
     let mut input = ConsoleInput;
-    let mut session = ReplSession::new(&mut input, &mut stdout);
+    let mut session = ReplSession::new(&mut input, &mut stdout, &mut stderr);
     let mut buf = String::new();
     loop {
         let prompt = if buf.is_empty() {
@@ -120,8 +126,9 @@ fn run_repl_editor(rl: &mut DefaultEditor) -> io::Result<()> {
 fn run_repl_plain() -> io::Result<()> {
     let mut stdin_lines = io::stdin().lock();
     let mut stdout = io::stdout();
+    let mut stderr = io::stderr();
     let mut input = ConsoleInput;
-    let mut session = ReplSession::new(&mut input, &mut stdout);
+    let mut session = ReplSession::new(&mut input, &mut stdout, &mut stderr);
     let mut buf = String::new();
     loop {
         let prompt = if buf.is_empty() {
@@ -290,7 +297,8 @@ fn print_help_linguagem() {
 fn eval_snippets(snippets: &[&str]) -> Result<Vec<String>, RuntimeError> {
     let mut input = io::Cursor::new("");
     let mut out = Vec::new();
-    let mut session = ReplSession::new(&mut input, &mut out);
+    let mut err = Vec::new();
+    let mut session = ReplSession::new(&mut input, &mut out, &mut err);
     let mut values = Vec::new();
     for src in snippets {
         let v = session.eval(src)?;
@@ -313,7 +321,8 @@ mod tests {
     fn repl_escreva_is_nada() {
         let mut input = io::Cursor::new("");
         let mut out = Vec::new();
-        let mut session = ReplSession::new(&mut input, &mut out);
+        let mut err = Vec::new();
+        let mut session = ReplSession::new(&mut input, &mut out, &mut err);
         let v = session.eval(r#"escreva("oi")"#).unwrap();
         assert!(matches!(v, Value::Nada));
         assert_eq!(String::from_utf8(out).unwrap(), "oi\n");

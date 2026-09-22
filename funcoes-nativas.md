@@ -16,7 +16,8 @@ Caminhos de arquivo **relativos** são resolvidos a partir da pasta do `.lep` em
 
 | Função | Resumo |
 |--------|--------|
-| [`escreva`](#escreva) | Imprime valores na saída |
+| [`escreva`](#escreva) | Imprime valores na saída (stdout) |
+| [`escreva_erro`](#escreva_erro) | Imprime na saída de erro (stderr) |
 | [`leia`](#leia) | Lê uma linha do teclado |
 | [`numero`](#numero) | Transforma texto em número |
 | [`raiz`](#raiz) | Raiz quadrada |
@@ -61,6 +62,20 @@ escreva("Olá")
 escreva("Média:", 7.5)
 escreva()                  // linha em branco
 ```
+
+### `escreva_erro`
+
+```text
+escreva_erro(valor, ...)
+```
+
+Igual a `escreva`, mas escreve na **saída de erro** (stderr). Não entra em arquivos redirecionados com `>`.
+
+```text
+escreva_erro("nome vazio")
+```
+
+Retorna `nada`.
 
 ### `leia`
 
