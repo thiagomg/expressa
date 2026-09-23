@@ -207,6 +207,17 @@ Nativas não podem ser reatribuídas (`escreva = 1` é erro).
 
 ---
 
+## Emacs
+
+```elisp
+(add-to-list 'load-path "/caminho/para/expressa/editors/emacs")
+(require 'expressa-mode)
+```
+
+Abre `.lep` em `expressa-mode` (palavras-chave, nativas, comentários, strings).
+
+---
+
 ## REPL e depurador
 
 ```text
