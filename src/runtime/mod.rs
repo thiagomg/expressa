@@ -10,8 +10,9 @@ mod value;
 pub use debug::{CliDebugger, DebugAction, DebugCtx, DebugHook, NoopHook};
 pub use error::{CallFrame, RuntimeError};
 pub use eval::{
-    debug_source, run_source, run_source_marcador, run_to_string, run_to_string_with,
-    run_to_strings_with, run_with_leia_host,
+    debug_source, debug_source_args, run_source, run_source_args, run_source_marcador,
+    run_source_marcador_args, run_to_string, run_to_string_with, run_to_strings_with,
+    run_with_leia_host,
 };
 pub use leia::{LEIA_MARKER, LeiaHost};
 pub use repl::run_repl;

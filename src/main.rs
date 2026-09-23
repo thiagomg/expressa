@@ -2,7 +2,7 @@ use std::env::args;
 use std::process;
 
 use expressa::parser::parse;
-use expressa::runtime::{debug_source, run_repl, run_source, run_source_marcador};
+use expressa::runtime::{debug_source_args, run_repl, run_source_args, run_source_marcador_args};
 
 fn main() {
     if let Err(e) = try_main() {
@@ -34,35 +34,35 @@ fn try_main() -> Result<(), Box<dyn std::error::Error>> {
         eprintln!(
             "Uso:\n  \
              expressa                         REPL\n  \
-             expressa <arquivo.lep>\n  \
-             expressa debug <arquivo.lep>\n  \
+             expressa <arquivo.lep> [args…]\n  \
+             expressa debug <arquivo.lep> [args…]\n  \
              expressa --ast <arquivo.lep>\n  \
-             expressa --marcador-leia <arquivo.lep>\n  \
-             expressa --numeros pt|en [arquivo.lep]"
+             expressa --marcador-leia <arquivo.lep> [args…]\n  \
+             expressa --numeros pt|en [arquivo.lep] [args…]"
         );
         return Ok(());
     }
 
-    let (mode, file) = if args[0] == "debug" {
+    let (mode, file, script_args) = if args[0] == "debug" {
         if args.len() < 2 {
-            eprintln!("Uso: expressa debug <arquivo.lep>");
+            eprintln!("Uso: expressa debug <arquivo.lep> [args…]");
             return Ok(());
         }
-        ("debug", args[1].as_str())
+        ("debug", args[1].as_str(), &args[2..])
     } else if args[0] == "--ast" {
         if args.len() < 2 {
             eprintln!("Uso: expressa --ast <arquivo.lep>");
             return Ok(());
         }
-        ("ast", args[1].as_str())
+        ("ast", args[1].as_str(), &args[2..])
     } else if args[0] == "--marcador-leia" {
         if args.len() < 2 {
-            eprintln!("Uso: expressa --marcador-leia <arquivo.lep>");
+            eprintln!("Uso: expressa --marcador-leia <arquivo.lep> [args…]");
             return Ok(());
         }
-        ("marcador-leia", args[1].as_str())
+        ("marcador-leia", args[1].as_str(), &args[2..])
     } else {
-        ("run", args[0].as_str())
+        ("run", args[0].as_str(), &args[1..])
     };
 
     let source = std::fs::read_to_string(file)?;
@@ -74,9 +74,9 @@ fn try_main() -> Result<(), Box<dyn std::error::Error>> {
                 process::exit(1);
             }
         },
-        "debug" => debug_source(&source, file)?,
-        "marcador-leia" => run_source_marcador(&source, file)?,
-        _ => run_source(&source, file)?,
+        "debug" => debug_source_args(&source, file, script_args)?,
+        "marcador-leia" => run_source_marcador_args(&source, file, script_args)?,
+        _ => run_source_args(&source, file, script_args)?,
     }
     Ok(())
 }

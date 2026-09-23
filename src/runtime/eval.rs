@@ -59,7 +59,15 @@ pub(crate) struct Vm<'a> {
     pub(crate) numero_locale: NumeroLocale,
 }
 
+fn script_args_value(args: &[String]) -> Value {
+    Value::lista(args.iter().cloned().map(Value::Texto).collect())
+}
+
 pub fn run_source(source: &str, file: &str) -> Result<(), RuntimeError> {
+    run_source_args(source, file, &[])
+}
+
+pub fn run_source_args(source: &str, file: &str, args: &[String]) -> Result<(), RuntimeError> {
     let mut input = ConsoleInput;
     let mut stdout = io::stdout();
     let mut stderr = io::stderr();
@@ -73,12 +81,21 @@ pub fn run_source(source: &str, file: &str) -> Result<(), RuntimeError> {
         None,
         None,
         None,
+        args,
     )
 }
 
 /// Run like [`run_source`], but each `leia()` writes [`super::leia::LEIA_MARKER`]
 /// plus the prompt on stderr so an IDE can detect it.
 pub fn run_source_marcador(source: &str, file: &str) -> Result<(), RuntimeError> {
+    run_source_marcador_args(source, file, &[])
+}
+
+pub fn run_source_marcador_args(
+    source: &str,
+    file: &str,
+    args: &[String],
+) -> Result<(), RuntimeError> {
     let stdin = io::stdin();
     let mut host = super::leia::MarkerLeiaHost {
         stdin: stdin.lock(),
@@ -96,10 +113,15 @@ pub fn run_source_marcador(source: &str, file: &str) -> Result<(), RuntimeError>
         None,
         None,
         Some(&mut host),
+        args,
     )
 }
 
 pub fn debug_source(source: &str, file: &str) -> Result<(), RuntimeError> {
+    debug_source_args(source, file, &[])
+}
+
+pub fn debug_source_args(source: &str, file: &str, args: &[String]) -> Result<(), RuntimeError> {
     let mut input = ConsoleInput;
     let mut stdout = io::stdout();
     let mut stderr = io::stderr();
@@ -113,6 +135,7 @@ pub fn debug_source(source: &str, file: &str) -> Result<(), RuntimeError> {
         None,
         None,
         None,
+        args,
     )
 }
 
@@ -142,6 +165,7 @@ pub fn run_to_string_with(
         workspace_root,
         time_limit,
         None,
+        &[],
     )?;
     Ok(String::from_utf8_lossy(&out).into_owned())
 }
@@ -165,6 +189,7 @@ pub fn run_to_strings_with(
         None,
         None,
         None,
+        &[],
     )?;
     Ok((
         String::from_utf8_lossy(&out).into_owned(),
@@ -192,6 +217,7 @@ pub fn run_with_leia_host(
         workspace_root,
         time_limit,
         Some(leia_host),
+        &[],
     )
 }
 
@@ -205,6 +231,7 @@ pub(crate) fn run_with<'a>(
     workspace_root: Option<PathBuf>,
     time_limit: Option<Duration>,
     leia_host: Option<&'a mut dyn LeiaHost>,
+    script_args: &[String],
 ) -> Result<(), RuntimeError> {
     let program = parse(source).map_err(|e| RuntimeError {
         message: format!("sintaxe: {}", e.message),
@@ -222,6 +249,7 @@ pub(crate) fn run_with<'a>(
         workspace_root,
         time_limit,
         leia_host,
+        script_args,
     );
     match vm.run(&program) {
         Ok(()) => Ok(()),
@@ -241,11 +269,15 @@ impl<'a> Vm<'a> {
         workspace_root: Option<PathBuf>,
         time_limit: Option<Duration>,
         leia_host: Option<&'a mut dyn LeiaHost>,
+        script_args: &[String],
     ) -> Self {
         let builtins = Env::new(FrameKind::Builtins, None);
         for name in BUILTINS {
             builtins.borrow_mut().define(*name, Value::Builtin(name));
         }
+        builtins
+            .borrow_mut()
+            .define("argumentos", script_args_value(script_args));
         let workspace_root = workspace_root.map(|p| lexical_normalize(&p));
         Self {
             out,
@@ -538,6 +570,18 @@ impl<'a> Vm<'a> {
                 let loop_env = Env::child(env, FrameKind::Block);
                 for item in items {
                     loop_env.borrow_mut().define(var.clone(), item);
+                    self.eval_stmts(&body.stmts, &loop_env)?;
+                }
+                Ok(Value::Nada)
+            }
+            Stmt::Enquanto { cond, body, span } => {
+                let loop_env = Env::child(env, FrameKind::Block);
+                loop {
+                    self.check_deadline(*span)?;
+                    let cond_v = self.eval_expr(cond, env)?;
+                    if !self.expect_bool(&cond_v, cond.span())? {
+                        break;
+                    }
                     self.eval_stmts(&body.stmts, &loop_env)?;
                 }
                 Ok(Value::Nada)
@@ -1228,18 +1272,23 @@ impl<'a> Vm<'a> {
                 self.err(format!("função não pode alterar `{name}`"), span)
             }
             AssignError::Builtin { name } => self.err(
-                format!("não é possível alterar a função nativa `{name}`"),
+                format!("não é possível alterar `{name}` (nome nativo)"),
                 span,
             ),
         })
     }
 
-    fn pause(&mut self, span: Span, env: &Rc<RefCell<Env>>) -> Result<(), EvalError> {
+    pub(crate) fn check_deadline(&self, span: Span) -> Result<(), EvalError> {
         if let Some(deadline) = self.deadline {
             if Instant::now() >= deadline {
                 return Err(self.err("tempo esgotado", span));
             }
         }
+        Ok(())
+    }
+
+    fn pause(&mut self, span: Span, env: &Rc<RefCell<Env>>) -> Result<(), EvalError> {
+        self.check_deadline(span)?;
         let file = self.file.clone();
         let source = self.source.clone();
         let stack = self.stack.clone();
@@ -1413,6 +1462,28 @@ mod tests {
             None,
             None,
             None,
+            &[],
+        )
+        .unwrap_or_else(|e| panic!("run failed: {e}"));
+        String::from_utf8_lossy(&out).into_owned()
+    }
+
+    fn run_args(src: &str, args: &[&str], input: &str) -> String {
+        let args: Vec<String> = args.iter().map(|s| (*s).to_string()).collect();
+        let mut input = io::Cursor::new(input.to_string());
+        let mut out = Vec::new();
+        let mut err = Vec::new();
+        run_with(
+            src,
+            "teste.lep",
+            Box::new(NoopHook),
+            &mut input,
+            &mut out,
+            &mut err,
+            None,
+            None,
+            None,
+            &args,
         )
         .unwrap_or_else(|e| panic!("run failed: {e}"));
         String::from_utf8_lossy(&out).into_owned()
@@ -1954,6 +2025,7 @@ fim
             None,
             None,
             Some(&mut host),
+            &[],
         )
         .unwrap();
         assert_eq!(host.prompt, "Seu nome:");
@@ -1987,9 +2059,100 @@ fim
             None,
             None,
             None,
+            &[],
         )
         .unwrap();
         assert_eq!(n.get(), 3);
         assert_eq!(String::from_utf8(buf).unwrap(), "3\n");
+    }
+
+    #[test]
+    fn enquanto_counts() {
+        let src = r#"
+i = 1
+enquanto i <= 3
+inicio
+    escreva(i)
+    i = i + 1
+fim
+"#;
+        assert_eq!(run(src), "1\n2\n3\n");
+        assert_eq!(
+            run(r#"
+i = 0
+enquanto falso
+inicio
+    escreva(i)
+fim
+escreva("ok")
+"#),
+            "ok\n"
+        );
+        let msg = run_err(
+            r#"
+enquanto 1
+inicio
+    escreva(1)
+fim
+"#,
+        );
+        assert!(msg.contains("esperado bool"), "{msg}");
+    }
+
+    #[test]
+    fn leia_linhas_reads_until_eof() {
+        assert_eq!(
+            run_in(r#"escreva(leia_linhas())"#, "a\nb\nc\n"),
+            "[\"a\", \"b\", \"c\"]\n"
+        );
+        assert_eq!(run_in(r#"escreva(leia_linhas())"#, ""), "[]\n");
+        assert_eq!(
+            run_in(
+                r#"
+a = leia()
+escreva(a)
+escreva(leia_linhas())
+"#,
+                "um\ndois\ntres\n"
+            ),
+            "um\n[\"dois\", \"tres\"]\n"
+        );
+        assert_eq!(
+            run_in(r#"escreva(leia_linhas())"#, "sozinha"),
+            "[\"sozinha\"]\n"
+        );
+    }
+
+    #[test]
+    fn argumentos_are_one_based() {
+        assert_eq!(run(r#"escreva(argumentos)"#), "[]\n");
+        assert_eq!(
+            run_args(r#"escreva(argumentos[1])"#, &["Thiago"], ""),
+            "Thiago\n"
+        );
+        assert_eq!(
+            run_args(r#"escreva(tamanho(argumentos))"#, &["a", "b"], ""),
+            "2\n"
+        );
+        let msg = run_err(r#"argumentos = 1"#);
+        assert!(msg.contains("nome nativo"), "{msg}");
+    }
+
+    #[test]
+    fn grep_filter_with_args_and_leia_linhas() {
+        let src = r#"
+busca = argumentos[1]
+para linha em leia_linhas()
+inicio
+    se linha contem busca
+    inicio
+        escreva(linha)
+    fim
+fim
+"#;
+        assert_eq!(
+            run_args(src, &["Thiago"], "Ana\nThiago Silva\nBruno\nThiago\n"),
+            "Thiago Silva\nThiago\n"
+        );
     }
 }

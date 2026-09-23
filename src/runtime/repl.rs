@@ -34,6 +34,7 @@ impl<'a> ReplSession<'a> {
             None,
             None,
             None,
+            &[],
         );
         let env = Env::child(&vm.builtins_env(), FrameKind::Module);
         vm.enter_repl();
@@ -230,6 +231,11 @@ fn print_help(topic: Option<&str>) {
             match key.as_str() {
                 "funcoes" | "funcao" | "nativas" | "builtins" => print_help_funcoes(),
                 "linguagem" | "sintaxe" => print_help_linguagem(),
+                "argumentos" => println!(
+                    "  argumentos              lista dos valores após o .lep\n  \
+                     argumentos[1]           primeiro (índices começam em 1)\n  \
+                     exemplo: expressa grep.lep Thiago"
+                ),
                 name => match super::builtins::lookup_builtin_doc(name) {
                     Some(doc) => print_help_builtin(doc),
                     None => {
@@ -280,7 +286,9 @@ fn print_help_linguagem() {
          se cond {{ … }} senao {{ … }}   '{{' e '}}' valem como inicio/fim\n  \
          para i de 1 ate 10 {{ … }}\n  \
          para x em lista {{ … }}\n  \
+         enquanto cond {{ … }}\n  \
          repita n vezes {{ … }}\n  \
+         argumentos[1]           primeiro argumento após o .lep\n  \
          funcao(a, b) {{ … }}            último valor é o resultado\n  \
          expr se_falhar outro            captura erro (divisão, arquivo, índice)\n  \
          mapa {{ \"k\" -> v }}           vazio: mapa {{}}\n  \
@@ -315,6 +323,12 @@ mod tests {
     fn repl_keeps_bindings_and_prints_exprs() {
         let vals = eval_snippets(&["x = 10", "x + 1", r#"maiuscula("oi")"#]).unwrap();
         assert_eq!(vals, ["nada", "11", "\"OI\""]);
+    }
+
+    #[test]
+    fn repl_argumentos_is_empty() {
+        let vals = eval_snippets(&["argumentos"]).unwrap();
+        assert_eq!(vals, ["[]"]);
     }
 
     #[test]

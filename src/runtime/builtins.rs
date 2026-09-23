@@ -19,6 +19,7 @@ impl Vm<'_> {
             "escreva" => self.bi_escreva(args, span),
             "escreva_erro" => self.bi_escreva_erro(args, span),
             "leia" => self.bi_leia(args, span),
+            "leia_linhas" => self.bi_leia_linhas(args, span),
             "raiz" => self.bi_raiz(args, span),
             "transposta" => self.bi_transposta(args, span),
             "det" => self.bi_det(args, span),
@@ -102,13 +103,39 @@ impl Vm<'_> {
         if n == 0 {
             return Err(self.err("fim da entrada", span));
         }
-        if line.ends_with('\n') {
-            line.pop();
-            if line.ends_with('\r') {
-                line.pop();
-            }
-        }
+        super::leia::strip_newline(&mut line);
         Ok(Value::Texto(line))
+    }
+
+    fn bi_leia_linhas(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
+        if !args.is_empty() {
+            return Err(self.err(
+                format!(
+                    "leia_linhas() não espera argumentos, recebeu {}",
+                    args.len()
+                ),
+                span,
+            ));
+        }
+        if let Some(host) = self.leia_host.as_mut() {
+            let lines = host.read_all_lines().map_err(|e| self.err(e, span))?;
+            return Ok(Value::lista(lines.into_iter().map(Value::Texto).collect()));
+        }
+        let mut lines = Vec::new();
+        loop {
+            self.check_deadline(span)?;
+            let mut line = String::new();
+            let n = self
+                .input
+                .read_line(&mut line)
+                .map_err(|e| self.io_err(e, span))?;
+            if n == 0 {
+                break;
+            }
+            super::leia::strip_newline(&mut line);
+            lines.push(Value::Texto(line));
+        }
+        Ok(Value::lista(lines))
     }
 
     fn bi_numero(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
@@ -430,6 +457,7 @@ pub(crate) const BUILTINS: &[&str] = &[
     "escreva",
     "escreva_erro",
     "leia",
+    "leia_linhas",
     "numero",
     "formato",
     "raiz",
@@ -477,6 +505,12 @@ pub(crate) const BUILTIN_DOCS: &[BuiltinDoc] = &[
         sig: "leia()  ou  leia(prompt)",
         summary: "Lê uma linha do teclado (sem o Enter). Prompt opcional.",
         example: r#"nome = leia("Seu nome:")"#,
+    },
+    BuiltinDoc {
+        name: "leia_linhas",
+        sig: "leia_linhas() -> lista",
+        summary: "Lê todas as linhas da entrada padrão (pipe/arquivo) até o fim.",
+        example: r#"para linha em leia_linhas() { escreva(linha) }"#,
     },
     BuiltinDoc {
         name: "numero",
@@ -679,9 +713,10 @@ mod tests {
     fn builtins_are_registered() {
         assert!(BUILTINS.contains(&"escreva"));
         assert!(BUILTINS.contains(&"leia"));
+        assert!(BUILTINS.contains(&"leia_linhas"));
         assert!(BUILTINS.contains(&"raiz"));
         assert!(BUILTINS.contains(&"numero"));
-        assert_eq!(BUILTINS.len(), 23);
+        assert_eq!(BUILTINS.len(), 24);
         assert_eq!(BUILTIN_DOCS.len(), BUILTINS.len());
         for name in BUILTINS {
             assert!(
@@ -721,6 +756,11 @@ escreva(numero("1,000.5"))"#),
     fn escreva_joins_args_with_space() {
         assert_eq!(run(r#"escreva("a", 1, verdadeiro)"#), "a 1 verdadeiro\n");
         assert_eq!(run(r#"escreva()"#), "\n");
+    }
+
+    #[test]
+    fn leia_linhas_rejects_args() {
+        assert!(run_err(r#"leia_linhas(1)"#).contains("não espera argumentos"));
     }
 
     #[test]

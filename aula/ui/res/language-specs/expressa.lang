@@ -59,6 +59,7 @@
       <keyword>ate</keyword>
       <keyword>em</keyword>
       <keyword>repita</keyword>
+      <keyword>enquanto</keyword>
       <keyword>vezes</keyword>
       <keyword>mapa</keyword>
       <keyword>matriz</keyword>
@@ -71,6 +72,8 @@
       <keyword>escreva</keyword>
       <keyword>escreva_erro</keyword>
       <keyword>leia</keyword>
+      <keyword>leia_linhas</keyword>
+      <keyword>argumentos</keyword>
       <keyword>numero</keyword>
       <keyword>formato</keyword>
       <keyword>raiz</keyword>

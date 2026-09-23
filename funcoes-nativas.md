@@ -19,6 +19,8 @@ Caminhos de arquivo **relativos** são resolvidos a partir da pasta do `.lep` em
 | [`escreva`](#escreva) | Imprime valores na saída (stdout) |
 | [`escreva_erro`](#escreva_erro) | Imprime na saída de erro (stderr) |
 | [`leia`](#leia) | Lê uma linha do teclado |
+| [`leia_linhas`](#leia_linhas) | Lê todas as linhas da entrada padrão |
+| [`argumentos`](#argumentos) | Lista dos valores após o `.lep` |
 | [`numero`](#numero) | Transforma texto em número |
 | [`raiz`](#raiz) | Raiz quadrada |
 | [`transposta`](#transposta) | Transposta |
@@ -100,6 +102,49 @@ linha = leia() se_falhar ""
 ```
 
 No modo `expressa debug`, a entrada do programa e os comandos do depurador compartilham o mesmo teclado.
+
+### `leia_linhas`
+
+```text
+leia_linhas() -> lista
+```
+
+Lê o restante da entrada padrão até o fim e devolve uma **lista de textos** (uma linha cada, sem a quebra de linha). Entrada vazia devolve `[]`. Linhas em branco entram na lista como `""`.
+
+- Sem argumentos.
+- Depois de um `leia()`, `leia_linhas()` continua do que ainda não foi lido.
+- Na Aula (diálogo), não há fim de arquivo: a chamada é um erro. Use `leia()` ou `leia_arquivo`.
+
+```text
+para linha em leia_linhas()
+inicio
+    escreva(linha)
+fim
+```
+
+```text
+cat arquivo.txt | expressa prog.lep
+```
+
+### `argumentos`
+
+Não é uma função: é uma **lista** já definida em todo programa.
+
+```text
+argumentos          // lista de textos
+argumentos[1]       // primeiro valor após o .lep
+```
+
+```text
+expressa grep.lep Thiago
+// argumentos == ["Thiago"]
+```
+
+No REPL a lista é `[]`. Não dá para fazer `argumentos = …` (nome nativo). Os itens ainda são uma lista comum (`tamanho(argumentos)`, `contem`, etc.).
+
+```text
+busca = argumentos[1] se_falhar ""
+```
 
 ---
 

@@ -134,6 +134,7 @@ impl Parser {
     fn parse_stmt(&mut self) -> Result<Stmt, ParseError> {
         match self.peek_kind() {
             TokenKind::Repita => self.parse_repita(),
+            TokenKind::Enquanto => self.parse_enquanto(),
             TokenKind::Para => self.parse_para(),
             _ => {
                 let expr = self.parse_expr()?;
@@ -206,6 +207,17 @@ impl Parser {
             }
             _ => Err(self.err("esperado 'de' ou 'em' após variável do 'para'")),
         }
+    }
+
+    fn parse_enquanto(&mut self) -> Result<Stmt, ParseError> {
+        let start = self.remove().span; // enquanto
+        let cond = self.parse_expr()?;
+        let body = self.parse_block()?;
+        Ok(Stmt::Enquanto {
+            cond,
+            span: start.join(body.span),
+            body,
+        })
     }
 
     fn parse_block(&mut self) -> Result<Block, ParseError> {
@@ -1278,6 +1290,20 @@ inicio
 fim
 "#;
         assert!(matches!(first_stmt(&parse_ok(src)), Stmt::ParaIn { .. }));
+    }
+
+    #[test]
+    fn enquanto_loop() {
+        let src = r#"
+enquanto i < 10
+inicio
+    i = i + 1
+fim
+"#;
+        assert!(matches!(first_stmt(&parse_ok(src)), Stmt::Enquanto { .. }));
+
+        let src = "enquanto verdadeiro { i = i + 1 }";
+        assert!(matches!(first_stmt(&parse_ok(src)), Stmt::Enquanto { .. }));
     }
 
     #[test]

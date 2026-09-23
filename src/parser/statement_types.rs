@@ -37,6 +37,9 @@ pub enum Stmt {
         body: Block,
         span: Span,
     },
+
+    /// `enquanto condicao inicio ... fim`
+    Enquanto { cond: Expr, body: Block, span: Span },
 }
 
 /// Left-hand side of `=`.
@@ -74,7 +77,8 @@ impl Stmt {
             | Stmt::Assign { span, .. }
             | Stmt::Repita { span, .. }
             | Stmt::ParaRange { span, .. }
-            | Stmt::ParaIn { span, .. } => *span,
+            | Stmt::ParaIn { span, .. }
+            | Stmt::Enquanto { span, .. } => *span,
         }
     }
 }

@@ -75,6 +75,7 @@ mod tests {
         assert!(needs_more_input("\"abc"));
         assert!(needs_more_input("lista = [1,"));
         assert!(needs_more_input("se verdadeiro {"));
+        assert!(needs_more_input("enquanto verdadeiro"));
         assert!(needs_more_input("funcao(n) {"));
         assert!(!needs_more_input("funcao(n) { n }"));
     }

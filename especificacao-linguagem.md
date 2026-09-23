@@ -155,7 +155,17 @@ para nome em ["Ana", "Bruno"]
 inicio
     escreva(nome)
 fim
+
+// Enquanto a condição for verdadeira
+i = 1
+enquanto i <= 3
+inicio
+    escreva(i)
+    i = i + 1
+fim
 ```
+
+A condição de `enquanto` tem que ser `verdadeiro` ou `falso`. O corpo usa `inicio`/`fim` ou `{`/`}`.
 
 ---
 
@@ -241,6 +251,25 @@ escreva("Olá, " + nome)
 ```
 
 Fim da entrada (Ctrl+D / Ctrl+Z) é um erro, tratável com `se_falhar`.
+
+`leia_linhas()` lê **todas** as linhas restantes da entrada padrão e devolve uma lista (arquivo vazio → `[]`). Não é erro chegar ao fim.
+
+```text
+busca = argumentos[1]
+para linha em leia_linhas()
+inicio
+    se linha contem busca
+    inicio
+        escreva(linha)
+    fim
+fim
+```
+
+```text
+cat nomes.txt | expressa grep.lep Thiago
+```
+
+`argumentos` é a lista dos valores depois do `.lep` na linha de comando (`argumentos[1]` é o primeiro; índices começam em 1). Sem argumentos extras, a lista é `[]`. Não dá para reatribuir `argumentos`.
 
 `escreva` vai para a saída padrão (stdout). `escreva_erro` vai para a saída de erro (stderr).
 

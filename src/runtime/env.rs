@@ -8,9 +8,9 @@
 //! Typical chain while a program runs:
 //!
 //! ```text
-//! Builtins  (escreva, leia, tamanho, …)     read-only
+//! Builtins  (escreva, leia, argumentos, …)  read-only
 //!    └── Module  (top-level of a .lep file)
-//!           └── Block     (`inicio` … `fim`, `se`, `para`, `repita`)
+//!           └── Block     (`inicio` … `fim`, `se`, `para`, `enquanto`, `repita`)
 //!                  └── Function   (call frame: params + locals)
 //! ```
 //!

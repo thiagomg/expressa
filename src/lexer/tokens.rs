@@ -36,6 +36,7 @@ pub enum TokenKind {
     Ate,        // ate
     Em,         // em
     Repita,     // repita
+    Enquanto,   // enquanto
     Vezes,      // vezes
     Mapa,       // mapa
     Matriz,     // matriz
@@ -98,6 +99,7 @@ pub fn keyword(s: &str) -> Option<TokenKind> {
         "ate" | "até" => TokenKind::Ate,
         "em" => TokenKind::Em,
         "repita" => TokenKind::Repita,
+        "enquanto" => TokenKind::Enquanto,
         "vezes" => TokenKind::Vezes,
         "mapa" => TokenKind::Mapa,
         "matriz" => TokenKind::Matriz,
