@@ -59,6 +59,12 @@ fim
 */
 ```
 
+A **primeira linha** do arquivo pode ser um shebang Unix (`#!…`). A Expressa ignora essa linha. `#` **não** é comentário em qualquer outro lugar.
+
+```text
+#!/usr/bin/env expressa
+```
+
 ---
 
 ## 4. Operadores
@@ -327,6 +333,20 @@ soma(10, 5)
 
 O código executa **de cima para baixo**, linha por linha.  
 Não existe função `main` obrigatória.
+
+Arquivos `.lep` podem ser executáveis:
+
+```text
+#!/usr/bin/env expressa
+escreva("olá")
+```
+
+```text
+chmod +x ola.lep
+./ola.lep
+```
+
+Valores depois do script chegam em `argumentos` (`./ola.lep Thiago` → `argumentos[1]` é `"Thiago"`).
 
 ---
 

@@ -36,11 +36,35 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>, LexError> {
 
 impl<'src> Scanner<'src> {
     pub fn new(source: &'src str) -> Self {
-        Self {
+        let mut s = Self {
             source,
             pos: 0,
             line: 1,
             col: 1,
+        };
+        s.skip_bom();
+        s.skip_shebang();
+        s
+    }
+
+    /// UTF-8 BOM at the start of a file, if present. Does not move the
+    /// reported line/column so `#!` still sits on line 1.
+    fn skip_bom(&mut self) {
+        if self.peek() == Some('\u{feff}') {
+            self.pos += '\u{feff}'.len_utf8();
+        }
+    }
+
+    /// `#!…` only as the first line (Unix shebang). Left as an invalid
+    /// character anywhere else; `#` is not a comment marker.
+    fn skip_shebang(&mut self) {
+        if self.peek() == Some('#') && self.skip_peek(1) == Some('!') {
+            while let Some(c) = self.peek() {
+                if c == '\n' {
+                    break;
+                }
+                self.remove();
+            }
         }
     }
 
@@ -1100,5 +1124,40 @@ fim
         assert!(err.message.contains("inválido"));
         assert_eq!(err.span.line, 1);
         assert_eq!(err.span.col, 1);
+    }
+
+    #[test]
+    fn shebang_on_first_line_is_skipped() {
+        let src = "#!/usr/bin/env expressa\nescreva(1)\n";
+        let toks = tokenize(src).expect("shebang should lex");
+        assert!(matches!(&toks[0].kind, TokenKind::Ident(s) if s == "escreva"));
+        assert_eq!(toks[0].span.line, 2);
+        assert_eq!(toks[0].span.col, 1);
+    }
+
+    #[test]
+    fn shebang_without_newline_is_the_whole_file() {
+        assert_eq!(kinds("#!/usr/bin/env expressa"), vec![TokenKind::Eof]);
+    }
+
+    #[test]
+    fn hash_without_bang_is_still_invalid() {
+        let err = tokenize("# comentario").expect_err("bare #");
+        assert!(err.message.contains("inválido"));
+    }
+
+    #[test]
+    fn shebang_on_later_line_is_invalid() {
+        let err = tokenize("escreva(1)\n#!/usr/bin/env expressa\n").expect_err("late #!");
+        assert!(err.message.contains("inválido"));
+        assert_eq!(err.span.line, 2);
+    }
+
+    #[test]
+    fn bom_then_shebang_is_skipped() {
+        let src = "\u{feff}#!/usr/bin/env expressa\nx\n";
+        let toks = tokenize(src).expect("BOM+shebang");
+        assert!(matches!(&toks[0].kind, TokenKind::Ident(s) if s == "x"));
+        assert_eq!(toks[0].span.line, 2);
     }
 }

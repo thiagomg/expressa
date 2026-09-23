@@ -1612,6 +1612,11 @@ mod tests {
     }
 
     #[test]
+    fn shebang_is_ignored_at_runtime() {
+        assert_eq!(run("#!/usr/bin/env expressa\nescreva(2 + 2)\n"), "4\n");
+    }
+
+    #[test]
     fn arithmetic_and_escreva() {
         assert_eq!(run(r#"escreva(10 + 5 * 2)"#), "20\n");
         assert_eq!(run(r#"escreva(10 / 2)"#), "5\n");

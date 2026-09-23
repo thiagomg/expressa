@@ -297,7 +297,8 @@ fn print_help_linguagem() {
          pessoa:nome                     chave de mapa (pessoa[\"nome\"])\n  \
          mat::soma(1, 2)                 nome em um módulo\n  \
          xs.tamanho()                    igual a tamanho(xs)\n  \
-         e  ou  nao  contem"
+         e  ou  nao  contem\n  \
+         #!/usr/bin/env expressa primeira linha (arquivo executável)"
     );
 }
 
