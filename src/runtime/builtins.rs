@@ -18,6 +18,7 @@ impl Vm<'_> {
         match name {
             "escreva" => self.bi_escreva(args, span),
             "escreva_erro" => self.bi_escreva_erro(args, span),
+            "sair" => self.bi_sair(args, span),
             "leia" => self.bi_leia(args, span),
             "leia_linhas" => self.bi_leia_linhas(args, span),
             "raiz" => self.bi_raiz(args, span),
@@ -72,6 +73,25 @@ impl Vm<'_> {
         writeln!(self.err).map_err(|e| self.io_err(e, span))?;
         self.err.flush().map_err(|e| self.io_err(e, span))?;
         Ok(Value::Nada)
+    }
+
+    fn bi_sair(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
+        let code = match args {
+            [] => 0,
+            [v] => {
+                let n = self.expect_int(v, span)?;
+                i32::try_from(n).map_err(|_| self.err("código de saída fora do intervalo", span))?
+            }
+            _ => {
+                return Err(self.err(
+                    format!("sair() espera 0 ou 1 argumento(s), recebeu {}", args.len()),
+                    span,
+                ));
+            }
+        };
+        let _ = self.out.flush();
+        let _ = self.err.flush();
+        Err(EvalError::Quit(code))
     }
 
     fn bi_leia(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
@@ -456,6 +476,7 @@ impl Vm<'_> {
 pub(crate) const BUILTINS: &[&str] = &[
     "escreva",
     "escreva_erro",
+    "sair",
     "leia",
     "leia_linhas",
     "numero",
@@ -499,6 +520,12 @@ pub(crate) const BUILTIN_DOCS: &[BuiltinDoc] = &[
         sig: "escreva_erro(valor, ...)",
         summary: "Como escreva, mas na saída de erro (stderr). Não vai para arquivos com >.",
         example: r#"escreva_erro("nome vazio")"#,
+    },
+    BuiltinDoc {
+        name: "sair",
+        sig: "sair()  ou  sair(codigo)",
+        summary: "Encerra o programa. Sem argumento, código 0; sair(1) indica falha.",
+        example: r#"se nome == "" { sair(1) }"#,
     },
     BuiltinDoc {
         name: "leia",
@@ -716,7 +743,7 @@ mod tests {
         assert!(BUILTINS.contains(&"leia_linhas"));
         assert!(BUILTINS.contains(&"raiz"));
         assert!(BUILTINS.contains(&"numero"));
-        assert_eq!(BUILTINS.len(), 24);
+        assert_eq!(BUILTINS.len(), 25);
         assert_eq!(BUILTIN_DOCS.len(), BUILTINS.len());
         for name in BUILTINS {
             assert!(
@@ -756,6 +783,13 @@ escreva(numero("1,000.5"))"#),
     fn escreva_joins_args_with_space() {
         assert_eq!(run(r#"escreva("a", 1, verdadeiro)"#), "a 1 verdadeiro\n");
         assert_eq!(run(r#"escreva()"#), "\n");
+    }
+
+    #[test]
+    fn sair_rejects_bad_args() {
+        assert!(run_err(r#"sair("x")"#).contains("esperado numero"));
+        assert!(run_err("sair(1, 2)").contains("espera 0 ou 1"));
+        assert!(run_err("sair(1.5)").contains("inteiro"));
     }
 
     #[test]

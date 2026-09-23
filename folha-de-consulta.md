@@ -148,6 +148,8 @@ tamanho(A)                     // linhas
 ```text
 escreva("Média:", 7.5)         // stdout
 escreva_erro("falhou")         // stderr (não entra em > arquivo)
+sair()                         // encerra, código 0
+sair(1)                        // encerra com falha (não pega se_falhar)
 
 nome = leia("Seu nome: ")      // uma linha, sem o Enter
 idade = numero(leia("Idade: ")) se_falhar 0
@@ -193,7 +195,7 @@ soma(10, 5)
 
 | | |
 |---|---|
-| `escreva` `escreva_erro` | imprimir |
+| `escreva` `escreva_erro` `sair` | imprimir / encerrar |
 | `leia` `leia_linhas` | teclado / pipe |
 | `argumentos` | lista (não é função) |
 | `numero` `formato` `raiz` | número |

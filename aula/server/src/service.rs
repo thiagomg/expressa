@@ -244,9 +244,16 @@ impl Runner for Aula {
                                 })).await;
                             }
                             let finished = match result {
-                                Ok(()) => ExecFinished {
+                                Ok(0) => ExecFinished {
                                     ok: true,
                                     error_message: String::new(),
+                                    error_file: String::new(),
+                                    error_line: 0,
+                                    error_col: 0,
+                                },
+                                Ok(code) => ExecFinished {
+                                    ok: false,
+                                    error_message: format!("encerrou com código {code}"),
                                     error_file: String::new(),
                                     error_line: 0,
                                     error_col: 0,

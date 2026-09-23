@@ -74,6 +74,7 @@
       <suffix>\b</suffix>
       <keyword>escreva</keyword>
       <keyword>escreva_erro</keyword>
+      <keyword>sair</keyword>
       <keyword>leia</keyword>
       <keyword>leia_linhas</keyword>
       <keyword>argumentos</keyword>

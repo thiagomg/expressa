@@ -46,7 +46,8 @@ impl std::error::Error for RuntimeError {}
 #[derive(Debug)]
 pub(crate) enum EvalError {
     Runtime(RuntimeError),
-    Quit,
+    /// `sair(codigo)` or the debugger's `terminar`. Not caught by `se_falhar`.
+    Quit(i32),
 }
 
 impl From<RuntimeError> for EvalError {

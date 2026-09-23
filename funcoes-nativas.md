@@ -18,6 +18,7 @@ Caminhos de arquivo **relativos** são resolvidos a partir da pasta do `.lep` em
 |--------|--------|
 | [`escreva`](#escreva) | Imprime valores na saída (stdout) |
 | [`escreva_erro`](#escreva_erro) | Imprime na saída de erro (stderr) |
+| [`sair`](#sair) | Encerra o programa |
 | [`leia`](#leia) | Lê uma linha do teclado |
 | [`leia_linhas`](#leia_linhas) | Lê todas as linhas da entrada padrão |
 | [`argumentos`](#argumentos) | Lista dos valores após o `.lep` |
@@ -78,6 +79,28 @@ escreva_erro("nome vazio")
 ```
 
 Retorna `nada`.
+
+### `sair`
+
+```text
+sair()
+sair(codigo)
+```
+
+Encerra o programa na hora. Nada depois da chamada roda.
+
+- Sem argumento, o código de saída é **0** (sucesso).
+- Com um número inteiro, esse é o código (use `1` para falha, como em `exit(1)`).
+- **Não** é capturado por `se_falhar`.
+- No REPL, a linha `sair` (sem parênteses) continua sendo o comando que sai do interpretador; `sair()` / `sair(1)` é esta função e encerra o processo.
+
+```text
+se nome == ""
+inicio
+    escreva_erro("nome vazio")
+    sair(1)
+fim
+```
 
 ### `leia`
 

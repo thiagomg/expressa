@@ -63,11 +63,11 @@ fn script_args_value(args: &[String]) -> Value {
     Value::lista(args.iter().cloned().map(Value::Texto).collect())
 }
 
-pub fn run_source(source: &str, file: &str) -> Result<(), RuntimeError> {
+pub fn run_source(source: &str, file: &str) -> Result<i32, RuntimeError> {
     run_source_args(source, file, &[])
 }
 
-pub fn run_source_args(source: &str, file: &str, args: &[String]) -> Result<(), RuntimeError> {
+pub fn run_source_args(source: &str, file: &str, args: &[String]) -> Result<i32, RuntimeError> {
     let mut input = ConsoleInput;
     let mut stdout = io::stdout();
     let mut stderr = io::stderr();
@@ -87,7 +87,7 @@ pub fn run_source_args(source: &str, file: &str, args: &[String]) -> Result<(), 
 
 /// Run like [`run_source`], but each `leia()` writes [`super::leia::LEIA_MARKER`]
 /// plus the prompt on stderr so an IDE can detect it.
-pub fn run_source_marcador(source: &str, file: &str) -> Result<(), RuntimeError> {
+pub fn run_source_marcador(source: &str, file: &str) -> Result<i32, RuntimeError> {
     run_source_marcador_args(source, file, &[])
 }
 
@@ -95,7 +95,7 @@ pub fn run_source_marcador_args(
     source: &str,
     file: &str,
     args: &[String],
-) -> Result<(), RuntimeError> {
+) -> Result<i32, RuntimeError> {
     let stdin = io::stdin();
     let mut host = super::leia::MarkerLeiaHost {
         stdin: stdin.lock(),
@@ -117,11 +117,11 @@ pub fn run_source_marcador_args(
     )
 }
 
-pub fn debug_source(source: &str, file: &str) -> Result<(), RuntimeError> {
+pub fn debug_source(source: &str, file: &str) -> Result<i32, RuntimeError> {
     debug_source_args(source, file, &[])
 }
 
-pub fn debug_source_args(source: &str, file: &str, args: &[String]) -> Result<(), RuntimeError> {
+pub fn debug_source_args(source: &str, file: &str, args: &[String]) -> Result<i32, RuntimeError> {
     let mut input = ConsoleInput;
     let mut stdout = io::stdout();
     let mut stderr = io::stderr();
@@ -205,7 +205,7 @@ pub fn run_with_leia_host(
     out: &mut dyn Write,
     err: &mut dyn Write,
     leia_host: &mut dyn LeiaHost,
-) -> Result<(), RuntimeError> {
+) -> Result<i32, RuntimeError> {
     let mut dummy_in = io::Cursor::new("");
     run_with(
         source,
@@ -232,7 +232,7 @@ pub(crate) fn run_with<'a>(
     time_limit: Option<Duration>,
     leia_host: Option<&'a mut dyn LeiaHost>,
     script_args: &[String],
-) -> Result<(), RuntimeError> {
+) -> Result<i32, RuntimeError> {
     let program = parse(source).map_err(|e| RuntimeError {
         message: format!("sintaxe: {}", e.message),
         file: file.to_string(),
@@ -252,8 +252,8 @@ pub(crate) fn run_with<'a>(
         script_args,
     );
     match vm.run(&program) {
-        Ok(()) => Ok(()),
-        Err(EvalError::Quit) => Ok(()),
+        Ok(()) => Ok(0),
+        Err(EvalError::Quit(code)) => Ok(code),
         Err(EvalError::Runtime(e)) => Err(e),
     }
 }
@@ -776,7 +776,7 @@ impl<'a> Vm<'a> {
                 attempt, fallback, ..
             } => match self.eval_expr(attempt, env) {
                 Ok(v) => Ok(v),
-                Err(EvalError::Quit) => Err(EvalError::Quit),
+                Err(EvalError::Quit(code)) => Err(EvalError::Quit(code)),
                 Err(EvalError::Runtime(_)) => self.eval_expr(fallback, env),
             },
         }
@@ -1300,7 +1300,7 @@ impl<'a> Vm<'a> {
             stack: &stack,
         }) {
             DebugAction::Continue => Ok(()),
-            DebugAction::Quit => Err(EvalError::Quit),
+            DebugAction::Quit => Err(EvalError::Quit(0)),
             DebugAction::Timeout => Err(self.err("tempo esgotado", span)),
         }
     }
@@ -1609,6 +1609,44 @@ mod tests {
         let src = include_str!("../../examples/erros.lep");
         let out = run_to_string(src, "erros.lep").unwrap();
         assert_eq!(out, "");
+    }
+
+    #[test]
+    fn sair_stops_the_program() {
+        let src = r#"
+escreva("antes")
+sair(1)
+escreva("depois")
+"#;
+        let mut input = io::Cursor::new("");
+        let mut out = Vec::new();
+        let mut err = Vec::new();
+        let code = run_with(
+            src,
+            "t.lep",
+            Box::new(NoopHook),
+            &mut input,
+            &mut out,
+            &mut err,
+            None,
+            None,
+            None,
+            &[],
+        )
+        .unwrap();
+        assert_eq!(code, 1);
+        assert_eq!(String::from_utf8(out).unwrap(), "antes\n");
+        assert_eq!(run(r#"sair()"#), "");
+        let skipped = run(r#"
+sair(0)
+escreva("depois")
+"#);
+        assert_eq!(skipped, "");
+        let not_caught = run(r#"
+sair(1) se_falhar 0
+escreva("depois")
+"#);
+        assert_eq!(not_caught, "");
     }
 
     #[test]

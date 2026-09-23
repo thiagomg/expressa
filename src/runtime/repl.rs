@@ -1,5 +1,6 @@
 use std::io::{self, BufRead, IsTerminal, Write};
 use std::path::PathBuf;
+use std::process;
 use std::rc::Rc;
 
 use rustyline::DefaultEditor;
@@ -16,6 +17,7 @@ use super::value::Value;
 pub struct ReplSession<'a> {
     vm: Vm<'a>,
     env: Rc<std::cell::RefCell<Env>>,
+    exit_code: Option<i32>,
 }
 
 impl<'a> ReplSession<'a> {
@@ -38,7 +40,11 @@ impl<'a> ReplSession<'a> {
         );
         let env = Env::child(&vm.builtins_env(), FrameKind::Module);
         vm.enter_repl();
-        Self { vm, env }
+        Self {
+            vm,
+            env,
+            exit_code: None,
+        }
     }
 
     pub fn eval(&mut self, source: &str) -> Result<Value, RuntimeError> {
@@ -51,7 +57,10 @@ impl<'a> ReplSession<'a> {
         })?;
         match self.vm.eval_items_value(&program.items, &self.env) {
             Ok(v) => Ok(v),
-            Err(EvalError::Quit) => Ok(Value::Nada),
+            Err(EvalError::Quit(code)) => {
+                self.exit_code = Some(code);
+                Ok(Value::Nada)
+            }
             Err(EvalError::Runtime(e)) => Err(e),
         }
     }
@@ -99,7 +108,15 @@ fn run_repl_editor(rl: &mut DefaultEditor) -> io::Result<()> {
         };
         match rl.readline(prompt) {
             Ok(line) => match apply_line(&mut session, &mut buf, &line) {
-                LineResult::Quit => break,
+                LineResult::Quit(code) => {
+                    if let Some(path) = history_path() {
+                        let _ = rl.save_history(&path);
+                    }
+                    if code != 0 {
+                        process::exit(code);
+                    }
+                    break;
+                }
                 LineResult::Continue => {}
                 LineResult::Ran(entry) => {
                     if !entry.is_empty() {
@@ -145,9 +162,12 @@ fn run_repl_plain() -> io::Result<()> {
             println!();
             break;
         }
-        if let LineResult::Quit =
+        if let LineResult::Quit(code) =
             apply_line(&mut session, &mut buf, line.trim_end_matches(['\n', '\r']))
         {
+            if code != 0 {
+                process::exit(code);
+            }
             break;
         }
     }
@@ -156,7 +176,7 @@ fn run_repl_plain() -> io::Result<()> {
 
 enum LineResult {
     Continue,
-    Quit,
+    Quit(i32),
     Ran(String),
 }
 
@@ -164,7 +184,7 @@ fn apply_line(session: &mut ReplSession<'_>, buf: &mut String, line: &str) -> Li
     let trimmed = line.trim();
     if buf.is_empty() {
         match parse_repl_command(trimmed) {
-            Some(ReplCommand::Sair) => return LineResult::Quit,
+            Some(ReplCommand::Sair) => return LineResult::Quit(0),
             Some(ReplCommand::Ajuda(topic)) => {
                 print_help(topic);
                 return LineResult::Ran(trimmed.to_string());
@@ -183,6 +203,9 @@ fn apply_line(session: &mut ReplSession<'_>, buf: &mut String, line: &str) -> Li
         Ok(Value::Nada) => {}
         Ok(v) => println!("{}", v.repl_format(session.vm.numero_locale)),
         Err(e) => eprintln!("{e}"),
+    }
+    if let Some(code) = session.exit_code {
+        return LineResult::Quit(code);
     }
     LineResult::Ran(source.trim().to_string())
 }
@@ -260,7 +283,8 @@ fn print_help_geral() {
          ajuda linguagem        se, para, funcao, se_falhar…\n  \
          ajuda escreva          detalhe de uma função\n  \
          formato(\"pt\") / en     padrão de números em texto\n  \
-         sair                   encerra (também Ctrl+D)\n  \
+         sair                   encerra o REPL (também Ctrl+D)\n  \
+         sair() / sair(1)       nativa: encerra o processo\n  \
          ↑ ↓                    comandos anteriores"
     );
 }

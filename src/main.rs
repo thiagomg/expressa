@@ -74,9 +74,16 @@ fn try_main() -> Result<(), Box<dyn std::error::Error>> {
                 process::exit(1);
             }
         },
-        "debug" => debug_source_args(&source, file, script_args)?,
-        "marcador-leia" => run_source_marcador_args(&source, file, script_args)?,
-        _ => run_source_args(&source, file, script_args)?,
+        "debug" => exit_if_nonzero(debug_source_args(&source, file, script_args)?)?,
+        "marcador-leia" => exit_if_nonzero(run_source_marcador_args(&source, file, script_args)?)?,
+        _ => exit_if_nonzero(run_source_args(&source, file, script_args)?)?,
+    }
+    Ok(())
+}
+
+fn exit_if_nonzero(code: i32) -> Result<(), Box<dyn std::error::Error>> {
+    if code != 0 {
+        process::exit(code);
     }
     Ok(())
 }
