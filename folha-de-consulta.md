@@ -156,6 +156,7 @@ idade = numero(leia("Idade: ")) se_falhar 0
 linhas = leia_linhas()         // resto da entrada → lista; vazio = []
 
 busca = argumentos[1]          // depois do .lep; REPL → []
+eh_terminal()                  // teclado?  também é_terminal()
 ```
 
 ```text
@@ -196,7 +197,7 @@ soma(10, 5)
 | | |
 |---|---|
 | `escreva` `escreva_erro` `sair` | imprimir / encerrar |
-| `leia` `leia_linhas` | teclado / pipe |
+| `leia` `leia_linhas` `eh_terminal` | teclado / pipe |
 | `argumentos` | lista (não é função) |
 | `numero` `formato` `raiz` | número |
 | `tamanho` `primeiro` `ultimo` | coleção |

@@ -21,6 +21,7 @@ impl Vm<'_> {
             "sair" => self.bi_sair(args, span),
             "leia" => self.bi_leia(args, span),
             "leia_linhas" => self.bi_leia_linhas(args, span),
+            "eh_terminal" | "é_terminal" => self.bi_eh_terminal(args, span),
             "raiz" => self.bi_raiz(args, span),
             "transposta" => self.bi_transposta(args, span),
             "det" => self.bi_det(args, span),
@@ -156,6 +157,19 @@ impl Vm<'_> {
             lines.push(Value::Texto(line));
         }
         Ok(Value::lista(lines))
+    }
+
+    fn bi_eh_terminal(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
+        if !args.is_empty() {
+            return Err(self.err(
+                format!(
+                    "eh_terminal() não espera argumentos, recebeu {}",
+                    args.len()
+                ),
+                span,
+            ));
+        }
+        Ok(Value::Bool(self.input.is_terminal()))
     }
 
     fn bi_numero(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
@@ -479,6 +493,8 @@ pub(crate) const BUILTINS: &[&str] = &[
     "sair",
     "leia",
     "leia_linhas",
+    "eh_terminal",
+    "é_terminal",
     "numero",
     "formato",
     "raiz",
@@ -538,6 +554,12 @@ pub(crate) const BUILTIN_DOCS: &[BuiltinDoc] = &[
         sig: "leia_linhas() -> lista",
         summary: "Lê todas as linhas da entrada padrão (pipe/arquivo) até o fim.",
         example: r#"para linha em leia_linhas() { escreva(linha) }"#,
+    },
+    BuiltinDoc {
+        name: "eh_terminal",
+        sig: "eh_terminal() -> bool",
+        summary: "Verdadeiro se a entrada é o teclado (não um pipe). Também é_terminal().",
+        example: r#"se eh_terminal() { nome = leia("Nome: ") }"#,
     },
     BuiltinDoc {
         name: "numero",
@@ -662,6 +684,10 @@ pub(crate) const BUILTIN_DOCS: &[BuiltinDoc] = &[
 ];
 
 pub(crate) fn lookup_builtin_doc(name: &str) -> Option<&'static BuiltinDoc> {
+    let name = match name {
+        "é_terminal" => "eh_terminal",
+        other => other,
+    };
     BUILTIN_DOCS.iter().find(|d| d.name == name)
 }
 
@@ -743,8 +769,14 @@ mod tests {
         assert!(BUILTINS.contains(&"leia_linhas"));
         assert!(BUILTINS.contains(&"raiz"));
         assert!(BUILTINS.contains(&"numero"));
-        assert_eq!(BUILTINS.len(), 25);
-        assert_eq!(BUILTIN_DOCS.len(), BUILTINS.len());
+        assert!(BUILTINS.contains(&"eh_terminal"));
+        assert!(BUILTINS.contains(&"é_terminal"));
+        assert_eq!(BUILTINS.len(), 27);
+        assert_eq!(BUILTIN_DOCS.len(), 26);
+        assert_eq!(
+            lookup_builtin_doc("é_terminal").map(|d| d.name),
+            Some("eh_terminal")
+        );
         for name in BUILTINS {
             assert!(
                 lookup_builtin_doc(name).is_some(),
@@ -790,6 +822,13 @@ escreva(numero("1,000.5"))"#),
         assert!(run_err(r#"sair("x")"#).contains("esperado numero"));
         assert!(run_err("sair(1, 2)").contains("espera 0 ou 1"));
         assert!(run_err("sair(1.5)").contains("inteiro"));
+    }
+
+    #[test]
+    fn eh_terminal_is_false_on_captured_stdin() {
+        assert_eq!(run("escreva(eh_terminal())"), "falso\n");
+        assert_eq!(run("escreva(é_terminal())"), "falso\n");
+        assert!(run_err("eh_terminal(1)").contains("não espera argumentos"));
     }
 
     #[test]

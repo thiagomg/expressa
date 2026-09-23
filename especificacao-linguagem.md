@@ -275,6 +275,8 @@ fim
 cat nomes.txt | expressa grep.lep Thiago
 ```
 
+`eh_terminal()` (também `é_terminal()`) é `verdadeiro` se a entrada é o teclado, `falso` se é um pipe ou um arquivo.
+
 `argumentos` é a lista dos valores depois do `.lep` na linha de comando (`argumentos[1]` é o primeiro; índices começam em 1). Sem argumentos extras, a lista é `[]`. Não dá para reatribuir `argumentos`.
 
 `escreva` vai para a saída padrão (stdout). `escreva_erro` vai para a saída de erro (stderr).

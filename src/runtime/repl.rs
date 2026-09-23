@@ -72,6 +72,10 @@ impl LineInput for ConsoleInput {
     fn read_line(&mut self, buf: &mut String) -> io::Result<usize> {
         io::stdin().read_line(buf)
     }
+
+    fn is_terminal(&self) -> bool {
+        io::stdin().is_terminal()
+    }
 }
 
 /// Interactive prompt. `sair` or Ctrl+D leaves.

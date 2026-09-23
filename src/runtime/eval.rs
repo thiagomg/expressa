@@ -1,6 +1,6 @@
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
-use std::io::{self, BufRead, Write};
+use std::io::{self, BufRead, IsTerminal, Write};
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::time::{Duration, Instant};
@@ -24,6 +24,9 @@ use super::value::{
 /// debugger can still prompt on the same terminal).
 pub(crate) trait LineInput {
     fn read_line(&mut self, buf: &mut String) -> io::Result<usize>;
+    fn is_terminal(&self) -> bool {
+        false
+    }
 }
 
 impl<T: BufRead> LineInput for T {
@@ -37,6 +40,10 @@ struct ConsoleInput;
 impl LineInput for ConsoleInput {
     fn read_line(&mut self, buf: &mut String) -> io::Result<usize> {
         io::stdin().read_line(buf)
+    }
+
+    fn is_terminal(&self) -> bool {
+        io::stdin().is_terminal()
     }
 }
 

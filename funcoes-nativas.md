@@ -21,6 +21,7 @@ Caminhos de arquivo **relativos** são resolvidos a partir da pasta do `.lep` em
 | [`sair`](#sair) | Encerra o programa |
 | [`leia`](#leia) | Lê uma linha do teclado |
 | [`leia_linhas`](#leia_linhas) | Lê todas as linhas da entrada padrão |
+| [`eh_terminal`](#eh_terminal) | Entrada é o teclado? (`é_terminal` também) |
 | [`argumentos`](#argumentos) | Lista dos valores após o `.lep` |
 | [`numero`](#numero) | Transforma texto em número |
 | [`raiz`](#raiz) | Raiz quadrada |
@@ -147,6 +148,28 @@ fim
 
 ```text
 cat arquivo.txt | expressa prog.lep
+```
+
+### `eh_terminal`
+
+```text
+eh_terminal() -> bool
+é_terminal() -> bool
+```
+
+`verdadeiro` se a entrada padrão é o **teclado** (terminal). `falso` se veio de um pipe, de um arquivo (`< dados.txt`) ou da Aula.
+
+Sem argumentos. As duas grafias são a mesma função.
+
+```text
+se eh_terminal()
+inicio
+    nome = leia("Seu nome: ")
+fim
+senao
+inicio
+    nome = leia() se_falhar ""
+fim
 ```
 
 ### `argumentos`

@@ -18,7 +18,8 @@
     "mapa" "matriz" "importe" "contem" "contém"))
 
 (defconst expressa-builtins
-  '("escreva" "escreva_erro" "sair" "leia" "leia_linhas" "argumentos"
+  '("escreva" "escreva_erro" "sair" "leia" "leia_linhas"
+    "eh_terminal" "é_terminal" "argumentos"
     "numero" "formato" "raiz"
     "transposta" "det" "identidade"
     "tamanho" "primeiro" "ultimo"

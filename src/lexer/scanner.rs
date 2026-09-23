@@ -731,13 +731,14 @@ mod tests {
     #[test]
     fn identifiers_are_not_keywords() {
         assert_eq!(
-            kinds("x soma _priv lista2 média"),
+            kinds("x soma _priv lista2 média é_terminal"),
             vec![
                 TokenKind::Ident("x".into()),
                 TokenKind::Ident("soma".into()),
                 TokenKind::Ident("_priv".into()),
                 TokenKind::Ident("lista2".into()),
                 TokenKind::Ident("média".into()),
+                TokenKind::Ident("é_terminal".into()),
                 TokenKind::Eof,
             ]
         );
