@@ -124,6 +124,8 @@ tamanho(A[1])    // colunas
 
 Cada ramo tem seu próprio bloco (`inicio`/`fim` ou `{`/`}`).
 
+Como **comando**, `senao` é opcional. Como **valor** (`x = se …`, argumento, `r = { se … }`), `senao` é obrigatório. No corpo da função, um `se` no fim continua sendo comando.
+
 ```text
 se nota >= 7
 inicio
@@ -180,10 +182,32 @@ A condição de `enquanto` tem que ser `verdadeiro` ou `falso`. O corpo usa `ini
 ```text
 soma = funcao(x, y)
 inicio
-    x + y
+    x + y                  // última expressão = resultado
 fim
 
 escreva(soma(10, 5))     // 15
+
+busca = funcao(xs, alvo)
+inicio
+    para x em xs
+    inicio
+        se x == alvo
+        inicio
+            retorne verdadeiro     // sai da função, não só do se
+        fim
+    fim
+    falso
+fim
+```
+
+`retorne` só vale **dentro de uma função**. `retorne` sozinho devolve `nada`. O valor, se houver, fica **na mesma linha**. Não é capturado por `se_falhar`.
+
+`se` usado **como valor** (`x = se …`, argumento, última expressão da função) precisa de `senao`. Como comando, o `senao` é opcional:
+
+```text
+se n < 0 { escreva("negativo") }           // ok
+x = se n >= 7 { "ok" }                     // erro: falta senao
+x = se n >= 7 { "ok" } senao { "não" }     // ok
 ```
 
 ---

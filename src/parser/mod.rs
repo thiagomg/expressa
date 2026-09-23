@@ -5,6 +5,7 @@ pub mod expression_types;
 pub mod incomplete;
 pub mod operator_types;
 pub mod parser;
+pub mod se_value;
 pub mod statement_types;
 
 // legacy empty module kept if referenced

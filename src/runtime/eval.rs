@@ -261,6 +261,12 @@ pub(crate) fn run_with<'a>(
     match vm.run(&program) {
         Ok(()) => Ok(0),
         Err(EvalError::Quit(code)) => Ok(code),
+        Err(EvalError::Return { span, .. }) => Err(RuntimeError {
+            message: "retorne só pode ser usado numa função".into(),
+            file: file.to_string(),
+            span,
+            stack: vec![],
+        }),
         Err(EvalError::Runtime(e)) => Err(e),
     }
 }
@@ -323,7 +329,7 @@ impl<'a> Vm<'a> {
             Ok(())
         })();
         self.stack.pop();
-        result
+        self.retorne_so_em_funcao(result)
     }
 
     fn eval_item(&mut self, item: &Item, env: &Rc<RefCell<Env>>) -> Result<(), EvalError> {
@@ -354,7 +360,10 @@ impl<'a> Vm<'a> {
     ) -> Result<Value, EvalError> {
         let mut last = Value::Nada;
         for item in items {
-            last = self.eval_item_value(item, env)?;
+            last = match self.eval_item_value(item, env) {
+                Ok(v) => v,
+                Err(e) => return self.retorne_so_em_funcao(Err(e)),
+            };
         }
         Ok(last)
     }
@@ -593,6 +602,16 @@ impl<'a> Vm<'a> {
                 }
                 Ok(Value::Nada)
             }
+            Stmt::Retorne { value, span } => {
+                let v = match value {
+                    Some(expr) => self.eval_expr(expr, env)?,
+                    None => Value::Nada,
+                };
+                Err(EvalError::Return {
+                    value: v,
+                    span: *span,
+                })
+            }
         }
     }
 
@@ -784,6 +803,7 @@ impl<'a> Vm<'a> {
             } => match self.eval_expr(attempt, env) {
                 Ok(v) => Ok(v),
                 Err(EvalError::Quit(code)) => Err(EvalError::Quit(code)),
+                Err(EvalError::Return { value, span }) => Err(EvalError::Return { value, span }),
                 Err(EvalError::Runtime(_)) => self.eval_expr(fallback, env),
             },
         }
@@ -973,7 +993,11 @@ impl<'a> Vm<'a> {
                 });
                 let result = self.eval_stmts(&closure.body.stmts, &call_env);
                 self.stack.pop();
-                result
+                match result {
+                    Ok(v) => Ok(v),
+                    Err(EvalError::Return { value, .. }) => Ok(value),
+                    Err(e) => Err(e),
+                }
             }
             other => Err(self.err(
                 format!(
@@ -1309,6 +1333,15 @@ impl<'a> Vm<'a> {
             DebugAction::Continue => Ok(()),
             DebugAction::Quit => Err(EvalError::Quit(0)),
             DebugAction::Timeout => Err(self.err("tempo esgotado", span)),
+        }
+    }
+
+    fn retorne_so_em_funcao<T>(&self, result: Result<T, EvalError>) -> Result<T, EvalError> {
+        match result {
+            Err(EvalError::Return { span, .. }) => {
+                Err(self.err("retorne só pode ser usado numa função", span))
+            }
+            other => other,
         }
     }
 
@@ -1654,6 +1687,65 @@ sair(1) se_falhar 0
 escreva("depois")
 "#);
         assert_eq!(not_caught, "");
+    }
+
+    #[test]
+    fn retorne_leaves_the_function() {
+        let src = r#"
+busca = funcao(xs, alvo)
+inicio
+    para x em xs
+    inicio
+        se x == alvo
+        inicio
+            retorne verdadeiro
+        fim
+    fim
+    falso
+fim
+escreva(busca([1, 2, 3], 2))
+escreva(busca([1, 2, 3], 9))
+"#;
+        assert_eq!(run(src), "verdadeiro\nfalso\n");
+        assert_eq!(
+            run(r#"
+f = funcao()
+inicio
+    retorne
+    escreva("nao")
+fim
+escreva(f())
+"#),
+            "nada\n"
+        );
+        assert_eq!(
+            run(r#"
+soma = funcao(x, y)
+inicio
+    x + y
+fim
+escreva(soma(2, 3))
+"#),
+            "5\n"
+        );
+        let msg = run_err("retorne 1");
+        assert!(msg.contains("função"), "{msg}");
+        let skipped = run(r#"
+f = funcao()
+inicio
+    se verdadeiro
+    inicio
+        retorne 1
+    fim
+    senao
+    inicio
+        0
+    fim
+    se_falhar 9
+fim
+escreva(f())
+"#);
+        assert_eq!(skipped, "1\n");
     }
 
     #[test]

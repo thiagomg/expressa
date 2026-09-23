@@ -40,6 +40,9 @@ pub enum Stmt {
 
     /// `enquanto condicao inicio ... fim`
     Enquanto { cond: Expr, body: Block, span: Span },
+
+    /// `retorne` or `retorne expr` — leaves the enclosing `funcao`.
+    Retorne { value: Option<Expr>, span: Span },
 }
 
 /// Left-hand side of `=`.
@@ -78,7 +81,8 @@ impl Stmt {
             | Stmt::Repita { span, .. }
             | Stmt::ParaRange { span, .. }
             | Stmt::ParaIn { span, .. }
-            | Stmt::Enquanto { span, .. } => *span,
+            | Stmt::Enquanto { span, .. }
+            | Stmt::Retorne { span, .. } => *span,
         }
     }
 }

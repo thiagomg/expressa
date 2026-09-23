@@ -49,6 +49,7 @@
       <prefix>\b</prefix>
       <suffix>\b</suffix>
       <keyword>se_falhar</keyword>
+      <keyword>retorne</keyword>
       <keyword>se</keyword>
       <keyword>senao</keyword>
       <keyword>ou</keyword>

@@ -13,6 +13,7 @@
 
 (defconst expressa-keywords
   '("se_falhar" "se" "senao" "senão" "ou" "e" "nao" "não"
+    "retorne"
     "inicio" "início" "fim" "funcao" "função"
     "para" "de" "ate" "até" "em" "repita" "enquanto" "vezes"
     "mapa" "matriz" "importe" "contem" "contém"))

@@ -13,7 +13,9 @@ use crate::parser::statement_types::{AssignTarget, Stmt};
 pub fn parse(source: &str) -> Result<Program, ParseError> {
     let tokens = tokenize(source)?;
     let mut parser = Parser::new(tokens);
-    parser.parse_program()
+    let program = parser.parse_program()?;
+    crate::parser::se_value::check_se_value(&program)?;
+    Ok(program)
 }
 
 struct Parser {
@@ -136,6 +138,7 @@ impl Parser {
             TokenKind::Repita => self.parse_repita(),
             TokenKind::Enquanto => self.parse_enquanto(),
             TokenKind::Para => self.parse_para(),
+            TokenKind::Retorne => self.parse_retorne(),
             _ => {
                 let expr = self.parse_expr()?;
                 if matches!(self.peek_kind(), TokenKind::Eq) {
@@ -206,6 +209,26 @@ impl Parser {
                 })
             }
             _ => Err(self.err("esperado 'de' ou 'em' após variável do 'para'")),
+        }
+    }
+
+    fn parse_retorne(&mut self) -> Result<Stmt, ParseError> {
+        let start = self.remove().span;
+        // Value must be on the same line (`retorne` then a new statement
+        // would otherwise swallow `escreva(...)` as the returned value).
+        let same_line = self.peek().span.line == start.line;
+        if same_line && expr_can_start(self.peek_kind()) {
+            let value = self.parse_expr()?;
+            let span = start.join(value.span());
+            Ok(Stmt::Retorne {
+                value: Some(value),
+                span,
+            })
+        } else {
+            Ok(Stmt::Retorne {
+                value: None,
+                span: start,
+            })
         }
     }
 
@@ -806,6 +829,27 @@ impl Parser {
     }
 }
 
+fn expr_can_start(kind: &TokenKind) -> bool {
+    matches!(
+        kind,
+        TokenKind::Number(_)
+            | TokenKind::String(_)
+            | TokenKind::Verdadeiro
+            | TokenKind::Falso
+            | TokenKind::Ident(_)
+            | TokenKind::LParen
+            | TokenKind::LBracket
+            | TokenKind::Inicio
+            | TokenKind::LBrace
+            | TokenKind::Se
+            | TokenKind::Funcao
+            | TokenKind::Mapa
+            | TokenKind::Matriz
+            | TokenKind::Minus
+            | TokenKind::Nao
+    )
+}
+
 // ── helpers ──────────────────────────────────────────────────────
 
 /// Look up an **infix** operator and its two binding powers.
@@ -1304,6 +1348,36 @@ fim
 
         let src = "enquanto verdadeiro { i = i + 1 }";
         assert!(matches!(first_stmt(&parse_ok(src)), Stmt::Enquanto { .. }));
+    }
+
+    #[test]
+    fn retorne_statement() {
+        assert!(matches!(
+            first_stmt(&parse_ok("retorne")),
+            Stmt::Retorne { value: None, .. }
+        ));
+        assert!(matches!(
+            first_stmt(&parse_ok("retorne 1 + 2")),
+            Stmt::Retorne { value: Some(_), .. }
+        ));
+        let src = r#"
+f = funcao(xs, alvo)
+inicio
+    para x em xs
+    inicio
+        se x == alvo
+        inicio
+            retorne verdadeiro
+        fim
+    fim
+    falso
+fim
+"#;
+        parse_ok(src);
+        match first_stmt(&parse_ok("retorne\nescreva(1)")) {
+            Stmt::Retorne { value: None, .. } => {}
+            other => panic!("{other:?}"),
+        }
     }
 
     #[test]

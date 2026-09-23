@@ -44,7 +44,8 @@ pub enum TokenKind {
     Contem,     // contem (infix operator, but reserved word)
     Verdadeiro, // verdadeiro
     Falso,      // falso
-    SeFalhar,   // se_falhar   (ONE keyword, not Se + Ident)
+    SeFalhar,   // se_falhar
+    Retorne,    // retorne   (ONE keyword, not Se + Ident)
 
     // ── Arithmetic ────────────────────────────────────────────────
     Plus,    // +
@@ -108,6 +109,7 @@ pub fn keyword(s: &str) -> Option<TokenKind> {
         "verdadeiro" => TokenKind::Verdadeiro,
         "falso" => TokenKind::Falso,
         "se_falhar" => TokenKind::SeFalhar,
+        "retorne" => TokenKind::Retorne,
         _ => return None,
     })
 }

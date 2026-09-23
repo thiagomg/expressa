@@ -78,9 +78,11 @@ xs.tamanho()                   // igual a tamanho(xs)  — o () é obrigatório
 ## Controle
 
 ```text
-se nota >= 7 { "aprovado" }
-ou se nota >= 5 { "recuperação" }
-senao { "reprovado" }
+se nota >= 7 { "aprovado" } senao { "reprovado" }   // como valor, senao obrigatório
+se n < 0 { escreva("negativo") }                    // comando: senao opcional
+
+retorne verdadeiro                 // só numa função; sai na hora
+retorne                            // devolve nada
 
 repita 3 vezes { escreva("olá") }
 
@@ -103,11 +105,18 @@ Não há `pare` / `continue`. Sem `se_falhar`, o programa para.
 
 ## Funções
 
-Última expressão do bloco é o resultado. Sem `retorne`.
+Última expressão do bloco é o resultado. `retorne` sai mais cedo.
 
 ```text
 soma = funcao(x, y) { x + y }
 escreva(soma(10, 5))           // 15
+
+busca = funcao(xs, alvo) {
+    para x em xs {
+        se x == alvo { retorne verdadeiro }
+    }
+    falso
+}
 ```
 
 ---

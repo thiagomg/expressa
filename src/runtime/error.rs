@@ -2,6 +2,8 @@ use std::fmt;
 
 use crate::lexer::Span;
 
+use super::value::Value;
+
 #[derive(Debug, Clone)]
 pub struct CallFrame {
     pub name: String,
@@ -48,6 +50,11 @@ pub(crate) enum EvalError {
     Runtime(RuntimeError),
     /// `sair(codigo)` or the debugger's `terminar`. Not caught by `se_falhar`.
     Quit(i32),
+    /// `retorne` inside a `funcao`. Not caught by `se_falhar`.
+    Return {
+        value: Value,
+        span: Span,
+    },
 }
 
 impl From<RuntimeError> for EvalError {

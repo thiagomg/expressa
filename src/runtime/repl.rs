@@ -61,6 +61,12 @@ impl<'a> ReplSession<'a> {
                 self.exit_code = Some(code);
                 Ok(Value::Nada)
             }
+            Err(EvalError::Return { span, .. }) => Err(RuntimeError {
+                message: "retorne só pode ser usado numa função".into(),
+                file: "<repl>".into(),
+                span,
+                stack: vec![],
+            }),
             Err(EvalError::Runtime(e)) => Err(e),
         }
     }
@@ -311,6 +317,8 @@ fn print_help_builtin(doc: &super::builtins::BuiltinDoc) {
 fn print_help_linguagem() {
     println!(
         "  se cond inicio … fim  [ou se …]  [senao …]\n  \
+         se como valor precisa de senao; como comando, senao é opcional\n  \
+         retorne / retorne expr     sai da função\n  \
          se cond {{ … }} senao {{ … }}   '{{' e '}}' valem como inicio/fim\n  \
          para i de 1 ate 10 {{ … }}\n  \
          para x em lista {{ … }}\n  \
