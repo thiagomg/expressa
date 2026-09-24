@@ -33,6 +33,7 @@ Caminhos de arquivo **relativos** são resolvidos a partir da pasta do `.lep` em
 | [`ultimo`](#ultimo) | Último elemento de uma lista |
 | [`maiuscula`](#maiuscula) | Texto em letras maiúsculas |
 | [`minuscula`](#minuscula) | Texto em letras minúsculas |
+| [`sem_acento`](#sem_acento) | Tira acentos e cedilha |
 | [`substitua`](#substitua) | Troca trechos de um texto |
 | [`separe`](#separe) | Parte um texto em lista |
 | [`junte`](#junte) | Junta uma lista em um texto |
@@ -368,6 +369,30 @@ Converte todas as letras para minúsculas.
 
 ```text
 minuscula("Olá, Mundo")    // "olá, mundo"
+```
+
+### `sem_acento`
+
+```text
+sem_acento(texto) -> texto
+```
+
+Devolve uma cópia sem acentos nem cedilha. **Não** muda maiúscula/minúscula.
+
+| vira | de |
+|------|-----|
+| `a` / `A` | á à â ã ä |
+| `e` / `E` | é è ê |
+| `i` / `I` | í ì î |
+| `o` / `O` | ó ò ô õ |
+| `u` / `U` | ú ù û ü |
+| `c` / `C` | ç |
+
+**Erros:** o argumento não é texto.
+
+```text
+sem_acento("São Paulo")    // "Sao Paulo"
+minuscula(sem_acento("OLÁ"))    // "ola"
 ```
 
 ### `substitua`

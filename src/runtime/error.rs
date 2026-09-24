@@ -55,6 +55,14 @@ pub(crate) enum EvalError {
         value: Value,
         span: Span,
     },
+    /// `pare` in a loop. Not caught by `se_falhar`.
+    Break {
+        span: Span,
+    },
+    /// `continue` in a loop. Not caught by `se_falhar`.
+    Continue {
+        span: Span,
+    },
 }
 
 impl From<RuntimeError> for EvalError {

@@ -15,7 +15,7 @@
 
 (defconst expressa-keywords
   '("se_falhar" "se" "senao" "senão" "ou" "e" "nao" "não"
-    "retorne"
+    "retorne" "pare" "continue" "continua"
     "inicio" "início" "fim" "funcao" "função"
     "para" "de" "ate" "até" "em" "repita" "enquanto" "vezes"
     "mapa" "matriz" "importe" "contem" "contém"))
@@ -26,7 +26,7 @@
     "numero" "formato" "raiz"
     "transposta" "det" "identidade"
     "tamanho" "primeiro" "ultimo"
-    "maiuscula" "minuscula" "substitua" "separe" "junte" "limpe"
+    "maiuscula" "minuscula" "sem_acento" "substitua" "separe" "junte" "limpe"
     "leia_arquivo" "salve_arquivo" "adicione_arquivo"
     "leia_csv" "salve_csv"))
 

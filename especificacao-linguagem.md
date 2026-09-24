@@ -175,6 +175,17 @@ fim
 
 A condição de `enquanto` tem que ser `verdadeiro` ou `falso`. O corpo usa `inicio`/`fim` ou `{`/`}`.
 
+`para x em` percorre **lista** ou **texto** (um caractere por vez):
+
+```text
+para ch em "olá"
+inicio
+    escreva(ch)        // o  l  á
+fim
+```
+
+`pare` sai do laço mais interno (`para`, `enquanto`, `repita`). `continue` (ou `continua`) pula para a próxima volta. Fora de um laço é erro. Não são capturados por `se_falhar`.
+
 ---
 
 ## 8. Funções (primeira classe)
@@ -258,6 +269,7 @@ nome = "  Maria Silva  "
 
 tamanho(nome)
 maiuscula(nome)
+sem_acento("olá")          // "ola"
 minuscula(nome)
 nome contem "Silva"
 substitua(nome, "Maria", "Ana")

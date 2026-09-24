@@ -267,6 +267,18 @@ pub(crate) fn run_with<'a>(
             span,
             stack: vec![],
         }),
+        Err(EvalError::Break { span }) => Err(RuntimeError {
+            message: "pare só pode ser usado num laço".into(),
+            file: file.to_string(),
+            span,
+            stack: vec![],
+        }),
+        Err(EvalError::Continue { span }) => Err(RuntimeError {
+            message: "continue só pode ser usado num laço".into(),
+            file: file.to_string(),
+            span,
+            stack: vec![],
+        }),
         Err(EvalError::Runtime(e)) => Err(e),
     }
 }
@@ -552,7 +564,9 @@ impl<'a> Vm<'a> {
                 }
                 let loop_env = Env::child(env, FrameKind::Block);
                 for _ in 0..n {
-                    self.eval_stmts(&body.stmts, &loop_env)?;
+                    if self.eval_loop_body(&body.stmts, &loop_env)? {
+                        break;
+                    }
                 }
                 Ok(Value::Nada)
             }
@@ -573,7 +587,9 @@ impl<'a> Vm<'a> {
                     loop_env
                         .borrow_mut()
                         .define(var.clone(), Value::Numero(i as f64));
-                    self.eval_stmts(&body.stmts, &loop_env)?;
+                    if self.eval_loop_body(&body.stmts, &loop_env)? {
+                        break;
+                    }
                     i += 1;
                 }
                 Ok(Value::Nada)
@@ -582,11 +598,13 @@ impl<'a> Vm<'a> {
                 var, iter, body, ..
             } => {
                 let seq = self.eval_expr(iter, env)?;
-                let items = self.expect_lista(&seq, iter.span())?.borrow().clone();
+                let items = self.iter_items(&seq, iter.span())?;
                 let loop_env = Env::child(env, FrameKind::Block);
                 for item in items {
                     loop_env.borrow_mut().define(var.clone(), item);
-                    self.eval_stmts(&body.stmts, &loop_env)?;
+                    if self.eval_loop_body(&body.stmts, &loop_env)? {
+                        break;
+                    }
                 }
                 Ok(Value::Nada)
             }
@@ -598,10 +616,14 @@ impl<'a> Vm<'a> {
                     if !self.expect_bool(&cond_v, cond.span())? {
                         break;
                     }
-                    self.eval_stmts(&body.stmts, &loop_env)?;
+                    if self.eval_loop_body(&body.stmts, &loop_env)? {
+                        break;
+                    }
                 }
                 Ok(Value::Nada)
             }
+            Stmt::Pare { span } => Err(EvalError::Break { span: *span }),
+            Stmt::Continue { span } => Err(EvalError::Continue { span: *span }),
             Stmt::Retorne { value, span } => {
                 let v = match value {
                     Some(expr) => self.eval_expr(expr, env)?,
@@ -612,6 +634,33 @@ impl<'a> Vm<'a> {
                     span: *span,
                 })
             }
+        }
+    }
+
+    /// `true` = `pare` left the loop.
+    fn eval_loop_body(
+        &mut self,
+        stmts: &[Stmt],
+        env: &Rc<RefCell<Env>>,
+    ) -> Result<bool, EvalError> {
+        match self.eval_stmts(stmts, env) {
+            Ok(_) | Err(EvalError::Continue { .. }) => Ok(false),
+            Err(EvalError::Break { .. }) => Ok(true),
+            Err(e) => Err(e),
+        }
+    }
+
+    fn iter_items(&self, seq: &Value, span: Span) -> Result<Vec<Value>, EvalError> {
+        match seq {
+            Value::Lista(xs) => Ok(xs.borrow().clone()),
+            Value::Texto(s) => Ok(s.chars().map(|c| Value::Texto(c.to_string())).collect()),
+            other => Err(self.err(
+                format!(
+                    "'para … em' espera lista ou texto, encontrado {}",
+                    other.type_name()
+                ),
+                span,
+            )),
         }
     }
 
@@ -804,6 +853,8 @@ impl<'a> Vm<'a> {
                 Ok(v) => Ok(v),
                 Err(EvalError::Quit(code)) => Err(EvalError::Quit(code)),
                 Err(EvalError::Return { value, span }) => Err(EvalError::Return { value, span }),
+                Err(EvalError::Break { span }) => Err(EvalError::Break { span }),
+                Err(EvalError::Continue { span }) => Err(EvalError::Continue { span }),
                 Err(EvalError::Runtime(_)) => self.eval_expr(fallback, env),
             },
         }
@@ -996,6 +1047,12 @@ impl<'a> Vm<'a> {
                 match result {
                     Ok(v) => Ok(v),
                     Err(EvalError::Return { value, .. }) => Ok(value),
+                    Err(EvalError::Break { span }) => {
+                        Err(self.err("pare só pode ser usado num laço", span))
+                    }
+                    Err(EvalError::Continue { span }) => {
+                        Err(self.err("continue só pode ser usado num laço", span))
+                    }
                     Err(e) => Err(e),
                 }
             }
@@ -1340,6 +1397,12 @@ impl<'a> Vm<'a> {
         match result {
             Err(EvalError::Return { span, .. }) => {
                 Err(self.err("retorne só pode ser usado numa função", span))
+            }
+            Err(EvalError::Break { span }) => {
+                Err(self.err("pare só pode ser usado num laço", span))
+            }
+            Err(EvalError::Continue { span }) => {
+                Err(self.err("continue só pode ser usado num laço", span))
             }
             other => other,
         }
@@ -1687,6 +1750,80 @@ sair(1) se_falhar 0
 escreva("depois")
 "#);
         assert_eq!(not_caught, "");
+    }
+
+    #[test]
+    fn para_em_iterates_text() {
+        assert_eq!(
+            run(r#"
+para ch em "olá"
+inicio
+    escreva(ch)
+fim
+"#),
+            "o\nl\ná\n"
+        );
+        assert_eq!(run(r#"para ch em "" { escreva(ch) }"#), "");
+        let msg = run_err(
+            r#"
+para x em 10
+inicio
+    escreva(x)
+fim
+"#,
+        );
+        assert!(msg.contains("lista ou texto"), "{msg}");
+    }
+
+    #[test]
+    fn pare_and_continue_in_loops() {
+        assert_eq!(
+            run(r#"
+para i de 1 ate 5
+inicio
+    se i == 3 { pare }
+    escreva(i)
+fim
+"#),
+            "1\n2\n"
+        );
+        assert_eq!(
+            run(r#"
+para i de 1 ate 5
+inicio
+    se i == 3 { continue }
+    escreva(i)
+fim
+"#),
+            "1\n2\n4\n5\n"
+        );
+        assert_eq!(
+            run(r#"
+para ch em "abcd"
+inicio
+    se ch == "c" { pare }
+    escreva(ch)
+fim
+"#),
+            "a\nb\n"
+        );
+        assert_eq!(
+            run(r#"
+i = 0
+enquanto verdadeiro
+inicio
+    i = i + 1
+    se i == 2 { continue }
+    escreva(i)
+    se i >= 3 { pare }
+fim
+"#),
+            "1\n3\n"
+        );
+        let msg = run_err("pare");
+        assert!(msg.contains("laço"), "{msg}");
+        let msg = run_err("continue");
+        assert!(msg.contains("laço"), "{msg}");
     }
 
     #[test]

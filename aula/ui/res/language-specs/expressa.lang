@@ -50,6 +50,9 @@
       <suffix>\b</suffix>
       <keyword>se_falhar</keyword>
       <keyword>retorne</keyword>
+      <keyword>pare</keyword>
+      <keyword>continue</keyword>
+      <keyword>continua</keyword>
       <keyword>se</keyword>
       <keyword>senao</keyword>
       <keyword>ou</keyword>
@@ -92,6 +95,7 @@
       <keyword>ultimo</keyword>
       <keyword>maiuscula</keyword>
       <keyword>minuscula</keyword>
+      <keyword>sem_acento</keyword>
       <keyword>substitua</keyword>
       <keyword>separe</keyword>
       <keyword>junte</keyword>

@@ -88,6 +88,9 @@ repita 3 vezes { escreva("olá") }
 
 para i de 1 ate 5 { escreva(i) }
 para nome em ["Ana", "Bruno"] { escreva(nome) }
+para ch em "olá" { escreva(ch) }    // texto: um caractere por vez
+pare                               // sai do laço
+continue                           // próxima volta (também continua)
 
 i = 1
 enquanto i <= 3 {
@@ -99,7 +102,7 @@ valor = 10 / 0 se_falhar 0
 linhas = leia_arquivo("x.txt") se_falhar []
 ```
 
-Não há `pare` / `continue`. Sem `se_falhar`, o programa para.
+Sem `se_falhar`, um erro encerra o programa.
 
 ---
 
@@ -132,7 +135,7 @@ tamanho(xs)  primeiro(xs)  ultimo(xs)
 
 t = "  Maria Silva  "
 t[1]  t[1..5]
-tamanho(t)  maiuscula(t)  minuscula(t)  limpe(t)
+tamanho(t)  maiuscula(t)  minuscula(t)  limpe(t)  sem_acento(t)
 substitua(t, "Maria", "Ana")
 separe("a,b,c", ",")           // ["a", "b", "c"]
 junte(["a", "b"], " - ")
@@ -210,7 +213,7 @@ soma(10, 5)
 | `argumentos` | lista (não é função) |
 | `numero` `formato` `raiz` | número |
 | `tamanho` `primeiro` `ultimo` | coleção |
-| `maiuscula` `minuscula` `substitua` `separe` `junte` `limpe` | texto |
+| `maiuscula` `minuscula` `sem_acento` `substitua` `separe` `junte` `limpe` | texto |
 | `leia_arquivo` `salve_arquivo` `adicione_arquivo` | arquivo |
 | `leia_csv` `salve_csv` | CSV |
 | `transposta` `det` `identidade` | matriz |

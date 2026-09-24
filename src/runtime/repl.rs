@@ -67,6 +67,18 @@ impl<'a> ReplSession<'a> {
                 span,
                 stack: vec![],
             }),
+            Err(EvalError::Break { span }) => Err(RuntimeError {
+                message: "pare só pode ser usado num laço".into(),
+                file: "<repl>".into(),
+                span,
+                stack: vec![],
+            }),
+            Err(EvalError::Continue { span }) => Err(RuntimeError {
+                message: "continue só pode ser usado num laço".into(),
+                file: "<repl>".into(),
+                span,
+                stack: vec![],
+            }),
             Err(EvalError::Runtime(e)) => Err(e),
         }
     }
@@ -321,9 +333,10 @@ fn print_help_linguagem() {
          retorne / retorne expr     sai da função\n  \
          se cond {{ … }} senao {{ … }}   '{{' e '}}' valem como inicio/fim\n  \
          para i de 1 ate 10 {{ … }}\n  \
-         para x em lista {{ … }}\n  \
+         para x em lista ou texto {{ … }}\n  \
          enquanto cond {{ … }}\n  \
          repita n vezes {{ … }}\n  \
+         pare / continue         sai do laço / próxima volta\n  \
          argumentos[1]           primeiro argumento após o .lep\n  \
          funcao(a, b) {{ … }}            último valor é o resultado\n  \
          expr se_falhar outro            captura erro (divisão, arquivo, índice)\n  \

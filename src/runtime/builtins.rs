@@ -33,6 +33,7 @@ impl Vm<'_> {
             "ultimo" => self.bi_ultimo(args, span),
             "maiuscula" => self.bi_maiuscula(args, span),
             "minuscula" => self.bi_minuscula(args, span),
+            "sem_acento" => self.bi_sem_acento(args, span),
             "substitua" => self.bi_substitua(args, span),
             "separe" => self.bi_separe(args, span),
             "junte" => self.bi_junte(args, span),
@@ -333,6 +334,12 @@ impl Vm<'_> {
         Ok(Value::Texto(s.to_lowercase()))
     }
 
+    fn bi_sem_acento(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
+        self.expect_arity(args, 1, span)?;
+        let s = self.expect_texto(&args[0], span)?;
+        Ok(Value::Texto(sem_acento(&s)))
+    }
+
     fn bi_substitua(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
         self.expect_arity(args, 3, span)?;
         let s = self.expect_texto(&args[0], span)?;
@@ -506,6 +513,7 @@ pub(crate) const BUILTINS: &[&str] = &[
     "ultimo",
     "maiuscula",
     "minuscula",
+    "sem_acento",
     "substitua",
     "separe",
     "junte",
@@ -628,6 +636,12 @@ pub(crate) const BUILTIN_DOCS: &[BuiltinDoc] = &[
         example: r#"minuscula("Olá")    // "olá""#,
     },
     BuiltinDoc {
+        name: "sem_acento",
+        sig: "sem_acento(texto) -> texto",
+        summary: "Tira acentos e cedilha: ã/á→a, é→e, ç→c. Não muda maiúscula.",
+        example: r#"sem_acento("São Paulo")    // "Sao Paulo""#,
+    },
+    BuiltinDoc {
         name: "substitua",
         sig: "substitua(texto, antigo, novo) -> texto",
         summary: "Troca todas as ocorrências de antigo por novo.",
@@ -682,6 +696,44 @@ pub(crate) const BUILTIN_DOCS: &[BuiltinDoc] = &[
         example: r#"salve_csv("saida.csv", [["Ana", 25]])"#,
     },
 ];
+
+/// Portuguese diacritics → base letter. Combining marks (NFD) are dropped.
+fn sem_acento(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for c in s.chars() {
+        if is_combining_mark(c) {
+            continue;
+        }
+        out.push(strip_diacritic(c));
+    }
+    out
+}
+
+fn is_combining_mark(c: char) -> bool {
+    matches!(c, '\u{0300}'..='\u{036F}')
+}
+
+fn strip_diacritic(c: char) -> char {
+    match c {
+        'á' | 'à' | 'â' | 'ã' | 'ä' => 'a',
+        'é' | 'è' | 'ê' | 'ë' => 'e',
+        'í' | 'ì' | 'î' | 'ï' => 'i',
+        'ó' | 'ò' | 'ô' | 'õ' | 'ö' => 'o',
+        'ú' | 'ù' | 'û' | 'ü' => 'u',
+        'ý' | 'ÿ' => 'y',
+        'ç' => 'c',
+        'ñ' => 'n',
+        'Á' | 'À' | 'Â' | 'Ã' | 'Ä' => 'A',
+        'É' | 'È' | 'Ê' | 'Ë' => 'E',
+        'Í' | 'Ì' | 'Î' | 'Ï' => 'I',
+        'Ó' | 'Ò' | 'Ô' | 'Õ' | 'Ö' => 'O',
+        'Ú' | 'Ù' | 'Û' | 'Ü' => 'U',
+        'Ý' => 'Y',
+        'Ç' => 'C',
+        'Ñ' => 'N',
+        other => other,
+    }
+}
 
 pub(crate) fn lookup_builtin_doc(name: &str) -> Option<&'static BuiltinDoc> {
     let name = match name {
@@ -771,8 +823,9 @@ mod tests {
         assert!(BUILTINS.contains(&"numero"));
         assert!(BUILTINS.contains(&"eh_terminal"));
         assert!(BUILTINS.contains(&"é_terminal"));
-        assert_eq!(BUILTINS.len(), 27);
-        assert_eq!(BUILTIN_DOCS.len(), 26);
+        assert!(BUILTINS.contains(&"sem_acento"));
+        assert_eq!(BUILTINS.len(), 28);
+        assert_eq!(BUILTIN_DOCS.len(), 27);
         assert_eq!(
             lookup_builtin_doc("é_terminal").map(|d| d.name),
             Some("eh_terminal")
@@ -822,6 +875,20 @@ escreva(numero("1,000.5"))"#),
         assert!(run_err(r#"sair("x")"#).contains("esperado numero"));
         assert!(run_err("sair(1, 2)").contains("espera 0 ou 1"));
         assert!(run_err("sair(1.5)").contains("inteiro"));
+    }
+
+    #[test]
+    fn sem_acento_strips_portuguese() {
+        assert_eq!(run(r#"escreva(sem_acento("São Paulo"))"#), "Sao Paulo\n");
+        assert_eq!(run(r#"escreva(sem_acento("olá"))"#), "ola\n");
+        assert_eq!(run(r#"escreva(sem_acento("AÇÃO"))"#), "ACAO\n");
+        assert_eq!(run(r#"escreva(sem_acento("açaí"))"#), "acai\n");
+        assert_eq!(run(r#"escreva(sem_acento("é"))"#), "e\n");
+        assert_eq!(run(r#"escreva(sem_acento("abc"))"#), "abc\n");
+        assert_eq!(run(r#"escreva(sem_acento(""))"#), "\n");
+        // e + combining acute (NFD)
+        assert_eq!(run("escreva(sem_acento(\"e\u{0301}\"))"), "e\n");
+        assert!(run_err("sem_acento(1)").contains("texto"));
     }
 
     #[test]

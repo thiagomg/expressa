@@ -764,7 +764,8 @@ mod tests {
         // One source with every ASCII keyword from the language (space-separated).
         let src = "\
 se senao ou e nao inicio fim funcao para de ate em \
-repita enquanto vezes mapa matriz importe contem verdadeiro falso se_falhar retorne";
+repita enquanto vezes mapa matriz importe contem verdadeiro falso se_falhar retorne \
+pare continue";
 
         assert_eq!(
             kinds(src),
@@ -792,6 +793,8 @@ repita enquanto vezes mapa matriz importe contem verdadeiro falso se_falhar reto
                 TokenKind::Falso,
                 TokenKind::SeFalhar,
                 TokenKind::Retorne,
+                TokenKind::Pare,
+                TokenKind::Continue,
                 TokenKind::Eof,
             ]
         );
@@ -800,7 +803,7 @@ repita enquanto vezes mapa matriz importe contem verdadeiro falso se_falhar reto
     #[test]
     fn reserved_words_with_accents() {
         // Accented spellings accepted by keyword().
-        let src = "senão não início função até contém";
+        let src = "senão não início função até contém continua";
 
         assert_eq!(
             kinds(src),
@@ -811,6 +814,7 @@ repita enquanto vezes mapa matriz importe contem verdadeiro falso se_falhar reto
                 TokenKind::Funcao,
                 TokenKind::Ate,
                 TokenKind::Contem,
+                TokenKind::Continue,
                 TokenKind::Eof,
             ]
         );

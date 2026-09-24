@@ -139,6 +139,12 @@ impl Parser {
             TokenKind::Enquanto => self.parse_enquanto(),
             TokenKind::Para => self.parse_para(),
             TokenKind::Retorne => self.parse_retorne(),
+            TokenKind::Pare => Ok(Stmt::Pare {
+                span: self.remove().span,
+            }),
+            TokenKind::Continue => Ok(Stmt::Continue {
+                span: self.remove().span,
+            }),
             _ => {
                 let expr = self.parse_expr()?;
                 if matches!(self.peek_kind(), TokenKind::Eq) {
@@ -1378,6 +1384,19 @@ fim
             Stmt::Retorne { value: None, .. } => {}
             other => panic!("{other:?}"),
         }
+    }
+
+    #[test]
+    fn pare_and_continue_statements() {
+        assert!(matches!(first_stmt(&parse_ok("pare")), Stmt::Pare { .. }));
+        assert!(matches!(
+            first_stmt(&parse_ok("continue")),
+            Stmt::Continue { .. }
+        ));
+        assert!(matches!(
+            first_stmt(&parse_ok("continua")),
+            Stmt::Continue { .. }
+        ));
     }
 
     #[test]

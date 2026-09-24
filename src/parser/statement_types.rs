@@ -43,6 +43,12 @@ pub enum Stmt {
 
     /// `retorne` or `retorne expr` — leaves the enclosing `funcao`.
     Retorne { value: Option<Expr>, span: Span },
+
+    /// Leaves the innermost `para` / `enquanto` / `repita`.
+    Pare { span: Span },
+
+    /// Next iteration of the innermost loop.
+    Continue { span: Span },
 }
 
 /// Left-hand side of `=`.
@@ -82,7 +88,9 @@ impl Stmt {
             | Stmt::ParaRange { span, .. }
             | Stmt::ParaIn { span, .. }
             | Stmt::Enquanto { span, .. }
-            | Stmt::Retorne { span, .. } => *span,
+            | Stmt::Retorne { span, .. }
+            | Stmt::Pare { span, .. }
+            | Stmt::Continue { span, .. } => *span,
         }
     }
 }

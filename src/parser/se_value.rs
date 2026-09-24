@@ -58,6 +58,7 @@ fn check_stmt(stmt: &Stmt, use_: Use) -> Result<(), ParseError> {
             value: Some(expr), ..
         } => check_expr(expr, Use::Value),
         Stmt::Retorne { value: None, .. } => Ok(()),
+        Stmt::Pare { .. } | Stmt::Continue { .. } => Ok(()),
     }
 }
 
