@@ -1,0 +1,110 @@
+#!/usr/bin/env expressa
+
+importe "linha_cmd"
+
+é_alfanumerico = função(c) {
+    c = sem_acento(c)
+    se (c >= "A" e c <= "Z") ou (c >= "a" e c <= "z") ou (c >= "0" e c <= "9") {
+        verdadeiro
+    } senao {
+        falso
+    }
+}
+
+conta_palavras = função(frase) {
+    palavras = 0
+    i = 1
+    enquanto i <= frase.tamanho() {
+        // Vamos procurar algo que não seja espaço ou caractere especial
+        enquanto i <= frase.tamanho() {
+            c = frase[i]
+            se é_alfanumerico(c) { pare }
+            i = i + 1
+        }
+
+        // O não espaço foi encontrado.
+        // Agora vamos procurar algo que seja espaço ou final de string
+        encontrou = falso
+        enquanto i <= frase.tamanho() {
+            c = frase[i]
+            se é_alfanumerico(c) == falso { pare }
+            // Se chegou aqui, existe algo que não é zero
+            encontrou = verdadeiro
+            i = i + 1
+        }
+
+        se encontrou == verdadeiro {
+            palavras = palavras + 1
+        }
+    
+    }
+    palavras
+}
+
+palavras_em_linhas = função(linhas) {
+    num = 0
+    para linha em linhas
+    {
+        num = num + conta_palavras(linha)
+    }
+    num
+}
+
+conta_linhas = função(linhas)
+{
+    num = 0
+    para linha em linhas
+    {
+        num = num + 1
+    }
+    num
+}
+
+ajuda = função()
+{
+    escreva("Para stdin:")
+    escreva("cat meu-arq.txt | wc.lep [-l]")
+    escreva("")
+    escreva("Para arquivo(s):")
+    escreva("wc.lep [-l] meu-arq.txt meu-arq-2.txt ...")
+}
+
+exec_wc = função(args)
+{
+    função_contagem = se args:op contém "l" {
+        conta_linhas
+    } senao {
+        palavras_em_linhas
+    }
+
+    se args:pos.tamanho() == 0
+    {
+        // Um argumento significa que arquivos não foram passados como
+        // argumento da aplicação
+        linhas = leia_linhas()
+        total = função_contagem(linhas)
+        escreva(total)
+    }
+    senao
+    {
+        // Pulando o arg 1, já que ele é o padrão a ser procurado
+        total_geral = 0
+        para i de 1 até args:pos.tamanho()
+        {
+            arg = args:pos[i]
+            total = função_contagem(leia_arquivo(arg))
+            escreva(arg, "=", total)
+            total_geral = total_geral + total
+        }
+        escreva("Total geral:", total_geral)
+    }
+}
+
+// Programa principal
+args = separa_args(argumentos, [])
+se args:op contem "ajuda" {
+    ajuda()
+} senao {
+    exec_wc(args)
+}
+

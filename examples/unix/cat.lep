@@ -1,0 +1,34 @@
+#!/usr/bin/env expressa
+
+importe "linha_cmd"
+
+ajuda = função()
+início
+    escreva("Para ler arquivos:")
+    escreva("cat.lep <arquivo>")
+    escreva("Ex: cat.lep meu-arquivo.txt")
+fim
+
+exec_cat = função(args)
+início
+    para arq em args:pos
+    inicio
+        linhas = leia_arquivo(arq)
+        para linha em linhas
+        início
+            escreva(linha)
+        fim
+    fim
+fim
+
+// Programa principal
+args = separa_args(argumentos, [])
+se args:op contem "ajuda" ou args:pos.tamanho() == 0
+inicio
+    ajuda()
+fim
+senão
+inicio
+    exec_cat(args)
+fim
+

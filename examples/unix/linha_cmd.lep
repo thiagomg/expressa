@@ -1,0 +1,44 @@
+#!/usr/bin/env expressa
+
+// args - lista de argumentos
+// ops - mapa de opções que tem valor. Ex: --nome Thiago
+separa_args = função(args, ops) {
+
+    // Opções
+    opções = mapa {}
+    // Argumentos posicionais 
+    args_pos = []
+
+    i = 0
+    enquanto i < args.tamanho() {
+        i += 1
+        a = args[i]
+        se a.tamanho() > 1 e a[1] == "-" {
+            // é uma opção. Se estiver na lista, vamos pegar o próximo valor, senão vamos colocar branco
+            nome_op = se a[1..2] == "--" {
+                a[3..]
+            } senao {
+                a[2..]
+            }
+            
+            valor = se ops contem nome_op {
+                i += 1
+                args[i] se_falhar("")
+            } senão {
+                ""
+            }
+
+            // Agora vamos adicionar no mapa de opções
+            opções[nome_op] = valor
+        } senão {
+            args_pos += [a]
+        }
+    }
+
+    mapa {
+        :op -> opções
+        :pos -> args_pos
+    }
+}
+
+
