@@ -803,8 +803,11 @@ impl<'a> Vm<'a> {
             } => {
                 let obj = self.eval_expr(object, env)?;
                 let s = self.eval_expr(start, env)?;
-                let e = self.eval_expr(end, env)?;
-                self.slice_get(&obj, &s, &e, *span)
+                let e = match end {
+                    Some(e) => Some(self.eval_expr(e, env)?),
+                    None => None,
+                };
+                self.slice_get(&obj, &s, e.as_ref(), *span)
             }
             Expr::Unary { op, expr, span } => {
                 let v = self.eval_expr(expr, env)?;
@@ -1256,7 +1259,7 @@ impl<'a> Vm<'a> {
         &self,
         obj: &Value,
         start: &Value,
-        end: &Value,
+        end: Option<&Value>,
         span: Span,
     ) -> Result<Value, EvalError> {
         match obj {
@@ -1309,7 +1312,12 @@ impl<'a> Vm<'a> {
         }
     }
 
-    fn to_index(&self, index: &Value, len: usize, span: Span) -> Result<usize, EvalError> {
+    pub(crate) fn to_index(
+        &self,
+        index: &Value,
+        len: usize,
+        span: Span,
+    ) -> Result<usize, EvalError> {
         let n = self.expect_int(index, span)?;
         if n < 1 {
             return Err(self.err(format!("índice deve ser >= 1, encontrado {n}"), span));
@@ -1324,24 +1332,31 @@ impl<'a> Vm<'a> {
         Ok(i)
     }
 
-    fn to_slice_bounds(
+    pub(crate) fn to_slice_bounds(
         &self,
         start: &Value,
-        end: &Value,
+        end: Option<&Value>,
         len: usize,
         span: Span,
     ) -> Result<(usize, usize), EvalError> {
         let s = self.expect_int(start, span)?;
-        let e = self.expect_int(end, span)?;
-        if s < 1 || e < 1 {
+        if s < 1 {
             return Err(self.err("índices de fatia devem ser >= 1", span));
         }
-        if s as usize > len || e as usize > len {
-            return Err(self.err(
-                format!("fatia [{s}..{e}] fora do intervalo (tamanho {len})"),
-                span,
-            ));
+        let e = match end {
+            None => len as i64,
+            Some(v) => {
+                let e = self.expect_int(v, span)?;
+                if e < 1 {
+                    return Err(self.err("índices de fatia devem ser >= 1", span));
+                }
+                e
+            }
+        };
+        if len == 0 || s > len as i64 {
+            return Ok((0, 0));
         }
+        let e = e.min(len as i64);
         if s > e {
             return Ok((0, 0));
         }
@@ -1891,6 +1906,34 @@ escreva(f())
     }
 
     #[test]
+    fn compound_assign() {
+        assert_eq!(
+            run(r#"
+i = 10
+i += 3
+i -= 1
+escreva(i)
+nome = "Ana"
+nome += " Silva"
+escreva(nome)
+xs = [1, 2]
+xs += [3]
+escreva(xs)
+xs[1] += 10
+escreva(xs)
+"#),
+            "12\nAna Silva\n[1, 2, 3]\n[11, 2, 3]\n"
+        );
+        assert!(
+            run_err(
+                r#"xs = [1]
+xs -= [1]"#
+            )
+            .contains("numero")
+        );
+    }
+
+    #[test]
     fn arithmetic_and_escreva() {
         assert_eq!(run(r#"escreva(10 + 5 * 2)"#), "20\n");
         assert_eq!(run(r#"escreva(10 / 2)"#), "5\n");
@@ -2142,6 +2185,11 @@ fim
     fn text_index_and_slice_are_one_based() {
         assert_eq!(run(r#"escreva("abc"[1])"#), "a\n");
         assert_eq!(run(r#"escreva("abc"[2..3])"#), "bc\n");
+        assert_eq!(run(r#"escreva("b"[1..3])"#), "b\n");
+        assert_eq!(run(r#"escreva("bacia"[2..])"#), "acia\n");
+        assert_eq!(run(r#"escreva("abc"[5..])"#), "\n");
+        assert_eq!(run(r#"escreva([10, 20][1..9])"#), "[10, 20]\n");
+        assert!(run_err(r#"escreva("b"[2])"#).contains("fora do intervalo"));
     }
 
     #[test]

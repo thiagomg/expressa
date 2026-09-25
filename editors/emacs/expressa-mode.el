@@ -26,7 +26,7 @@
     "numero" "formato" "raiz"
     "transposta" "det" "identidade"
     "tamanho" "primeiro" "ultimo"
-    "maiuscula" "minuscula" "sem_acento" "substitua" "separe" "junte" "limpe"
+    "maiuscula" "minuscula" "sem_acento" "remova" "substitua" "separe" "junte" "limpe"
     "leia_arquivo" "salve_arquivo" "adicione_arquivo"
     "leia_csv" "salve_csv"))
 

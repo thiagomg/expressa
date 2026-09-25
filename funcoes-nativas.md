@@ -34,6 +34,7 @@ Caminhos de arquivo **relativos** são resolvidos a partir da pasta do `.lep` em
 | [`maiuscula`](#maiuscula) | Texto em letras maiúsculas |
 | [`minuscula`](#minuscula) | Texto em letras minúsculas |
 | [`sem_acento`](#sem_acento) | Tira acentos e cedilha |
+| [`remova`](#remova) | Tira índice/faixa de lista ou texto, ou chave de mapa |
 | [`substitua`](#substitua) | Troca trechos de um texto |
 | [`separe`](#separe) | Parte um texto em lista |
 | [`junte`](#junte) | Junta uma lista em um texto |
@@ -394,6 +395,28 @@ Devolve uma cópia sem acentos nem cedilha. **Não** muda maiúscula/minúscula.
 sem_acento("São Paulo")    // "Sao Paulo"
 minuscula(sem_acento("OLÁ"))    // "ola"
 ```
+
+### `remova`
+
+```text
+remova(lista, i) -> lista
+remova(lista, inicio, fim) -> lista
+remova(texto, i) -> texto
+remova(texto, inicio, fim) -> texto
+remova(mapa, chave) -> mapa
+```
+
+Devolve uma **cópia** sem aquele pedaço. Índices começam em 1; a faixa é inclusiva (como `xs[2..3]`). No mapa, a chave some; não existe faixa.
+
+```text
+xs = [10, 20, 30, 40]
+xs.remova(2)           // [10, 30, 40]
+xs.remova(2, 3)        // [10, 40]
+"abcd".remova(2, 3)    // "ad"
+pessoa = pessoa.remova("idade")
+```
+
+**Erros:** índice menor que 1; início maior que o fim; chave inexistente; mapa com 3 argumentos. Fatia/`remova` com fim além do tamanho só corta até o último.
 
 ### `substitua`
 

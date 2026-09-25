@@ -147,23 +147,46 @@ impl Parser {
             }),
             _ => {
                 let expr = self.parse_expr()?;
-                if matches!(self.peek_kind(), TokenKind::Eq) {
-                    let target = expr_to_assign_target(expr)
-                        .map_err(|span| self.err_at("lado esquerdo de '=' inválido", span))?;
-                    self.remove(); // =
-                    let value = self.parse_expr()?;
-                    let span = target.span().join(value.span());
-                    Ok(Stmt::Assign {
-                        target,
-                        value,
-                        span,
-                    })
-                } else {
-                    let span = expr.span();
-                    Ok(Stmt::Expr { expr, span })
+                match self.peek_kind() {
+                    TokenKind::Eq => self.finish_assign(expr, None),
+                    TokenKind::PlusEq => self.finish_assign(expr, Some(BinaryOp::Add)),
+                    TokenKind::MinusEq => self.finish_assign(expr, Some(BinaryOp::Sub)),
+                    _ => {
+                        let span = expr.span();
+                        Ok(Stmt::Expr { expr, span })
+                    }
                 }
             }
         }
+    }
+
+    fn finish_assign(&mut self, lhs: Expr, compound: Option<BinaryOp>) -> Result<Stmt, ParseError> {
+        let op_tok = self.remove();
+        let msg = match op_tok.kind {
+            TokenKind::PlusEq => "lado esquerdo de '+=' inválido",
+            TokenKind::MinusEq => "lado esquerdo de '-=' inválido",
+            _ => "lado esquerdo de '=' inválido",
+        };
+        let target = expr_to_assign_target(lhs).map_err(|span| self.err_at(msg, span))?;
+        let rhs = self.parse_expr()?;
+        let span = target.span().join(rhs.span());
+        let value = match compound {
+            None => rhs,
+            Some(op) => {
+                let left = assign_target_to_expr(&target);
+                Expr::Binary {
+                    left: Box::new(left),
+                    op,
+                    right: Box::new(rhs),
+                    span,
+                }
+            }
+        };
+        Ok(Stmt::Assign {
+            target,
+            value,
+            span,
+        })
     }
 
     fn parse_repita(&mut self) -> Result<Stmt, ParseError> {
@@ -538,12 +561,16 @@ impl Parser {
         let first = self.parse_expr()?;
         if matches!(self.peek_kind(), TokenKind::DotDot) {
             self.remove();
-            let end_expr = self.parse_expr()?;
+            let end_expr = if matches!(self.peek_kind(), TokenKind::RBracket) {
+                None
+            } else {
+                Some(Box::new(self.parse_expr()?))
+            };
             let end = self.expect_kind(|k| matches!(k, TokenKind::RBracket), "esperado ']'")?;
             Ok(Expr::Slice {
                 object: Box::new(object),
                 start: Box::new(first),
-                end: Box::new(end_expr),
+                end: end_expr,
                 span: start.join(end.span),
             })
         } else if matches!(self.peek_kind(), TokenKind::Comma) {
@@ -980,6 +1007,44 @@ fn is_comparison_op(op: BinaryOp) -> bool {
     )
 }
 
+fn assign_target_to_expr(target: &AssignTarget) -> Expr {
+    match target {
+        AssignTarget::Name { name, span } => Expr::Ident {
+            name: name.clone(),
+            span: *span,
+        },
+        AssignTarget::Index {
+            object,
+            index,
+            span,
+        } => Expr::Index {
+            object: Box::new(object.clone()),
+            index: Box::new(index.clone()),
+            span: *span,
+        },
+        AssignTarget::Index2 {
+            object,
+            row,
+            col,
+            span,
+        } => Expr::Index2 {
+            object: Box::new(object.clone()),
+            row: Box::new(row.clone()),
+            col: Box::new(col.clone()),
+            span: *span,
+        },
+        AssignTarget::MapField {
+            object,
+            field,
+            span,
+        } => Expr::MapField {
+            object: Box::new(object.clone()),
+            field: field.clone(),
+            span: *span,
+        },
+    }
+}
+
 fn expr_to_assign_target(expr: Expr) -> Result<AssignTarget, Span> {
     match expr {
         Expr::Ident { name, span } => Ok(AssignTarget::Name { name, span }),
@@ -1045,6 +1110,34 @@ mod tests {
         match first_stmt(p) {
             Stmt::Expr { expr, .. } => expr,
             other => panic!("expected expr stmt, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn compound_assign_desugars() {
+        match first_stmt(&parse_ok("i += 1")) {
+            Stmt::Assign { value, .. } => {
+                assert!(matches!(
+                    value,
+                    Expr::Binary {
+                        op: BinaryOp::Add,
+                        ..
+                    }
+                ));
+            }
+            other => panic!("{other:?}"),
+        }
+        match first_stmt(&parse_ok("i -= 2")) {
+            Stmt::Assign { value, .. } => {
+                assert!(matches!(
+                    value,
+                    Expr::Binary {
+                        op: BinaryOp::Sub,
+                        ..
+                    }
+                ));
+            }
+            other => panic!("{other:?}"),
         }
     }
 
@@ -1264,6 +1357,11 @@ fim
         assert!(matches!(expr_stmt(&p), Expr::Index { .. }));
         let p = parse_ok("xs[1..3]");
         assert!(matches!(expr_stmt(&p), Expr::Slice { .. }));
+        let p = parse_ok("xs[2..]");
+        match expr_stmt(&p) {
+            Expr::Slice { end: None, .. } => {}
+            other => panic!("{other:?}"),
+        }
     }
 
     #[test]

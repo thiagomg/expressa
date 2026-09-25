@@ -342,10 +342,12 @@ fn print_help_linguagem() {
          expr se_falhar outro            captura erro (divisão, arquivo, índice)\n  \
          mapa {{ \"k\" -> v }}           vazio: mapa {{}}\n  \
          matriz {{ [1, 2], [3, 4] }}     A[1, 2]  A+B  k*A  A*B\n  \
-         lista[1]  texto[1..3]           índices começam em 1\n  \
+         lista[1]  texto[1..3]  t[2..]   fatia corta no fim; t[2] fora ainda é erro\n  \
          pessoa:nome                     chave de mapa (pessoa[\"nome\"])\n  \
          mat::soma(1, 2)                 nome em um módulo\n  \
          xs.tamanho()                    igual a tamanho(xs)\n  \
+         i += 1  xs += [x]  nome += \" a\"\n  \
+         xs.remova(2)  t.remova(1, 3)  m.remova(\"k\")\n  \
          e  ou  nao  contem\n  \
          #!/usr/bin/env expressa primeira linha (arquivo executável)"
     );

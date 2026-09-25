@@ -92,6 +92,9 @@ para ch em "olá" { escreva(ch) }    // texto: um caractere por vez
 pare                               // sai do laço
 continue                           // próxima volta (também continua)
 
+i += 1                         // números: += e -=
+nome += " Silva"               // texto: só +=
+
 i = 1
 enquanto i <= 3 {
     escreva(i)
@@ -130,7 +133,12 @@ busca = funcao(xs, alvo) {
 xs = [10, 20, 30, 40]
 xs[1]                          // 10
 xs[2..3]                       // [20, 30]
+xs[2..]                        // até o fim
+"b"[1..3]                      // "b" (não falha)
 xs + [50]
+xs += [50]                     // xs = xs + [50]
+xs = xs.remova(2)               // sem o índice 2
+xs = xs.remova(2, 4)            // faixa inclusiva
 tamanho(xs)  primeiro(xs)  ultimo(xs)
 
 t = "  Maria Silva  "
@@ -144,6 +152,7 @@ pessoa = mapa { "nome" -> "Ana", "idade" -> 25 }
 pessoa:nome  pessoa["nome"]
 pessoa:nome = "Bia"
 pessoa["cidade"] = "Fortaleza"
+pessoa = pessoa.remova("idade")
 
 A = matriz { [1, 2, 3], [4, 5, 6] }
 A[1, 2]                        // 2
@@ -213,7 +222,7 @@ soma(10, 5)
 | `argumentos` | lista (não é função) |
 | `numero` `formato` `raiz` | número |
 | `tamanho` `primeiro` `ultimo` | coleção |
-| `maiuscula` `minuscula` `sem_acento` `substitua` `separe` `junte` `limpe` | texto |
+| `maiuscula` `minuscula` `sem_acento` `remova` `substitua` `separe` `junte` `limpe` | texto / lista / mapa |
 | `leia_arquivo` `salve_arquivo` `adicione_arquivo` | arquivo |
 | `leia_csv` `salve_csv` | CSV |
 | `transposta` `det` `identidade` | matriz |

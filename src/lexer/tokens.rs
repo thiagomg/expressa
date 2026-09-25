@@ -65,8 +65,10 @@ pub enum TokenKind {
     GtEq,   // >=
 
     // ── Assignment & map arrow ────────────────────────────────────
-    Eq,    // =
-    Arrow, // ->
+    Eq,      // =
+    PlusEq,  // +=
+    MinusEq, // -=
+    Arrow,   // ->
 
     // ── Range / access ────────────────────────────────────────────
     DotDot,     // ..   (only used inside [i..j])

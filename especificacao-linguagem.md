@@ -70,6 +70,7 @@ A **primeira linha** do arquivo pode ser um shebang Unix (`#!…`). A Expressa i
 ## 4. Operadores
 
 **Aritméticos:** `+` `-` `*` `/` `%`  
+**Atribuição composta:** `+=` (número, texto, lista), `-=` (número) — `alvo += v` é `alvo = alvo + v`.  
 **Comparação:** `==` `!=` `>` `<` `>=` `<=`  
 **Lógicos:** `e` `ou` `nao`  
 **Raiz quadrada (nativa):** `raiz(n)` — erro se `n < 0` (tratável com `se_falhar`)  
@@ -234,10 +235,15 @@ numeros = [10, 20, 30, 40]
 tamanho(numeros)               // 4
 numeros[1]                     // 10
 numeros + [50]                 // [10, 20, 30, 40, 50]
+numeros += [50]                // igual a numeros = numeros + [50]
+numeros.remova(2)              // sem o 2º item (cópia)
+numeros.remova(2, 3)           // sem os índices 2 e 3
 numeros contem 20              // verdadeiro
 primeiro(numeros)              // 10
 ultimo(numeros)                // 40
 numeros[2..3]                  // [20, 30]
+numeros[2..]                   // do 2 até o fim
+"b"[1..3]                      // "b" (corta no tamanho)
 ```
 
 ---
@@ -257,7 +263,8 @@ pessoa:nome                    // igual a pessoa["nome"]
 pessoa:nome = "Bia"            // igual a pessoa["nome"] = "Bia"
 pessoa contem "idade"          // verdadeiro
 pessoa["cidade"] = "Fortaleza"
-tamanho(pessoa)                // 4
+pessoa = pessoa.remova("idade")
+tamanho(pessoa)                // 3 (nome, ativo, cidade)
 ```
 
 ---
@@ -266,6 +273,9 @@ tamanho(pessoa)                // 4
 
 ```text
 nome = "  Maria Silva  "
+nome[1]                    // um caractere
+nome[2..4]                 // inclusive; se o fim passar do tamanho, corta
+nome[2..]                  // até o último
 
 tamanho(nome)
 maiuscula(nome)

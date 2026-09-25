@@ -6,7 +6,7 @@ use crate::lexer::Span;
 
 use super::error::EvalError;
 use super::eval::Vm;
-use super::value::{NumeroLocale, Value, format_numero};
+use super::value::{MapKey, NumeroLocale, Value, format_numero};
 
 impl Vm<'_> {
     pub(crate) fn call_builtin(
@@ -34,6 +34,7 @@ impl Vm<'_> {
             "maiuscula" => self.bi_maiuscula(args, span),
             "minuscula" => self.bi_minuscula(args, span),
             "sem_acento" => self.bi_sem_acento(args, span),
+            "remova" => self.bi_remova(args, span),
             "substitua" => self.bi_substitua(args, span),
             "separe" => self.bi_separe(args, span),
             "junte" => self.bi_junte(args, span),
@@ -340,6 +341,88 @@ impl Vm<'_> {
         Ok(Value::Texto(sem_acento(&s)))
     }
 
+    fn bi_remova(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
+        if args.len() < 2 || args.len() > 3 {
+            return Err(self.err(
+                format!("remova espera 2 ou 3 argumentos, recebeu {}", args.len()),
+                span,
+            ));
+        }
+        match &args[0] {
+            Value::Mapa(_) => {
+                if args.len() != 2 {
+                    return Err(self.err(
+                        "remova em mapa espera a chave (não uma faixa de índices)",
+                        span,
+                    ));
+                }
+                self.remova_mapa(&args[0], &args[1], span)
+            }
+            Value::Lista(_) | Value::Texto(_) => {
+                let end = if args.len() == 3 { &args[2] } else { &args[1] };
+                self.remova_faixa(&args[0], &args[1], end, span)
+            }
+            other => Err(self.err(
+                format!(
+                    "remova espera lista, texto ou mapa, encontrado {}",
+                    other.type_name()
+                ),
+                span,
+            )),
+        }
+    }
+
+    fn remova_mapa(&self, map: &Value, key_v: &Value, span: Span) -> Result<Value, EvalError> {
+        let Value::Mapa(xs) = map else {
+            unreachable!();
+        };
+        let key = MapKey::from_value(key_v).ok_or_else(|| {
+            self.err(
+                format!("chave de mapa inválida ({})", key_v.type_name()),
+                span,
+            )
+        })?;
+        let mut entries = xs.borrow().clone();
+        let before = entries.len();
+        entries.retain(|(k, _)| *k != key);
+        if entries.len() == before {
+            return Err(self.err(format!("chave {key} não existe no mapa"), span));
+        }
+        Ok(Value::mapa(entries))
+    }
+
+    fn remova_faixa(
+        &self,
+        coll: &Value,
+        start: &Value,
+        end: &Value,
+        span: Span,
+    ) -> Result<Value, EvalError> {
+        let s = self.expect_int(start, span)?;
+        let e = self.expect_int(end, span)?;
+        if s > e {
+            return Err(self.err(
+                format!("faixa de remova: início {s} maior que o fim {e}"),
+                span,
+            ));
+        }
+        match coll {
+            Value::Lista(xs) => {
+                let mut v = xs.borrow().clone();
+                let (a, b) = self.to_slice_bounds(start, Some(end), v.len(), span)?;
+                v.drain(a..b);
+                Ok(Value::lista(v))
+            }
+            Value::Texto(t) => {
+                let mut chars: Vec<char> = t.chars().collect();
+                let (a, b) = self.to_slice_bounds(start, Some(end), chars.len(), span)?;
+                chars.drain(a..b);
+                Ok(Value::Texto(chars.into_iter().collect()))
+            }
+            _ => unreachable!(),
+        }
+    }
+
     fn bi_substitua(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
         self.expect_arity(args, 3, span)?;
         let s = self.expect_texto(&args[0], span)?;
@@ -514,6 +597,7 @@ pub(crate) const BUILTINS: &[&str] = &[
     "maiuscula",
     "minuscula",
     "sem_acento",
+    "remova",
     "substitua",
     "separe",
     "junte",
@@ -640,6 +724,12 @@ pub(crate) const BUILTIN_DOCS: &[BuiltinDoc] = &[
         sig: "sem_acento(texto) -> texto",
         summary: "Tira acentos e cedilha: ã/á→a, é→e, ç→c. Não muda maiúscula.",
         example: r#"sem_acento("São Paulo")    // "Sao Paulo""#,
+    },
+    BuiltinDoc {
+        name: "remova",
+        sig: "remova(lista|texto, i)  ou  remova(..., inicio, fim)  ou  remova(mapa, chave)",
+        summary: "Devolve uma cópia sem o índice/faixa (1…n) ou sem a chave do mapa.",
+        example: r#"xs = xs.remova(2)    // sem o 2º item"#,
     },
     BuiltinDoc {
         name: "substitua",
@@ -824,8 +914,9 @@ mod tests {
         assert!(BUILTINS.contains(&"eh_terminal"));
         assert!(BUILTINS.contains(&"é_terminal"));
         assert!(BUILTINS.contains(&"sem_acento"));
-        assert_eq!(BUILTINS.len(), 28);
-        assert_eq!(BUILTIN_DOCS.len(), 27);
+        assert!(BUILTINS.contains(&"remova"));
+        assert_eq!(BUILTINS.len(), 29);
+        assert_eq!(BUILTIN_DOCS.len(), 28);
         assert_eq!(
             lookup_builtin_doc("é_terminal").map(|d| d.name),
             Some("eh_terminal")
@@ -875,6 +966,37 @@ escreva(numero("1,000.5"))"#),
         assert!(run_err(r#"sair("x")"#).contains("esperado numero"));
         assert!(run_err("sair(1, 2)").contains("espera 0 ou 1"));
         assert!(run_err("sair(1.5)").contains("inteiro"));
+    }
+
+    #[test]
+    fn remova_list_text_map() {
+        assert_eq!(
+            run(r#"
+xs = [10, 20, 30, 40]
+escreva(xs.remova(2))
+escreva(xs)
+escreva(xs.remova(2, 3))
+"#),
+            "[10, 30, 40]\n[10, 20, 30, 40]\n[10, 40]\n"
+        );
+        assert_eq!(run(r#"escreva("abcd".remova(2, 3))"#), "ad\n");
+        assert_eq!(run(r#"escreva("olá".remova(2))"#), "oá\n");
+        assert_eq!(
+            run(r#"
+p = mapa {
+    "nome" -> "Ana"
+    "idade" -> 25
+}
+p = p.remova("idade")
+escreva(p contem "idade")
+escreva(p:nome)
+"#),
+            "falso\nAna\n"
+        );
+        assert_eq!(run(r#"escreva([10].remova(2))"#), "[10]\n");
+        assert!(run_err(r#"mapa { "a" -> 1 }.remova("b")"#).contains("não existe"));
+        assert!(run_err(r#"[1, 2].remova(2, 1)"#).contains("maior que o fim"));
+        assert!(run_err(r#"mapa { "a" -> 1 }.remova("a", "b")"#).contains("chave"));
     }
 
     #[test]

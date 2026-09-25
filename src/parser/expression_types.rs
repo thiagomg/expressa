@@ -76,11 +76,12 @@ pub enum Expr {
         col: Box<Expr>,
         span: Span,
     },
-    /// `a[i..j]`
+    /// `a[i..j]` or `a[i..]` (to the last item).
     Slice {
         object: Box<Expr>,
         start: Box<Expr>,
-        end: Box<Expr>,
+        /// `None` = `a[i..]` through the end.
+        end: Option<Box<Expr>>,
         span: Span,
     },
 

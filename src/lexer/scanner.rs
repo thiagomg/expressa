@@ -231,6 +231,9 @@ impl<'src> Scanner<'src> {
                 if self.peek() == Some('>') {
                     self.remove();
                     token!(TokenKind::Arrow)
+                } else if self.peek() == Some('=') {
+                    self.remove();
+                    token!(TokenKind::MinusEq)
                 } else {
                     token!(TokenKind::Minus)
                 }
@@ -251,7 +254,12 @@ impl<'src> Scanner<'src> {
             }
             '+' => {
                 self.remove();
-                token!(TokenKind::Plus)
+                if self.peek() == Some('=') {
+                    self.remove();
+                    token!(TokenKind::PlusEq)
+                } else {
+                    token!(TokenKind::Plus)
+                }
             }
             '*' => {
                 self.remove();
@@ -607,12 +615,14 @@ mod tests {
     #[test]
     fn operators_assignment_comparison_arrow_range() {
         // Space-separated so each operator is its own token.
-        let src = r#"= == != < > <= >= -> .. + - * / %"#;
+        let src = r#"= += -= == != < > <= >= -> .. + - * / %"#;
 
         assert_eq!(
             kinds(src),
             vec![
                 TokenKind::Eq,      // =
+                TokenKind::PlusEq,  // +=
+                TokenKind::MinusEq, // -=
                 TokenKind::EqEq,    // ==
                 TokenKind::BangEq,  // !=
                 TokenKind::Lt,      // <

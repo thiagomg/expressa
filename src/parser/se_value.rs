@@ -172,7 +172,10 @@ fn check_expr(expr: &Expr, use_: Use) -> Result<(), ParseError> {
         } => {
             check_expr(object, Use::Value)?;
             check_expr(start, Use::Value)?;
-            check_expr(end, Use::Value)
+            if let Some(end) = end {
+                check_expr(end, Use::Value)?;
+            }
+            Ok(())
         }
         Expr::Number { .. } | Expr::String { .. } | Expr::Bool { .. } | Expr::Ident { .. } => {
             Ok(())
