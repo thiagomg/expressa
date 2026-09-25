@@ -654,9 +654,10 @@ impl<'a> Vm<'a> {
         match seq {
             Value::Lista(xs) => Ok(xs.borrow().clone()),
             Value::Texto(s) => Ok(s.chars().map(|c| Value::Texto(c.to_string())).collect()),
+            Value::Conjunto(xs) => Ok(xs.borrow().iter().map(|k| k.to_value()).collect()),
             other => Err(self.err(
                 format!(
-                    "'para … em' espera lista ou texto, encontrado {}",
+                    "'para … em' espera lista, texto ou conjunto, encontrado {}",
                     other.type_name()
                 ),
                 span,
@@ -713,6 +714,20 @@ impl<'a> Vm<'a> {
                 Ok(Value::mapa(map))
             }
             Expr::Matrix { rows, span } => self.eval_matrix(rows, *span, env),
+            Expr::Conjunto { elements, span } => {
+                let mut xs = Vec::new();
+                for e in elements {
+                    let v = self.eval_expr(e, env)?;
+                    let k = MapKey::from_value(&v).ok_or_else(|| {
+                        self.err(
+                            format!("elemento de conjunto inválido ({})", v.type_name()),
+                            *span,
+                        )
+                    })?;
+                    super::value::conjunto_insert(&mut xs, k);
+                }
+                Ok(Value::conjunto(xs))
+            }
             Expr::Function { params, body, span } => {
                 check_unique_params(params)
                     .map_err(|name| self.err(format!("parâmetro duplicado `{name}`"), *span))?;
@@ -911,6 +926,27 @@ impl<'a> Vm<'a> {
                     out.extend(b.borrow().clone());
                     Ok(Value::lista(out))
                 }
+                (Value::Conjunto(a), Value::Conjunto(b)) => {
+                    let mut out = a.borrow().clone();
+                    for k in b.borrow().iter() {
+                        super::value::conjunto_insert(&mut out, k.clone());
+                    }
+                    Ok(Value::conjunto(out))
+                }
+                (Value::Conjunto(a), other) => {
+                    let k = MapKey::from_value(other).ok_or_else(|| {
+                        self.err(
+                            format!(
+                                "operador '+' não se aplica a conjunto e {}",
+                                other.type_name()
+                            ),
+                            span,
+                        )
+                    })?;
+                    let mut out = a.borrow().clone();
+                    super::value::conjunto_insert(&mut out, k);
+                    Ok(Value::conjunto(out))
+                }
                 (Value::Matriz(_), Value::Matriz(_)) => self.matriz_add(l, r, span, 1.0),
                 (Value::Texto(_), _) | (_, Value::Texto(_)) => Ok(Value::Texto(format!(
                     "{}{}",
@@ -1006,6 +1042,15 @@ impl<'a> Vm<'a> {
                     self.err(format!("chave de mapa inválida ({})", r.type_name()), span)
                 })?;
                 Ok(Value::Bool(xs.borrow().iter().any(|(k, _)| *k == key)))
+            }
+            Value::Conjunto(xs) => {
+                let key = MapKey::from_value(r).ok_or_else(|| {
+                    self.err(
+                        format!("elemento de conjunto inválido ({})", r.type_name()),
+                        span,
+                    )
+                })?;
+                Ok(Value::Bool(xs.borrow().contains(&key)))
             }
             other => Err(self.err(
                 format!("'contem' não se aplica a {}", other.type_name()),
@@ -1787,7 +1832,7 @@ inicio
 fim
 "#,
         );
-        assert!(msg.contains("lista ou texto"), "{msg}");
+        assert!(msg.contains("lista, texto ou conjunto"), "{msg}");
     }
 
     #[test]
@@ -1906,6 +1951,34 @@ escreva(f())
     }
 
     #[test]
+    fn conjunto_unique_contem_union_remova() {
+        assert_eq!(
+            run(r#"
+s = conjunto { :ana, :bia, :ana, 1 }
+escreva(s contem :ana)
+escreva(s contem :carlos)
+escreva(tamanho(s))
+s += :carlos
+escreva(s contem :carlos)
+s += conjunto { :bia, :dani }
+escreva(tamanho(s))
+s = s.remova(:ana)
+escreva(s contem :ana)
+para x em conjunto { 10, 20 }
+inicio
+    escreva(x)
+fim
+"#),
+            "verdadeiro\nfalso\n3\nverdadeiro\n5\nfalso\n10\n20\n"
+        );
+        assert_eq!(
+            run("escreva(conjunto { 1, 2 } == conjunto { 2, 1 })"),
+            "verdadeiro\n"
+        );
+        assert!(run_err("conjunto { [1] }").contains("inválido"));
+    }
+
+    #[test]
     fn compound_assign() {
         assert_eq!(
             run(r#"
@@ -2005,6 +2078,29 @@ escreva(x)
             "sim\n"
         );
         assert_eq!(run("m = mapa { \"a\" -> 1 }\nescreva(m[\"a\"])"), "1\n");
+        assert_eq!(
+            run(r#"
+p = mapa { :nome -> "Thiago" :idade -> 25 }
+escreva(p:nome)
+escreva(p[:nome])
+escreva(:nome)
+p = p.remova(:idade)
+escreva(p contem :idade)
+"#),
+            "Thiago\nThiago\nnome\nfalso\n"
+        );
+        assert_eq!(
+            run(r#"
+opções = mapa { :nome -> "Thiago" }
+args_pos = ["a"]
+res = mapa {
+    :op -> opções
+    :args -> args_pos
+}
+escreva(res:args[1])
+"#),
+            "a\n"
+        );
     }
 
     #[test]

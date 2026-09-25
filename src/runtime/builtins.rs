@@ -291,11 +291,12 @@ impl Vm<'_> {
             Value::Texto(s) => s.chars().count() as f64,
             Value::Lista(xs) => xs.borrow().len() as f64,
             Value::Mapa(xs) => xs.borrow().len() as f64,
+            Value::Conjunto(xs) => xs.borrow().len() as f64,
             Value::Matriz(m) => m.borrow().len() as f64,
             other => {
                 return Err(self.err(
                     format!(
-                        "tamanho() espera texto, lista, mapa ou matriz, encontrado {}",
+                        "tamanho() espera texto, lista, mapa, conjunto ou matriz, encontrado {}",
                         other.type_name()
                     ),
                     span,
@@ -358,13 +359,22 @@ impl Vm<'_> {
                 }
                 self.remova_mapa(&args[0], &args[1], span)
             }
+            Value::Conjunto(_) => {
+                if args.len() != 2 {
+                    return Err(self.err(
+                        "remova em conjunto espera o elemento (não uma faixa de índices)",
+                        span,
+                    ));
+                }
+                self.remova_conjunto(&args[0], &args[1], span)
+            }
             Value::Lista(_) | Value::Texto(_) => {
                 let end = if args.len() == 3 { &args[2] } else { &args[1] };
                 self.remova_faixa(&args[0], &args[1], end, span)
             }
             other => Err(self.err(
                 format!(
-                    "remova espera lista, texto ou mapa, encontrado {}",
+                    "remova espera lista, texto, mapa ou conjunto, encontrado {}",
                     other.type_name()
                 ),
                 span,
@@ -389,6 +399,25 @@ impl Vm<'_> {
             return Err(self.err(format!("chave {key} não existe no mapa"), span));
         }
         Ok(Value::mapa(entries))
+    }
+
+    fn remova_conjunto(&self, set: &Value, elem: &Value, span: Span) -> Result<Value, EvalError> {
+        let Value::Conjunto(xs) = set else {
+            unreachable!();
+        };
+        let key = MapKey::from_value(elem).ok_or_else(|| {
+            self.err(
+                format!("elemento de conjunto inválido ({})", elem.type_name()),
+                span,
+            )
+        })?;
+        let mut items = xs.borrow().clone();
+        let before = items.len();
+        items.retain(|k| *k != key);
+        if items.len() == before {
+            return Err(self.err(format!("elemento {key} não existe no conjunto"), span));
+        }
+        Ok(Value::conjunto(items))
     }
 
     fn remova_faixa(
@@ -1050,7 +1079,7 @@ escreva_erro("falhou")"#,
 fim))"#),
             "2\n"
         );
-        assert!(run_err("tamanho(10)").contains("espera texto, lista, mapa ou matriz"));
+        assert!(run_err("tamanho(10)").contains("espera texto, lista, mapa, conjunto ou matriz"));
     }
 
     #[test]

@@ -24,7 +24,7 @@ Todo bloco (`inicio`/`fim` ou `{`/`}`) é uma expressão e retorna o valor da ú
 | `texto`  | `"olá"`, `"123"`                  |
 | `bool`   | `verdadeiro`, `falso`             |
 
-Tipos compostos: **lista**, **mapa** e **matriz**.
+Tipos compostos: **lista**, **mapa**, **conjunto** e **matriz**.
 
 ---
 
@@ -250,26 +250,55 @@ numeros[2..]                   // do 2 até o fim
 
 ## 10. Mapas
 
-```text
-pessoa = mapa
-inicio
-    "nome" = "Ana"
-    "idade" = 25
-    "ativo" = verdadeiro
-fim
+`:nome` é o texto `"nome"` (só um identificador). Palavras-chave e textos com espaço continuam com aspas.
 
-pessoa["nome"]                 // "Ana"
-pessoa:nome                    // igual a pessoa["nome"]
-pessoa:nome = "Bia"            // igual a pessoa["nome"] = "Bia"
-pessoa contem "idade"          // verdadeiro
-pessoa["cidade"] = "Fortaleza"
-pessoa = pessoa.remova("idade")
-tamanho(pessoa)                // 3 (nome, ativo, cidade)
+```text
+pessoa = mapa {
+    :nome -> "Thiago"
+    :idade -> 25
+    "cidade natal" -> "Fortaleza"
+}
+
+pessoa:nome                    // "Thiago"
+pessoa[:nome]                  // igual a pessoa["nome"]
+pessoa:nome = "Bia"
+pessoa contem :idade           // verdadeiro
+pessoa = pessoa.remova(:idade)
 ```
+
+`pessoa:nome` exige os tokens **na mesma linha**. Com quebra de linha, `:nome` é o texto `"nome"` (chave), não um campo:
+
+```text
+pessoa:nome          // campo
+opções
+:args                // não é opções:args
+```
+
+Num `mapa { }`, o valor também não come o próximo `:chave`. Campo como valor: `:op -> (obj:campo)`.
+
+A forma `mapa inicio … fim` também vale (`"nome" = "Ana"` ou `:nome -> "Ana"`).
 
 ---
 
-## 11. Textos (strings)
+## 11. Conjuntos
+
+Valores únicos (texto, número inteiro ou bool). Sem repetir, sem ordem de índice.
+
+```text
+s = conjunto { :ana, :bia, 1 }
+s contem :ana              // verdadeiro
+s += :carlos               // acrescenta um elemento
+s += conjunto { :bia, :dani }    // união
+s = s.remova(:ana)         // por valor, devolve cópia
+tamanho(s)
+para x em s { escreva(x) }
+```
+
+`conjunto {}` é vazio. Lista e mapa **não** viram conjunto sozinhos. `remova` no conjunto é o elemento, não um índice.
+
+---
+
+## 12. Textos (strings)
 
 ```text
 nome = "  Maria Silva  "
@@ -292,7 +321,7 @@ nome[1..5]
 
 ---
 
-## 12. Entrada do teclado
+## 13. Entrada do teclado
 
 `leia()` lê uma linha do teclado (sem a quebra de linha).  
 `leia(prompt)` imprime o texto do prompt e em seguida espera a linha.
@@ -344,7 +373,7 @@ escreva_erro("falhou")
 
 ---
 
-## 13. Arquivos
+## 14. Arquivos
 
 ```text
 linhas = leia_arquivo("dados.txt")          // retorna lista de linhas
@@ -360,7 +389,7 @@ salve_csv("saida.csv", dados)
 
 ---
 
-## 14. Tratamento de Erros
+## 15. Tratamento de Erros
 
 - Qualquer erro causa **crash** (com valores + call stack)
 - Para tratar, usa-se `se_falhar`
@@ -375,7 +404,7 @@ item = lista[99] se_falhar "não existe"
 
 ---
 
-## 15. Módulos / Importação
+## 16. Módulos / Importação
 
 ```text
 mat = importe "matematica"     // com namespace
@@ -387,7 +416,7 @@ soma(10, 5)
 
 ---
 
-## 16. Execução do Programa
+## 17. Execução do Programa
 
 O código executa **de cima para baixo**, linha por linha.  
 Não existe função `main` obrigatória.

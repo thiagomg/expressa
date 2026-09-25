@@ -15,6 +15,7 @@ pub enum Value {
     Bool(bool),
     Lista(Rc<RefCell<Vec<Value>>>),
     Mapa(Rc<RefCell<Vec<(MapKey, Value)>>>),
+    Conjunto(Rc<RefCell<Vec<MapKey>>>),
     Matriz(Rc<RefCell<Vec<Vec<f64>>>>),
     Funcao(Rc<Closure>),
     Builtin(&'static str),
@@ -42,6 +43,10 @@ impl Value {
 
     pub fn mapa(entries: Vec<(MapKey, Value)>) -> Self {
         Value::Mapa(Rc::new(RefCell::new(entries)))
+    }
+
+    pub fn conjunto(items: Vec<MapKey>) -> Self {
+        Value::Conjunto(Rc::new(RefCell::new(items)))
     }
 
     pub fn matriz(rows: Vec<Vec<f64>>) -> Self {
@@ -87,6 +92,10 @@ impl Value {
                     .collect();
                 format!("mapa{{{}}}", inner.join(", "))
             }
+            Value::Conjunto(xs) => {
+                let inner: Vec<_> = xs.borrow().iter().map(|k| format!("{k}")).collect();
+                format!("conjunto{{{}}}", inner.join(", "))
+            }
             Value::Matriz(m) => format_matriz(&m.borrow(), loc),
             other => other.to_string(),
         }
@@ -100,6 +109,7 @@ impl Value {
             Value::Bool(_) => "bool",
             Value::Lista(_) => "lista",
             Value::Mapa(_) => "mapa",
+            Value::Conjunto(_) => "conjunto",
             Value::Matriz(_) => "matriz",
             Value::Funcao(_) => "funcao",
             Value::Builtin(_) => "funcao",
@@ -117,6 +127,11 @@ impl PartialEq for Value {
             (Value::Bool(a), Value::Bool(b)) => a == b,
             (Value::Lista(a), Value::Lista(b)) => a.borrow()[..] == b.borrow()[..],
             (Value::Mapa(a), Value::Mapa(b)) => a.borrow()[..] == b.borrow()[..],
+            (Value::Conjunto(a), Value::Conjunto(b)) => {
+                let a = a.borrow();
+                let b = b.borrow();
+                a.len() == b.len() && a.iter().all(|k| b.contains(k))
+            }
             (Value::Matriz(a), Value::Matriz(b)) => a.borrow()[..] == b.borrow()[..],
             (Value::Funcao(a), Value::Funcao(b)) => Rc::ptr_eq(a, b),
             (Value::Builtin(a), Value::Builtin(b)) => a == b,
@@ -163,6 +178,16 @@ impl fmt::Display for Value {
                     }
                     write!(f, "{k}: ")?;
                     write_debug_value(f, v)?;
+                }
+                write!(f, "}}")
+            }
+            Value::Conjunto(xs) => {
+                write!(f, "conjunto{{")?;
+                for (i, k) in xs.borrow().iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{k}")?;
                 }
                 write!(f, "}}")
             }
@@ -421,6 +446,20 @@ impl MapKey {
             _ => None,
         }
     }
+
+    pub fn to_value(&self) -> Value {
+        match self {
+            MapKey::Texto(s) => Value::Texto(s.clone()),
+            MapKey::Numero(n) => Value::Numero(*n as f64),
+            MapKey::Bool(b) => Value::Bool(*b),
+        }
+    }
+}
+
+pub fn conjunto_insert(xs: &mut Vec<MapKey>, k: MapKey) {
+    if !xs.contains(&k) {
+        xs.push(k);
+    }
 }
 
 #[cfg(test)]
@@ -435,6 +474,7 @@ mod tests {
         assert_eq!(Value::Bool(true).type_name(), "bool");
         assert_eq!(Value::lista(vec![]).type_name(), "lista");
         assert_eq!(Value::mapa(vec![]).type_name(), "mapa");
+        assert_eq!(Value::conjunto(vec![]).type_name(), "conjunto");
         assert_eq!(Value::Builtin("escreva").type_name(), "funcao");
     }
 

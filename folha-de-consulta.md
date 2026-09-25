@@ -27,6 +27,7 @@ chmod +x prog.lep && ./prog.lep
 | lista | `[1, 2, 3]` |
 | mapa | `mapa { "nome" -> "Ana" }` |
 | matriz | `matriz { [1, 2], [3, 4] }` só números |
+| conjunto | `conjunto { :ana, 1 }` valores únicos |
 
 Não há literal `nada`. `escreva` e gravar arquivo devolvem `nada`.
 
@@ -69,7 +70,7 @@ mapa contem "idade"
 
 ```text
 mat::soma(1, 2)                // nome no módulo
-pessoa:nome                    // chave de mapa (= pessoa["nome"])
+pessoa:nome                    // chave de mapa (= pessoa["nome"]); mesma linha
 xs.tamanho()                   // igual a tamanho(xs)  — o () é obrigatório
 ```
 
@@ -148,11 +149,17 @@ substitua(t, "Maria", "Ana")
 separe("a,b,c", ",")           // ["a", "b", "c"]
 junte(["a", "b"], " - ")
 
-pessoa = mapa { "nome" -> "Ana", "idade" -> 25 }
-pessoa:nome  pessoa["nome"]
+:nome                          // o texto "nome"
+pessoa = mapa { :nome -> "Ana"  :idade -> 25 }
+pessoa:nome  pessoa[:nome]  pessoa["nome"]
 pessoa:nome = "Bia"
 pessoa["cidade"] = "Fortaleza"
 pessoa = pessoa.remova("idade")
+
+s = conjunto { :ana, :bia }
+s contem :ana
+s += :carlos
+s = s.remova(:bia)
 
 A = matriz { [1, 2, 3], [4, 5, 6] }
 A[1, 2]                        // 2
@@ -222,7 +229,7 @@ soma(10, 5)
 | `argumentos` | lista (não é função) |
 | `numero` `formato` `raiz` | número |
 | `tamanho` `primeiro` `ultimo` | coleção |
-| `maiuscula` `minuscula` `sem_acento` `remova` `substitua` `separe` `junte` `limpe` | texto / lista / mapa |
+| `maiuscula` `minuscula` `sem_acento` `remova` `substitua` `separe` `junte` `limpe` | texto / lista / mapa / conjunto |
 | `leia_arquivo` `salve_arquivo` `adicione_arquivo` | arquivo |
 | `leia_csv` `salve_csv` | CSV |
 | `transposta` `det` `identidade` | matriz |

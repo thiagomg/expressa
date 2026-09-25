@@ -340,7 +340,9 @@ fn print_help_linguagem() {
          argumentos[1]           primeiro argumento após o .lep\n  \
          funcao(a, b) {{ … }}            último valor é o resultado\n  \
          expr se_falhar outro            captura erro (divisão, arquivo, índice)\n  \
-         mapa {{ \"k\" -> v }}           vazio: mapa {{}}\n  \
+         :nome                           o texto \"nome\" (chave de mapa)\n  \
+         mapa {{ :nome -> \"Ana\" }}     vazio: mapa {{}}\n  \
+         conjunto {{ :ana, 1 }}          únicos; s += :bia; s.remova(:ana)\n  \
          matriz {{ [1, 2], [3, 4] }}     A[1, 2]  A+B  k*A  A*B\n  \
          lista[1]  texto[1..3]  t[2..]   fatia corta no fim; t[2] fora ainda é erro\n  \
          pessoa:nome                     chave de mapa (pessoa[\"nome\"])\n  \

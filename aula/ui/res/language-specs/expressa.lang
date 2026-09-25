@@ -36,6 +36,9 @@
         </context>
       </include>
     </context>
+    <context id="key-ident" style-ref="string">
+      <match>:[A-Za-zÀ-ÿ_][A-Za-zÀ-ÿ0-9_]*</match>
+    </context>
     <context id="number" style-ref="number">
       <match>\b[0-9][0-9_]*(\.[0-9_]+)?\b</match>
     </context>
@@ -70,6 +73,7 @@
       <keyword>vezes</keyword>
       <keyword>mapa</keyword>
       <keyword>matriz</keyword>
+      <keyword>conjunto</keyword>
       <keyword>importe</keyword>
       <keyword>contem</keyword>
     </context>
@@ -113,6 +117,7 @@
         <context ref="line-comment"/>
         <context ref="block-comment"/>
         <context ref="string"/>
+        <context ref="key-ident"/>
         <context ref="number"/>
         <context ref="boolean"/>
         <context ref="keyword"/>

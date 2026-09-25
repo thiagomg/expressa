@@ -18,7 +18,7 @@
     "retorne" "pare" "continue" "continua"
     "inicio" "início" "fim" "funcao" "função"
     "para" "de" "ate" "até" "em" "repita" "enquanto" "vezes"
-    "mapa" "matriz" "importe" "contem" "contém"))
+    "mapa" "matriz" "conjunto" "importe" "contem" "contém"))
 
 (defconst expressa-builtins
   '("escreva" "escreva_erro" "sair" "leia" "leia_linhas"
@@ -38,6 +38,7 @@
     (,(regexp-opt expressa-keywords 'symbols) . font-lock-keyword-face)
     (,(regexp-opt expressa-builtins 'symbols) . font-lock-builtin-face)
     (,(regexp-opt expressa-constants 'symbols) . font-lock-constant-face)
+    (":[A-Za-zÀ-ÿ_][A-Za-zÀ-ÿ0-9_]*" . font-lock-string-face)
     ("\\_<[0-9][0-9_]*\\(?:\\.[0-9_]+\\)?\\_>"
      . ,(if (facep 'font-lock-number-face)
             'font-lock-number-face

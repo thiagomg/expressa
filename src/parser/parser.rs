@@ -21,11 +21,19 @@ pub fn parse(source: &str) -> Result<Program, ParseError> {
 struct Parser {
     tokens: Vec<Token>,
     pos: usize,
+    /// `obj:campo` postfix. Off while parsing a mapa *value* so the next
+    /// `:chave` starts a new entry (`:a -> x :b -> y`). Use `(obj:campo)` to
+    /// force field access in that position.
+    allow_colon_field: bool,
 }
 
 impl Parser {
     fn new(tokens: Vec<Token>) -> Self {
-        Self { tokens, pos: 0 }
+        Self {
+            tokens,
+            pos: 0,
+            allow_colon_field: true,
+        }
     }
 
     // ── token helpers ────────────────────────────────────────────
@@ -36,6 +44,14 @@ impl Parser {
 
     fn peek_kind(&self) -> &TokenKind {
         &self.peek().kind
+    }
+
+    /// `pessoa:nome` only when `:` sits on the same line as the previous token.
+    fn colon_on_same_line(&self) -> bool {
+        if self.pos == 0 {
+            return true;
+        }
+        self.peek().span.line == self.tokens[self.pos - 1].span.line
     }
 
     fn at_eof(&self) -> bool {
@@ -443,7 +459,13 @@ impl Parser {
                 TokenKind::LParen => lhs = self.finish_call(lhs)?,
                 TokenKind::LBracket => lhs = self.finish_index_or_slice(lhs)?,
                 TokenKind::ColonColon => lhs = self.finish_module_field(lhs)?,
-                TokenKind::Colon => lhs = self.finish_map_field(lhs)?,
+                TokenKind::Colon
+                    if self.allow_colon_field
+                        && self.colon_on_same_line()
+                        && map_field_receiver(&lhs) =>
+                {
+                    lhs = self.finish_map_field(lhs)?;
+                }
                 TokenKind::Dot => lhs = self.finish_ufcs(lhs)?,
                 _ => break,
             }
@@ -474,8 +496,25 @@ impl Parser {
                 name,
                 span: tok.span,
             }),
+            TokenKind::Colon => {
+                let name_tok = self.remove();
+                match name_tok.kind {
+                    TokenKind::Ident(name) => Ok(Expr::String {
+                        value: name,
+                        span: tok.span.join(name_tok.span),
+                    }),
+                    _ => Err(self.err_at(
+                        "esperado nome após ':'; palavras-chave usam aspas (ex.: \"se\")",
+                        name_tok.span,
+                    )),
+                }
+            }
             TokenKind::LParen => {
-                let expr = self.parse_expr()?;
+                let prev = self.allow_colon_field;
+                self.allow_colon_field = true;
+                let expr = self.parse_expr();
+                self.allow_colon_field = prev;
+                let expr = expr?;
                 self.expect_kind(|k| matches!(k, TokenKind::RParen), "esperado ')'")?;
                 Ok(expr)
             }
@@ -500,6 +539,10 @@ impl Parser {
             TokenKind::Matriz => {
                 self.pos -= 1;
                 self.parse_matrix()
+            }
+            TokenKind::Conjunto => {
+                self.pos -= 1;
+                self.parse_conjunto()
             }
             _ => Err(self.err_at(
                 format!("expressão inválida (token inesperado: {:?})", tok.kind),
@@ -787,7 +830,11 @@ impl Parser {
                         |k| matches!(k, TokenKind::Arrow),
                         "esperado '->' entre chave e valor do mapa",
                     )?;
-                    let value = self.parse_expr()?;
+                    let prev = self.allow_colon_field;
+                    self.allow_colon_field = false;
+                    let value = self.parse_expr();
+                    self.allow_colon_field = prev;
+                    let value = value?;
                     let span = key.span().join(value.span());
                     entries.push(MapEntry { key, value, span });
                 }
@@ -860,6 +907,74 @@ impl Parser {
             span: start.join(end.span),
         })
     }
+
+    fn parse_conjunto(&mut self) -> Result<Expr, ParseError> {
+        let start = self
+            .expect_kind(|k| matches!(k, TokenKind::Conjunto), "esperado 'conjunto'")?
+            .span;
+        let brace = match self.peek_kind() {
+            TokenKind::LBrace => true,
+            TokenKind::Inicio => false,
+            _ => {
+                return Err(self.err("esperado 'inicio' ou '{' após 'conjunto'"));
+            }
+        };
+        self.remove();
+        if brace && matches!(self.peek_kind(), TokenKind::RBrace) {
+            let end = self.remove();
+            return Ok(Expr::Conjunto {
+                elements: vec![],
+                span: start.join(end.span),
+            });
+        }
+        let mut elements = Vec::new();
+        loop {
+            match self.peek_kind() {
+                TokenKind::Eof => break,
+                TokenKind::Fim if !brace => break,
+                TokenKind::RBrace if brace => break,
+                TokenKind::Fim if brace => {
+                    return Err(self.err("esperado '}' (conjunto aberto com '{')"));
+                }
+                TokenKind::RBrace if !brace => {
+                    return Err(self.err("esperado 'fim' (conjunto aberto com 'inicio')"));
+                }
+                _ => {
+                    elements.push(self.parse_expr()?);
+                    if matches!(self.peek_kind(), TokenKind::Comma) {
+                        self.remove();
+                    }
+                }
+            }
+        }
+        let end = if brace {
+            self.expect_kind(
+                |k| matches!(k, TokenKind::RBrace),
+                "esperado '}' do conjunto",
+            )?
+        } else {
+            self.expect_kind(
+                |k| matches!(k, TokenKind::Fim),
+                "esperado 'fim' do conjunto",
+            )?
+        };
+        Ok(Expr::Conjunto {
+            elements,
+            span: start.join(end.span),
+        })
+    }
+}
+
+fn map_field_receiver(expr: &Expr) -> bool {
+    matches!(
+        expr,
+        Expr::Ident { .. }
+            | Expr::Index { .. }
+            | Expr::Index2 { .. }
+            | Expr::Call { .. }
+            | Expr::Field { .. }
+            | Expr::MapField { .. }
+    )
 }
 
 fn expr_can_start(kind: &TokenKind) -> bool {
@@ -878,8 +993,10 @@ fn expr_can_start(kind: &TokenKind) -> bool {
             | TokenKind::Funcao
             | TokenKind::Mapa
             | TokenKind::Matriz
+            | TokenKind::Conjunto
             | TokenKind::Minus
             | TokenKind::Nao
+            | TokenKind::Colon
     )
 }
 
@@ -1390,6 +1507,47 @@ fim
             }
             other => panic!("{other:?}"),
         }
+    }
+
+    #[test]
+    fn conjunto_literal() {
+        parse_ok("conjunto {}");
+        parse_ok("conjunto { 1, :ana, verdadeiro }");
+        parse_ok(
+            r#"
+conjunto inicio
+    1
+    2
+fim
+"#,
+        );
+    }
+
+    #[test]
+    fn colon_ident_is_string_key() {
+        match expr_stmt(&parse_ok(":nome")) {
+            Expr::String { value, .. } if value == "nome" => {}
+            other => panic!("{other:?}"),
+        }
+        parse_ok(r#"mapa { :nome -> "Thiago" }"#);
+        parse_ok(
+            r#"
+mapa {
+    :op -> opções
+    :args -> args_pos
+}
+"#,
+        );
+        parse_ok("mapa { :op -> (opções:campo) :args -> 1 }");
+        parse_ok("pessoa:nome");
+        parse_ok("escreva(pessoa:nome)");
+        let err = parse("escreva(pessoa\n:nome)").unwrap_err();
+        assert!(
+            err.message.contains("inesperado") || err.message.contains(")"),
+            "{err}"
+        );
+        let err = parse(":se").unwrap_err();
+        assert!(err.message.contains("nome após ':'"), "{err}");
     }
 
     #[test]

@@ -774,7 +774,7 @@ mod tests {
         // One source with every ASCII keyword from the language (space-separated).
         let src = "\
 se senao ou e nao inicio fim funcao para de ate em \
-repita enquanto vezes mapa matriz importe contem verdadeiro falso se_falhar retorne \
+repita enquanto vezes mapa matriz conjunto importe contem verdadeiro falso se_falhar retorne \
 pare continue";
 
         assert_eq!(
@@ -797,6 +797,7 @@ pare continue";
                 TokenKind::Vezes,
                 TokenKind::Mapa,
                 TokenKind::Matriz,
+                TokenKind::Conjunto,
                 TokenKind::Importe,
                 TokenKind::Contem,
                 TokenKind::Verdadeiro,

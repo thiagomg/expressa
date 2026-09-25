@@ -33,6 +33,11 @@ pub enum Expr {
         rows: Vec<Expr>,
         span: Span,
     },
+    /// `conjunto { 1, :ana }` — unique key-like values.
+    Conjunto {
+        elements: Vec<Expr>,
+        span: Span,
+    },
     /// `funcao (a, b) inicio ... fim` or `{ ... }`
     Function {
         params: Vec<Param>,
@@ -147,6 +152,7 @@ impl Expr {
             | Expr::List { span, .. }
             | Expr::Map { span, .. }
             | Expr::Matrix { span, .. }
+            | Expr::Conjunto { span, .. }
             | Expr::Function { span, .. }
             | Expr::Ident { span, .. }
             | Expr::Field { span, .. }

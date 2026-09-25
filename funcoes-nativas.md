@@ -404,9 +404,10 @@ remova(lista, inicio, fim) -> lista
 remova(texto, i) -> texto
 remova(texto, inicio, fim) -> texto
 remova(mapa, chave) -> mapa
+remova(conjunto, elemento) -> conjunto
 ```
 
-Devolve uma **cópia** sem aquele pedaço. Índices começam em 1; a faixa é inclusiva (como `xs[2..3]`). No mapa, a chave some; não existe faixa.
+Devolve uma **cópia** sem aquele pedaço. Índices começam em 1; a faixa é inclusiva (como `xs[2..3]`). No mapa, a chave some; no conjunto, o **elemento** some.
 
 ```text
 xs = [10, 20, 30, 40]
@@ -414,6 +415,7 @@ xs.remova(2)           // [10, 30, 40]
 xs.remova(2, 3)        // [10, 40]
 "abcd".remova(2, 3)    // "ad"
 pessoa = pessoa.remova("idade")
+s = s.remova(:ana)
 ```
 
 **Erros:** índice menor que 1; início maior que o fim; chave inexistente; mapa com 3 argumentos. Fatia/`remova` com fim além do tamanho só corta até o último.

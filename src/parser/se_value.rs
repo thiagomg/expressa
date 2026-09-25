@@ -153,6 +153,12 @@ fn check_expr(expr: &Expr, use_: Use) -> Result<(), ParseError> {
             }
             Ok(())
         }
+        Expr::Conjunto { elements, .. } => {
+            for e in elements {
+                check_expr(e, Use::Value)?;
+            }
+            Ok(())
+        }
         Expr::Field { object, .. } | Expr::MapField { object, .. } => {
             check_expr(object, Use::Value)
         }

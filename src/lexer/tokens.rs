@@ -40,6 +40,7 @@ pub enum TokenKind {
     Vezes,      // vezes
     Mapa,       // mapa
     Matriz,     // matriz
+    Conjunto,   // conjunto
     Importe,    // importe
     Contem,     // contem (infix operator, but reserved word)
     Verdadeiro, // verdadeiro
@@ -108,6 +109,7 @@ pub fn keyword(s: &str) -> Option<TokenKind> {
         "vezes" => TokenKind::Vezes,
         "mapa" => TokenKind::Mapa,
         "matriz" => TokenKind::Matriz,
+        "conjunto" => TokenKind::Conjunto,
         "importe" => TokenKind::Importe,
         "contem" | "contém" => TokenKind::Contem,
         "verdadeiro" => TokenKind::Verdadeiro,
