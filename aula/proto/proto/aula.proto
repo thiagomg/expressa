@@ -62,6 +62,7 @@ message RunRequest {
   string source = 3;
   bool debug = 4;
   repeated uint32 breakpoint_lines = 5;
+  repeated string args = 6;
 }
 
 message ExecIn {
@@ -101,6 +102,7 @@ message ExecOut {
     string leia_prompt = 2;
     ExecFinished finished = 3;
     DebugPaused paused = 4;
+    string stderr = 5;
   }
 }
 

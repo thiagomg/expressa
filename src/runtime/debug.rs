@@ -449,6 +449,36 @@ impl DebugHook for CliDebugger {
     }
 }
 
+/// For **Rodar**: ignore step commands, honour `terminar` so Parar works.
+pub struct StopHook {
+    cmd_rx: std::sync::mpsc::Receiver<String>,
+}
+
+impl StopHook {
+    pub fn new(cmd_rx: std::sync::mpsc::Receiver<String>) -> Self {
+        Self { cmd_rx }
+    }
+}
+
+impl DebugHook for StopHook {
+    fn before_stmt(&mut self, _ctx: &DebugCtx<'_>) -> DebugAction {
+        loop {
+            match self.cmd_rx.try_recv() {
+                Ok(cmd) => {
+                    let cmd = cmd.trim();
+                    if cmd == "terminar" || cmd == "q" || cmd == "quit" {
+                        return DebugAction::Quit;
+                    }
+                }
+                Err(std::sync::mpsc::TryRecvError::Empty) => return DebugAction::Continue,
+                Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                    return DebugAction::Quit;
+                }
+            }
+        }
+    }
+}
+
 /// Pauses by sending a snapshot and waiting for a command string (Aula).
 pub struct ChannelDebugger {
     pub session: DebugSession,

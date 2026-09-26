@@ -6,17 +6,20 @@ use expressa_aula_proto::{
 };
 use std::process::Child;
 use std::sync::Mutex;
+use std::sync::atomic::{AtomicU32, Ordering};
 
 use tokio_stream::StreamExt;
 use tonic::transport::{Channel, Endpoint};
 
 static SPAWNED_PID: Mutex<Option<u32>> = Mutex::new(None);
+static SPAWNED_PID_ATOMIC: AtomicU32 = AtomicU32::new(0);
 
 fn pidfile() -> std::path::PathBuf {
     std::env::temp_dir().join("expressa-aula-server.pid")
 }
 
 fn remember_pid(pid: u32) {
+    SPAWNED_PID_ATOMIC.store(pid, Ordering::SeqCst);
     if let Ok(mut g) = SPAWNED_PID.lock() {
         *g = Some(pid);
     }
@@ -45,6 +48,7 @@ fn kill_pid(pid: u32) {
 
 /// Stop a server this UI started (or a leftover from a previous UI spawn).
 pub fn kill_spawned_server() {
+    SPAWNED_PID_ATOMIC.store(0, Ordering::SeqCst);
     let mem = SPAWNED_PID.lock().ok().and_then(|mut g| g.take());
     let file = std::fs::read_to_string(pidfile())
         .ok()
@@ -52,6 +56,34 @@ pub fn kill_spawned_server() {
     let _ = std::fs::remove_file(pidfile());
     for pid in [mem, file].into_iter().flatten() {
         kill_pid(pid);
+    }
+}
+
+/// Ctrl+C / SIGTERM: kill the child then exit (GTK does not run Drop).
+pub fn install_signal_handlers() {
+    #[cfg(unix)]
+    unsafe {
+        libc::signal(
+            libc::SIGINT,
+            on_fatal_signal as *const () as libc::sighandler_t,
+        );
+        libc::signal(
+            libc::SIGTERM,
+            on_fatal_signal as *const () as libc::sighandler_t,
+        );
+    }
+}
+
+#[cfg(unix)]
+extern "C" fn on_fatal_signal(sig: i32) {
+    let pid = SPAWNED_PID_ATOMIC.swap(0, Ordering::SeqCst);
+    if pid != 0 {
+        unsafe {
+            libc::kill(pid as i32, libc::SIGKILL);
+        }
+    }
+    unsafe {
+        libc::_exit(128 + sig);
     }
 }
 
@@ -64,6 +96,7 @@ pub struct Rpc {
 
 pub enum ExecEvent {
     Stdout(String),
+    Stderr(String),
     Leia(String),
     Paused(DebugPaused),
     Finished(ExecFinished),
@@ -164,6 +197,7 @@ impl Rpc {
         source: String,
         debug: bool,
         breakpoints: Vec<u32>,
+        args: Vec<String>,
         event_tx: std::sync::mpsc::Sender<ExecEvent>,
         line_rx: std::sync::mpsc::Receiver<String>,
         debug_cmd_rx: std::sync::mpsc::Receiver<String>,
@@ -179,6 +213,7 @@ impl Rpc {
                     source,
                     debug,
                     breakpoint_lines: breakpoints,
+                    args,
                 })),
             };
             if in_tx.send(start).await.is_err() {
@@ -240,6 +275,9 @@ impl Rpc {
                         Some(expressa_aula_proto::exec_out::Payload::Paused(p)) => {
                             let _ = event_tx.send(ExecEvent::Paused(p));
                         }
+                        Some(expressa_aula_proto::exec_out::Payload::Stderr(s)) => {
+                            let _ = event_tx.send(ExecEvent::Stderr(s));
+                        }
                         None => {}
                     },
                     Err(e) => {
@@ -279,14 +317,8 @@ pub fn ensure_server(url: &str) -> Result<Rpc, String> {
             server.display()
         ));
     }
-    let mut cmd = std::process::Command::new(&server);
-    cmd.args(["--bind", "127.0.0.1:50051", "--root", "./aula-data"]);
-    #[cfg(unix)]
-    {
-        use std::os::unix::process::CommandExt;
-        cmd.process_group(0);
-    }
-    let child = cmd
+    let child = std::process::Command::new(&server)
+        .args(["--bind", "127.0.0.1:50051", "--root", "./aula-data"])
         .spawn()
         .map_err(|e| format!("não iniciou o servidor: {e}"))?;
     remember_pid(child.id());

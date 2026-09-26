@@ -203,6 +203,7 @@ dependencies = [
  "expressa-aula-proto",
  "gdk-pixbuf",
  "gtk4",
+ "libc",
  "sourceview5",
  "tokio",
  "tokio-stream",

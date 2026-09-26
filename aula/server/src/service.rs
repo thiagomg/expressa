@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use expressa::runtime::{
-    ChannelDebugger, DebugHook, DebugPaused, LeiaHost, NoopHook, run_with_hook,
+    ChannelDebugger, DebugHook, DebugPaused, LeiaHost, StopHook, run_with_hook,
 };
 use expressa_aula_proto::runner_server::Runner;
 use expressa_aula_proto::turma_server::Turma;
@@ -220,19 +220,21 @@ impl Runner for Aula {
         let (prompt_tx, prompt_rx) = std::sync::mpsc::channel::<String>();
         let (line_tx, line_rx) = std::sync::mpsc::channel::<String>();
         let (out_tx, out_rx) = std::sync::mpsc::channel::<String>();
+        let (err_tx, err_rx) = std::sync::mpsc::channel::<String>();
         let (done_tx, done_rx) = std::sync::mpsc::channel();
         let (pause_tx, pause_rx) = std::sync::mpsc::channel::<DebugPaused>();
         let (dcmd_tx, dcmd_rx) = std::sync::mpsc::channel::<String>();
 
         let debug = start.debug;
         let bps = start.breakpoint_lines.clone();
+        let script_args = start.args.clone();
         std::thread::spawn(move || {
             let mut host = ChannelLeia {
                 prompts: prompt_tx,
                 lines: line_rx,
             };
-            let mut out = ChannelOut { tx: out_tx.clone() };
-            let mut err = ChannelOut { tx: out_tx };
+            let mut out = ChannelOut { tx: out_tx };
+            let mut err = ChannelOut { tx: err_tx };
             let hook: Box<dyn DebugHook> = if debug {
                 let mut dbg = ChannelDebugger::new(pause_tx, dcmd_rx);
                 for line in bps {
@@ -241,8 +243,7 @@ impl Runner for Aula {
                 Box::new(dbg)
             } else {
                 drop(pause_tx);
-                drop(dcmd_rx);
-                Box::new(NoopHook)
+                Box::new(StopHook::new(dcmd_rx))
             };
             let result = run_with_hook(
                 &source,
@@ -253,7 +254,7 @@ impl Runner for Aula {
                 &mut out,
                 &mut err,
                 &mut host,
-                &[],
+                &script_args,
             );
             let _ = done_tx.send(result);
         });
@@ -269,6 +270,12 @@ impl Runner for Aula {
                                     let _ = line_tx.send(line);
                                 }
                                 Some(expressa_aula_proto::exec_in::Payload::DebugCmd(cmd)) => {
+                                    if cmd.trim() == "terminar"
+                                        || cmd.trim() == "q"
+                                        || cmd.trim() == "quit"
+                                    {
+                                        let _ = line_tx.send(String::new());
+                                    }
                                     let _ = dcmd_tx.send(cmd);
                                 }
                                 _ => {}
@@ -280,6 +287,11 @@ impl Runner for Aula {
                         while let Ok(chunk) = out_rx.try_recv() {
                             let _ = tx.send(Ok(ExecOut {
                                 payload: Some(expressa_aula_proto::exec_out::Payload::Stdout(chunk)),
+                            })).await;
+                        }
+                        while let Ok(chunk) = err_rx.try_recv() {
+                            let _ = tx.send(Ok(ExecOut {
+                                payload: Some(expressa_aula_proto::exec_out::Payload::Stderr(chunk)),
                             })).await;
                         }
                         while let Ok(prompt) = prompt_rx.try_recv() {
@@ -312,6 +324,13 @@ impl Runner for Aula {
                                 let _ = tx.send(Ok(ExecOut {
                                     payload: Some(
                                         expressa_aula_proto::exec_out::Payload::Stdout(chunk),
+                                    ),
+                                })).await;
+                            }
+                            while let Ok(chunk) = err_rx.try_recv() {
+                                let _ = tx.send(Ok(ExecOut {
+                                    payload: Some(
+                                        expressa_aula_proto::exec_out::Payload::Stderr(chunk),
                                     ),
                                 })).await;
                             }

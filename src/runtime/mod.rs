@@ -9,7 +9,7 @@ mod value;
 
 pub use debug::{
     ChannelDebugger, CliDebugger, DebugAction, DebugBinding, DebugCtx, DebugFrameInfo, DebugHook,
-    DebugPaused, DebugSession, NoopHook, collect_stack, collect_vars, snapshot,
+    DebugPaused, DebugSession, NoopHook, StopHook, collect_stack, collect_vars, snapshot,
 };
 pub use error::{CallFrame, RuntimeError};
 pub use eval::{

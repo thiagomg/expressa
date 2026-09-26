@@ -32,6 +32,11 @@ struct Ui {
     editor: SourceView,
     buffer: SourceBuffer,
     output: TextView,
+    args_entry: Entry,
+    dirty: bool,
+    suppress_dirty: bool,
+    err_tag: TextTag,
+    error_link_tag: TextTag,
     status: Label,
     window: ApplicationWindow,
     debug_cmd: Option<std::sync::mpsc::Sender<String>>,
@@ -52,6 +57,7 @@ struct Ui {
 }
 
 fn main() {
+    rpc::install_signal_handlers();
     let app = Application::builder().application_id(APP_ID).build();
     app.connect_activate(build_ui);
     app.connect_shutdown(|_| {
@@ -145,7 +151,19 @@ fn build_ui(app: &Application) {
     let output = TextView::builder()
         .editable(false)
         .monospace(true)
+        .cursor_visible(false)
         .wrap_mode(gtk::WrapMode::WordChar)
+        .build();
+    let err_tag = TextTag::new(Some("stderr"));
+    err_tag.set_foreground(Some("#e53935"));
+    output.buffer().tag_table().add(&err_tag);
+    let error_link_tag = TextTag::new(Some("error-link"));
+    error_link_tag.set_foreground(Some("#e53935"));
+    error_link_tag.set_underline(gtk::pango::Underline::Single);
+    output.buffer().tag_table().add(&error_link_tag);
+    let args_entry = Entry::builder()
+        .placeholder_text("argumentos (ex.: Thiago --ajuda)")
+        .hexpand(true)
         .build();
     let status = Label::new(Some("conectado a 127.0.0.1:50051"));
     status.set_xalign(0.0);
@@ -167,6 +185,11 @@ fn build_ui(app: &Application) {
         editor,
         buffer,
         output,
+        args_entry,
+        dirty: false,
+        suppress_dirty: false,
+        err_tag,
+        error_link_tag,
         status,
         window: win.clone(),
         debug_cmd: None,
@@ -219,6 +242,12 @@ fn build_ui(app: &Application) {
     toolbar.append(&btn_files);
     toolbar.append(&btn_panel);
 
+    let args_row = GtkBox::new(Orientation::Horizontal, 8);
+    args_row.set_margin_start(8);
+    args_row.set_margin_end(8);
+    args_row.append(&Label::new(Some("argumentos:")));
+    args_row.append(&ui.borrow().args_entry);
+
     let file_scroll = ScrolledWindow::builder()
         .min_content_width(220)
         .child(&ui.borrow().tree)
@@ -230,35 +259,38 @@ fn build_ui(app: &Application) {
         .build();
     const OUTPUT_HEIGHT: i32 = 160;
     let output_scroll = ScrolledWindow::builder()
-        .min_content_height(OUTPUT_HEIGHT)
-        .vexpand(false)
+        .min_content_height(80)
         .hexpand(true)
         .child(&ui.borrow().output)
         .build();
-    output_scroll.set_height_request(OUTPUT_HEIGHT);
-    output_scroll.set_valign(gtk::Align::Fill);
 
     let debug_panel = make_debug_panel(&ui);
     const DEBUG_PANEL_WIDTH: i32 = 320;
     debug_panel.set_width_request(DEBUG_PANEL_WIDTH);
     debug_panel.set_hexpand(false);
 
-    // Box, not Paned: GtkPaned's default position is 0 and keeps collapsing
-    // the output. The editor takes leftover height; the console stays 160px.
-    let editor_col = GtkBox::new(Orientation::Vertical, 0);
-    editor_scroll.set_vexpand(true);
-    editor_col.append(&editor_scroll);
-    editor_col.append(&gtk::Separator::new(Orientation::Horizontal));
-    editor_col.append(&output_scroll);
+    install_paned_css();
+
+    let editor_col = Paned::new(Orientation::Vertical);
+    editor_col.add_css_class("aula-paned");
+    editor_col.set_wide_handle(false);
+    editor_col.set_start_child(Some(&editor_scroll));
+    editor_col.set_end_child(Some(&output_scroll));
+    editor_col.set_resize_start_child(true);
+    editor_col.set_resize_end_child(false);
+    editor_col.set_shrink_start_child(false);
+    editor_col.set_shrink_end_child(false);
 
     let main_split = Paned::new(Orientation::Horizontal);
+    main_split.add_css_class("aula-paned");
     main_split.set_start_child(Some(&editor_col));
     main_split.set_end_child(Some(&debug_panel));
     main_split.set_resize_start_child(true);
     main_split.set_shrink_end_child(false);
-    main_split.set_wide_handle(true);
+    main_split.set_wide_handle(false);
 
     let body = Paned::new(Orientation::Horizontal);
+    body.add_css_class("aula-paned");
     body.set_start_child(Some(&file_scroll));
     body.set_end_child(Some(&main_split));
     body.set_resize_end_child(true);
@@ -266,6 +298,7 @@ fn build_ui(app: &Application) {
 
     let root = GtkBox::new(Orientation::Vertical, 6);
     root.append(&toolbar);
+    root.append(&args_row);
     root.append(&body);
     root.append(&ui.borrow().status);
     ui.borrow().status.set_margin_start(8);
@@ -276,7 +309,10 @@ fn build_ui(app: &Application) {
 
     {
         let ui_n = Rc::clone(&ui);
-        btn_new.connect_clicked(move |_| novo(&ui_n));
+        btn_new.connect_clicked(move |_| {
+            let ui = Rc::clone(&ui_n);
+            confirm_discard(&ui_n, move || novo(&ui));
+        });
     }
     {
         let ui_s = Rc::clone(&ui);
@@ -339,7 +375,9 @@ fn build_ui(app: &Application) {
         ui.borrow()
             .tree
             .connect_row_activated(move |_, path, _col| {
-                abrir_no(&ui_o, path);
+                let ui_cb = Rc::clone(&ui_o);
+                let p = path.clone();
+                confirm_discard(&ui_o, move || abrir_no(&ui_cb, &p));
             });
     }
     {
@@ -374,6 +412,32 @@ fn build_ui(app: &Application) {
             }
         });
         ui.borrow().editor.add_controller(click);
+    }
+    {
+        let ui_ch = Rc::clone(&ui);
+        let buffer = ui.borrow().buffer.clone();
+        buffer.connect_changed(move |_| {
+            let Ok(mut u) = ui_ch.try_borrow_mut() else {
+                return;
+            };
+            if u.suppress_dirty {
+                return;
+            }
+            if !u.dirty {
+                u.dirty = true;
+                drop(u);
+                refresh_title(&ui_ch);
+            }
+        });
+    }
+    {
+        let ui_o = Rc::clone(&ui);
+        let click = gtk::GestureClick::new();
+        click.set_button(1);
+        click.connect_pressed(move |_, _, x, y| {
+            jump_from_output_click(&ui_o, x, y);
+        });
+        ui.borrow().output.add_controller(click);
     }
 
     let keys = gtk::EventControllerKey::new();
@@ -442,13 +506,42 @@ fn build_ui(app: &Application) {
     win.present();
     {
         let split = main_split.clone();
-        glib::timeout_add_local(std::time::Duration::from_millis(80), move || {
+        let editor_split = editor_col.clone();
+        glib::timeout_add_local(std::time::Duration::from_millis(120), move || {
             let w = split.allocated_width();
             if w > DEBUG_PANEL_WIDTH + 400 {
                 split.set_position(w - DEBUG_PANEL_WIDTH);
             }
+            let h = editor_split.allocated_height();
+            if h > OUTPUT_HEIGHT + 200 {
+                editor_split.set_position(h - OUTPUT_HEIGHT);
+            }
             glib::ControlFlow::Break
         });
+    }
+}
+
+fn install_paned_css() {
+    let css = gtk::CssProvider::new();
+    css.load_from_data(
+        "
+        paned.aula-paned > separator {
+            min-width: 4px;
+            min-height: 4px;
+            margin: 0;
+            background-color: alpha(currentColor, 0.12);
+        }
+        paned.aula-paned > separator:hover {
+            background-color: alpha(currentColor, 0.28);
+        }
+        ",
+    );
+    if let Some(display) = gtk::gdk::Display::default() {
+        gtk::style_context_add_provider_for_display(
+            &display,
+            &css,
+            gtk::STYLE_PROVIDER_PRIORITY_APPLICATION,
+        );
     }
 }
 
@@ -507,8 +600,56 @@ fn source_text(ui: &Ui) -> String {
 }
 
 fn set_source(ui: &Rc<RefCell<Ui>>, text: &str) {
+    ui.borrow_mut().suppress_dirty = true;
+    let buffer = ui.borrow().buffer.clone();
+    buffer.set_text(text);
+    {
+        let mut u = ui.borrow_mut();
+        u.suppress_dirty = false;
+        u.dirty = false;
+    }
+    refresh_title(ui);
+}
+
+fn refresh_title(ui: &Rc<RefCell<Ui>>) {
     let u = ui.borrow();
-    u.buffer.set_text(text);
+    let name = filename(&u);
+    let star = if u.dirty { "*" } else { "" };
+    u.window
+        .set_title(Some(&format!("{star}{name} — Expressa Aula")));
+}
+
+fn parse_run_args(s: &str) -> Vec<String> {
+    s.split_whitespace().map(|w| w.to_string()).collect()
+}
+
+fn confirm_discard(ui: &Rc<RefCell<Ui>>, then: impl FnOnce() + 'static) {
+    if !ui.borrow().dirty {
+        then();
+        return;
+    }
+    let window = ui.borrow().window.clone();
+    let then = RefCell::new(Some(then));
+    #[allow(deprecated)]
+    let dlg = gtk::MessageDialog::builder()
+        .transient_for(&window)
+        .modal(true)
+        .message_type(gtk::MessageType::Warning)
+        .buttons(gtk::ButtonsType::None)
+        .text("Há alterações não salvas")
+        .secondary_text("Descartar e continuar?")
+        .build();
+    dlg.add_button("Cancelar", gtk::ResponseType::Cancel);
+    dlg.add_button("Descartar", gtk::ResponseType::Accept);
+    dlg.connect_response(move |d, resp| {
+        d.close();
+        if resp == gtk::ResponseType::Accept {
+            if let Some(f) = then.borrow_mut().take() {
+                f();
+            }
+        }
+    });
+    dlg.present();
 }
 
 fn set_output(ui: &Rc<RefCell<Ui>>, text: &str) {
@@ -539,6 +680,8 @@ fn salvar(ui: &Rc<RefCell<Ui>>) {
     };
     match rpc_result {
         Ok(()) => {
+            ui.borrow_mut().dirty = false;
+            refresh_title(ui);
             set_status(ui, &format!("salvo {name}"));
             conectar(ui);
         }
@@ -799,8 +942,7 @@ fn set_debug_buttons(ui: &Rc<RefCell<Ui>>, paused: bool, running: bool) {
 }
 
 fn red_breakpoint_pixbuf() -> gdk_pixbuf::Pixbuf {
-    let pb = gdk_pixbuf::Pixbuf::new(gdk_pixbuf::Colorspace::Rgb, true, 8, 12, 12)
-        .expect("pixbuf");
+    let pb = gdk_pixbuf::Pixbuf::new(gdk_pixbuf::Colorspace::Rgb, true, 8, 12, 12).expect("pixbuf");
     pb.fill(0x0000_0000);
     for y in 0..12 {
         for x in 0..12 {
@@ -914,22 +1056,77 @@ fn clear_debug_views(ui: &Rc<RefCell<Ui>>) {
 }
 
 fn append_output(ui: &Rc<RefCell<Ui>>, text: &str) {
+    append_output_tagged(ui, text, false);
+}
+
+fn append_stderr(ui: &Rc<RefCell<Ui>>, text: &str) {
+    append_output_tagged(ui, text, true);
+}
+
+fn append_output_tagged(ui: &Rc<RefCell<Ui>>, text: &str, stderr: bool) {
     let u = ui.borrow();
     let buf = u.output.buffer();
-    let mut end = buf.end_iter();
-    buf.insert(&mut end, text);
+    let mut start = buf.end_iter();
+    let start_off = start.offset();
+    buf.insert(&mut start, text);
+    if stderr {
+        let a = buf.iter_at_offset(start_off);
+        let b = buf.end_iter();
+        buf.apply_tag(&u.err_tag, &a, &b);
+    }
+}
+
+fn append_error_link(ui: &Rc<RefCell<Ui>>, text: &str) {
+    let u = ui.borrow();
+    let buf = u.output.buffer();
+    let mut start = buf.end_iter();
+    let start_off = start.offset();
+    buf.insert(&mut start, text);
+    let a = buf.iter_at_offset(start_off);
+    let b = buf.end_iter();
+    buf.apply_tag(&u.error_link_tag, &a, &b);
+}
+
+fn jump_from_output_click(ui: &Rc<RefCell<Ui>>, x: f64, y: f64) {
+    let u = ui.borrow();
+    let (bx, by) = u
+        .output
+        .window_to_buffer_coords(gtk::TextWindowType::Text, x as i32, y as i32);
+    let Some(iter) = u.output.iter_at_location(bx, by) else {
+        return;
+    };
+    let line_idx = iter.line();
+    let a = u.output.buffer().iter_at_line(line_idx).unwrap_or(iter);
+    let mut b = a.clone();
+    if !b.forward_to_line_end() {
+        b = u.output.buffer().end_iter();
+    }
+    let line = u.output.buffer().text(&a, &b, false);
+    drop(u);
+    if let Some(n) = parse_error_line(&line) {
+        ir_para_linha(ui, n);
+    }
+}
+
+fn parse_error_line(line: &str) -> Option<u32> {
+    // "erro: … em arquivo.lep:12" or "… em /path/x.lep:8"
+    let em = line.rfind(" em ")?;
+    let loc = line[em + 4..].trim();
+    let colon = loc.rfind(':')?;
+    loc[colon + 1..].trim().parse().ok()
 }
 
 fn rodar(ui: &Rc<RefCell<Ui>>, debug: bool) {
     set_output(ui, "");
     clear_debug_views(ui);
-    let (student, name, src, bps) = {
+    let (student, name, src, bps, args) = {
         let u = ui.borrow();
         (
             student(&u),
             filename(&u),
             source_text(&u),
             u.breakpoints.iter().copied().collect::<Vec<_>>(),
+            parse_run_args(&u.args_entry.text()),
         )
     };
     set_status(
@@ -951,6 +1148,7 @@ fn rodar(ui: &Rc<RefCell<Ui>>, debug: bool) {
             src,
             debug,
             bps,
+            args,
             event_tx,
             line_rx,
             dcmd_rx,
@@ -963,6 +1161,7 @@ fn rodar(ui: &Rc<RefCell<Ui>>, debug: bool) {
         loop {
             match event_rx.borrow().try_recv() {
                 Ok(ExecEvent::Stdout(s)) => append_output(&ui_ev, &s),
+                Ok(ExecEvent::Stderr(s)) => append_stderr(&ui_ev, &s),
                 Ok(ExecEvent::Paused(p)) => {
                     fill_debug_views(&ui_ev, &p);
                     set_debug_buttons(&ui_ev, true, true);
@@ -988,7 +1187,7 @@ fn rodar(ui: &Rc<RefCell<Ui>>, debug: bool) {
                     if f.ok {
                         set_status(&ui_ev, &format!("ok — {name}"));
                     } else {
-                        append_output(
+                        append_error_link(
                             &ui_ev,
                             &format!(
                                 "erro: {} em {}:{}\n",
