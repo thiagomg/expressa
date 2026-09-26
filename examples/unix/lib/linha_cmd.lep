@@ -1,5 +1,3 @@
-#!/usr/bin/env expressa
-
 // args - lista de argumentos
 // ops - mapa de opções que tem valor. Ex: --nome Thiago
 separa_args = função(args, ops) {
@@ -40,5 +38,3 @@ separa_args = função(args, ops) {
         :pos -> args_pos
     }
 }
-
-

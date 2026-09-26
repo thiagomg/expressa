@@ -12,3 +12,5 @@ tokio = { workspace = true }
 tokio-stream = { workspace = true }
 gtk = { version = "0.9", package = "gtk4", features = ["v4_6"] }
 sourceview5 = { version = "0.9", features = ["v5_4"] }
+gdk-pixbuf = "0.20"
+libc = "0.2"

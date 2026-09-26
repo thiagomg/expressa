@@ -9,6 +9,8 @@ service Turma {
   rpc ReadFile(ReadFileRequest) returns (ReadFileResponse);
   rpc WriteFile(WriteFileRequest) returns (WriteFileResponse);
   rpc DeleteFile(DeleteFileRequest) returns (DeleteFileResponse);
+  rpc Mkdir(MkdirRequest) returns (MkdirResponse);
+  rpc Rename(RenameRequest) returns (RenameResponse);
 }
 
 service Runner {
@@ -55,18 +57,59 @@ message DeleteFileRequest {
 
 message DeleteFileResponse {}
 
+message MkdirRequest {
+  string student = 1;
+  string path = 2;
+}
+
+message MkdirResponse {}
+
+message RenameRequest {
+  string student = 1;
+  string from = 2;
+  string to = 3;
+}
+
+message RenameResponse {}
+
 message RunRequest {
   string student = 1;
   string path = 2;
   // If empty, the file is read from disk.
   string source = 3;
+  bool debug = 4;
+  repeated uint32 breakpoint_lines = 5;
+  repeated string args = 6;
 }
 
 message ExecIn {
   oneof payload {
     RunRequest start = 1;
     string line = 2;
+    // continuar | proximo | entrar | sair | terminar | ponto N | remover N
+    string debug_cmd = 3;
   }
+}
+
+message DebugVar {
+  string scope = 1;
+  string name = 2;
+  string value = 3;
+}
+
+message DebugFrame {
+  string name = 1;
+  string file = 2;
+  uint32 line = 3;
+}
+
+message DebugPaused {
+  string file = 1;
+  uint32 line = 2;
+  uint32 col = 3;
+  string source_line = 4;
+  repeated DebugVar vars = 5;
+  repeated DebugFrame stack = 6;
 }
 
 message ExecOut {
@@ -75,6 +118,8 @@ message ExecOut {
     // Same text as CLI `<<<EXPRESSA-LEIA>>>{prompt}` — the prompt only.
     string leia_prompt = 2;
     ExecFinished finished = 3;
+    DebugPaused paused = 4;
+    string stderr = 5;
   }
 }
 

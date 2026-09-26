@@ -27,6 +27,83 @@ pub enum DebugAction {
     Timeout,
 }
 
+#[derive(Debug, Clone)]
+pub struct DebugBinding {
+    pub scope: String,
+    pub name: String,
+    pub value: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct DebugFrameInfo {
+    pub name: String,
+    pub file: String,
+    pub line: u32,
+}
+
+#[derive(Debug, Clone)]
+pub struct DebugPaused {
+    pub file: String,
+    pub line: u32,
+    pub col: u32,
+    pub source_line: String,
+    pub vars: Vec<DebugBinding>,
+    pub stack: Vec<DebugFrameInfo>,
+}
+
+pub fn collect_vars(ctx: &DebugCtx<'_>) -> Vec<DebugBinding> {
+    let mut out = Vec::new();
+    let mut current = Some(Rc::clone(ctx.env));
+    while let Some(cell) = current {
+        let env = cell.borrow();
+        if env.kind != FrameKind::Builtins {
+            let label = match env.kind {
+                FrameKind::Module => "módulo",
+                FrameKind::Block => "bloco",
+                FrameKind::Function => "função",
+                FrameKind::Builtins => "",
+            };
+            for (k, v) in env.bindings_sorted() {
+                if matches!(v, Value::Builtin(_)) {
+                    continue;
+                }
+                out.push(DebugBinding {
+                    scope: label.to_string(),
+                    name: k,
+                    value: v.to_string(),
+                });
+            }
+        }
+        let parent = env.parent.clone();
+        drop(env);
+        current = parent;
+    }
+    out
+}
+
+pub fn collect_stack(ctx: &DebugCtx<'_>) -> Vec<DebugFrameInfo> {
+    ctx.stack
+        .iter()
+        .rev()
+        .map(|frame| DebugFrameInfo {
+            name: frame.name.clone(),
+            file: frame.file.clone(),
+            line: frame.span.line,
+        })
+        .collect()
+}
+
+pub fn snapshot(ctx: &DebugCtx<'_>) -> DebugPaused {
+    DebugPaused {
+        file: ctx.file.to_string(),
+        line: ctx.span.line,
+        col: ctx.span.col,
+        source_line: source_line(ctx.source, ctx.span.line).to_string(),
+        vars: collect_vars(ctx),
+        stack: collect_stack(ctx),
+    }
+}
+
 pub trait DebugHook {
     fn before_stmt(&mut self, ctx: &DebugCtx<'_>) -> DebugAction;
 }
@@ -55,26 +132,19 @@ enum StepMode {
     StepOut { depth: usize },
 }
 
-pub struct CliDebugger {
-    breakpoints: HashSet<(String, u32)>,
+/// Stepping + breakpoints. Shared by the CLI debugger and the Aula hook.
+pub struct DebugSession {
+    pub breakpoints: HashSet<(String, u32)>,
     mode: StepMode,
-    last_line: String,
     pause_on_start: bool,
-    out: Box<dyn Write>,
 }
 
-impl CliDebugger {
-    pub fn new() -> Self {
-        Self::with_out(Box::new(io::stderr()))
-    }
-
-    pub fn with_out(out: Box<dyn Write>) -> Self {
+impl DebugSession {
+    pub fn step_in() -> Self {
         Self {
             breakpoints: HashSet::new(),
             mode: StepMode::StepIn,
-            last_line: String::new(),
             pause_on_start: true,
-            out,
         }
     }
 
@@ -98,6 +168,96 @@ impl CliDebugger {
                 }
             }
             StepMode::StepOut { depth } => ctx.stack.len() <= *depth,
+        }
+    }
+
+    fn consume_pause_on_start(&mut self) -> bool {
+        if self.pause_on_start {
+            self.pause_on_start = false;
+            true
+        } else {
+            false
+        }
+    }
+
+    /// `Some` = resume the VM. `None` = stay paused (list vars, set a breakpoint).
+    pub fn handle_command(&mut self, line: &str, ctx: &DebugCtx<'_>) -> Option<DebugAction> {
+        self.handle_command_out(line, ctx, &mut io::sink())
+    }
+
+    fn handle_command_out(
+        &mut self,
+        line: &str,
+        ctx: &DebugCtx<'_>,
+        out: &mut dyn Write,
+    ) -> Option<DebugAction> {
+        let mut parts = line.split_whitespace();
+        let cmd = parts.next().unwrap_or("");
+        match cmd {
+            "continuar" | "c" | "continue" => {
+                self.mode = StepMode::Continue;
+                Some(DebugAction::Continue)
+            }
+            "proximo" | "próximo" | "n" | "next" => {
+                self.mode = StepMode::StepOver {
+                    depth: ctx.stack.len(),
+                    file: ctx.file.to_string(),
+                    span: ctx.span,
+                };
+                Some(DebugAction::Continue)
+            }
+            "entrar" | "s" | "step" => {
+                self.mode = StepMode::StepIn;
+                Some(DebugAction::Continue)
+            }
+            "sair" | "o" | "out" | "fin" => {
+                let depth = ctx.stack.len().saturating_sub(1);
+                self.mode = StepMode::StepOut { depth };
+                Some(DebugAction::Continue)
+            }
+            "vars" | "v" | "locais" => None,
+            "pilha" | "k" | "stack" | "bt" => None,
+            "ponto" | "break" | "b" => match parts.next() {
+                None => None,
+                Some(spec) => {
+                    if let Some((file, line)) = parse_breakpoint(spec, ctx.file) {
+                        self.breakpoints.insert((file, line));
+                    } else {
+                        let _ = writeln!(out, "uso: ponto [arquivo:]linha");
+                    }
+                    None
+                }
+            },
+            "remover" | "delete" | "d" => {
+                if let Some(line) = parts.next().and_then(|s| s.parse::<u32>().ok()) {
+                    self.breakpoints.remove(&(ctx.file.to_string(), line));
+                }
+                None
+            }
+            "ajuda" | "h" | "help" | "?" => None,
+            "terminar" | "q" | "quit" => Some(DebugAction::Quit),
+            "" => None,
+            _ => None,
+        }
+    }
+}
+
+pub struct CliDebugger {
+    session: DebugSession,
+    last_line: String,
+    out: Box<dyn Write>,
+}
+
+impl CliDebugger {
+    pub fn new() -> Self {
+        Self::with_out(Box::new(io::stderr()))
+    }
+
+    pub fn with_out(out: Box<dyn Write>) -> Self {
+        Self {
+            session: DebugSession::step_in(),
+            last_line: String::new(),
+            out,
         }
     }
 
@@ -174,30 +334,8 @@ impl CliDebugger {
     }
 
     fn handle_command(&mut self, line: &str, ctx: &DebugCtx<'_>) -> Option<DebugAction> {
-        let mut parts = line.split_whitespace();
-        let cmd = parts.next().unwrap_or("");
+        let cmd = line.split_whitespace().next().unwrap_or("");
         match cmd {
-            "continuar" | "c" | "continue" => {
-                self.mode = StepMode::Continue;
-                Some(DebugAction::Continue)
-            }
-            "proximo" | "próximo" | "n" | "next" => {
-                self.mode = StepMode::StepOver {
-                    depth: ctx.stack.len(),
-                    file: ctx.file.to_string(),
-                    span: ctx.span,
-                };
-                Some(DebugAction::Continue)
-            }
-            "entrar" | "s" | "step" => {
-                self.mode = StepMode::StepIn;
-                Some(DebugAction::Continue)
-            }
-            "sair" | "o" | "out" | "fin" => {
-                let depth = ctx.stack.len().saturating_sub(1);
-                self.mode = StepMode::StepOut { depth };
-                Some(DebugAction::Continue)
-            }
             "vars" | "v" | "locais" => {
                 self.print_vars(ctx);
                 None
@@ -206,52 +344,60 @@ impl CliDebugger {
                 self.print_stack(ctx);
                 None
             }
-            "ponto" | "break" | "b" => {
-                match parts.next() {
-                    None => {
-                        if self.breakpoints.is_empty() {
-                            let _ = writeln!(self.out, "(nenhum ponto de parada)");
-                        } else {
-                            let mut bps: Vec<_> = self.breakpoints.iter().collect();
-                            bps.sort_by(|a, b| a.0.cmp(&b.0).then(a.1.cmp(&b.1)));
-                            for (file, line) in bps {
-                                let _ = writeln!(self.out, "  {file}:{line}");
-                            }
-                        }
+            "ponto" | "break" | "b" if line.split_whitespace().nth(1).is_none() => {
+                if self.session.breakpoints.is_empty() {
+                    let _ = writeln!(self.out, "(nenhum ponto de parada)");
+                } else {
+                    let mut bps: Vec<_> = self.session.breakpoints.iter().collect();
+                    bps.sort_by(|a, b| a.0.cmp(&b.0).then(a.1.cmp(&b.1)));
+                    for (file, line) in bps {
+                        let _ = writeln!(self.out, "  {file}:{line}");
                     }
-                    Some(spec) => match parse_breakpoint(spec, ctx.file) {
-                        Some((file, line)) => {
-                            self.breakpoints.insert((file.clone(), line));
-                            let _ = writeln!(self.out, "ponto de parada em {file}:{line}");
-                        }
-                        None => {
-                            let _ = writeln!(self.out, "uso: ponto [arquivo:]linha");
-                        }
-                    },
                 }
                 None
             }
-            "remover" | "delete" | "d" => match parts.next().and_then(|s| s.parse::<u32>().ok()) {
-                Some(line) => {
-                    let file = ctx.file.to_string();
-                    if self.breakpoints.remove(&(file.clone(), line)) {
-                        let _ = writeln!(self.out, "removido {file}:{line}");
-                    } else {
-                        let _ = writeln!(self.out, "nenhum ponto de parada em {file}:{line}");
+            "ponto" | "break" | "b" => {
+                let spec = line.split_whitespace().nth(1).unwrap();
+                match parse_breakpoint(spec, ctx.file) {
+                    Some((file, line)) => {
+                        self.session.breakpoints.insert((file.clone(), line));
+                        let _ = writeln!(self.out, "ponto de parada em {file}:{line}");
                     }
-                    None
+                    None => {
+                        let _ = writeln!(self.out, "uso: ponto [arquivo:]linha");
+                    }
                 }
-                None => {
-                    let _ = writeln!(self.out, "uso: remover linha");
-                    None
+                None
+            }
+            "remover" | "delete" | "d" => {
+                match line
+                    .split_whitespace()
+                    .nth(1)
+                    .and_then(|s| s.parse::<u32>().ok())
+                {
+                    Some(n) => {
+                        let file = ctx.file.to_string();
+                        if self.session.breakpoints.remove(&(file.clone(), n)) {
+                            let _ = writeln!(self.out, "removido {file}:{n}");
+                        } else {
+                            let _ = writeln!(self.out, "nenhum ponto de parada em {file}:{n}");
+                        }
+                    }
+                    None => {
+                        let _ = writeln!(self.out, "uso: remover linha");
+                    }
                 }
-            },
+                None
+            }
             "ajuda" | "h" | "help" | "?" => {
                 self.print_help();
                 None
             }
-            "terminar" | "q" | "quit" => Some(DebugAction::Quit),
             "" => None,
+            "continuar" | "c" | "continue" | "proximo" | "próximo" | "n" | "next" | "entrar"
+            | "s" | "step" | "sair" | "o" | "out" | "fin" | "terminar" | "q" | "quit" => {
+                self.session.handle_command_out(line, ctx, &mut self.out)
+            }
             other => {
                 let _ = writeln!(
                     self.out,
@@ -271,9 +417,9 @@ impl Default for CliDebugger {
 
 impl DebugHook for CliDebugger {
     fn before_stmt(&mut self, ctx: &DebugCtx<'_>) -> DebugAction {
-        if self.pause_on_start {
-            self.pause_on_start = false;
-        } else if !self.should_pause(ctx) {
+        if self.session.consume_pause_on_start() {
+            // first statement
+        } else if !self.session.should_pause(ctx) {
             return DebugAction::Continue;
         }
 
@@ -298,6 +444,85 @@ impl DebugHook for CliDebugger {
             };
             if let Some(action) = self.handle_command(&command, ctx) {
                 return action;
+            }
+        }
+    }
+}
+
+/// For **Rodar**: ignore step commands, honour `terminar` so Parar works.
+pub struct StopHook {
+    cmd_rx: std::sync::mpsc::Receiver<String>,
+}
+
+impl StopHook {
+    pub fn new(cmd_rx: std::sync::mpsc::Receiver<String>) -> Self {
+        Self { cmd_rx }
+    }
+}
+
+impl DebugHook for StopHook {
+    fn before_stmt(&mut self, _ctx: &DebugCtx<'_>) -> DebugAction {
+        loop {
+            match self.cmd_rx.try_recv() {
+                Ok(cmd) => {
+                    let cmd = cmd.trim();
+                    if cmd == "terminar" || cmd == "q" || cmd == "quit" {
+                        return DebugAction::Quit;
+                    }
+                }
+                Err(std::sync::mpsc::TryRecvError::Empty) => return DebugAction::Continue,
+                Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                    return DebugAction::Quit;
+                }
+            }
+        }
+    }
+}
+
+/// Pauses by sending a snapshot and waiting for a command string (Aula).
+pub struct ChannelDebugger {
+    pub session: DebugSession,
+    pause_tx: std::sync::mpsc::Sender<DebugPaused>,
+    cmd_rx: std::sync::mpsc::Receiver<String>,
+}
+
+impl ChannelDebugger {
+    pub fn new(
+        pause_tx: std::sync::mpsc::Sender<DebugPaused>,
+        cmd_rx: std::sync::mpsc::Receiver<String>,
+    ) -> Self {
+        Self {
+            session: DebugSession::step_in(),
+            pause_tx,
+            cmd_rx,
+        }
+    }
+}
+
+impl DebugHook for ChannelDebugger {
+    fn before_stmt(&mut self, ctx: &DebugCtx<'_>) -> DebugAction {
+        if self.session.consume_pause_on_start() {
+            // first statement
+        } else if !self.session.should_pause(ctx) {
+            return DebugAction::Continue;
+        }
+        if self.pause_tx.send(snapshot(ctx)).is_err() {
+            return DebugAction::Quit;
+        }
+        loop {
+            match self.cmd_rx.recv() {
+                Ok(cmd) => {
+                    let cmd = cmd.trim();
+                    if cmd.is_empty() {
+                        continue;
+                    }
+                    if let Some(action) = self.session.handle_command(cmd, ctx) {
+                        return action;
+                    }
+                    // ponto / remover: stay paused, send an updated snapshot
+                    let _ = self.pause_tx.send(snapshot(ctx));
+                }
+                Err(_) => return DebugAction::Quit,
             }
         }
     }
@@ -403,25 +628,28 @@ mod tests {
             dbg.handle_command("continuar", &ctx),
             Some(DebugAction::Continue)
         );
-        assert!(matches!(dbg.mode, StepMode::Continue));
+        assert!(matches!(dbg.session.mode, StepMode::Continue));
 
         assert_eq!(
             dbg.handle_command("entrar", &ctx),
             Some(DebugAction::Continue)
         );
-        assert!(matches!(dbg.mode, StepMode::StepIn));
+        assert!(matches!(dbg.session.mode, StepMode::StepIn));
 
         assert_eq!(
             dbg.handle_command("proximo", &ctx),
             Some(DebugAction::Continue)
         );
-        assert!(matches!(dbg.mode, StepMode::StepOver { depth: 1, .. }));
+        assert!(matches!(
+            dbg.session.mode,
+            StepMode::StepOver { depth: 1, .. }
+        ));
 
         assert_eq!(
             dbg.handle_command("sair", &ctx),
             Some(DebugAction::Continue)
         );
-        assert!(matches!(dbg.mode, StepMode::StepOut { depth: 0 }));
+        assert!(matches!(dbg.session.mode, StepMode::StepOut { depth: 0 }));
 
         assert_eq!(
             dbg.handle_command("terminar", &ctx),
@@ -439,13 +667,13 @@ mod tests {
         let mut dbg = debugger();
 
         assert_eq!(dbg.handle_command("ponto 7", &ctx), None);
-        assert!(dbg.breakpoints.contains(&("media.lep".into(), 7)));
+        assert!(dbg.session.breakpoints.contains(&("media.lep".into(), 7)));
 
         assert_eq!(dbg.handle_command("ponto lib.lep:2", &ctx), None);
-        assert!(dbg.breakpoints.contains(&("lib.lep".into(), 2)));
+        assert!(dbg.session.breakpoints.contains(&("lib.lep".into(), 2)));
 
         assert_eq!(dbg.handle_command("remover 7", &ctx), None);
-        assert!(!dbg.breakpoints.contains(&("media.lep".into(), 7)));
+        assert!(!dbg.session.breakpoints.contains(&("media.lep".into(), 7)));
     }
 
     #[test]
@@ -455,11 +683,17 @@ mod tests {
         let span4 = Span::new(4, 1, 5, 8);
         let stack = [];
         let mut dbg = debugger();
-        dbg.mode = StepMode::Continue;
-        dbg.breakpoints.insert(("a.lep".into(), 3));
+        dbg.session.mode = StepMode::Continue;
+        dbg.session.breakpoints.insert(("a.lep".into(), 3));
 
-        assert!(dbg.should_pause(&ctx("a.lep", "", span3, &env, &stack)));
-        assert!(!dbg.should_pause(&ctx("a.lep", "", span4, &env, &stack)));
+        assert!(
+            dbg.session
+                .should_pause(&ctx("a.lep", "", span3, &env, &stack))
+        );
+        assert!(
+            !dbg.session
+                .should_pause(&ctx("a.lep", "", span4, &env, &stack))
+        );
     }
 
     #[test]
@@ -467,8 +701,8 @@ mod tests {
         let env = env();
         let span = Span::new(1, 1, 0, 1);
         let mut dbg = debugger();
-        dbg.mode = StepMode::StepIn;
-        assert!(dbg.should_pause(&ctx("a.lep", "", span, &env, &[])));
+        dbg.session.mode = StepMode::StepIn;
+        assert!(dbg.session.should_pause(&ctx("a.lep", "", span, &env, &[])));
     }
 
     #[test]
@@ -483,15 +717,24 @@ mod tests {
             span: outer,
         }];
         let mut dbg = debugger();
-        dbg.mode = StepMode::StepOver {
+        dbg.session.mode = StepMode::StepOver {
             depth: 1,
             file: "a.lep".into(),
             span: outer,
         };
 
-        assert!(!dbg.should_pause(&ctx("a.lep", "", inner, &env, &stack)));
-        assert!(dbg.should_pause(&ctx("a.lep", "", after, &env, &stack)));
-        assert!(dbg.should_pause(&ctx("a.lep", "", inner, &env, &[])));
+        assert!(
+            !dbg.session
+                .should_pause(&ctx("a.lep", "", inner, &env, &stack))
+        );
+        assert!(
+            dbg.session
+                .should_pause(&ctx("a.lep", "", after, &env, &stack))
+        );
+        assert!(
+            dbg.session
+                .should_pause(&ctx("a.lep", "", inner, &env, &[]))
+        );
     }
 
     #[test]
@@ -516,10 +759,29 @@ mod tests {
             span,
         }];
         let mut dbg = debugger();
-        dbg.mode = StepMode::StepOut { depth: 1 };
+        dbg.session.mode = StepMode::StepOut { depth: 1 };
 
-        assert!(!dbg.should_pause(&ctx("a.lep", "", span, &env, &deep)));
-        assert!(dbg.should_pause(&ctx("a.lep", "", span, &env, &shallow)));
+        assert!(
+            !dbg.session
+                .should_pause(&ctx("a.lep", "", span, &env, &deep))
+        );
+        assert!(
+            dbg.session
+                .should_pause(&ctx("a.lep", "", span, &env, &shallow))
+        );
+    }
+
+    #[test]
+    fn collect_vars_lists_module_bindings() {
+        let env = env();
+        env.borrow_mut().vars.insert("n".into(), Value::Numero(3.0));
+        let span = Span::new(1, 1, 0, 1);
+        let ctx = ctx("a.lep", "n = 3", span, &env, &[]);
+        let vars = collect_vars(&ctx);
+        assert!(
+            vars.iter().any(|b| b.name == "n" && b.value.contains('3')),
+            "{vars:?}"
+        );
     }
 
     #[test]

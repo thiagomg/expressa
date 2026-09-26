@@ -3,13 +3,16 @@ use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use expressa::runtime::{LeiaHost, run_with_leia_host};
+use expressa::runtime::{
+    ChannelDebugger, DebugHook, DebugPaused, LeiaHost, StopHook, run_with_hook,
+};
 use expressa_aula_proto::runner_server::Runner;
 use expressa_aula_proto::turma_server::Turma;
 use expressa_aula_proto::{
-    DeleteFileRequest, DeleteFileResponse, ExecFinished, ExecIn, ExecOut, ListFilesRequest,
-    ListFilesResponse, ReadFileRequest, ReadFileResponse, TreeEntry, WriteFileRequest,
-    WriteFileResponse,
+    DebugFrame, DebugPaused as ProtoPaused, DebugVar, DeleteFileRequest, DeleteFileResponse,
+    ExecFinished, ExecIn, ExecOut, ListFilesRequest, ListFilesResponse, MkdirRequest,
+    MkdirResponse, ReadFileRequest, ReadFileResponse, RenameRequest, RenameResponse, TreeEntry,
+    WriteFileRequest, WriteFileResponse,
 };
 use tokio::sync::mpsc;
 use tokio_stream::StreamExt;
@@ -109,8 +112,63 @@ impl Turma for Aula {
     ) -> Result<Response<DeleteFileResponse>, Status> {
         let req = request.into_inner();
         let path = self.file(&req.student, &req.path)?;
-        fs::remove_file(&path).map_err(|e| Status::not_found(e.to_string()))?;
+        if path.is_dir() {
+            fs::remove_dir_all(&path).map_err(|e| Status::internal(e.to_string()))?;
+        } else {
+            fs::remove_file(&path).map_err(|e| Status::not_found(e.to_string()))?;
+        }
         Ok(Response::new(DeleteFileResponse {}))
+    }
+
+    async fn mkdir(
+        &self,
+        request: Request<MkdirRequest>,
+    ) -> Result<Response<MkdirResponse>, Status> {
+        let req = request.into_inner();
+        let path = self.file(&req.student, &req.path)?;
+        fs::create_dir_all(&path).map_err(|e| Status::internal(e.to_string()))?;
+        Ok(Response::new(MkdirResponse {}))
+    }
+
+    async fn rename(
+        &self,
+        request: Request<RenameRequest>,
+    ) -> Result<Response<RenameResponse>, Status> {
+        let req = request.into_inner();
+        let from = self.file(&req.student, &req.from)?;
+        let to = self.file(&req.student, &req.to)?;
+        if let Some(parent) = to.parent() {
+            fs::create_dir_all(parent).map_err(|e| Status::internal(e.to_string()))?;
+        }
+        fs::rename(&from, &to).map_err(|e| Status::internal(e.to_string()))?;
+        Ok(Response::new(RenameResponse {}))
+    }
+}
+
+fn to_proto_paused(p: DebugPaused) -> ProtoPaused {
+    ProtoPaused {
+        file: p.file,
+        line: p.line,
+        col: p.col,
+        source_line: p.source_line,
+        vars: p
+            .vars
+            .into_iter()
+            .map(|v| DebugVar {
+                scope: v.scope,
+                name: v.name,
+                value: v.value,
+            })
+            .collect(),
+        stack: p
+            .stack
+            .into_iter()
+            .map(|f| DebugFrame {
+                name: f.name,
+                file: f.file,
+                line: f.line,
+            })
+            .collect(),
     }
 }
 
@@ -179,29 +237,53 @@ impl Runner for Aula {
         };
 
         let file = path.to_string_lossy().into_owned();
-        let timeout = self.timeout;
+        // Debug sits paused on a statement; the classroom timeout must not
+        // fire while the student inspects variables. Rodar still uses it.
+        let timeout = if start.debug {
+            None
+        } else {
+            Some(self.timeout)
+        };
         let workspace_run = workspace.clone();
 
         let (prompt_tx, prompt_rx) = std::sync::mpsc::channel::<String>();
         let (line_tx, line_rx) = std::sync::mpsc::channel::<String>();
         let (out_tx, out_rx) = std::sync::mpsc::channel::<String>();
+        let (err_tx, err_rx) = std::sync::mpsc::channel::<String>();
         let (done_tx, done_rx) = std::sync::mpsc::channel();
+        let (pause_tx, pause_rx) = std::sync::mpsc::channel::<DebugPaused>();
+        let (dcmd_tx, dcmd_rx) = std::sync::mpsc::channel::<String>();
 
+        let debug = start.debug;
+        let bps = start.breakpoint_lines.clone();
+        let script_args = start.args.clone();
         std::thread::spawn(move || {
             let mut host = ChannelLeia {
                 prompts: prompt_tx,
                 lines: line_rx,
             };
-            let mut out = ChannelOut { tx: out_tx.clone() };
-            let mut err = ChannelOut { tx: out_tx };
-            let result = run_with_leia_host(
+            let mut out = ChannelOut { tx: out_tx };
+            let mut err = ChannelOut { tx: err_tx };
+            let hook: Box<dyn DebugHook> = if debug {
+                let mut dbg = ChannelDebugger::new(pause_tx, dcmd_rx);
+                for line in bps {
+                    dbg.session.breakpoints.insert((file.clone(), line));
+                }
+                Box::new(dbg)
+            } else {
+                drop(pause_tx);
+                Box::new(StopHook::new(dcmd_rx))
+            };
+            let result = run_with_hook(
                 &source,
                 &file,
+                hook,
                 Some(workspace_run),
-                Some(timeout),
+                timeout,
                 &mut out,
                 &mut err,
                 &mut host,
+                &script_args,
             );
             let _ = done_tx.send(result);
         });
@@ -212,12 +294,20 @@ impl Runner for Aula {
                 tokio::select! {
                     msg = inbound.next() => {
                         match msg {
-                            Some(Ok(m)) => {
-                                if let Some(expressa_aula_proto::exec_in::Payload::Line(line)) =
-                                    m.payload
-                                {
+                            Some(Ok(m)) => match m.payload {
+                                Some(expressa_aula_proto::exec_in::Payload::Line(line)) => {
                                     let _ = line_tx.send(line);
                                 }
+                                Some(expressa_aula_proto::exec_in::Payload::DebugCmd(cmd)) => {
+                                    if cmd.trim() == "terminar"
+                                        || cmd.trim() == "q"
+                                        || cmd.trim() == "quit"
+                                    {
+                                        let _ = line_tx.send(String::new());
+                                    }
+                                    let _ = dcmd_tx.send(cmd);
+                                }
+                                _ => {}
                             }
                             Some(Err(_)) | None => break,
                         }
@@ -228,6 +318,11 @@ impl Runner for Aula {
                                 payload: Some(expressa_aula_proto::exec_out::Payload::Stdout(chunk)),
                             })).await;
                         }
+                        while let Ok(chunk) = err_rx.try_recv() {
+                            let _ = tx.send(Ok(ExecOut {
+                                payload: Some(expressa_aula_proto::exec_out::Payload::Stderr(chunk)),
+                            })).await;
+                        }
                         while let Ok(prompt) = prompt_rx.try_recv() {
                             let _ = tx.send(Ok(ExecOut {
                                 payload: Some(
@@ -235,11 +330,36 @@ impl Runner for Aula {
                                 ),
                             })).await;
                         }
+                        while let Ok(paused) = pause_rx.try_recv() {
+                            let _ = tx.send(Ok(ExecOut {
+                                payload: Some(expressa_aula_proto::exec_out::Payload::Paused(
+                                    to_proto_paused(paused),
+                                )),
+                            })).await;
+                        }
                         if let Ok(result) = done_rx.try_recv() {
+                            while let Ok(paused) = pause_rx.try_recv() {
+                                let _ = tx
+                                    .send(Ok(ExecOut {
+                                        payload: Some(
+                                            expressa_aula_proto::exec_out::Payload::Paused(
+                                                to_proto_paused(paused),
+                                            ),
+                                        ),
+                                    }))
+                                    .await;
+                            }
                             while let Ok(chunk) = out_rx.try_recv() {
                                 let _ = tx.send(Ok(ExecOut {
                                     payload: Some(
                                         expressa_aula_proto::exec_out::Payload::Stdout(chunk),
+                                    ),
+                                })).await;
+                            }
+                            while let Ok(chunk) = err_rx.try_recv() {
+                                let _ = tx.send(Ok(ExecOut {
+                                    payload: Some(
+                                        expressa_aula_proto::exec_out::Payload::Stderr(chunk),
                                     ),
                                 })).await;
                             }
