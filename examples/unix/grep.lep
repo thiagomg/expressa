@@ -1,6 +1,6 @@
 #!/usr/bin/env expressa
 
-importe "linha_cmd"
+importe "lib/linha_cmd"
 
 ajuda = função()
 início
