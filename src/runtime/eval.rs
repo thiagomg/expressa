@@ -213,18 +213,42 @@ pub fn run_with_leia_host(
     err: &mut dyn Write,
     leia_host: &mut dyn LeiaHost,
 ) -> Result<i32, RuntimeError> {
+    run_with_hook(
+        source,
+        file,
+        Box::new(NoopHook),
+        workspace_root,
+        time_limit,
+        out,
+        err,
+        leia_host,
+        &[],
+    )
+}
+
+pub fn run_with_hook(
+    source: &str,
+    file: &str,
+    hook: Box<dyn DebugHook>,
+    workspace_root: Option<PathBuf>,
+    time_limit: Option<Duration>,
+    out: &mut dyn Write,
+    err: &mut dyn Write,
+    leia_host: &mut dyn LeiaHost,
+    script_args: &[String],
+) -> Result<i32, RuntimeError> {
     let mut dummy_in = io::Cursor::new("");
     run_with(
         source,
         file,
-        Box::new(NoopHook),
+        hook,
         &mut dummy_in,
         out,
         err,
         workspace_root,
         time_limit,
         Some(leia_host),
-        &[],
+        script_args,
     )
 }
 

@@ -3,13 +3,15 @@ use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use expressa::runtime::{LeiaHost, run_with_leia_host};
+use expressa::runtime::{
+    ChannelDebugger, DebugHook, DebugPaused, LeiaHost, NoopHook, run_with_hook,
+};
 use expressa_aula_proto::runner_server::Runner;
 use expressa_aula_proto::turma_server::Turma;
 use expressa_aula_proto::{
-    DeleteFileRequest, DeleteFileResponse, ExecFinished, ExecIn, ExecOut, ListFilesRequest,
-    ListFilesResponse, ReadFileRequest, ReadFileResponse, TreeEntry, WriteFileRequest,
-    WriteFileResponse,
+    DebugFrame, DebugPaused as ProtoPaused, DebugVar, DeleteFileRequest, DeleteFileResponse,
+    ExecFinished, ExecIn, ExecOut, ListFilesRequest, ListFilesResponse, ReadFileRequest,
+    ReadFileResponse, TreeEntry, WriteFileRequest, WriteFileResponse,
 };
 use tokio::sync::mpsc;
 use tokio_stream::StreamExt;
@@ -114,6 +116,33 @@ impl Turma for Aula {
     }
 }
 
+fn to_proto_paused(p: DebugPaused) -> ProtoPaused {
+    ProtoPaused {
+        file: p.file,
+        line: p.line,
+        col: p.col,
+        source_line: p.source_line,
+        vars: p
+            .vars
+            .into_iter()
+            .map(|v| DebugVar {
+                scope: v.scope,
+                name: v.name,
+                value: v.value,
+            })
+            .collect(),
+        stack: p
+            .stack
+            .into_iter()
+            .map(|f| DebugFrame {
+                name: f.name,
+                file: f.file,
+                line: f.line,
+            })
+            .collect(),
+    }
+}
+
 struct ChannelLeia {
     prompts: std::sync::mpsc::Sender<String>,
     lines: std::sync::mpsc::Receiver<String>,
@@ -179,14 +208,24 @@ impl Runner for Aula {
         };
 
         let file = path.to_string_lossy().into_owned();
-        let timeout = self.timeout;
+        // Debug sits paused on a statement; the classroom timeout must not
+        // fire while the student inspects variables. Rodar still uses it.
+        let timeout = if start.debug {
+            None
+        } else {
+            Some(self.timeout)
+        };
         let workspace_run = workspace.clone();
 
         let (prompt_tx, prompt_rx) = std::sync::mpsc::channel::<String>();
         let (line_tx, line_rx) = std::sync::mpsc::channel::<String>();
         let (out_tx, out_rx) = std::sync::mpsc::channel::<String>();
         let (done_tx, done_rx) = std::sync::mpsc::channel();
+        let (pause_tx, pause_rx) = std::sync::mpsc::channel::<DebugPaused>();
+        let (dcmd_tx, dcmd_rx) = std::sync::mpsc::channel::<String>();
 
+        let debug = start.debug;
+        let bps = start.breakpoint_lines.clone();
         std::thread::spawn(move || {
             let mut host = ChannelLeia {
                 prompts: prompt_tx,
@@ -194,14 +233,27 @@ impl Runner for Aula {
             };
             let mut out = ChannelOut { tx: out_tx.clone() };
             let mut err = ChannelOut { tx: out_tx };
-            let result = run_with_leia_host(
+            let hook: Box<dyn DebugHook> = if debug {
+                let mut dbg = ChannelDebugger::new(pause_tx, dcmd_rx);
+                for line in bps {
+                    dbg.session.breakpoints.insert((file.clone(), line));
+                }
+                Box::new(dbg)
+            } else {
+                drop(pause_tx);
+                drop(dcmd_rx);
+                Box::new(NoopHook)
+            };
+            let result = run_with_hook(
                 &source,
                 &file,
+                hook,
                 Some(workspace_run),
-                Some(timeout),
+                timeout,
                 &mut out,
                 &mut err,
                 &mut host,
+                &[],
             );
             let _ = done_tx.send(result);
         });
@@ -212,12 +264,14 @@ impl Runner for Aula {
                 tokio::select! {
                     msg = inbound.next() => {
                         match msg {
-                            Some(Ok(m)) => {
-                                if let Some(expressa_aula_proto::exec_in::Payload::Line(line)) =
-                                    m.payload
-                                {
+                            Some(Ok(m)) => match m.payload {
+                                Some(expressa_aula_proto::exec_in::Payload::Line(line)) => {
                                     let _ = line_tx.send(line);
                                 }
+                                Some(expressa_aula_proto::exec_in::Payload::DebugCmd(cmd)) => {
+                                    let _ = dcmd_tx.send(cmd);
+                                }
+                                _ => {}
                             }
                             Some(Err(_)) | None => break,
                         }
@@ -235,7 +289,25 @@ impl Runner for Aula {
                                 ),
                             })).await;
                         }
+                        while let Ok(paused) = pause_rx.try_recv() {
+                            let _ = tx.send(Ok(ExecOut {
+                                payload: Some(expressa_aula_proto::exec_out::Payload::Paused(
+                                    to_proto_paused(paused),
+                                )),
+                            })).await;
+                        }
                         if let Ok(result) = done_rx.try_recv() {
+                            while let Ok(paused) = pause_rx.try_recv() {
+                                let _ = tx
+                                    .send(Ok(ExecOut {
+                                        payload: Some(
+                                            expressa_aula_proto::exec_out::Payload::Paused(
+                                                to_proto_paused(paused),
+                                            ),
+                                        ),
+                                    }))
+                                    .await;
+                            }
                             while let Ok(chunk) = out_rx.try_recv() {
                                 let _ = tx.send(Ok(ExecOut {
                                     payload: Some(
