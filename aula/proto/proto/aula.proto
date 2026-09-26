@@ -9,6 +9,8 @@ service Turma {
   rpc ReadFile(ReadFileRequest) returns (ReadFileResponse);
   rpc WriteFile(WriteFileRequest) returns (WriteFileResponse);
   rpc DeleteFile(DeleteFileRequest) returns (DeleteFileResponse);
+  rpc Mkdir(MkdirRequest) returns (MkdirResponse);
+  rpc Rename(RenameRequest) returns (RenameResponse);
 }
 
 service Runner {
@@ -54,6 +56,21 @@ message DeleteFileRequest {
 }
 
 message DeleteFileResponse {}
+
+message MkdirRequest {
+  string student = 1;
+  string path = 2;
+}
+
+message MkdirResponse {}
+
+message RenameRequest {
+  string student = 1;
+  string from = 2;
+  string to = 3;
+}
+
+message RenameResponse {}
 
 message RunRequest {
   string student = 1;

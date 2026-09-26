@@ -1,8 +1,8 @@
 use expressa_aula_proto::runner_client::RunnerClient;
 use expressa_aula_proto::turma_client::TurmaClient;
 use expressa_aula_proto::{
-    DebugPaused, DeleteFileRequest, ExecFinished, ExecIn, ListFilesRequest, ReadFileRequest,
-    RunRequest, TreeEntry, WriteFileRequest,
+    DebugPaused, DeleteFileRequest, ExecFinished, ExecIn, ListFilesRequest, MkdirRequest,
+    ReadFileRequest, RenameRequest, RunRequest, TreeEntry, WriteFileRequest,
 };
 use std::process::Child;
 use std::sync::Mutex;
@@ -178,13 +178,35 @@ impl Rpc {
         Ok(())
     }
 
-    #[allow(dead_code)]
     pub fn delete_file(&self, student: &str, path: &str) -> Result<(), String> {
         let mut c = TurmaClient::new(self.channel.clone());
         self.rt
             .block_on(c.delete_file(DeleteFileRequest {
                 student: student.to_string(),
                 path: path.to_string(),
+            }))
+            .map_err(|e| e.to_string())?;
+        Ok(())
+    }
+
+    pub fn mkdir(&self, student: &str, path: &str) -> Result<(), String> {
+        let mut c = TurmaClient::new(self.channel.clone());
+        self.rt
+            .block_on(c.mkdir(MkdirRequest {
+                student: student.to_string(),
+                path: path.to_string(),
+            }))
+            .map_err(|e| e.to_string())?;
+        Ok(())
+    }
+
+    pub fn rename(&self, student: &str, from: &str, to: &str) -> Result<(), String> {
+        let mut c = TurmaClient::new(self.channel.clone());
+        self.rt
+            .block_on(c.rename(RenameRequest {
+                student: student.to_string(),
+                from: from.to_string(),
+                to: to.to_string(),
             }))
             .map_err(|e| e.to_string())?;
         Ok(())

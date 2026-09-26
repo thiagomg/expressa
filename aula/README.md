@@ -39,6 +39,8 @@ F5 roda, **F6 depura**, F7 mostra/oculta arquivos, F8 o painel do depurador, F9 
 
 A linha **argumentos** vai para `argumentos[1]…` no programa. `escreva_erro` aparece em vermelho. **Parar** encerra Rodar e Depurar. Clique na linha `erro: … em arquivo:linha` salta para o código. O título mostra `*` se houver alterações não salvas.
 
+**Ctrl+F** busca (Esc fecha). Tab indenta `inicio`/`fim`/`{` `}` (Shift+Tab volta). O par de `inicio`/`fim` da linha do cursor fica destacado. Clique direito na árvore: novo arquivo/pasta, renomear, apagar. **Ctrl+clique** em `importe "matematica"` abre o módulo.
+
 Fechar o editor encerra o `expressa-aula-server` que ele mesmo tiver iniciado. A janela abre maximizada; o código ocupa a maior parte da tela.
 
 No depurador: a linha atual fica amarela; **Observados** guarda nomes para ver o valor a cada passo; **Variáveis** lista o que está no escopo; **Pilha** as chamadas. Continuar / Próximo / Entrar / Sair / Parar usam o mesmo passo a passo de `expressa debug`.

@@ -1,3 +1,4 @@
+mod indent;
 mod rpc;
 
 use std::cell::RefCell;
@@ -10,12 +11,13 @@ use gtk::glib::prelude::*;
 use gtk::prelude::*;
 use gtk::{
     Application, ApplicationWindow, Box as GtkBox, Button, CellRendererText, Entry, Label,
-    Orientation, Paned, ScrolledWindow, TextTag, TextView, ToggleButton, TreeStore, TreeView,
-    TreeViewColumn,
+    Orientation, Paned, Revealer, ScrolledWindow, TextTag, TextView, ToggleButton, TreeStore,
+    TreeView, TreeViewColumn,
 };
 use sourceview5::prelude::*;
 use sourceview5::{
-    Buffer as SourceBuffer, LanguageManager, MarkAttributes, StyleSchemeManager, View as SourceView,
+    Buffer as SourceBuffer, LanguageManager, MarkAttributes, SearchContext, SearchSettings,
+    StyleSchemeManager, View as SourceView,
 };
 
 use rpc::{ExecEvent, Rpc, ensure_server};
@@ -37,6 +39,12 @@ struct Ui {
     suppress_dirty: bool,
     err_tag: TextTag,
     error_link_tag: TextTag,
+    match_tag: TextTag,
+    search_settings: SearchSettings,
+    search_ctx: SearchContext,
+    search_entry: Entry,
+    replace_entry: Entry,
+    search_revealer: Revealer,
     status: Label,
     window: ApplicationWindow,
     debug_cmd: Option<std::sync::mpsc::Sender<String>>,
@@ -115,6 +123,23 @@ fn build_ui(app: &Application) {
     let debug_tag = TextTag::new(Some("debug-current"));
     debug_tag.set_background(Some("#fff3bf"));
     buffer.tag_table().add(&debug_tag);
+    let match_tag = TextTag::new(Some("block-match"));
+    match_tag.set_background(Some("#c5e1a5"));
+    buffer.tag_table().add(&match_tag);
+    let search_settings = SearchSettings::new();
+    search_settings.set_wrap_around(true);
+    let search_ctx = SearchContext::new(&buffer, Some(&search_settings));
+    search_ctx.set_highlight(true);
+    let search_entry = Entry::builder()
+        .placeholder_text("buscar")
+        .hexpand(true)
+        .build();
+    let replace_entry = Entry::builder()
+        .placeholder_text("substituir por")
+        .hexpand(true)
+        .build();
+    let search_revealer = Revealer::new();
+    search_revealer.set_reveal_child(false);
 
     #[allow(deprecated)]
     let vars_store = TreeStore::new(&[glib::Type::STRING, glib::Type::STRING, glib::Type::STRING]);
@@ -140,10 +165,13 @@ fn build_ui(app: &Application) {
         .show_line_numbers(true)
         .show_line_marks(true)
         .highlight_current_line(true)
-        .auto_indent(true)
+        .auto_indent(false)
+        .indent_on_tab(false)
         .tab_width(4)
+        .indent_width(4)
         .build();
     editor.set_wrap_mode(gtk::WrapMode::None);
+    editor.set_accepts_tab(true);
     let bp_attrs = MarkAttributes::new();
     bp_attrs.set_pixbuf(&red_breakpoint_pixbuf());
     editor.set_mark_attributes("breakpoint", &bp_attrs, 10);
@@ -190,6 +218,12 @@ fn build_ui(app: &Application) {
         suppress_dirty: false,
         err_tag,
         error_link_tag,
+        match_tag,
+        search_settings,
+        search_ctx,
+        search_entry,
+        replace_entry,
+        search_revealer,
         status,
         window: win.clone(),
         debug_cmd: None,
@@ -297,8 +331,28 @@ fn build_ui(app: &Application) {
     body.set_position(200);
 
     let root = GtkBox::new(Orientation::Vertical, 6);
+    let search_bar = GtkBox::new(Orientation::Horizontal, 6);
+    search_bar.set_margin_start(8);
+    search_bar.set_margin_end(8);
+    search_bar.append(&Label::new(Some("buscar:")));
+    search_bar.append(&ui.borrow().search_entry);
+    let btn_find_next = Button::with_label("↓");
+    let btn_find_prev = Button::with_label("↑");
+    search_bar.append(&btn_find_next);
+    search_bar.append(&btn_find_prev);
+    search_bar.append(&Label::new(Some("trocar:")));
+    search_bar.append(&ui.borrow().replace_entry);
+    let btn_repl = Button::with_label("Trocar");
+    let btn_repl_all = Button::with_label("Todas");
+    let btn_find_close = Button::with_label("Fechar");
+    search_bar.append(&btn_repl);
+    search_bar.append(&btn_repl_all);
+    search_bar.append(&btn_find_close);
+    ui.borrow().search_revealer.set_child(Some(&search_bar));
+
     root.append(&toolbar);
     root.append(&args_row);
+    root.append(&ui.borrow().search_revealer);
     root.append(&body);
     root.append(&ui.borrow().status);
     ui.borrow().status.set_margin_start(8);
@@ -479,10 +533,132 @@ fn build_ui(app: &Application) {
                 salvar(&ui_k);
                 return glib::Propagation::Stop;
             }
+            if ctrl && key == Key::f {
+                show_search(&ui_k);
+                return glib::Propagation::Stop;
+            }
+            if ctrl && key == Key::h {
+                show_search(&ui_k);
+                return glib::Propagation::Stop;
+            }
             glib::Propagation::Proceed
         });
     }
     win.add_controller(keys);
+    {
+        let ui_s = Rc::clone(&ui);
+        btn_find_next.connect_clicked(move |_| search_next(&ui_s));
+    }
+    {
+        let ui_s = Rc::clone(&ui);
+        btn_find_prev.connect_clicked(move |_| search_prev(&ui_s));
+    }
+    {
+        let ui_s = Rc::clone(&ui);
+        btn_repl.connect_clicked(move |_| search_replace_one(&ui_s));
+    }
+    {
+        let ui_s = Rc::clone(&ui);
+        btn_repl_all.connect_clicked(move |_| search_replace_all(&ui_s));
+    }
+    {
+        let ui_s = Rc::clone(&ui);
+        btn_find_close.connect_clicked(move |_| hide_search(&ui_s));
+    }
+    {
+        let ui_s = Rc::clone(&ui);
+        ui.borrow()
+            .search_entry
+            .connect_activate(move |_| search_next(&ui_s));
+    }
+    {
+        let ui_s = Rc::clone(&ui);
+        let search_keys = gtk::EventControllerKey::new();
+        search_keys.connect_key_pressed(move |_, key, _, _| {
+            if key == Key::Escape {
+                hide_search(&ui_s);
+                return glib::Propagation::Stop;
+            }
+            glib::Propagation::Proceed
+        });
+        ui.borrow().search_entry.add_controller(search_keys);
+    }
+    {
+        let ui_tab = Rc::clone(&ui);
+        let ui_untab = Rc::clone(&ui);
+        let shortcuts = gtk::ShortcutController::new();
+        shortcuts.set_propagation_phase(gtk::PropagationPhase::Capture);
+        if let Some(trigger) = gtk::ShortcutTrigger::parse_string("Tab") {
+            shortcuts.add_shortcut(gtk::Shortcut::new(
+                Some(trigger),
+                Some(gtk::CallbackAction::new(move |_, _| {
+                    indent::indent_current_line(&ui_tab.borrow().buffer);
+                    glib::Propagation::Stop
+                })),
+            ));
+        }
+        if let Some(trigger) = gtk::ShortcutTrigger::parse_string("<Shift>Tab") {
+            shortcuts.add_shortcut(gtk::Shortcut::new(
+                Some(trigger),
+                Some(gtk::CallbackAction::new(move |_, _| {
+                    indent::unindent_current_line(&ui_untab.borrow().buffer);
+                    glib::Propagation::Stop
+                })),
+            ));
+        }
+        ui.borrow().editor.add_controller(shortcuts);
+    }
+    {
+        let buffer = ui.borrow().buffer.clone();
+        buffer.connect_insert_text(move |buf, iter, text| {
+            let buf = buf.clone();
+            if text == "\n" {
+                glib::idle_add_local_once(move || {
+                    indent::indent_current_line(&buf);
+                });
+                return;
+            }
+            if text == "}" || text == "m" {
+                let line = iter.line();
+                glib::idle_add_local_once(move || {
+                    indent::indent_if_closer(&buf, line);
+                });
+            }
+        });
+    }
+    {
+        let ui_m = Rc::clone(&ui);
+        ui.borrow().buffer.connect_mark_set(move |_, _, mark| {
+            if mark.name().as_deref() != Some("insert") {
+                return;
+            }
+            highlight_matching(&ui_m);
+        });
+    }
+    {
+        let ui_c = Rc::clone(&ui);
+        let click = gtk::GestureClick::new();
+        click.set_button(1);
+        click.connect_pressed(move |g, _, x, y| {
+            if !g
+                .current_event_state()
+                .contains(gtk::gdk::ModifierType::CONTROL_MASK)
+            {
+                return;
+            }
+            open_import_at(&ui_c, x, y);
+        });
+        ui.borrow().editor.add_controller(click);
+    }
+    {
+        let ui_t = Rc::clone(&ui);
+        let right = gtk::GestureClick::new();
+        right.set_button(3);
+        right.connect_pressed(move |_, _, x, y| {
+            tree_popup(&ui_t, x, y);
+        });
+        ui.borrow().tree.add_controller(right);
+    }
 
     conectar(&ui);
     if !lang_ok {
@@ -493,7 +669,7 @@ fn build_ui(app: &Application) {
     }
     set_source(
         &ui,
-        "// F5 roda. F6 depura. F7 arquivos. F8 painel. F9 ponto. F10 próximo.\n\nescreva(\"Olá, Expressa!\")\n",
+        "// F5 roda. F6 depura. Ctrl+F busca. Ctrl+clique em importe \"mod\".\n\nescreva(\"Olá, Expressa!\")\n",
     );
     {
         let ui_close = Rc::clone(&ui);
@@ -1321,6 +1497,366 @@ fn abrir_no(ui: &Rc<RefCell<Ui>>, path: &gtk::TreePath) {
         }
         Err(e) => set_status(ui, &format!("abrir: {e}")),
     }
+}
+
+fn show_search(ui: &Rc<RefCell<Ui>>) {
+    let u = ui.borrow();
+    u.search_revealer.set_reveal_child(true);
+    u.search_entry.grab_focus();
+}
+
+fn hide_search(ui: &Rc<RefCell<Ui>>) {
+    ui.borrow().search_revealer.set_reveal_child(false);
+    ui.borrow().editor.grab_focus();
+}
+
+fn search_apply(ui: &Rc<RefCell<Ui>>) {
+    let u = ui.borrow();
+    let q = u.search_entry.text();
+    if q.is_empty() {
+        u.search_settings.set_search_text(None::<&str>);
+    } else {
+        u.search_settings.set_search_text(Some(q.as_str()));
+    }
+}
+
+fn search_next(ui: &Rc<RefCell<Ui>>) {
+    search_apply(ui);
+    let u = ui.borrow();
+    let insert = u.buffer.iter_at_mark(&u.buffer.get_insert());
+    let from = if let Some((_, end)) = u.buffer.selection_bounds() {
+        end
+    } else {
+        insert
+    };
+    if let Some((a, b, _)) = u.search_ctx.forward(&from) {
+        u.buffer.select_range(&a, &b);
+        u.editor
+            .scroll_to_iter(&mut a.clone(), 0.2, false, 0.0, 0.0);
+    } else {
+        drop(u);
+        set_status(ui, "não encontrado");
+    }
+}
+
+fn search_prev(ui: &Rc<RefCell<Ui>>) {
+    search_apply(ui);
+    let u = ui.borrow();
+    let insert = u.buffer.iter_at_mark(&u.buffer.get_insert());
+    if let Some((a, b, _)) = u.search_ctx.backward(&insert) {
+        u.buffer.select_range(&a, &b);
+        u.editor
+            .scroll_to_iter(&mut a.clone(), 0.2, false, 0.0, 0.0);
+    } else {
+        drop(u);
+        set_status(ui, "não encontrado");
+    }
+}
+
+fn search_replace_one(ui: &Rc<RefCell<Ui>>) {
+    search_apply(ui);
+    let u = ui.borrow();
+    let repl = u.replace_entry.text().to_string();
+    if let Some((mut a, mut b)) = u.buffer.selection_bounds() {
+        if u.search_ctx.replace(&mut a, &mut b, &repl).is_ok() {
+            drop(u);
+            search_next(ui);
+            return;
+        }
+    }
+    drop(u);
+    search_next(ui);
+}
+
+fn search_replace_all(ui: &Rc<RefCell<Ui>>) {
+    search_apply(ui);
+    let u = ui.borrow();
+    let repl = u.replace_entry.text().to_string();
+    match u.search_ctx.replace_all(&repl) {
+        Ok(()) => set_status(ui, "substituições feitas"),
+        Err(e) => set_status(ui, &format!("substituir: {e}")),
+    }
+}
+
+fn highlight_matching(ui: &Rc<RefCell<Ui>>) {
+    let Ok(u) = ui.try_borrow() else {
+        return;
+    };
+    let (s, e) = u.buffer.bounds();
+    u.buffer.remove_tag(&u.match_tag, &s, &e);
+    let Some((a, b)) = indent::matching_block(&u.buffer) else {
+        return;
+    };
+    let tag = u.match_tag.clone();
+    let buf = u.buffer.clone();
+    drop(u);
+    for line in [a, b] {
+        if let Some(start) = buf.iter_at_line(line) {
+            let mut end = start.clone();
+            if !end.forward_to_line_end() {
+                end = buf.end_iter();
+            }
+            buf.apply_tag(&tag, &start, &end);
+        }
+    }
+}
+
+fn join_path(dir: &str, name: &str) -> String {
+    if dir.is_empty() {
+        name.to_string()
+    } else {
+        format!("{dir}/{name}")
+    }
+}
+
+fn parent_dir(path: &str, is_dir: bool) -> String {
+    if is_dir {
+        return path.to_string();
+    }
+    match path.rfind('/') {
+        Some(i) => path[..i].to_string(),
+        None => String::new(),
+    }
+}
+
+fn selected_tree_entry(ui: &Rc<RefCell<Ui>>) -> (String, bool) {
+    let u = ui.borrow();
+    let sel = u.tree.selection();
+    if let Some((_, iter)) = sel.selected() {
+        let model = u.store.upcast_ref::<gtk::TreeModel>();
+        let path: String = model.get(&iter, 1);
+        let is_dir: bool = model.get(&iter, 2);
+        return (path, is_dir);
+    }
+    (String::new(), true)
+}
+
+fn tree_popup(ui: &Rc<RefCell<Ui>>, x: f64, y: f64) {
+    let tree = ui.borrow().tree.clone();
+    if let Some((Some(path), _, _, _)) = tree.path_at_pos(x as i32, y as i32) {
+        tree.selection().select_path(&path);
+    }
+    let (rel, is_dir) = selected_tree_entry(ui);
+    let window = ui.borrow().window.clone();
+    let pop = gtk::Popover::new();
+    pop.set_parent(&tree);
+    pop.set_has_arrow(false);
+    pop.set_pointing_to(Some(&gtk::gdk::Rectangle::new(x as i32, y as i32, 1, 1)));
+    let box_ = GtkBox::new(Orientation::Vertical, 0);
+    let add_item = |box_: &GtkBox, label: &str, action: Box<dyn FnOnce() + 'static>| {
+        let btn = Button::with_label(label);
+        btn.set_has_frame(false);
+        let pop_c = pop.clone();
+        let action = RefCell::new(Some(action));
+        btn.connect_clicked(move |_| {
+            pop_c.popdown();
+            if let Some(f) = action.borrow_mut().take() {
+                f();
+            }
+        });
+        box_.append(&btn);
+    };
+    let ui_a = Rc::clone(ui);
+    let dir = parent_dir(&rel, is_dir);
+    add_item(
+        &box_,
+        "Novo arquivo",
+        Box::new({
+            let ui = Rc::clone(&ui_a);
+            let dir = dir.clone();
+            let window = window.clone();
+            move || {
+                if let Some(name) = perguntar_linha(&window, "Nome do arquivo:") {
+                    let name = if name.ends_with(".lep") {
+                        name
+                    } else if name.contains('.') {
+                        name
+                    } else {
+                        format!("{name}.lep")
+                    };
+                    let path = join_path(&dir, &name);
+                    let stu = student(&ui.borrow());
+                    match ui
+                        .borrow()
+                        .rpc
+                        .write_file(&stu, &path, "escreva(\"Olá\")\n")
+                    {
+                        Ok(()) => {
+                            conectar(&ui);
+                            set_status(&ui, &format!("criado {path}"));
+                        }
+                        Err(e) => set_status(&ui, &format!("criar: {e}")),
+                    }
+                }
+            }
+        }),
+    );
+    add_item(
+        &box_,
+        "Nova pasta",
+        Box::new({
+            let ui = Rc::clone(&ui_a);
+            let dir = dir.clone();
+            let window = window.clone();
+            move || {
+                if let Some(name) = perguntar_linha(&window, "Nome da pasta:") {
+                    if name.is_empty() {
+                        return;
+                    }
+                    let path = join_path(&dir, &name);
+                    let stu = student(&ui.borrow());
+                    match ui.borrow().rpc.mkdir(&stu, &path) {
+                        Ok(()) => {
+                            conectar(&ui);
+                            set_status(&ui, &format!("pasta {path}"));
+                        }
+                        Err(e) => set_status(&ui, &format!("pasta: {e}")),
+                    }
+                }
+            }
+        }),
+    );
+    if !rel.is_empty() {
+        add_item(
+            &box_,
+            "Renomear",
+            Box::new({
+                let ui = Rc::clone(&ui_a);
+                let rel = rel.clone();
+                let window = window.clone();
+                move || {
+                    let base = rel.rsplit('/').next().unwrap_or(&rel).to_string();
+                    if let Some(name) = perguntar_linha(&window, &format!("Renomear `{base}`:")) {
+                        if name.is_empty() {
+                            return;
+                        }
+                        let to = join_path(&parent_dir(&rel, false), &name);
+                        let stu = student(&ui.borrow());
+                        match ui.borrow().rpc.rename(&stu, &rel, &to) {
+                            Ok(()) => {
+                                if ui.borrow().filename.text() == rel.as_str() {
+                                    ui.borrow().filename.set_text(&to);
+                                }
+                                conectar(&ui);
+                                set_status(&ui, &format!("{rel} → {to}"));
+                            }
+                            Err(e) => set_status(&ui, &format!("renomear: {e}")),
+                        }
+                    }
+                }
+            }),
+        );
+        add_item(
+            &box_,
+            "Apagar",
+            Box::new({
+                let ui = Rc::clone(&ui_a);
+                let rel = rel.clone();
+                let window = window.clone();
+                move || {
+                    let then = {
+                        let ui = Rc::clone(&ui);
+                        let rel = rel.clone();
+                        move || {
+                            let stu = student(&ui.borrow());
+                            match ui.borrow().rpc.delete_file(&stu, &rel) {
+                                Ok(()) => {
+                                    conectar(&ui);
+                                    set_status(&ui, &format!("apagado {rel}"));
+                                }
+                                Err(e) => set_status(&ui, &format!("apagar: {e}")),
+                            }
+                        }
+                    };
+                    let then = RefCell::new(Some(then));
+                    #[allow(deprecated)]
+                    let dlg = gtk::MessageDialog::builder()
+                        .transient_for(&window)
+                        .modal(true)
+                        .message_type(gtk::MessageType::Warning)
+                        .buttons(gtk::ButtonsType::None)
+                        .text(&format!("Apagar `{rel}`?"))
+                        .build();
+                    dlg.add_button("Cancelar", gtk::ResponseType::Cancel);
+                    dlg.add_button("Apagar", gtk::ResponseType::Accept);
+                    dlg.connect_response(move |d, resp| {
+                        d.close();
+                        if resp == gtk::ResponseType::Accept {
+                            if let Some(f) = then.borrow_mut().take() {
+                                f();
+                            }
+                        }
+                    });
+                    dlg.present();
+                }
+            }),
+        );
+    }
+    pop.set_child(Some(&box_));
+    pop.popup();
+}
+
+fn open_import_at(ui: &Rc<RefCell<Ui>>, x: f64, y: f64) {
+    let line_txt = {
+        let u = ui.borrow();
+        let (_, by) =
+            u.editor
+                .window_to_buffer_coords(gtk::TextWindowType::Text, x as i32, y as i32);
+        let Some(iter) = u.editor.iter_at_location(0, by) else {
+            return;
+        };
+        let line = iter.line();
+        let Some(a) = u.buffer.iter_at_line(line) else {
+            return;
+        };
+        let mut b = a.clone();
+        if !b.forward_to_line_end() {
+            b = u.buffer.end_iter();
+        }
+        u.buffer.text(&a, &b, false).to_string()
+    };
+    let Some(mod_name) = parse_importe(&line_txt) else {
+        return;
+    };
+    let current = filename(&ui.borrow());
+    let mut candidates = Vec::new();
+    let with_lep = if mod_name.ends_with(".lep") {
+        mod_name.clone()
+    } else {
+        format!("{mod_name}.lep")
+    };
+    if let Some(slash) = current.rfind('/') {
+        candidates.push(format!("{}/{}", &current[..slash], with_lep));
+    }
+    candidates.push(format!("lib/{with_lep}"));
+    candidates.push(with_lep);
+    let stu = student(&ui.borrow());
+    for rel in candidates {
+        if let Ok(src) = ui.borrow().rpc.read_file(&stu, &rel) {
+            confirm_discard(ui, {
+                let ui = Rc::clone(ui);
+                let rel = rel.clone();
+                let src = src.clone();
+                move || {
+                    ui.borrow().filename.set_text(&rel);
+                    ui.borrow_mut().breakpoints.clear();
+                    set_source(&ui, &src);
+                    paint_breakpoints(&ui);
+                    set_status(&ui, &format!("aberto {rel}"));
+                }
+            });
+            return;
+        }
+    }
+    set_status(ui, &format!("importe: não achei `{mod_name}`"));
+}
+
+fn parse_importe(line: &str) -> Option<String> {
+    let i = line.find("importe")?;
+    let rest = line[i + "importe".len()..].trim_start();
+    let rest = rest.strip_prefix('"')?;
+    let end = rest.find('"')?;
+    Some(rest[..end].to_string())
 }
 
 #[cfg(test)]

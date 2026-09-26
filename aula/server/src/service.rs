@@ -10,8 +10,9 @@ use expressa_aula_proto::runner_server::Runner;
 use expressa_aula_proto::turma_server::Turma;
 use expressa_aula_proto::{
     DebugFrame, DebugPaused as ProtoPaused, DebugVar, DeleteFileRequest, DeleteFileResponse,
-    ExecFinished, ExecIn, ExecOut, ListFilesRequest, ListFilesResponse, ReadFileRequest,
-    ReadFileResponse, TreeEntry, WriteFileRequest, WriteFileResponse,
+    ExecFinished, ExecIn, ExecOut, ListFilesRequest, ListFilesResponse, MkdirRequest,
+    MkdirResponse, ReadFileRequest, ReadFileResponse, RenameRequest, RenameResponse, TreeEntry,
+    WriteFileRequest, WriteFileResponse,
 };
 use tokio::sync::mpsc;
 use tokio_stream::StreamExt;
@@ -111,8 +112,36 @@ impl Turma for Aula {
     ) -> Result<Response<DeleteFileResponse>, Status> {
         let req = request.into_inner();
         let path = self.file(&req.student, &req.path)?;
-        fs::remove_file(&path).map_err(|e| Status::not_found(e.to_string()))?;
+        if path.is_dir() {
+            fs::remove_dir_all(&path).map_err(|e| Status::internal(e.to_string()))?;
+        } else {
+            fs::remove_file(&path).map_err(|e| Status::not_found(e.to_string()))?;
+        }
         Ok(Response::new(DeleteFileResponse {}))
+    }
+
+    async fn mkdir(
+        &self,
+        request: Request<MkdirRequest>,
+    ) -> Result<Response<MkdirResponse>, Status> {
+        let req = request.into_inner();
+        let path = self.file(&req.student, &req.path)?;
+        fs::create_dir_all(&path).map_err(|e| Status::internal(e.to_string()))?;
+        Ok(Response::new(MkdirResponse {}))
+    }
+
+    async fn rename(
+        &self,
+        request: Request<RenameRequest>,
+    ) -> Result<Response<RenameResponse>, Status> {
+        let req = request.into_inner();
+        let from = self.file(&req.student, &req.from)?;
+        let to = self.file(&req.student, &req.to)?;
+        if let Some(parent) = to.parent() {
+            fs::create_dir_all(parent).map_err(|e| Status::internal(e.to_string()))?;
+        }
+        fs::rename(&from, &to).map_err(|e| Status::internal(e.to_string()))?;
+        Ok(Response::new(RenameResponse {}))
     }
 }
 
