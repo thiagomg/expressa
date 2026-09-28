@@ -1,7 +1,7 @@
 mod indent;
 mod rpc;
 
-use std::cell::{Cell, RefCell};
+use std::cell::RefCell;
 use std::collections::HashSet;
 use std::rc::Rc;
 
@@ -172,6 +172,9 @@ fn build_ui(app: &Application) {
         .build();
     editor.set_wrap_mode(gtk::WrapMode::None);
     editor.set_accepts_tab(true);
+    editor.set_input_hints(gtk::InputHints::NONE);
+    editor.set_input_purpose(gtk::InputPurpose::FreeForm);
+    buffer.set_highlight_matching_brackets(true);
     let bp_attrs = MarkAttributes::new();
     bp_attrs.set_pixbuf(&red_breakpoint_pixbuf());
     editor.set_mark_attributes("breakpoint", &bp_attrs, 10);
@@ -494,57 +497,58 @@ fn build_ui(app: &Application) {
         ui.borrow().output.add_controller(click);
     }
 
-    let keys = gtk::EventControllerKey::new();
     {
+        let shortcuts = gtk::ShortcutController::new();
+        shortcuts.set_propagation_phase(gtk::PropagationPhase::Bubble);
+        // Do not use EventControllerKey on the window (defaults to Capture
+        // and eats dead keys). Do not Capture here either.
         let ui_k = Rc::clone(&ui);
-        let btn_files_k = btn_files.clone();
-        let btn_panel_k = btn_panel.clone();
-        keys.connect_key_pressed(move |_, key, _, mods| {
-            let ctrl = mods.contains(gtk::gdk::ModifierType::CONTROL_MASK);
-            if key == Key::F5 {
-                rodar(&ui_k, false);
-                return glib::Propagation::Stop;
-            }
-            if key == Key::F6 {
-                rodar(&ui_k, true);
-                return glib::Propagation::Stop;
-            }
-            if key == Key::F7 {
-                btn_files_k.set_active(!btn_files_k.is_active());
-                return glib::Propagation::Stop;
-            }
-            if key == Key::F8 {
-                btn_panel_k.set_active(!btn_panel_k.is_active());
-                return glib::Propagation::Stop;
-            }
-            if key == Key::F9 {
-                toggle_breakpoint_here(&ui_k);
-                return glib::Propagation::Stop;
-            }
-            if key == Key::F10 {
-                send_debug_cmd(&ui_k, "proximo");
-                return glib::Propagation::Stop;
-            }
-            if key == Key::F11 {
-                send_debug_cmd(&ui_k, "entrar");
-                return glib::Propagation::Stop;
-            }
-            if ctrl && key == Key::s {
-                salvar(&ui_k);
-                return glib::Propagation::Stop;
-            }
-            if ctrl && key == Key::f {
-                show_search(&ui_k);
-                return glib::Propagation::Stop;
-            }
-            if ctrl && key == Key::h {
-                show_search(&ui_k);
-                return glib::Propagation::Stop;
-            }
-            glib::Propagation::Proceed
+        add_shortcut(&shortcuts, "F5", {
+            let ui = Rc::clone(&ui_k);
+            move || rodar(&ui, false)
         });
+        add_shortcut(&shortcuts, "F6", {
+            let ui = Rc::clone(&ui_k);
+            move || rodar(&ui, true)
+        });
+        add_shortcut(&shortcuts, "F7", {
+            let b = btn_files.clone();
+            move || b.set_active(!b.is_active())
+        });
+        add_shortcut(&shortcuts, "F8", {
+            let b = btn_panel.clone();
+            move || b.set_active(!b.is_active())
+        });
+        add_shortcut(&shortcuts, "F9", {
+            let ui = Rc::clone(&ui_k);
+            move || toggle_breakpoint_here(&ui)
+        });
+        add_shortcut(&shortcuts, "F10", {
+            let ui = Rc::clone(&ui_k);
+            move || send_debug_cmd(&ui, "proximo")
+        });
+        add_shortcut(&shortcuts, "F11", {
+            let ui = Rc::clone(&ui_k);
+            move || send_debug_cmd(&ui, "entrar")
+        });
+        add_shortcut(&shortcuts, "<Primary>s", {
+            let ui = Rc::clone(&ui_k);
+            move || salvar(&ui)
+        });
+        add_shortcut(&shortcuts, "<Primary>f", {
+            let ui = Rc::clone(&ui_k);
+            move || show_search(&ui)
+        });
+        add_shortcut(&shortcuts, "<Primary>h", {
+            let ui = Rc::clone(&ui_k);
+            move || show_search(&ui)
+        });
+        add_shortcut(&shortcuts, "<Shift>Tab", {
+            let ui = Rc::clone(&ui_k);
+            move || indent::unindent_current_line(&ui.borrow().buffer)
+        });
+        win.add_controller(shortcuts);
     }
-    win.add_controller(keys);
     {
         let ui_s = Rc::clone(&ui);
         btn_find_next.connect_clicked(move |_| search_next(&ui_s));
@@ -584,71 +588,24 @@ fn build_ui(app: &Application) {
         ui.borrow().search_entry.add_controller(search_keys);
     }
     {
-        let ui_tab = Rc::clone(&ui);
-        let ui_untab = Rc::clone(&ui);
-        let shortcuts = gtk::ShortcutController::new();
-        shortcuts.set_propagation_phase(gtk::PropagationPhase::Capture);
-        if let Some(trigger) = gtk::ShortcutTrigger::parse_string("Tab") {
-            shortcuts.add_shortcut(gtk::Shortcut::new(
-                Some(trigger),
-                Some(gtk::CallbackAction::new(move |_, _| {
-                    indent::indent_current_line(&ui_tab.borrow().buffer);
-                    glib::Propagation::Stop
-                })),
-            ));
-        }
-        if let Some(trigger) = gtk::ShortcutTrigger::parse_string("<Shift>Tab") {
-            shortcuts.add_shortcut(gtk::Shortcut::new(
-                Some(trigger),
-                Some(gtk::CallbackAction::new(move |_, _| {
-                    indent::unindent_current_line(&ui_untab.borrow().buffer);
-                    glib::Propagation::Stop
-                })),
-            ));
-        }
-        ui.borrow().editor.add_controller(shortcuts);
-    }
-    {
-        #[derive(Clone, Copy)]
-        enum IndentPending {
-            None,
-            Newline,
-            Closer,
-        }
-        let pending = Rc::new(Cell::new(IndentPending::None));
         let buffer = ui.borrow().buffer.clone();
-        {
-            let pending = Rc::clone(&pending);
-            buffer.connect_insert_text(move |_, _, text| {
-                if text == "\n" {
-                    pending.set(IndentPending::Newline);
-                } else if text == "}" || text == "m" {
-                    pending.set(IndentPending::Closer);
-                }
-            });
-        }
-        {
-            let pending = Rc::clone(&pending);
-            let buffer_ch = buffer.clone();
-            buffer.connect_changed(move |_| {
-                match pending.replace(IndentPending::None) {
-                    IndentPending::None => {}
-                    IndentPending::Newline => indent::indent_current_line(&buffer_ch),
-                    IndentPending::Closer => {
-                        let insert = buffer_ch.iter_at_mark(&buffer_ch.get_insert());
-                        indent::indent_if_closer(&buffer_ch, insert.line());
-                    }
-                }
-            });
-        }
-    }
-    {
-        let ui_m = Rc::clone(&ui);
-        ui.borrow().buffer.connect_mark_set(move |_, _, mark| {
-            if mark.name().as_deref() != Some("insert") {
+        let buffer_ch = buffer.clone();
+        let ui_ind = Rc::clone(&ui);
+        buffer.connect_changed(move |_| {
+            if ui_ind
+                .try_borrow()
+                .map(|u| u.suppress_dirty)
+                .unwrap_or(true)
+            {
                 return;
             }
-            highlight_matching(&ui_m);
+            let insert = buffer_ch.iter_at_mark(&buffer_ch.get_insert());
+            let line = insert.line();
+            if indent::line_is_blank(&buffer_ch, line) {
+                indent::indent_current_line(&buffer_ch);
+            } else {
+                indent::indent_if_closer(&buffer_ch, line);
+            }
         });
     }
     {
@@ -711,6 +668,19 @@ fn build_ui(app: &Application) {
             glib::ControlFlow::Break
         });
     }
+}
+
+fn add_shortcut(controller: &gtk::ShortcutController, accel: &str, f: impl Fn() + 'static) {
+    let Some(trigger) = gtk::ShortcutTrigger::parse_string(accel) else {
+        return;
+    };
+    controller.add_shortcut(gtk::Shortcut::new(
+        Some(trigger),
+        Some(gtk::CallbackAction::new(move |_, _| {
+            f();
+            glib::Propagation::Stop
+        })),
+    ));
 }
 
 fn install_paned_css() {

@@ -150,6 +150,10 @@ fn want_indent(prev_lines: &[&str], current: &str) -> usize {
     }
 }
 
+pub fn line_is_blank(buffer: &SourceBuffer, line: i32) -> bool {
+    line_text(buffer, line).trim().is_empty()
+}
+
 pub fn line_starts_with_closer(buffer: &SourceBuffer, line: i32) -> bool {
     let t = strip_line_code(&line_text(buffer, line));
     starts_with_closer(&t)
@@ -278,6 +282,13 @@ mod tests {
         assert_eq!(want_indent(&["escreva(1)"], "escreva(2)"), 0);
         assert_eq!(want_indent(&[], "escreva(1)"), 0);
         assert_eq!(want_indent(&["x = 1"], ""), 0);
+    }
+
+    #[test]
+    fn after_closer_next_line_is_not_indented() {
+        assert_eq!(want_indent(&["se a {", "    x", "}"], ""), 0);
+        assert_eq!(want_indent(&["se a {", "}"], "escreva(1)"), 0);
+        assert_eq!(want_indent(&["se a {", "    }"], ""), 0);
     }
 
     #[test]
