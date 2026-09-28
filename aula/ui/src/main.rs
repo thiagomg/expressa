@@ -1,7 +1,7 @@
 mod indent;
 mod rpc;
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::collections::HashSet;
 use std::rc::Rc;
 
@@ -609,22 +609,38 @@ fn build_ui(app: &Application) {
         ui.borrow().editor.add_controller(shortcuts);
     }
     {
+        #[derive(Clone, Copy)]
+        enum IndentPending {
+            None,
+            Newline,
+            Closer,
+        }
+        let pending = Rc::new(Cell::new(IndentPending::None));
         let buffer = ui.borrow().buffer.clone();
-        buffer.connect_insert_text(move |buf, iter, text| {
-            let buf = buf.clone();
-            if text == "\n" {
-                glib::idle_add_local_once(move || {
-                    indent::indent_current_line(&buf);
-                });
-                return;
-            }
-            if text == "}" || text == "m" {
-                let line = iter.line();
-                glib::idle_add_local_once(move || {
-                    indent::indent_if_closer(&buf, line);
-                });
-            }
-        });
+        {
+            let pending = Rc::clone(&pending);
+            buffer.connect_insert_text(move |_, _, text| {
+                if text == "\n" {
+                    pending.set(IndentPending::Newline);
+                } else if text == "}" || text == "m" {
+                    pending.set(IndentPending::Closer);
+                }
+            });
+        }
+        {
+            let pending = Rc::clone(&pending);
+            let buffer_ch = buffer.clone();
+            buffer.connect_changed(move |_| {
+                match pending.replace(IndentPending::None) {
+                    IndentPending::None => {}
+                    IndentPending::Newline => indent::indent_current_line(&buffer_ch),
+                    IndentPending::Closer => {
+                        let insert = buffer_ch.iter_at_mark(&buffer_ch.get_insert());
+                        indent::indent_if_closer(&buffer_ch, insert.line());
+                    }
+                }
+            });
+        }
     }
     {
         let ui_m = Rc::clone(&ui);
