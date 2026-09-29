@@ -19,15 +19,20 @@ Caminhos de arquivo **relativos** são resolvidos a partir da pasta do `.lep` em
 | [`escreva`](#escreva) | Imprime valores na saída (stdout) |
 | [`escreva_erro`](#escreva_erro) | Imprime na saída de erro (stderr) |
 | [`sair`](#sair) | Encerra o programa |
+| [`cls`](#cls) | Limpa a tela (`limpe_tela` também) |
+| [`durma`](#durma) | Espera um número de segundos |
 | [`leia`](#leia) | Lê uma linha do teclado |
 | [`leia_linhas`](#leia_linhas) | Lê todas as linhas da entrada padrão |
 | [`eh_terminal`](#eh_terminal) | Entrada é o teclado? (`é_terminal` também) |
 | [`argumentos`](#argumentos) | Lista dos valores após o `.lep` |
 | [`numero`](#numero) | Transforma texto em número |
+| [`formate`](#formate) | Monta texto com alinhamento (`{:<n}` `{:>n}` `{:^n}`) |
 | [`raiz`](#raiz) | Raiz quadrada |
 | [`transposta`](#transposta) | Transposta |
 | [`det`](#det) | Determinante 1×1–3×3 |
 | [`identidade`](#identidade) | Matriz identidade |
+| [`nlinhas`](#nlinhas) | Número de linhas |
+| [`ncolunas`](#ncolunas) | Número de colunas |
 | [`tamanho`](#tamanho) | Quantidade de itens ou caracteres |
 | [`primeiro`](#primeiro) | Primeiro elemento de uma lista |
 | [`ultimo`](#ultimo) | Último elemento de uma lista |
@@ -104,6 +109,53 @@ inicio
     sair(1)
 fim
 ```
+
+### `cls`
+
+```text
+cls()
+limpe_tela()
+```
+
+Limpa a tela do terminal e coloca o cursor no canto superior esquerdo. Sem argumentos. As duas grafias são a mesma função.
+
+No REPL, a linha `cls` (sem parênteses) também limpa a tela; `cls()` é esta função.
+
+Na Aula, limpa o painel de saída. Quando a saída não é um terminal (pipe, arquivo), ainda assim escreve o código ANSI de limpar a tela.
+
+Retorna `nada`.
+
+```text
+repita 3 vezes
+inicio
+    cls()
+    escreva("contador")
+fim
+```
+
+**Erros:** qualquer argumento.
+
+### `durma`
+
+```text
+durma(segundos)
+```
+
+Pausa o programa pelo número de **segundos** indicado. Aceita fração: `durma(0.5)` espera meio segundo. `durma(0)` não espera.
+
+Na Aula, o tempo-limite do programa continua valendo: uma espera longa vira `tempo esgotado`.
+
+Retorna `nada`.
+
+```text
+escreva("3")
+durma(1)
+escreva("2")
+durma(1)
+escreva("1")
+```
+
+**Erros:** falta o argumento, valor que não é número, ou número negativo.
 
 ### `leia`
 
@@ -235,6 +287,45 @@ Na linha de comando: `expressa --numeros en arquivo.lep` (ou `EXPRESSA_NUMEROS=e
 
 Literais no código continuam com ponto: `media = 7.3`.
 
+### `formate`
+
+```text
+formate(modelo, valor, ...) -> texto
+```
+
+Monta um texto a partir de um **modelo**. Cada `{}` (ou `{1}`, `{2}`, …) é substituído pelo valor correspondente. O resultado é texto: use em `escreva`, `+`, arquivos, etc.
+
+Alinhamento (útil em tabelas). `n` é a largura em caracteres:
+
+| no modelo | efeito |
+|-----------|--------|
+| `{}` | o valor, sem padding |
+| `{:<n}` | encosta à **esquerda** |
+| `{:>n}` | encosta à **direita** |
+| `{:^n}` | **centro** |
+| `{:-<n}` | esquerda, preenchido com `-` (qualquer caractere no lugar de `-`) |
+
+Sem `<` `>` `^`, texto encosta à esquerda e número à direita: `{:8}`.
+
+Se o valor já é mais largo que `n`, ele entra inteiro (não corta). `{1}` é o **primeiro** valor (índices começam em 1). `{{` e `}}` escrevem `{` e `}`. Números seguem o `formato` atual (`7,5` em pt).
+
+```text
+formate("Hello {:<5}!", "x")     // "Hello x    !"
+formate("Hello {:-<5}!", "x")    // "Hello x----!"
+formate("Hello {:^5}!", "x")     // "Hello   x  !"
+formate("Hello {:>5}!", "x")     // "Hello     x!"
+
+escreva(formate("{:<10} {:>6}", "Ana", 7.5))
+escreva(formate("{:<10} {:>6}", "Bruno", 10))
+```
+
+```text
+Ana             7,5
+Bruno            10
+```
+
+**Erros:** o modelo não é texto; `{` sem `}`; valor a menos ou a mais; misturar `{}` e `{1}`; índice `0` (use `{1}`).
+
 ---
 
 ## Matrizes
@@ -247,7 +338,27 @@ A = matriz {
 ```
 
 Índices em 1: `A[1, 2]`. `A[1]` é a linha como lista. `A + B`, `k * A`, `A * B` (produto).
-`tamanho(A)` é o número de linhas; `tamanho(A[1])` o de colunas.
+`nlinhas(A)` e `ncolunas(A)` são o tamanho; `tamanho(A)` também é o número de linhas.
+
+### `nlinhas`
+
+```text
+nlinhas(A) -> numero
+```
+
+Quantidade de linhas. `nlinhas(matriz { [1, 2, 3], [4, 5, 6] })` vale `2`.
+
+**Erros:** o argumento não é matriz.
+
+### `ncolunas`
+
+```text
+ncolunas(A) -> numero
+```
+
+Quantidade de colunas. `ncolunas(matriz { [1, 2, 3], [4, 5, 6] })` vale `3`.
+
+**Erros:** o argumento não é matriz.
 
 ### `transposta`
 
@@ -296,9 +407,9 @@ x = raiz(delta) se_falhar 0
 tamanho(valor) -> numero
 ```
 
-Retorna a quantidade de elementos (lista ou mapa) ou de caracteres (texto). A contagem de texto usa caracteres Unicode, não bytes.
+Retorna a quantidade de elementos (lista, mapa ou conjunto), de caracteres (texto) ou de linhas (matriz). A contagem de texto usa caracteres Unicode, não bytes. Para colunas de matriz, use `ncolunas`.
 
-**Erros:** o argumento não é texto, lista nem mapa.
+**Erros:** o argumento não é texto, lista, mapa, conjunto nem matriz.
 
 ```text
 tamanho("olá")             // 3

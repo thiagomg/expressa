@@ -83,6 +83,9 @@
       <keyword>escreva</keyword>
       <keyword>escreva_erro</keyword>
       <keyword>sair</keyword>
+      <keyword>cls</keyword>
+      <keyword>limpe_tela</keyword>
+      <keyword>durma</keyword>
       <keyword>leia</keyword>
       <keyword>leia_linhas</keyword>
       <keyword>eh_terminal</keyword>
@@ -90,10 +93,13 @@
       <keyword>argumentos</keyword>
       <keyword>numero</keyword>
       <keyword>formato</keyword>
+      <keyword>formate</keyword>
       <keyword>raiz</keyword>
       <keyword>transposta</keyword>
       <keyword>det</keyword>
       <keyword>identidade</keyword>
+      <keyword>nlinhas</keyword>
+      <keyword>ncolunas</keyword>
       <keyword>tamanho</keyword>
       <keyword>primeiro</keyword>
       <keyword>ultimo</keyword>

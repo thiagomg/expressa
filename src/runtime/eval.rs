@@ -3,6 +3,7 @@ use std::collections::{HashMap, HashSet};
 use std::io::{self, BufRead, IsTerminal, Write};
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
+use std::thread;
 use std::time::{Duration, Instant};
 
 use crate::lexer::Span;
@@ -1459,6 +1460,35 @@ impl<'a> Vm<'a> {
         Ok(())
     }
 
+    pub(crate) fn sleep_secs(&self, secs: f64, span: Span) -> Result<(), EvalError> {
+        if !secs.is_finite() || secs < 0.0 {
+            return Err(self.err("durma() espera um número >= 0 (segundos)", span));
+        }
+        self.check_deadline(span)?;
+        if secs == 0.0 {
+            return Ok(());
+        }
+        let want = Duration::try_from_secs_f64(secs)
+            .map_err(|_| self.err("durma() duração grande demais", span))?;
+        let slice = match self.deadline {
+            Some(deadline) => {
+                let now = Instant::now();
+                if now >= deadline {
+                    return Err(self.err("tempo esgotado", span));
+                }
+                let remaining = deadline.saturating_duration_since(now);
+                if want > remaining {
+                    thread::sleep(remaining);
+                    return Err(self.err("tempo esgotado", span));
+                }
+                want
+            }
+            None => want,
+        };
+        thread::sleep(slice);
+        self.check_deadline(span)
+    }
+
     fn pause(&mut self, span: Span, env: &Rc<RefCell<Env>>) -> Result<(), EvalError> {
         self.check_deadline(span)?;
         let file = self.file.clone();
@@ -2137,6 +2167,8 @@ A = matriz {
 escreva(A[1, 2])
 escreva(tamanho(A))
 escreva(tamanho(A[1]))
+escreva(nlinhas(A))
+escreva(ncolunas(A))
 escreva(det(A))
 B = transposta(A)
 escreva(B[1, 2])
@@ -2144,7 +2176,7 @@ I = identidade(2)
 C = A * I
 escreva(C[2, 2])
 "#;
-        assert_eq!(run(src), "2\n2\n2\n-2\n3\n4\n");
+        assert_eq!(run(src), "2\n2\n2\n2\n2\n-2\n3\n4\n");
     }
 
     #[test]

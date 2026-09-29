@@ -1,0 +1,92 @@
+
+// Retorna maior valor de uma matriz
+maior_valor = função(m) {
+    mv = 0
+    para l de 1 até nlinhas(m) {
+        para c de 1 até ncolunas(m) {
+            // Valor da célula posicionada em (l, c)
+            lc_val = m[l, c]
+            se lc_val > mv { mv = lc_val }
+        }
+    }
+    mv
+}
+
+somar_linhas_colunas = função(m) {
+    // Nós precisamos encontrar o maior valor da matriz para saber quantos espaços são necessários
+    max = m.maior_valor()
+    // vamos converter para string e contar os dígitos
+    digitos = tamanho("" + max)
+    fmt = "{:>" + digitos  + "} "
+
+    linha = "+"
+    // Serão 2 traços para o número, mais um traço para o espaço
+    para c de 1 até ncolunas(m) * (digitos + 1) {
+        linha += "-"
+    }
+    // E mais um traço para o espaço final (não contado antes)
+    linha += "-+"
+    
+    colunas = []
+    // Vamos criar as colunas para soma
+    para c de 1 até ncolunas(m) {
+        colunas += [0]
+    }
+
+    escreva(linha)
+    para l de 1 até nlinhas(m) {
+        // Para somar a linha, é necessário usar somente uma variável
+        linha_total = 0
+        s_linha = "| "
+        para c de 1 até ncolunas(m) {
+            // Valor da célula posicionada em (l, c)
+            lc_val = m[l, c]
+            s_linha += formate(fmt, lc_val)
+            linha_total += lc_val
+            colunas[c] += lc_val
+        }
+        s_linha += "| " + linha_total
+        escreva(s_linha)
+    }
+    escreva(linha)
+
+    s_cols = "  "
+    
+    para c de 1 até colunas.tamanho() {
+        s_cols += colunas[c] + " "
+    }
+    escreva(s_cols)
+}
+
+
+b = 11 // Banana
+m = 8 // Maçã
+a = 6 // Azeitona
+c = 2 // Cereja
+
+criar = função() {
+    matriz {
+        [ b, m, a, b ],
+        [ a, c, b, a ],
+        [ m, m, m, c ],
+        [ m, b, b, a ]
+    }
+}
+
+
+para i de 1 até 3 {
+    linha = "."
+    para i de 1 até 20 {
+        linha = " " + linha
+        cls()
+        escreva(linha)
+        durma(0.05)
+    }
+}
+
+// Este programa cria uma tabela com frutas
+// Cada fruta tem um valor
+m = criar()
+// Escreve na tela a matriz com o total de linhas e colunas ao lado e abaixo
+somar_linhas_colunas(m)
+

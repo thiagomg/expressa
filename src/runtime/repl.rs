@@ -12,6 +12,7 @@ use super::debug::NoopHook;
 use super::env::{Env, FrameKind};
 use super::error::{EvalError, RuntimeError};
 use super::eval::{LineInput, Vm};
+use super::leia::CLEAR_SCREEN;
 use super::value::Value;
 
 pub struct ReplSession<'a> {
@@ -211,6 +212,11 @@ fn apply_line(session: &mut ReplSession<'_>, buf: &mut String, line: &str) -> Li
                 print_help(topic);
                 return LineResult::Ran(trimmed.to_string());
             }
+            Some(ReplCommand::Cls) => {
+                print!("{CLEAR_SCREEN}");
+                let _ = io::stdout().flush();
+                return LineResult::Ran(trimmed.to_string());
+            }
             Some(ReplCommand::Vazio) => return LineResult::Continue,
             None => {}
         }
@@ -235,6 +241,7 @@ fn apply_line(session: &mut ReplSession<'_>, buf: &mut String, line: &str) -> Li
 enum ReplCommand<'a> {
     Sair,
     Ajuda(Option<&'a str>),
+    Cls,
     Vazio,
 }
 
@@ -249,6 +256,7 @@ fn parse_repl_command(line: &str) -> Option<ReplCommand<'_>> {
     match normalize_topic(cmd).as_str() {
         "sair" | "exit" | "quit" => Some(ReplCommand::Sair),
         "ajuda" | "help" => Some(ReplCommand::Ajuda(rest)),
+        "cls" | "limpe_tela" | "clear" if rest.is_none() => Some(ReplCommand::Cls),
         _ => None,
     }
 }
@@ -307,6 +315,7 @@ fn print_help_geral() {
          formato(\"pt\") / en     padrão de números em texto\n  \
          sair                   encerra o REPL (também Ctrl+D)\n  \
          sair() / sair(1)       nativa: encerra o processo\n  \
+         cls                    limpa a tela (também limpe_tela / cls())\n  \
          ↑ ↓                    comandos anteriores"
     );
 }
@@ -343,7 +352,7 @@ fn print_help_linguagem() {
          :nome                           o texto \"nome\" (chave de mapa)\n  \
          mapa {{ :nome -> \"Ana\" }}     vazio: mapa {{}}\n  \
          conjunto {{ :ana, 1 }}          únicos; s += :bia; s.remova(:ana)\n  \
-         matriz {{ [1, 2], [3, 4] }}     A[1, 2]  A+B  k*A  A*B\n  \
+         matriz {{ [1, 2], [3, 4] }}     A[1, 2]  nlinhas(A)  ncolunas(A)\n  \
          lista[1]  texto[1..3]  t[2..]   fatia corta no fim; t[2] fora ainda é erro\n  \
          pessoa:nome                     chave de mapa (pessoa[\"nome\"])\n  \
          mat::soma(1, 2)                 nome em um módulo\n  \
@@ -419,5 +428,11 @@ mod tests {
         ));
         assert_eq!(normalize_topic("funções"), "funcoes");
         assert!(super::super::builtins::lookup_builtin_doc("escreva").is_some());
+        assert!(matches!(parse_repl_command("cls"), Some(ReplCommand::Cls)));
+        assert!(matches!(
+            parse_repl_command("limpe_tela"),
+            Some(ReplCommand::Cls)
+        ));
+        assert!(parse_repl_command("cls()").is_none());
     }
 }

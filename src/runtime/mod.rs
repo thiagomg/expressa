@@ -3,6 +3,7 @@ mod debug;
 mod env;
 mod error;
 mod eval;
+mod formate;
 mod leia;
 mod repl;
 mod value;
@@ -17,7 +18,7 @@ pub use eval::{
     run_source_marcador_args, run_to_string, run_to_string_with, run_to_strings_with,
     run_with_hook, run_with_leia_host,
 };
-pub use leia::{LEIA_MARKER, LeiaHost};
+pub use leia::{CLEAR_SCREEN, LEIA_MARKER, LeiaHost};
 pub use repl::run_repl;
 pub use value::{NumeroLocale, Value, default_numero_locale};
 

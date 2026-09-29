@@ -148,6 +148,7 @@ tamanho(t)  maiuscula(t)  minuscula(t)  limpe(t)  sem_acento(t)
 substitua(t, "Maria", "Ana")
 separe("a,b,c", ",")           // ["a", "b", "c"]
 junte(["a", "b"], " - ")
+formate("{:<8} {:>5}", "Ana", 10)  // colunas: < esquerda  > direita  ^ centro
 
 :nome                          // o texto "nome"
 pessoa = mapa { :nome -> "Ana"  :idade -> 25 }
@@ -166,7 +167,8 @@ A[1, 2]                        // 2
 A[1]                           // linha → lista
 A + B    3 * A    A * B
 transposta(A)  det(A)  identidade(3)
-tamanho(A)                     // linhas
+nlinhas(A)  ncolunas(A)        // 2 e 3
+tamanho(A)                     // também linhas
 ```
 
 ---
@@ -176,6 +178,8 @@ tamanho(A)                     // linhas
 ```text
 escreva("Média:", 7.5)         // stdout
 escreva_erro("falhou")         // stderr (não entra em > arquivo)
+cls()                          // limpa a tela  (também limpe_tela())
+durma(1)                       // espera 1 segundo  (aceita 0.5)
 sair()                         // encerra, código 0
 sair(1)                        // encerra com falha (não pega se_falhar)
 
@@ -224,15 +228,15 @@ soma(10, 5)
 
 | | |
 |---|---|
-| `escreva` `escreva_erro` `sair` | imprimir / encerrar |
+| `escreva` `escreva_erro` `sair` `cls` `durma` | imprimir / encerrar / limpar tela / esperar |
 | `leia` `leia_linhas` `eh_terminal` | teclado / pipe |
 | `argumentos` | lista (não é função) |
 | `numero` `formato` `raiz` | número |
 | `tamanho` `primeiro` `ultimo` | coleção |
-| `maiuscula` `minuscula` `sem_acento` `remova` `substitua` `separe` `junte` `limpe` | texto / lista / mapa / conjunto |
+| `maiuscula` `minuscula` `sem_acento` `remova` `substitua` `separe` `junte` `limpe` `formate` | texto / lista / mapa / conjunto |
 | `leia_arquivo` `salve_arquivo` `adicione_arquivo` | arquivo |
 | `leia_csv` `salve_csv` | CSV |
-| `transposta` `det` `identidade` | matriz |
+| `transposta` `det` `identidade` `nlinhas` `ncolunas` | matriz |
 
 Nativas não podem ser reatribuídas (`escreva = 1` é erro).
 
@@ -254,6 +258,7 @@ Abre `.lep` em `expressa-mode` (palavras-chave, nativas, comentários, strings).
 ```text
 expressa                  // ↑ ↓ histórico
 ajuda    ajuda funcoes    ajuda linguagem    ajuda escreva
+cls                       // limpa a tela (também limpe_tela)
 sair
 ```
 

@@ -6,6 +6,7 @@ use crate::lexer::Span;
 
 use super::error::EvalError;
 use super::eval::Vm;
+use super::leia::CLEAR_SCREEN;
 use super::value::{MapKey, NumeroLocale, Value, format_numero};
 
 impl Vm<'_> {
@@ -19,6 +20,8 @@ impl Vm<'_> {
             "escreva" => self.bi_escreva(args, span),
             "escreva_erro" => self.bi_escreva_erro(args, span),
             "sair" => self.bi_sair(args, span),
+            "cls" | "limpe_tela" => self.bi_cls(args, span),
+            "durma" => self.bi_durma(args, span),
             "leia" => self.bi_leia(args, span),
             "leia_linhas" => self.bi_leia_linhas(args, span),
             "eh_terminal" | "é_terminal" => self.bi_eh_terminal(args, span),
@@ -26,8 +29,11 @@ impl Vm<'_> {
             "transposta" => self.bi_transposta(args, span),
             "det" => self.bi_det(args, span),
             "identidade" => self.bi_identidade(args, span),
+            "nlinhas" => self.bi_nlinhas(args, span),
+            "ncolunas" => self.bi_ncolunas(args, span),
             "numero" => self.bi_numero(args, span),
             "formato" => self.bi_formato(args, span),
+            "formate" => self.bi_formate(args, span),
             "tamanho" => self.bi_tamanho(args, span),
             "primeiro" => self.bi_primeiro(args, span),
             "ultimo" => self.bi_ultimo(args, span),
@@ -75,6 +81,25 @@ impl Vm<'_> {
         }
         writeln!(self.err).map_err(|e| self.io_err(e, span))?;
         self.err.flush().map_err(|e| self.io_err(e, span))?;
+        Ok(Value::Nada)
+    }
+
+    fn bi_cls(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
+        if !args.is_empty() {
+            return Err(self.err(
+                format!("cls() não espera argumentos, recebeu {}", args.len()),
+                span,
+            ));
+        }
+        write!(self.out, "{CLEAR_SCREEN}").map_err(|e| self.io_err(e, span))?;
+        self.out.flush().map_err(|e| self.io_err(e, span))?;
+        Ok(Value::Nada)
+    }
+
+    fn bi_durma(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
+        self.expect_arity(args, 1, span)?;
+        let secs = self.expect_numero(&args[0], span)?;
+        self.sleep_secs(secs, span)?;
         Ok(Value::Nada)
     }
 
@@ -210,6 +235,19 @@ impl Vm<'_> {
         }
     }
 
+    fn bi_formate(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
+        if args.is_empty() {
+            return Err(self.err(
+                "formate() espera um modelo (texto) e os valores",
+                span,
+            ));
+        }
+        let modelo = self.expect_texto(&args[0], span)?;
+        let text = super::formate::formate(&modelo, &args[1..], self.numero_locale)
+            .map_err(|msg| self.err(msg, span))?;
+        Ok(Value::Texto(text))
+    }
+
     fn bi_raiz(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
         self.expect_arity(args, 1, span)?;
         let n = self.expect_numero(&args[0], span)?;
@@ -260,6 +298,19 @@ impl Vm<'_> {
             out[i][i] = 1.0;
         }
         Ok(Value::matriz(out))
+    }
+
+    fn bi_nlinhas(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
+        self.expect_arity(args, 1, span)?;
+        let m = self.expect_matriz(&args[0], span)?;
+        Ok(Value::Numero(m.borrow().len() as f64))
+    }
+
+    fn bi_ncolunas(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
+        self.expect_arity(args, 1, span)?;
+        let m = self.expect_matriz(&args[0], span)?;
+        let n = m.borrow().first().map(|r| r.len()).unwrap_or(0);
+        Ok(Value::Numero(n as f64))
     }
 
     fn bi_det(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
@@ -610,16 +661,22 @@ pub(crate) const BUILTINS: &[&str] = &[
     "escreva",
     "escreva_erro",
     "sair",
+    "cls",
+    "limpe_tela",
+    "durma",
     "leia",
     "leia_linhas",
     "eh_terminal",
     "é_terminal",
     "numero",
     "formato",
+    "formate",
     "raiz",
     "transposta",
     "det",
     "identidade",
+    "nlinhas",
+    "ncolunas",
     "tamanho",
     "primeiro",
     "ultimo",
@@ -665,6 +722,18 @@ pub(crate) const BUILTIN_DOCS: &[BuiltinDoc] = &[
         example: r#"se nome == "" { sair(1) }"#,
     },
     BuiltinDoc {
+        name: "cls",
+        sig: "cls()",
+        summary: "Limpa a tela do terminal. Também limpe_tela().",
+        example: r#"cls()"#,
+    },
+    BuiltinDoc {
+        name: "durma",
+        sig: "durma(segundos)",
+        summary: "Espera o número de segundos (aceita fração: durma(0.5)).",
+        example: r#"durma(1)"#,
+    },
+    BuiltinDoc {
         name: "leia",
         sig: "leia()  ou  leia(prompt)",
         summary: "Lê uma linha do teclado (sem o Enter). Prompt opcional.",
@@ -695,6 +764,12 @@ pub(crate) const BUILTIN_DOCS: &[BuiltinDoc] = &[
         example: r#"formato("en")"#,
     },
     BuiltinDoc {
+        name: "formate",
+        sig: r#"formate("modelo", valores…) -> texto"#,
+        summary: "Monta um texto: {} valor, {:<n} esquerda, {:>n} direita, {:^n} centro.",
+        example: r#"formate("{:<8} {:>5}", "Ana", 10)"#,
+    },
+    BuiltinDoc {
         name: "transposta",
         sig: "transposta(matriz) -> matriz",
         summary: "Troca linhas por colunas.",
@@ -713,6 +788,18 @@ pub(crate) const BUILTIN_DOCS: &[BuiltinDoc] = &[
         example: "identidade(3)",
     },
     BuiltinDoc {
+        name: "nlinhas",
+        sig: "nlinhas(matriz) -> numero",
+        summary: "Quantidade de linhas da matriz.",
+        example: "nlinhas(A)    // 2",
+    },
+    BuiltinDoc {
+        name: "ncolunas",
+        sig: "ncolunas(matriz) -> numero",
+        summary: "Quantidade de colunas da matriz.",
+        example: "ncolunas(A)    // 3",
+    },
+    BuiltinDoc {
         name: "raiz",
         sig: "raiz(numero) -> numero",
         summary: "Raiz quadrada. Erro se o número for negativo (use se_falhar).",
@@ -720,8 +807,8 @@ pub(crate) const BUILTIN_DOCS: &[BuiltinDoc] = &[
     },
     BuiltinDoc {
         name: "tamanho",
-        sig: "tamanho(texto|lista|mapa) -> numero",
-        summary: "Quantidade de caracteres, itens ou pares.",
+        sig: "tamanho(texto|lista|mapa|conjunto|matriz) -> numero",
+        summary: "Quantidade de caracteres, itens, pares ou linhas.",
         example: r#"tamanho("olá")    // 3"#,
     },
     BuiltinDoc {
@@ -857,6 +944,7 @@ fn strip_diacritic(c: char) -> char {
 pub(crate) fn lookup_builtin_doc(name: &str) -> Option<&'static BuiltinDoc> {
     let name = match name {
         "é_terminal" => "eh_terminal",
+        "limpe_tela" => "cls",
         other => other,
     };
     BUILTIN_DOCS.iter().find(|d| d.name == name)
@@ -944,11 +1032,15 @@ mod tests {
         assert!(BUILTINS.contains(&"é_terminal"));
         assert!(BUILTINS.contains(&"sem_acento"));
         assert!(BUILTINS.contains(&"remova"));
-        assert_eq!(BUILTINS.len(), 29);
-        assert_eq!(BUILTIN_DOCS.len(), 28);
+        assert_eq!(BUILTINS.len(), 35);
+        assert_eq!(BUILTIN_DOCS.len(), 33);
         assert_eq!(
             lookup_builtin_doc("é_terminal").map(|d| d.name),
             Some("eh_terminal")
+        );
+        assert_eq!(
+            lookup_builtin_doc("limpe_tela").map(|d| d.name),
+            Some("cls")
         );
         for name in BUILTINS {
             assert!(
@@ -1043,6 +1135,79 @@ escreva(p:nome)
     }
 
     #[test]
+    fn formate_alignment_and_tables() {
+        assert_eq!(
+            run(r#"escreva(formate("Hello {:<5}!", "x"))"#),
+            "Hello x    !\n"
+        );
+        assert_eq!(
+            run(r#"escreva(formate("Hello {:-<5}!", "x"))"#),
+            "Hello x----!\n"
+        );
+        assert_eq!(
+            run(r#"escreva(formate("Hello {:^5}!", "x"))"#),
+            "Hello   x  !\n"
+        );
+        assert_eq!(
+            run(r#"escreva(formate("Hello {:>5}!", "x"))"#),
+            "Hello     x!\n"
+        );
+        assert_eq!(
+            run(r#"escreva(formate("{:<8} {:>6}", "Ana", 7.5))"#),
+            "Ana         7,5\n"
+        );
+        assert_eq!(
+            run(r#"escreva("{1} {1}".formate("oi"))"#),
+            "oi oi\n"
+        );
+        assert!(run_err(r#"formate("{}")"#).contains("espera pelo menos"));
+        assert!(run_err(r#"formate(10, "x")"#).contains("texto"));
+    }
+
+    #[test]
+    fn cls_writes_ansi_clear() {
+        use crate::runtime::CLEAR_SCREEN;
+        assert_eq!(run("cls()"), CLEAR_SCREEN);
+        assert_eq!(run("limpe_tela()"), CLEAR_SCREEN);
+        assert_eq!(
+            run(
+                r#"
+escreva("a")
+cls()
+escreva("b")
+"#
+            ),
+            format!("a\n{CLEAR_SCREEN}b\n")
+        );
+        assert!(run_err("cls(1)").contains("não espera argumentos"));
+        assert!(run_err("limpe_tela(\"x\")").contains("não espera argumentos"));
+    }
+
+    #[test]
+    fn durma_zero_and_errors() {
+        assert_eq!(run("durma(0)"), "");
+        assert!(run_err("durma(-1)").contains(">= 0"));
+        assert!(run_err("durma()").contains("esperado 1"));
+        assert!(run_err(r#"durma("x")"#).contains("numero"));
+    }
+
+    #[test]
+    fn durma_hits_time_limit() {
+        use std::time::Duration;
+
+        use crate::runtime::run_to_string_with;
+        let err = run_to_string_with(
+            "durma(1)",
+            "t.lep",
+            "",
+            None,
+            Some(Duration::from_millis(30)),
+        )
+        .expect_err("should time out");
+        assert!(err.message.contains("tempo esgotado"), "{err}");
+    }
+
+    #[test]
     fn eh_terminal_is_false_on_captured_stdin() {
         assert_eq!(run("escreva(eh_terminal())"), "falso\n");
         assert_eq!(run("escreva(é_terminal())"), "falso\n");
@@ -1066,6 +1231,35 @@ escreva_erro("falhou")"#,
         .unwrap();
         assert_eq!(out, "ok\n");
         assert_eq!(err, "falhou\n");
+    }
+
+    #[test]
+    fn nlinhas_e_ncolunas() {
+        assert_eq!(
+            run(
+                r#"
+A = matriz {
+    [1, 2, 3],
+    [4, 5, 6]
+}
+escreva(nlinhas(A))
+escreva(ncolunas(A))
+escreva(A.nlinhas())
+escreva(A.ncolunas())
+"#
+            ),
+            "2\n3\n2\n3\n"
+        );
+        assert_eq!(run("escreva(nlinhas(identidade(1)))"), "1\n");
+        assert_eq!(run("escreva(ncolunas(identidade(1)))"), "1\n");
+        assert_eq!(
+            run("escreva(ncolunas(transposta(matriz { [1, 2, 3] })))"),
+            "1\n"
+        );
+        assert!(run_err("nlinhas([1, 2])").contains("esperado matriz"));
+        assert!(run_err("ncolunas(10)").contains("esperado matriz"));
+        assert!(run_err("nlinhas()").contains("esperado 1 argumento"));
+        assert!(run_err("ncolunas(identidade(2), 1)").contains("esperado 1 argumento"));
     }
 
     #[test]

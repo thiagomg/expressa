@@ -1228,6 +1228,15 @@ fn append_stderr(ui: &Rc<RefCell<Ui>>, text: &str) {
 fn append_output_tagged(ui: &Rc<RefCell<Ui>>, text: &str, stderr: bool) {
     let u = ui.borrow();
     let buf = u.output.buffer();
+    let text = if let Some(after) = after_screen_clear(text) {
+        buf.set_text("");
+        after
+    } else {
+        text
+    };
+    if text.is_empty() {
+        return;
+    }
     let mut start = buf.end_iter();
     let start_off = start.offset();
     buf.insert(&mut start, text);
@@ -1236,6 +1245,26 @@ fn append_output_tagged(ui: &Rc<RefCell<Ui>>, text: &str, stderr: bool) {
         let b = buf.end_iter();
         buf.apply_tag(&u.err_tag, &a, &b);
     }
+}
+
+/// Suffix after the last terminal clear (`ESC[2J`), with leftover CSI
+/// home/scrollback codes stripped. `None` if the chunk does not clear.
+fn after_screen_clear(text: &str) -> Option<&str> {
+    const CSI_ERASE: &str = "\x1b[2J";
+    let i = text.rfind(CSI_ERASE)?;
+    let mut s = &text[i + CSI_ERASE.len()..];
+    loop {
+        if let Some(rest) = s.strip_prefix("\x1b[H") {
+            s = rest;
+        } else if let Some(rest) = s.strip_prefix("\x1b[2J") {
+            s = rest;
+        } else if let Some(rest) = s.strip_prefix("\x1b[3J") {
+            s = rest;
+        } else {
+            break;
+        }
+    }
+    Some(s)
 }
 
 fn append_error_link(ui: &Rc<RefCell<Ui>>, text: &str) {
@@ -1847,7 +1876,18 @@ fn parse_importe(line: &str) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{leia_call_count, leia_prompts};
+    use super::{after_screen_clear, leia_call_count, leia_prompts};
+
+    #[test]
+    fn after_screen_clear_keeps_suffix() {
+        assert_eq!(after_screen_clear("olá"), None);
+        assert_eq!(after_screen_clear("\x1b[2J\x1b[H"), Some(""));
+        assert_eq!(after_screen_clear("antes\x1b[2J\x1b[Hdepois"), Some("depois"));
+        assert_eq!(
+            after_screen_clear("a\x1b[2J\x1b[Hb\x1b[2J\x1b[Hc"),
+            Some("c")
+        );
+    }
 
     #[test]
     fn leia_count_ignores_leia_arquivo() {

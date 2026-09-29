@@ -4,6 +4,9 @@ use std::io::{self, BufRead, Write};
 /// before `leia()` waits for a reply. The rest of the line is the prompt.
 pub const LEIA_MARKER: &str = "<<<EXPRESSA-LEIA>>>";
 
+/// ANSI: erase the screen, then move the cursor home. Written by `cls()`.
+pub const CLEAR_SCREEN: &str = "\x1b[2J\x1b[H";
+
 pub trait LeiaHost {
     fn ask(&mut self, prompt: &str) -> Result<String, String>;
 

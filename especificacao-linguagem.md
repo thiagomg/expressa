@@ -115,8 +115,9 @@ A * B            // produto de matrizes
 transposta(A)
 det(A)           // 1×1, 2×2 ou 3×3
 identidade(3)
-tamanho(A)       // linhas
-tamanho(A[1])    // colunas
+nlinhas(A)       // 2
+ncolunas(A)      // 3
+tamanho(A)       // também linhas
 ```
 
 ---
@@ -315,6 +316,7 @@ substitua(nome, "Maria", "Ana")
 separe("a,b,c", ",")
 junte(["a", "b"], " - ")
 limpe(nome)
+formate("{:<8} {:>5}", "Ana", 10)   // < esquerda  > direita  ^ centro
 nome[1]
 nome[1..5]
 ```
@@ -354,7 +356,9 @@ cat nomes.txt | expressa grep.lep Thiago
 
 `argumentos` é a lista dos valores depois do `.lep` na linha de comando (`argumentos[1]` é o primeiro; índices começam em 1). Sem argumentos extras, a lista é `[]`. Não dá para reatribuir `argumentos`.
 
-`escreva` vai para a saída padrão (stdout). `escreva_erro` vai para a saída de erro (stderr).
+`escreva` vai para a saída padrão (stdout). `escreva_erro` vai para a saída de erro (stderr).  
+`cls()` (também `limpe_tela()`) limpa a tela.  
+`durma(segundos)` espera; `durma(0.5)` é meio segundo.
 
 `sair()` encerra o programa com código 0. `sair(1)` encerra com falha (o shell vê o código). Não é capturado por `se_falhar`.
 

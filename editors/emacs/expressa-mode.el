@@ -21,10 +21,10 @@
     "mapa" "matriz" "conjunto" "importe" "contem" "contém"))
 
 (defconst expressa-builtins
-  '("escreva" "escreva_erro" "sair" "leia" "leia_linhas"
+  '("escreva" "escreva_erro" "sair" "cls" "limpe_tela" "durma" "leia" "leia_linhas"
     "eh_terminal" "é_terminal" "argumentos"
-    "numero" "formato" "raiz"
-    "transposta" "det" "identidade"
+    "numero" "formato" "formate" "raiz"
+    "transposta" "det" "identidade" "nlinhas" "ncolunas"
     "tamanho" "primeiro" "ultimo"
     "maiuscula" "minuscula" "sem_acento" "remova" "substitua" "separe" "junte" "limpe"
     "leia_arquivo" "salve_arquivo" "adicione_arquivo"
