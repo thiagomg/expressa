@@ -14,7 +14,8 @@ fn line_text(buffer: &SourceBuffer, line: i32) -> String {
         return String::new();
     };
     let mut end = start.clone();
-    if !end.forward_to_line_end() {
+    // On an empty line forward_to_line_end() would jump to the next line's end.
+    if !end.ends_line() && !end.forward_to_line_end() {
         end = buffer.end_iter();
     }
     buffer.text(&start, &end, false).to_string()
@@ -166,55 +167,132 @@ pub fn indent_if_closer(buffer: &SourceBuffer, line: i32) {
     }
 }
 
+/// Replace the leading whitespace of `line` with `want` spaces. Like Emacs
+/// `indent-line-to`: a cursor inside the indentation lands on the first
+/// non-blank char, a cursor after it keeps its place in the text.
+fn set_line_indent(buffer: &SourceBuffer, line: i32, want: usize) {
+    let have = leading_ws(&line_text(buffer, line));
+    let Some(start) = buffer.iter_at_line(line) else {
+        return;
+    };
+    let cursor = buffer.iter_at_mark(&buffer.get_insert());
+    let cursor_col = (cursor.line() == line).then(|| cursor.line_offset() as usize);
+    let has_selection = buffer.has_selection();
+    if have != want {
+        let mut ws_end = start.clone();
+        ws_end.forward_chars(have as i32);
+        buffer.delete(&mut start.clone(), &mut ws_end);
+        let mut ins = buffer.iter_at_line(line).unwrap_or(start);
+        buffer.insert(&mut ins, &" ".repeat(want));
+    }
+    if let (Some(col), false) = (cursor_col, has_selection) {
+        let col = if col <= have { want } else { col - have + want };
+        if let Some(it) = buffer.iter_at_line_offset(line, col as i32) {
+            buffer.place_cursor(&it);
+        }
+    }
+}
+
 pub fn indent_line(buffer: &SourceBuffer, line: i32) {
-    let n = buffer.line_count();
-    if line < 0 || line >= n {
+    if line < 0 || line >= buffer.line_count() {
         return;
     }
     let prev: Vec<String> = (0..line).map(|l| line_text(buffer, l)).collect();
     let prev_refs: Vec<&str> = prev.iter().map(String::as_str).collect();
-    let current = line_text(buffer, line);
-    let want = want_indent(&prev_refs, &current);
-    let have = leading_ws(&current);
-    if have == want {
-        return;
-    }
-    let Some(start) = buffer.iter_at_line(line) else {
-        return;
-    };
-    let mut ws_end = start.clone();
-    for _ in 0..have {
-        if !ws_end.forward_char() {
-            break;
-        }
-    }
-    buffer.delete(&mut start.clone(), &mut ws_end);
-    let mut ins = buffer.iter_at_line(line).unwrap_or(start);
-    buffer.insert(&mut ins, &" ".repeat(want));
+    let want = want_indent(&prev_refs, &line_text(buffer, line));
+    set_line_indent(buffer, line, want);
 }
 
 pub fn indent_current_line(buffer: &SourceBuffer) {
     let insert = buffer.iter_at_mark(&buffer.get_insert());
+    buffer.begin_user_action();
     indent_line(buffer, insert.line());
+    buffer.end_user_action();
 }
 
-pub fn unindent_current_line(buffer: &SourceBuffer) {
-    let insert = buffer.iter_at_mark(&buffer.get_insert());
-    let line = insert.line();
-    let raw = line_text(buffer, line);
-    let have = leading_ws(&raw);
-    let drop = have.min(OFFSET);
-    if drop == 0 {
-        return;
-    }
-    let Some(start) = buffer.iter_at_line(line) else {
+/// First and last line touched by the selection. A selection ending at
+/// column 0 does not include that last line (as when selecting whole lines).
+fn selection_lines(buffer: &SourceBuffer) -> Option<(i32, i32)> {
+    let (a, b) = buffer.selection_bounds()?;
+    let last = if b.starts_line() && b.line() > a.line() {
+        b.line() - 1
+    } else {
+        b.line()
+    };
+    Some((a.line(), last))
+}
+
+/// Lines to shift with Tab / Shift+Tab: the selection, if it spans more than
+/// one line or covers a whole line. `None` for no selection or a selection
+/// inside a single line.
+pub fn selected_full_lines(buffer: &SourceBuffer) -> Option<(i32, i32)> {
+    let (a, b) = buffer.selection_bounds()?;
+    let (first, last) = selection_lines(buffer)?;
+    let whole_line = a.starts_line() && (b.ends_line() || b.line() > a.line());
+    (last > first || whole_line).then_some((first, last))
+}
+
+/// Emacs `indent-region` (C-M-\): reindent every non-blank line of the
+/// selection, or the current line without a selection.
+pub fn indent_region_or_line(buffer: &SourceBuffer) {
+    let Some((first, last)) = selection_lines(buffer) else {
+        indent_current_line(buffer);
         return;
     };
-    let mut end = start.clone();
-    for _ in 0..drop {
-        end.forward_char();
+    buffer.begin_user_action();
+    for line in first..=last {
+        if !line_is_blank(buffer, line) {
+            indent_line(buffer, line);
+        }
     }
-    buffer.delete(&mut start.clone(), &mut end);
+    select_lines(buffer, first, last);
+    buffer.end_user_action();
+}
+
+/// Emacs `indent-rigidly`: move lines `first..=last` right (`delta > 0`) or
+/// left by `delta` columns. Blank lines are left alone.
+pub fn shift_lines(buffer: &SourceBuffer, first: i32, last: i32, delta: i32) {
+    buffer.begin_user_action();
+    for line in first..=last {
+        if line_is_blank(buffer, line) {
+            continue;
+        }
+        let have = leading_ws(&line_text(buffer, line)) as i32;
+        set_line_indent(buffer, line, (have + delta).max(0) as usize);
+    }
+    select_lines(buffer, first, last);
+    buffer.end_user_action();
+}
+
+fn select_lines(buffer: &SourceBuffer, first: i32, last: i32) {
+    let Some(start) = buffer.iter_at_line(first) else {
+        return;
+    };
+    let end = buffer
+        .iter_at_line(last + 1)
+        .unwrap_or_else(|| buffer.end_iter());
+    buffer.select_range(&end, &start);
+}
+
+/// Tab: shift the selected lines, else auto-indent the current line.
+pub fn tab(buffer: &SourceBuffer) {
+    match selected_full_lines(buffer) {
+        Some((first, last)) => shift_lines(buffer, first, last, OFFSET as i32),
+        None => indent_current_line(buffer),
+    }
+}
+
+/// Shift+Tab: shift the selected lines (or the current line) left.
+pub fn backtab(buffer: &SourceBuffer) {
+    if let Some((first, last)) = selected_full_lines(buffer) {
+        shift_lines(buffer, first, last, -(OFFSET as i32));
+        return;
+    }
+    let line = buffer.iter_at_mark(&buffer.get_insert()).line();
+    let have = leading_ws(&line_text(buffer, line));
+    buffer.begin_user_action();
+    set_line_indent(buffer, line, have.saturating_sub(OFFSET));
+    buffer.end_user_action();
 }
 
 fn opens_closes(code: &str) -> (i32, i32) {
@@ -308,5 +386,84 @@ mod tests {
             want_indent(&["se a {", "    x", "} se b {"], "y"),
             4
         );
+    }
+}
+
+#[cfg(test)]
+mod buffer_tests {
+    use super::*;
+
+    fn buf(text: &str) -> Option<SourceBuffer> {
+        if !gtk::is_initialized() && gtk::init().is_err() {
+            return None; // no display
+        }
+        let b = SourceBuffer::new(None::<&gtk::TextTagTable>);
+        b.set_text(text);
+        Some(b)
+    }
+
+    fn text(b: &SourceBuffer) -> String {
+        let (s, e) = b.bounds();
+        b.text(&s, &e, false).to_string()
+    }
+
+    fn cursor(b: &SourceBuffer, line: i32, col: i32) {
+        b.place_cursor(&b.iter_at_line_offset(line, col).unwrap());
+    }
+
+    fn select(b: &SourceBuffer, l1: i32, c1: i32, l2: i32, c2: i32) {
+        let a = b.iter_at_line_offset(l1, c1).unwrap();
+        let z = b.iter_at_line_offset(l2, c2).unwrap();
+        b.select_range(&z, &a);
+    }
+
+    // One test: GTK objects must stay on the thread that initialized GTK.
+    #[test]
+    fn tab_backtab_and_region() {
+        let Some(b) = buf("se a {\nx = 1\n}\n") else {
+            return;
+        };
+
+        // Tab without selection auto-indents; cursor in the indentation
+        // moves to the first char.
+        cursor(&b, 1, 0);
+        tab(&b);
+        assert_eq!(text(&b), "se a {\n    x = 1\n}\n");
+        assert_eq!(b.iter_at_mark(&b.get_insert()).line_offset(), 4);
+        // Again: no change (Emacs Tab is idempotent), cursor after the text
+        // keeps its place.
+        cursor(&b, 1, 9);
+        tab(&b);
+        assert_eq!(text(&b), "se a {\n    x = 1\n}\n");
+        assert_eq!(b.iter_at_mark(&b.get_insert()).line_offset(), 9);
+
+        // Shift+Tab without selection unindents the current line.
+        backtab(&b);
+        assert_eq!(text(&b), "se a {\nx = 1\n}\n");
+        assert_eq!(b.iter_at_mark(&b.get_insert()).line_offset(), 5);
+
+        // Selection inside one line: Tab auto-indents instead of shifting.
+        select(&b, 1, 1, 1, 3);
+        tab(&b);
+        assert_eq!(text(&b), "se a {\n    x = 1\n}\n");
+
+        // Full lines selected (ending at column 0 of the next line): shift.
+        select(&b, 0, 0, 2, 0);
+        tab(&b);
+        assert_eq!(text(&b), "    se a {\n        x = 1\n}\n");
+        tab(&b);
+        assert_eq!(text(&b), "        se a {\n            x = 1\n}\n");
+        backtab(&b);
+        backtab(&b);
+        backtab(&b);
+        assert_eq!(text(&b), "se a {\nx = 1\n}\n");
+        let (s, e) = b.selection_bounds().unwrap();
+        assert_eq!((s.line(), s.line_offset(), e.line(), e.line_offset()), (0, 0, 2, 0));
+
+        // Ctrl+Alt+\ reindents the region, skipping blank lines.
+        b.set_text("se a {\n      x\n\nse b {\ny\n  }\n}\n");
+        select(&b, 0, 0, 7, 0);
+        indent_region_or_line(&b);
+        assert_eq!(text(&b), "se a {\n    x\n\n    se b {\n        y\n    }\n}\n");
     }
 }

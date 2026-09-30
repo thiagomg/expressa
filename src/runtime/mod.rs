@@ -5,6 +5,7 @@ mod error;
 mod eval;
 mod formate;
 mod leia;
+mod rng;
 mod repl;
 mod value;
 

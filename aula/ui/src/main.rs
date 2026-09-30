@@ -1,7 +1,7 @@
 mod indent;
 mod rpc;
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::collections::HashSet;
 use std::rc::Rc;
 
@@ -91,6 +91,13 @@ fn build_ui(app: &Application) {
             return;
         }
     };
+
+    // ibus + GTK4 leaves the dead key (´ ~ `) stuck as preedit after composing
+    // á/ã. GTK's built-in input method composes dead keys itself.
+    // GTK_IM_MODULE in the environment still takes precedence over this.
+    if let Some(settings) = gtk::Settings::default() {
+        settings.set_gtk_im_module(Some("gtk-im-context-simple"));
+    }
 
     let student = Entry::builder()
         .text("local")
@@ -543,10 +550,6 @@ fn build_ui(app: &Application) {
             let ui = Rc::clone(&ui_k);
             move || show_search(&ui)
         });
-        add_shortcut(&shortcuts, "<Shift>Tab", {
-            let ui = Rc::clone(&ui_k);
-            move || indent::unindent_current_line(&ui.borrow().buffer)
-        });
         win.add_controller(shortcuts);
     }
     {
@@ -588,23 +591,61 @@ fn build_ui(app: &Application) {
         ui.borrow().search_entry.add_controller(search_keys);
     }
     {
+        // Emacs-style indentation keys. Capture so they run before the
+        // TextView inserts a tab; only these keys match, the rest passes on.
+        let shortcuts = gtk::ShortcutController::new();
+        shortcuts.set_propagation_phase(gtk::PropagationPhase::Capture);
         let buffer = ui.borrow().buffer.clone();
+        add_shortcut(&shortcuts, "Tab", {
+            let b = buffer.clone();
+            move || indent::tab(&b)
+        });
+        for accel in ["<Shift>Tab", "<Shift>ISO_Left_Tab"] {
+            let b = buffer.clone();
+            add_shortcut(&shortcuts, accel, move || indent::backtab(&b));
+        }
+        add_shortcut(&shortcuts, "<Control><Alt>backslash", {
+            let b = buffer.clone();
+            move || indent::indent_region_or_line(&b)
+        });
+        ui.borrow().editor.add_controller(shortcuts);
+    }
+    {
+        // Electric indent: Enter indents the new line; typing `}` or the `m`
+        // of `fim` reindents a line that starts with a closer.
+        #[derive(Clone, Copy)]
+        enum Pending {
+            None,
+            Newline,
+            Closer,
+        }
+        let pending = Rc::new(Cell::new(Pending::None));
+        let buffer = ui.borrow().buffer.clone();
+        {
+            let pending = Rc::clone(&pending);
+            let ui_ind = Rc::clone(&ui);
+            buffer.connect_insert_text(move |_, _, text| {
+                if ui_ind
+                    .try_borrow()
+                    .map(|u| u.suppress_dirty)
+                    .unwrap_or(true)
+                {
+                    return;
+                }
+                pending.set(match text {
+                    "\n" => Pending::Newline,
+                    "}" | "m" => Pending::Closer,
+                    _ => Pending::None,
+                });
+            });
+        }
         let buffer_ch = buffer.clone();
-        let ui_ind = Rc::clone(&ui);
         buffer.connect_changed(move |_| {
-            if ui_ind
-                .try_borrow()
-                .map(|u| u.suppress_dirty)
-                .unwrap_or(true)
-            {
-                return;
-            }
-            let insert = buffer_ch.iter_at_mark(&buffer_ch.get_insert());
-            let line = insert.line();
-            if indent::line_is_blank(&buffer_ch, line) {
-                indent::indent_current_line(&buffer_ch);
-            } else {
-                indent::indent_if_closer(&buffer_ch, line);
+            let line = buffer_ch.iter_at_mark(&buffer_ch.get_insert()).line();
+            match pending.replace(Pending::None) {
+                Pending::None => {}
+                Pending::Newline => indent::indent_line(&buffer_ch, line),
+                Pending::Closer => indent::indent_if_closer(&buffer_ch, line),
             }
         });
     }
@@ -1228,15 +1269,6 @@ fn append_stderr(ui: &Rc<RefCell<Ui>>, text: &str) {
 fn append_output_tagged(ui: &Rc<RefCell<Ui>>, text: &str, stderr: bool) {
     let u = ui.borrow();
     let buf = u.output.buffer();
-    let text = if let Some(after) = after_screen_clear(text) {
-        buf.set_text("");
-        after
-    } else {
-        text
-    };
-    if text.is_empty() {
-        return;
-    }
     let mut start = buf.end_iter();
     let start_off = start.offset();
     buf.insert(&mut start, text);
@@ -1245,26 +1277,6 @@ fn append_output_tagged(ui: &Rc<RefCell<Ui>>, text: &str, stderr: bool) {
         let b = buf.end_iter();
         buf.apply_tag(&u.err_tag, &a, &b);
     }
-}
-
-/// Suffix after the last terminal clear (`ESC[2J`), with leftover CSI
-/// home/scrollback codes stripped. `None` if the chunk does not clear.
-fn after_screen_clear(text: &str) -> Option<&str> {
-    const CSI_ERASE: &str = "\x1b[2J";
-    let i = text.rfind(CSI_ERASE)?;
-    let mut s = &text[i + CSI_ERASE.len()..];
-    loop {
-        if let Some(rest) = s.strip_prefix("\x1b[H") {
-            s = rest;
-        } else if let Some(rest) = s.strip_prefix("\x1b[2J") {
-            s = rest;
-        } else if let Some(rest) = s.strip_prefix("\x1b[3J") {
-            s = rest;
-        } else {
-            break;
-        }
-    }
-    Some(s)
 }
 
 fn append_error_link(ui: &Rc<RefCell<Ui>>, text: &str) {
@@ -1876,18 +1888,7 @@ fn parse_importe(line: &str) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{after_screen_clear, leia_call_count, leia_prompts};
-
-    #[test]
-    fn after_screen_clear_keeps_suffix() {
-        assert_eq!(after_screen_clear("olá"), None);
-        assert_eq!(after_screen_clear("\x1b[2J\x1b[H"), Some(""));
-        assert_eq!(after_screen_clear("antes\x1b[2J\x1b[Hdepois"), Some("depois"));
-        assert_eq!(
-            after_screen_clear("a\x1b[2J\x1b[Hb\x1b[2J\x1b[Hc"),
-            Some("c")
-        );
-    }
+    use super::{leia_call_count, leia_prompts};
 
     #[test]
     fn leia_count_ignores_leia_arquivo() {

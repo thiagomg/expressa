@@ -26,9 +26,14 @@ impl Vm<'_> {
             "leia_linhas" => self.bi_leia_linhas(args, span),
             "eh_terminal" | "é_terminal" => self.bi_eh_terminal(args, span),
             "raiz" => self.bi_raiz(args, span),
+            "aleatorio" | "aleatório" => self.bi_aleatorio(args, span),
+            "semente" => self.bi_semente(args, span),
             "transposta" => self.bi_transposta(args, span),
             "det" => self.bi_det(args, span),
             "identidade" => self.bi_identidade(args, span),
+            "zeros" => self.bi_zeros(args, span),
+            "uns" => self.bi_uns(args, span),
+            "cheia" => self.bi_cheia(args, span),
             "nlinhas" => self.bi_nlinhas(args, span),
             "ncolunas" => self.bi_ncolunas(args, span),
             "numero" => self.bi_numero(args, span),
@@ -257,6 +262,23 @@ impl Vm<'_> {
         Ok(Value::Numero(n.sqrt()))
     }
 
+    fn bi_aleatorio(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
+        self.expect_arity(args, 2, span)?;
+        let min = self.expect_int(&args[0], span)?;
+        let max = self.expect_int(&args[1], span)?;
+        if min > max {
+            return Err(self.err("aleatorio() espera min <= max", span));
+        }
+        Ok(Value::Numero(self.rng.inclusive(min, max) as f64))
+    }
+
+    fn bi_semente(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
+        self.expect_arity(args, 1, span)?;
+        let n = self.expect_int(&args[0], span)?;
+        self.rng.set_seed(n as u64);
+        Ok(Value::Nada)
+    }
+
     fn expect_matriz(
         &self,
         v: &Value,
@@ -298,6 +320,57 @@ impl Vm<'_> {
             out[i][i] = 1.0;
         }
         Ok(Value::matriz(out))
+    }
+
+    fn expect_dim(&self, v: &Value, span: Span, nome: &str) -> Result<usize, EvalError> {
+        let n = self.expect_int(v, span)?;
+        if n < 1 {
+            return Err(self.err(
+                format!("{nome}() espera um inteiro >= 1"),
+                span,
+            ));
+        }
+        Ok(n as usize)
+    }
+
+    fn dims_1_or_2(
+        &self,
+        args: &[Value],
+        span: Span,
+        nome: &str,
+    ) -> Result<(usize, usize), EvalError> {
+        match args {
+            [n] => {
+                let n = self.expect_dim(n, span, nome)?;
+                Ok((n, n))
+            }
+            [h, w] => Ok((
+                self.expect_dim(h, span, nome)?,
+                self.expect_dim(w, span, nome)?,
+            )),
+            _ => Err(self.err(
+                format!("{nome}() espera 1 ou 2 argumentos (linhas, colunas), recebeu {}", args.len()),
+                span,
+            )),
+        }
+    }
+
+    fn bi_zeros(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
+        let (h, w) = self.dims_1_or_2(args, span, "zeros")?;
+        Ok(Value::matriz(vec![vec![0.0; w]; h]))
+    }
+
+    fn bi_uns(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
+        let (h, w) = self.dims_1_or_2(args, span, "uns")?;
+        Ok(Value::matriz(vec![vec![1.0; w]; h]))
+    }
+
+    fn bi_cheia(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
+        self.expect_arity(args, 3, span)?;
+        let h = self.expect_dim(&args[0], span, "cheia")?;
+        let w = self.expect_dim(&args[1], span, "cheia")?;
+        let v = self.expect_numero(&args[2], span)?;
+        Ok(Value::matriz(vec![vec![v; w]; h]))
     }
 
     fn bi_nlinhas(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
@@ -672,9 +745,15 @@ pub(crate) const BUILTINS: &[&str] = &[
     "formato",
     "formate",
     "raiz",
+    "aleatorio",
+    "aleatório",
+    "semente",
     "transposta",
     "det",
     "identidade",
+    "zeros",
+    "uns",
+    "cheia",
     "nlinhas",
     "ncolunas",
     "tamanho",
@@ -788,6 +867,24 @@ pub(crate) const BUILTIN_DOCS: &[BuiltinDoc] = &[
         example: "identidade(3)",
     },
     BuiltinDoc {
+        name: "zeros",
+        sig: "zeros(n)  ou  zeros(linhas, colunas) -> matriz",
+        summary: "Matriz só de zeros. Um argumento: n×n.",
+        example: "zeros(2, 3)",
+    },
+    BuiltinDoc {
+        name: "uns",
+        sig: "uns(n)  ou  uns(linhas, colunas) -> matriz",
+        summary: "Matriz só de uns. Um argumento: n×n.",
+        example: "uns(2, 3)",
+    },
+    BuiltinDoc {
+        name: "cheia",
+        sig: "cheia(linhas, colunas, valor) -> matriz",
+        summary: "Matriz retangular preenchida com o mesmo número.",
+        example: "cheia(2, 3, 7)",
+    },
+    BuiltinDoc {
         name: "nlinhas",
         sig: "nlinhas(matriz) -> numero",
         summary: "Quantidade de linhas da matriz.",
@@ -804,6 +901,18 @@ pub(crate) const BUILTIN_DOCS: &[BuiltinDoc] = &[
         sig: "raiz(numero) -> numero",
         summary: "Raiz quadrada. Erro se o número for negativo (use se_falhar).",
         example: "raiz(9)    // 3",
+    },
+    BuiltinDoc {
+        name: "aleatorio",
+        sig: "aleatorio(min, max) -> numero",
+        summary: "Inteiro ao acaso entre min e max (inclusive). Também aleatório().",
+        example: "aleatorio(1, 6)    // dado",
+    },
+    BuiltinDoc {
+        name: "semente",
+        sig: "semente(n)",
+        summary: "Fixa a sequência de aleatorio() (útil para repetir um teste).",
+        example: "semente(1)",
     },
     BuiltinDoc {
         name: "tamanho",
@@ -945,6 +1054,7 @@ pub(crate) fn lookup_builtin_doc(name: &str) -> Option<&'static BuiltinDoc> {
     let name = match name {
         "é_terminal" => "eh_terminal",
         "limpe_tela" => "cls",
+        "aleatório" => "aleatorio",
         other => other,
     };
     BUILTIN_DOCS.iter().find(|d| d.name == name)
@@ -1032,8 +1142,8 @@ mod tests {
         assert!(BUILTINS.contains(&"é_terminal"));
         assert!(BUILTINS.contains(&"sem_acento"));
         assert!(BUILTINS.contains(&"remova"));
-        assert_eq!(BUILTINS.len(), 35);
-        assert_eq!(BUILTIN_DOCS.len(), 33);
+        assert_eq!(BUILTINS.len(), 41);
+        assert_eq!(BUILTIN_DOCS.len(), 38);
         assert_eq!(
             lookup_builtin_doc("é_terminal").map(|d| d.name),
             Some("eh_terminal")
@@ -1041,6 +1151,10 @@ mod tests {
         assert_eq!(
             lookup_builtin_doc("limpe_tela").map(|d| d.name),
             Some("cls")
+        );
+        assert_eq!(
+            lookup_builtin_doc("aleatório").map(|d| d.name),
+            Some("aleatorio")
         );
         for name in BUILTINS {
             assert!(
@@ -1064,6 +1178,41 @@ mod tests {
 escreva(numero("1,000.5"))"#),
             "1,000.5\n"
         );
+    }
+
+    #[test]
+    fn aleatorio_inclusive_and_seed() {
+        assert_eq!(
+            run(
+                r#"
+semente(1)
+a = aleatorio(1, 6)
+semente(1)
+b = aleatorio(1, 6)
+escreva(a == b)
+escreva(aleatorio(5, 5))
+"#
+            ),
+            "verdadeiro\n5\n"
+        );
+        assert_eq!(
+            run(
+                r#"
+semente(3)
+para i de 1 ate 40
+inicio
+    n = aleatorio(1, 6)
+    se n < 1 ou n > 6 { escreva("fora") }
+fim
+"#
+            ),
+            ""
+        );
+        assert_eq!(run("escreva(aleatório(-2, -2))"), "-2\n");
+        assert!(run_err("aleatorio(6, 1)").contains("min <= max"));
+        assert!(run_err("aleatorio(1)").contains("esperado 2"));
+        assert!(run_err(r#"aleatorio(1, "x")"#).contains("numero"));
+        assert!(run_err("semente()").contains("esperado 1"));
     }
 
     #[test]
@@ -1231,6 +1380,34 @@ escreva_erro("falhou")"#,
         .unwrap();
         assert_eq!(out, "ok\n");
         assert_eq!(err, "falhou\n");
+    }
+
+    #[test]
+    fn zeros_uns_cheia() {
+        assert_eq!(
+            run(
+                r#"
+Z = zeros(2, 3)
+escreva(nlinhas(Z))
+escreva(ncolunas(Z))
+escreva(Z[1, 1])
+escreva(Z[2, 3])
+Q = zeros(2)
+escreva(ncolunas(Q))
+U = uns(1, 4)
+escreva(U[1, 4])
+C = cheia(2, 3, 7)
+escreva(C[2, 1])
+C[1, 2] = 9
+escreva(C[1, 2])
+"#
+            ),
+            "2\n3\n0\n0\n2\n1\n7\n9\n"
+        );
+        assert!(run_err("zeros(0)").contains(">= 1"));
+        assert!(run_err("uns(-1, 2)").contains(">= 1"));
+        assert!(run_err("cheia(2, 3)").contains("esperado 3"));
+        assert!(run_err(r#"cheia(2, 3, "x")"#).contains("numero"));
     }
 
     #[test]

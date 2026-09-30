@@ -167,6 +167,7 @@ A[1, 2]                        // 2
 A[1]                           // linha → lista
 A + B    3 * A    A * B
 transposta(A)  det(A)  identidade(3)
+zeros(2, 5)  uns(3)  cheia(2, 3, 7)
 nlinhas(A)  ncolunas(A)        // 2 e 3
 tamanho(A)                     // também linhas
 ```
@@ -195,6 +196,8 @@ eh_terminal()                  // teclado?  também é_terminal()
 formato("pt")                  // 1.000,5   (padrão)
 formato("en")                  // 1,000.5
 numero("3,14")                 // segue o formato atual
+aleatorio(1, 6)                // inteiro inclusive; também aleatório()
+semente(1)                     // mesma sequência de aleatorio
 ```
 
 Literais no código sempre com ponto: `3.14`.
@@ -231,12 +234,12 @@ soma(10, 5)
 | `escreva` `escreva_erro` `sair` `cls` `durma` | imprimir / encerrar / limpar tela / esperar |
 | `leia` `leia_linhas` `eh_terminal` | teclado / pipe |
 | `argumentos` | lista (não é função) |
-| `numero` `formato` `raiz` | número |
+| `numero` `formato` `raiz` `aleatorio` `semente` | número |
 | `tamanho` `primeiro` `ultimo` | coleção |
 | `maiuscula` `minuscula` `sem_acento` `remova` `substitua` `separe` `junte` `limpe` `formate` | texto / lista / mapa / conjunto |
 | `leia_arquivo` `salve_arquivo` `adicione_arquivo` | arquivo |
 | `leia_csv` `salve_csv` | CSV |
-| `transposta` `det` `identidade` `nlinhas` `ncolunas` | matriz |
+| `transposta` `det` `identidade` `zeros` `uns` `cheia` `nlinhas` `ncolunas` | matriz |
 
 Nativas não podem ser reatribuídas (`escreva = 1` é erro).
 

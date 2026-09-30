@@ -28,9 +28,14 @@ Caminhos de arquivo **relativos** são resolvidos a partir da pasta do `.lep` em
 | [`numero`](#numero) | Transforma texto em número |
 | [`formate`](#formate) | Monta texto com alinhamento (`{:<n}` `{:>n}` `{:^n}`) |
 | [`raiz`](#raiz) | Raiz quadrada |
+| [`aleatorio`](#aleatorio) | Inteiro ao acaso (`aleatório` também) |
+| [`semente`](#semente) | Fixa a sequência de `aleatorio` |
 | [`transposta`](#transposta) | Transposta |
 | [`det`](#det) | Determinante 1×1–3×3 |
 | [`identidade`](#identidade) | Matriz identidade |
+| [`zeros`](#zeros) | Matriz de zeros |
+| [`uns`](#uns) | Matriz de uns |
+| [`cheia`](#cheia) | Matriz preenchida com um valor |
 | [`nlinhas`](#nlinhas) | Número de linhas |
 | [`ncolunas`](#ncolunas) | Número de colunas |
 | [`tamanho`](#tamanho) | Quantidade de itens ou caracteres |
@@ -380,6 +385,47 @@ Só 1×1, 2×2 e 3×3.
 identidade(n) -> matriz
 ```
 
+### `zeros`
+
+```text
+zeros(n) -> matriz
+zeros(linhas, colunas) -> matriz
+```
+
+Matriz só de zeros. Um argumento: quadrada `n×n`. Dois: `linhas` × `colunas`.
+
+```text
+zeros(3)        // 3×3
+zeros(2, 5)     // 2 linhas, 5 colunas
+```
+
+**Erros:** falta argumento; valor que não é inteiro `>= 1`.
+
+### `uns`
+
+```text
+uns(n) -> matriz
+uns(linhas, colunas) -> matriz
+```
+
+Como `zeros`, mas preenchida com `1`.
+
+### `cheia`
+
+```text
+cheia(linhas, colunas, valor) -> matriz
+```
+
+Retangular, todas as células iguais a `valor` (um número).
+
+```text
+cheia(2, 3, 7)
+A = zeros(14, 36)
+A[2, 3] = 1
+```
+
+**Erros:** não são 3 argumentos; linhas/colunas que não são inteiro `>= 1`; `valor` que não é número.
+
 ---
 
 ### `raiz`
@@ -396,6 +442,41 @@ Raiz quadrada. `raiz(9)` vale `3`, `raiz(0)` vale `0`.
 escreva(raiz(9 + 16))            // 5
 x = raiz(delta) se_falhar 0
 ```
+
+### `aleatorio`
+
+```text
+aleatorio(min, max) -> numero
+aleatório(min, max) -> numero
+```
+
+Devolve um **inteiro** ao acaso entre `min` e `max`, inclusive. `aleatorio(1, 6)` é um dado.
+
+As duas grafias são a mesma função. Sem `semente()`, cada execução do programa gera uma sequência diferente.
+
+```text
+dado = aleatorio(1, 6)
+escreva("saiu", dado)
+```
+
+**Erros:** faltam 2 argumentos; `min` ou `max` não é inteiro; `min > max`.
+
+### `semente`
+
+```text
+semente(n)
+```
+
+Fixa o gerador de `aleatorio`. O mesmo `n` produz a mesma sequência — útil para repetir um teste.
+
+```text
+semente(1)
+escreva(aleatorio(1, 6))
+```
+
+Retorna `nada`.
+
+**Erros:** falta o argumento, ou valor que não é inteiro.
 
 ---
 

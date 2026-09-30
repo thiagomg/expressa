@@ -16,6 +16,7 @@ use super::debug::{DebugAction, DebugCtx, DebugHook, NoopHook};
 use super::env::{AssignError, Env, FrameKind};
 use super::error::{CallFrame, EvalError, RuntimeError};
 use super::leia::LeiaHost;
+use super::rng::Rng;
 use super::value::{
     Closure, MapKey, NumeroLocale, Value, default_numero_locale, format_numero, parse_numero,
 };
@@ -65,6 +66,7 @@ pub(crate) struct Vm<'a> {
     deadline: Option<Instant>,
     pub(crate) leia_host: Option<&'a mut dyn LeiaHost>,
     pub(crate) numero_locale: NumeroLocale,
+    pub(crate) rng: Rng,
 }
 
 fn script_args_value(args: &[String]) -> Value {
@@ -345,6 +347,7 @@ impl<'a> Vm<'a> {
             deadline: time_limit.map(|d| Instant::now() + d),
             leia_host,
             numero_locale: default_numero_locale(),
+            rng: Rng::new(),
         }
     }
 

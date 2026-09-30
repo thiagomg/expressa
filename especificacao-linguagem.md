@@ -74,6 +74,7 @@ A **primeira linha** do arquivo pode ser um shebang Unix (`#!…`). A Expressa i
 **Comparação:** `==` `!=` `>` `<` `>=` `<=`  
 **Lógicos:** `e` `ou` `nao`  
 **Raiz quadrada (nativa):** `raiz(n)` — erro se `n < 0` (tratável com `se_falhar`)  
+**Ao acaso:** `aleatorio(min, max)` (também `aleatório`) inteiro inclusive; `semente(n)` fixa a sequência.  
 **Texto ↔ número:** `numero(t)` lê o padrão atual; `formato("pt")` / `formato("en")` escolhe pt-BR (`1.000,5`) ou en-US (`1,000.5`). Padrão pt-BR. Literais no código usam `.`.  
 **Acesso:** `mat::soma` (módulo), `pessoa:nome` (chave de mapa), `xs.tamanho()` (= `tamanho(xs)`).
 
@@ -115,6 +116,7 @@ A * B            // produto de matrizes
 transposta(A)
 det(A)           // 1×1, 2×2 ou 3×3
 identidade(3)
+zeros(2, 5)      // só zeros; uns(2, 5); cheia(2, 5, 7)
 nlinhas(A)       // 2
 ncolunas(A)      // 3
 tamanho(A)       // também linhas
