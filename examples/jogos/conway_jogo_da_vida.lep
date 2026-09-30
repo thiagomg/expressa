@@ -1,4 +1,4 @@
-
+// Cria um novo jogo aleatório
 inicia_jogo = funcao(m) {
     para i de 1 até m.nlinhas() {
         para j de 1 até m.ncolunas() {
@@ -7,6 +7,7 @@ inicia_jogo = funcao(m) {
     }
 }
 
+// Cria um novo jogo com um padrão pré definido
 predefinido = função(m) {
     // planador
     m[2, 3] = 1
@@ -21,10 +22,11 @@ predefinido = função(m) {
     m[8, 22] = 1    
 }
 
+// Desenha o mundo definido pela matriz m
 desenha = funcao(m) {
     espaço = " "
     ser = "*"
-    //ser = "█"
+    // ser = "█"
     
     // borda to topo e rodapé - +- linhas -+
     borda = "+"
@@ -38,7 +40,6 @@ desenha = funcao(m) {
         l = "|"
         para j de 1 até m.ncolunas() {
             l += se m[i, j] == 0 { espaço } senao { ser }
-            // l += m[i, j]
         }
         l += "|"
         escreva(l)
@@ -109,6 +110,7 @@ conta_vizinhos = função(m) {
     total_vizinhos
 }
 
+// Executa uma nova geração do mundo e retorna em uma nova matriz
 nova_geracao = função(m) {
     // Regras do jogo
     // Toda célula viva com menos de dois vizinhos vivos morre por isolamento.
@@ -161,7 +163,7 @@ nova_geracao = função(m) {
     nm
 }
 
-
+// Rotina principal do jogo
 m = zeros(15, 30)
 m.inicia_jogo()
 // m.predefinido()
