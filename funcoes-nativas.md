@@ -20,6 +20,7 @@ Caminhos de arquivo **relativos** são resolvidos a partir da pasta do `.lep` em
 | [`escreva_erro`](#escreva_erro) | Imprime na saída de erro (stderr) |
 | [`sair`](#sair) | Encerra o programa |
 | [`cls`](#cls) | Limpa a tela (`limpe_tela` também) |
+| [`casa`](#casa) | Cursor no canto, sem apagar |
 | [`durma`](#durma) | Espera um número de segundos |
 | [`leia`](#leia) | Lê uma linha do teclado |
 | [`leia_linhas`](#leia_linhas) | Lê todas as linhas da entrada padrão |
@@ -137,6 +138,34 @@ inicio
     escreva("contador")
 fim
 ```
+
+**Erros:** qualquer argumento.
+
+Em uma animação, `cls()` a cada quadro **pisca**: a tela fica vazia um instante antes do próximo `escreva`. Use [`casa`](#casa) no laço e `cls()` só uma vez no começo.
+
+### `casa`
+
+```text
+casa()
+```
+
+Manda o cursor para o canto superior esquerdo **sem apagar** o que já está na tela. O próximo `escreva` desenha por cima. Sem argumentos.
+
+```text
+cls()
+repita 20 vezes
+inicio
+    casa()
+    escreva(quadro)
+    durma(0.1)
+fim
+```
+
+Monte o quadro inteiro numa variável e dê um `escreva` só: vários `escreva` no meio do quadro ainda aparecem aos poucos.
+
+Na Aula, o painel de saída trata `casa()` como um novo quadro (substitui o texto).
+
+Retorna `nada`.
 
 **Erros:** qualquer argumento.
 

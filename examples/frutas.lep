@@ -74,11 +74,12 @@ criar = função() {
 }
 
 
+cls()
 para i de 1 até 3 {
     linha = "."
     para i de 1 até 20 {
         linha = " " + linha
-        cls()
+        casa()
         escreva(linha)
         durma(0.05)
     }

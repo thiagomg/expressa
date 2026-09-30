@@ -360,6 +360,7 @@ cat nomes.txt | expressa grep.lep Thiago
 
 `escreva` vai para a saída padrão (stdout). `escreva_erro` vai para a saída de erro (stderr).  
 `cls()` (também `limpe_tela()`) limpa a tela.  
+`casa()` manda o cursor ao canto sem apagar — use no lugar de `cls()` em animações para não piscar.  
 `durma(segundos)` espera; `durma(0.5)` é meio segundo.
 
 `sair()` encerra o programa com código 0. `sair(1)` encerra com falha (o shell vê o código). Não é capturado por `se_falhar`.

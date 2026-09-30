@@ -1269,6 +1269,14 @@ fn append_stderr(ui: &Rc<RefCell<Ui>>, text: &str) {
 fn append_output_tagged(ui: &Rc<RefCell<Ui>>, text: &str, stderr: bool) {
     let u = ui.borrow();
     let buf = u.output.buffer();
+    if !stderr && has_screen_code(text) {
+        let start = buf.start_iter();
+        let end = buf.end_iter();
+        let current = buf.text(&start, &end, false);
+        let next = apply_screen_codes(current.as_str(), text);
+        buf.set_text(&next);
+        return;
+    }
     let mut start = buf.end_iter();
     let start_off = start.offset();
     buf.insert(&mut start, text);
@@ -1277,6 +1285,37 @@ fn append_output_tagged(ui: &Rc<RefCell<Ui>>, text: &str, stderr: bool) {
         let b = buf.end_iter();
         buf.apply_tag(&u.err_tag, &a, &b);
     }
+}
+
+const ANSI_ERASE_DISPLAY: &str = "\x1b[2J";
+const ANSI_CURSOR_HOME: &str = "\x1b[H";
+
+fn has_screen_code(text: &str) -> bool {
+    text.contains(ANSI_ERASE_DISPLAY) || text.contains(ANSI_CURSOR_HOME)
+}
+
+/// `cls()` / `casa()` in the output pane: erase-display and cursor-home
+/// start a new frame so animation replaces the text instead of stacking it.
+fn apply_screen_codes(current: &str, incoming: &str) -> String {
+    let mut screen = current.to_string();
+    let mut pos = 0;
+    while pos < incoming.len() {
+        let rest = &incoming[pos..];
+        if rest.starts_with(ANSI_ERASE_DISPLAY) {
+            screen.clear();
+            pos += ANSI_ERASE_DISPLAY.len();
+            continue;
+        }
+        if rest.starts_with(ANSI_CURSOR_HOME) {
+            screen.clear();
+            pos += ANSI_CURSOR_HOME.len();
+            continue;
+        }
+        let ch = rest.chars().next().unwrap();
+        screen.push(ch);
+        pos += ch.len_utf8();
+    }
+    screen
 }
 
 fn append_error_link(ui: &Rc<RefCell<Ui>>, text: &str) {
@@ -1888,7 +1927,7 @@ fn parse_importe(line: &str) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{leia_call_count, leia_prompts};
+    use super::{apply_screen_codes, leia_call_count, leia_prompts};
 
     #[test]
     fn leia_count_ignores_leia_arquivo() {
@@ -1912,5 +1951,17 @@ mod tests {
             leia_prompts("leia(\"a\")\nleia()"),
             vec![Some("a".into()), None]
         );
+    }
+
+    #[test]
+    fn apply_screen_codes_cls_clears_then_appends() {
+        let out = apply_screen_codes("velho\n", "\x1b[2J\x1b[Hnovo\n");
+        assert_eq!(out, "novo\n");
+    }
+
+    #[test]
+    fn apply_screen_codes_casa_replaces_frame() {
+        let out = apply_screen_codes("quadro 1\n", "\x1b[Hquadro 2\n");
+        assert_eq!(out, "quadro 2\n");
     }
 }

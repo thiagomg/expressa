@@ -6,7 +6,7 @@ use crate::lexer::Span;
 
 use super::error::EvalError;
 use super::eval::Vm;
-use super::leia::CLEAR_SCREEN;
+use super::leia::{CLEAR_SCREEN, CURSOR_HOME};
 use super::value::{MapKey, NumeroLocale, Value, format_numero};
 
 impl Vm<'_> {
@@ -21,6 +21,7 @@ impl Vm<'_> {
             "escreva_erro" => self.bi_escreva_erro(args, span),
             "sair" => self.bi_sair(args, span),
             "cls" | "limpe_tela" => self.bi_cls(args, span),
+            "casa" => self.bi_casa(args, span),
             "durma" => self.bi_durma(args, span),
             "leia" => self.bi_leia(args, span),
             "leia_linhas" => self.bi_leia_linhas(args, span),
@@ -98,6 +99,19 @@ impl Vm<'_> {
         }
         write!(self.out, "{CLEAR_SCREEN}").map_err(|e| self.io_err(e, span))?;
         self.out.flush().map_err(|e| self.io_err(e, span))?;
+        Ok(Value::Nada)
+    }
+
+    fn bi_casa(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
+        if !args.is_empty() {
+            return Err(self.err(
+                format!("casa() não espera argumentos, recebeu {}", args.len()),
+                span,
+            ));
+        }
+        // No flush: the next escreva() should paint in the same burst, so the
+        // terminal never shows a blank frame.
+        write!(self.out, "{CURSOR_HOME}").map_err(|e| self.io_err(e, span))?;
         Ok(Value::Nada)
     }
 
@@ -736,6 +750,7 @@ pub(crate) const BUILTINS: &[&str] = &[
     "sair",
     "cls",
     "limpe_tela",
+    "casa",
     "durma",
     "leia",
     "leia_linhas",
@@ -805,6 +820,12 @@ pub(crate) const BUILTIN_DOCS: &[BuiltinDoc] = &[
         sig: "cls()",
         summary: "Limpa a tela do terminal. Também limpe_tela().",
         example: r#"cls()"#,
+    },
+    BuiltinDoc {
+        name: "casa",
+        sig: "casa()",
+        summary: "Cursor no canto, sem apagar. Use no lugar de cls() em animações.",
+        example: r#"casa()"#,
     },
     BuiltinDoc {
         name: "durma",
@@ -1142,8 +1163,8 @@ mod tests {
         assert!(BUILTINS.contains(&"é_terminal"));
         assert!(BUILTINS.contains(&"sem_acento"));
         assert!(BUILTINS.contains(&"remova"));
-        assert_eq!(BUILTINS.len(), 41);
-        assert_eq!(BUILTIN_DOCS.len(), 38);
+        assert_eq!(BUILTINS.len(), 42);
+        assert_eq!(BUILTIN_DOCS.len(), 39);
         assert_eq!(
             lookup_builtin_doc("é_terminal").map(|d| d.name),
             Some("eh_terminal")
@@ -1330,6 +1351,23 @@ escreva("b")
         );
         assert!(run_err("cls(1)").contains("não espera argumentos"));
         assert!(run_err("limpe_tela(\"x\")").contains("não espera argumentos"));
+    }
+
+    #[test]
+    fn casa_writes_cursor_home() {
+        use crate::runtime::CURSOR_HOME;
+        assert_eq!(run("casa()"), CURSOR_HOME);
+        assert_eq!(
+            run(
+                r#"
+escreva("a")
+casa()
+escreva("b")
+"#
+            ),
+            format!("a\n{CURSOR_HOME}b\n")
+        );
+        assert!(run_err("casa(1)").contains("não espera argumentos"));
     }
 
     #[test]

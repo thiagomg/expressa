@@ -180,6 +180,7 @@ tamanho(A)                     // também linhas
 escreva("Média:", 7.5)         // stdout
 escreva_erro("falhou")         // stderr (não entra em > arquivo)
 cls()                          // limpa a tela  (também limpe_tela())
+casa()                         // cursor no canto, sem apagar (animações)
 durma(1)                       // espera 1 segundo  (aceita 0.5)
 sair()                         // encerra, código 0
 sair(1)                        // encerra com falha (não pega se_falhar)
@@ -231,7 +232,7 @@ soma(10, 5)
 
 | | |
 |---|---|
-| `escreva` `escreva_erro` `sair` `cls` `durma` | imprimir / encerrar / limpar tela / esperar |
+| `escreva` `escreva_erro` `sair` `cls` `casa` `durma` | imprimir / encerrar / limpar / cursor / esperar |
 | `leia` `leia_linhas` `eh_terminal` | teclado / pipe |
 | `argumentos` | lista (não é função) |
 | `numero` `formato` `raiz` `aleatorio` `semente` | número |
