@@ -37,6 +37,7 @@ Caminhos de arquivo **relativos** são resolvidos a partir da pasta do `.lep` em
 | [`argumentos`](#argumentos) | Lista dos valores após o `.lep` |
 | [`numero`](#numero) | Transforma texto em número |
 | [`formate`](#formate) | Monta texto com alinhamento (`{:<n}` `{:>n}` `{:^n}`) |
+| [`avaliar`](#avaliar) | Executa um texto como código Expressa |
 | [`mapa`](#mapa) | Constrói um mapa a partir de uma lista de pares |
 | [`conjunto`](#conjunto) | Constrói um conjunto a partir de uma lista |
 | [`tamanho`](#tamanho) | Quantidade de itens ou caracteres |
@@ -58,6 +59,9 @@ Caminhos de arquivo **relativos** são resolvidos a partir da pasta do `.lep` em
 | [`cls`](#cls) | Limpa a tela (`limpe_tela` também) |
 | [`casa`](#casa) | Cursor no canto, sem apagar |
 | [`eh_terminal`](#eh_terminal) | Entrada é o teclado? (`é_terminal` também) |
+| [`pinte`](#pinte) | Cor da letra (e fundo opcional) |
+| [`fundo`](#fundo) | Só a cor de fundo |
+| [`negrito`](#negrito) | Texto em negrito |
 
 **`importe "mat"`**
 
@@ -301,6 +305,58 @@ inicio
 fim
 ```
 
+### `pinte`
+
+Módulo `tela`: `importe "tela"`.
+
+```text
+pinte(texto, frente) -> texto
+pinte(texto, frente, fundo) -> texto
+```
+
+Devolve `texto` envolvido em códigos ANSI: tinta + texto + reset (`\x1b[0m`). A cor não vaza para o próximo pedaço.
+
+Cores: `normal`, `preto`, `vermelho`, `verde`, `amarelo`, `azul`, `magenta`, `ciano`, `branco`. `:verde` é o texto `"verde"`. `normal` é a cor padrão do terminal naquele slot.
+
+```text
+escreva("vida".pinte(:verde))
+escreva("GAME OVER".pinte(:branco, :vermelho))
+escreva("HP".pinte(:verde, :normal))
+escreva("    ".pinte(:normal, :azul))
+```
+
+**Erros:** 1º argumento que não é texto; 2 ou 3 argumentos; nome de cor desconhecido.
+
+### `fundo`
+
+Módulo `tela`: `importe "tela"`.
+
+```text
+fundo(texto, cor) -> texto
+```
+
+Só o papel (fundo). Letra no padrão do terminal.
+
+```text
+escreva("    ".fundo(:verde))
+```
+
+**Erros:** iguais aos de `pinte` (cor desconhecida; tipos).
+
+### `negrito`
+
+Módulo `tela`: `importe "tela"`.
+
+```text
+negrito(texto) -> texto
+```
+
+Devolve o texto em negrito, com reset no fim.
+
+```text
+escreva("GO".negrito().pinte(:vermelho))
+```
+
 ### `argumentos`
 
 Não é uma função: é uma **lista** já definida em todo programa.
@@ -320,6 +376,28 @@ No REPL a lista é `[]`. Não dá para fazer `argumentos = …` (nome nativo). O
 ```text
 busca = argumentos[1] se_falhar ""
 ```
+
+### `avaliar`
+
+```text
+avaliar(texto) -> valor
+```
+
+Executa `texto` como código Expressa **no escopo atual** e devolve o valor da última expressão. Serve para calculadora (`leia` + `avaliar`) e para fórmulas em jogos.
+
+Vê as variáveis e funções já definidas; uma atribuição no texto altera o escopo de quem chamou (mesma regra de sempre: função não escreve nomes de fora).
+
+```text
+escreva(avaliar("2 + 3 * 4"))     // 14
+x = 10
+escreva(avaliar("x + 1"))         // 11
+conta = leia("conta: ")
+escreva(avaliar(conta) se_falhar "conta inválida")
+```
+
+UFCS: `"2 + 2".avaliar()`.
+
+**Erros:** o argumento não é texto; o texto está vazio; erro de sintaxe ou de execução no código avaliado. Tudo isso pode ir em `se_falhar`.
 
 ---
 

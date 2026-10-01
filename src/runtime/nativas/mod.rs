@@ -30,6 +30,7 @@ pub const NATIVAS: &[Nativa] = &[
     Nativa { names: &["numero"], module: None },
     Nativa { names: &["formato"], module: None },
     Nativa { names: &["formate"], module: None },
+    Nativa { names: &["avaliar"], module: None },
     Nativa { names: &["tamanho"], module: None },
     Nativa { names: &["primeiro"], module: None },
     Nativa { names: &["ultimo"], module: None },
@@ -46,6 +47,9 @@ pub const NATIVAS: &[Nativa] = &[
     Nativa { names: &["cls", "limpe_tela"], module: Some("tela") },
     Nativa { names: &["casa"], module: Some("tela") },
     Nativa { names: &["eh_terminal", "é_terminal"], module: Some("tela") },
+    Nativa { names: &["pinte"], module: Some("tela") },
+    Nativa { names: &["fundo"], module: Some("tela") },
+    Nativa { names: &["negrito"], module: Some("tela") },
     Nativa { names: &["raiz"], module: Some("mat") },
     Nativa { names: &["aleatorio", "aleatório"], module: Some("mat") },
     Nativa { names: &["semente"], module: Some("mat") },
@@ -97,6 +101,7 @@ impl Vm<'_> {
         name: &str,
         args: &[Value],
         span: Span,
+        env: &Rc<RefCell<Env>>,
     ) -> Result<Value, EvalError> {
         match name {
             "escreva" => self.bi_escreva(args, span),
@@ -108,6 +113,9 @@ impl Vm<'_> {
             "leia" => self.bi_leia(args, span),
             "leia_linhas" => self.bi_leia_linhas(args, span),
             "eh_terminal" | "é_terminal" => self.bi_eh_terminal(args, span),
+            "pinte" => self.bi_pinte(args, span),
+            "fundo" => self.bi_fundo(args, span),
+            "negrito" => self.bi_negrito(args, span),
             "raiz" => self.bi_raiz(args, span),
             "aleatorio" | "aleatório" => self.bi_aleatorio(args, span),
             "semente" => self.bi_semente(args, span),
@@ -123,6 +131,7 @@ impl Vm<'_> {
             "numero" => self.bi_numero(args, span),
             "formato" => self.bi_formato(args, span),
             "formate" => self.bi_formate(args, span),
+            "avaliar" => self.bi_avaliar(args, span, env),
             "tamanho" => self.bi_tamanho(args, span),
             "primeiro" => self.bi_primeiro(args, span),
             "ultimo" => self.bi_ultimo(args, span),
@@ -209,6 +218,24 @@ pub(crate) const BUILTIN_DOCS: &[BuiltinDoc] = &[
         example: r#"se eh_terminal() { nome = leia("Nome: ") }"#,
     },
     BuiltinDoc {
+        name: "pinte",
+        sig: "pinte(texto, frente)  ou  pinte(texto, frente, fundo) -> texto",
+        summary: "Devolve o texto com cor ANSI (letra e fundo opcional) e reset no fim. Cores: normal, preto, vermelho, verde, amarelo, azul, magenta, ciano, branco.",
+        example: r#""HP".pinte(:verde)"#,
+    },
+    BuiltinDoc {
+        name: "fundo",
+        sig: "fundo(texto, cor) -> texto",
+        summary: "Devolve o texto com cor de fundo ANSI e reset no fim.",
+        example: r#""    ".fundo(:vermelho)"#,
+    },
+    BuiltinDoc {
+        name: "negrito",
+        sig: "negrito(texto) -> texto",
+        summary: "Devolve o texto em negrito (ANSI) e reset no fim.",
+        example: r#""GAME OVER".negrito()"#,
+    },
+    BuiltinDoc {
         name: "numero",
         sig: "numero(texto|numero) -> numero",
         summary: "Transforma texto em número (aceita 3.14 ou 3,14). Erro se não for número.",
@@ -225,6 +252,12 @@ pub(crate) const BUILTIN_DOCS: &[BuiltinDoc] = &[
         sig: r#"formate("modelo", valores…) -> texto"#,
         summary: "Monta um texto: {} valor, {:<n} esquerda, {:>n} direita, {:^n} centro.",
         example: r#"formate("{:<8} {:>5}", "Ana", 10)"#,
+    },
+    BuiltinDoc {
+        name: "avaliar",
+        sig: "avaliar(texto) -> valor",
+        summary: "Executa o texto como código Expressa no escopo atual e devolve o último valor.",
+        example: r#"avaliar("2 + 3 * 4")    // 14"#,
     },
     BuiltinDoc {
         name: "transposta",
@@ -579,6 +612,43 @@ mod tests {
     }
 
     #[test]
+    fn avaliar_runs_source_in_current_scope() {
+        assert_eq!(run(r#"escreva(avaliar("2 + 3 * 4"))"#), "14\n");
+        assert_eq!(run(r#"escreva("10 - 3".avaliar())"#), "7\n");
+        assert_eq!(
+            run(
+                r#"
+x = 10
+escreva(avaliar("x + 1"))
+avaliar("x = 20")
+escreva(x)
+"#
+            ),
+            "11\n20\n"
+        );
+        assert_eq!(
+            run(
+                r#"
+f = funcao(n) { avaliar("n * 2") }
+escreva(f(3))
+"#
+            ),
+            "6\n"
+        );
+        assert_eq!(run(r#"escreva(avaliar("1 / 0") se_falhar 0)"#), "0\n");
+        assert_eq!(run(r#"escreva(avaliar("2 +") se_falhar "ops")"#), "ops\n");
+        assert!(run_err("avaliar(1)").contains("texto"));
+        assert!(run_err(r#"avaliar("")"#).contains("expressão"));
+        let err = run_to_string(r#"avaliar("1 / 0")"#, "teste.lep").expect_err("divisão");
+        assert!(err.message.contains("divisão por zero"), "{err}");
+        assert!(
+            err.stack.iter().any(|f| f.name == "avaliar"),
+            "pilha: {:?}",
+            err.stack
+        );
+    }
+
+    #[test]
     fn numero_from_text() {
         assert_eq!(run(r#"escreva(numero("10"))"#), "10\n");
         assert_eq!(run(r#"escreva(numero("  3,14  "))"#), "3,14\n");
@@ -761,6 +831,42 @@ escreva("b")
             format!("a\n{CURSOR_HOME}b\n")
         );
         assert!(run_err("casa(1)").contains("não espera argumentos"));
+    }
+
+    #[test]
+    fn pinte_wraps_ansi_and_reset() {
+        assert_eq!(
+            run(r#"escreva(pinte("HP", :verde))"#),
+            "\x1b[32mHP\x1b[0m\n"
+        );
+        assert_eq!(
+            run(r#"escreva("HP".pinte(:branco, :vermelho))"#),
+            "\x1b[37;41mHP\x1b[0m\n"
+        );
+        assert_eq!(
+            run(r#"escreva("HP".pinte(:verde, :normal))"#),
+            "\x1b[32;49mHP\x1b[0m\n"
+        );
+        assert_eq!(
+            run(r#"escreva("HP".pinte(:normal, :azul))"#),
+            "\x1b[39;44mHP\x1b[0m\n"
+        );
+        assert_eq!(
+            run(r#"escreva("    ".fundo(:verde))"#),
+            "\x1b[42m    \x1b[0m\n"
+        );
+        assert_eq!(
+            run(r#"escreva("GO".negrito())"#),
+            "\x1b[1mGO\x1b[0m\n"
+        );
+        assert!(run_err(r#"pinte("HP", :roxo)"#).contains("cor desconhecida"));
+        assert!(run_err(r#"pinte("HP")"#).contains("2 ou 3"));
+        assert!(run_err(r#"fundo("HP")"#).contains("esperado 2"));
+        assert!(run_err("negrito(1)").contains("texto"));
+        assert_eq!(
+            run(r#"escreva(pinte("x", :rosa) se_falhar "ops")"#),
+            "ops\n"
+        );
     }
 
     #[test]

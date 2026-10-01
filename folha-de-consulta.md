@@ -121,6 +121,9 @@ Sem `se_falhar`, um erro encerra o programa.
 soma = funcao(x, y) { x + y }
 escreva(soma(10, 5))           // 15
 
+avaliar("2 + 3 * 4")           // 14  (usa x, funções… do escopo atual)
+escreva(avaliar(leia("> ")) se_falhar "conta inválida")
+
 busca = funcao(xs, alvo) {
     para x em xs {
         se x == alvo { retorne verdadeiro }
@@ -199,6 +202,10 @@ importe "tela"
 cls()                          // limpa a tela  (também limpe_tela())
 casa()                         // cursor no canto, sem apagar (animações)
 eh_terminal()                  // teclado?  também é_terminal()
+"HP".pinte(:verde)             // letra; :branco, :vermelho = letra e fundo
+"    ".fundo(:azul)            // só o papel
+"GO".negrito()
+// cores: normal preto vermelho verde amarelo azul magenta ciano branco
 ```
 
 ```text
@@ -255,7 +262,7 @@ Núcleo (sempre no escopo):
 | `escreva` `escreva_erro` `sair` `durma` | imprimir / encerrar / esperar |
 | `leia` `leia_linhas` | teclado / pipe |
 | `argumentos` | lista (não é função) |
-| `numero` `formato` | número |
+| `numero` `formato` `avaliar` | número / executar texto como código |
 | `mapa` `conjunto` | construtores |
 | `tamanho` `primeiro` `ultimo` | coleção |
 | `maiuscula` `minuscula` `sem_acento` `remova` `substitua` `separe` `junte` `limpe` `formate` | texto / lista / mapa / conjunto |
@@ -264,7 +271,7 @@ Módulos (`importe "…"`):
 
 | | |
 |---|---|
-| `tela` | `cls` `casa` `eh_terminal` |
+| `tela` | `cls` `casa` `eh_terminal` `pinte` `fundo` `negrito` |
 | `mat` | `raiz` `aleatorio` `semente` |
 | `matriz` | `matriz` `transposta` `det` `identidade` `zeros` `uns` `cheia` `nlinhas` `ncolunas` |
 | `arquivo` | `leia_arquivo` `salve_arquivo` `adicione_arquivo` `leia_csv` `salve_csv` |

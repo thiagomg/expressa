@@ -83,6 +83,9 @@
       <keyword>cls</keyword>
       <keyword>limpe_tela</keyword>
       <keyword>casa</keyword>
+      <keyword>pinte</keyword>
+      <keyword>fundo</keyword>
+      <keyword>negrito</keyword>
       <keyword>durma</keyword>
       <keyword>leia</keyword>
       <keyword>leia_linhas</keyword>
@@ -92,6 +95,7 @@
       <keyword>numero</keyword>
       <keyword>formato</keyword>
       <keyword>formate</keyword>
+      <keyword>avaliar</keyword>
       <keyword>mapa</keyword>
       <keyword>conjunto</keyword>
       <keyword>matriz</keyword>

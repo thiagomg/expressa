@@ -57,7 +57,7 @@ pub(crate) struct Vm<'a> {
     pub(crate) source: String,
     pub(crate) base_dir: PathBuf,
     hook: Box<dyn DebugHook>,
-    stack: Vec<CallFrame>,
+    pub(crate) stack: Vec<CallFrame>,
     builtins: Rc<RefCell<Env>>,
     loading: HashSet<PathBuf>,
     modules: HashMap<PathBuf, Rc<RefCell<Env>>>,
@@ -836,7 +836,7 @@ impl<'a> Vm<'a> {
                 for a in args {
                     vals.push(self.eval_expr(a, env)?);
                 }
-                self.call_value(&func, &vals, *span, &name)
+                self.call_value(&func, &vals, *span, &name, env)
             }
             Expr::Index {
                 object,
@@ -1113,9 +1113,10 @@ impl<'a> Vm<'a> {
         args: &[Value],
         span: Span,
         name: &str,
+        env: &Rc<RefCell<Env>>,
     ) -> Result<Value, EvalError> {
         match func {
-            Value::Builtin(b) => self.call_builtin(b, args, span),
+            Value::Builtin(b) => self.call_builtin(b, args, span, env),
             Value::Funcao(closure) => {
                 if args.len() != closure.params.len() {
                     return Err(self.err(
@@ -1744,7 +1745,7 @@ mod tests {
 
     #[test]
     fn media_example() {
-        let src = include_str!("../../examples/media.lep");
+        let src = include_str!("../../exemplos/media.lep");
         let out = run_to_string(src, "media.lep").unwrap();
         assert_eq!(out, "Média: 7,3\nResultado: Aprovado\n");
     }
@@ -1753,96 +1754,96 @@ mod tests {
     fn example_programs_run() {
         let examples = [
             (
-                "examples/tabuada.lep",
-                include_str!("../../examples/tabuada.lep"),
+                "exemplos/tabuada.lep",
+                include_str!("../../exemplos/tabuada.lep"),
             ),
             (
-                "examples/fatorial.lep",
-                include_str!("../../examples/fatorial.lep"),
+                "exemplos/fatorial.lep",
+                include_str!("../../exemplos/fatorial.lep"),
             ),
             (
-                "examples/filtra.lep",
-                include_str!("../../examples/filtra.lep"),
+                "exemplos/filtra.lep",
+                include_str!("../../exemplos/filtra.lep"),
             ),
             (
-                "examples/receita.lep",
-                include_str!("../../examples/receita.lep"),
+                "exemplos/receita.lep",
+                include_str!("../../exemplos/receita.lep"),
             ),
             (
-                "examples/poema.lep",
-                include_str!("../../examples/poema.lep"),
+                "exemplos/poema.lep",
+                include_str!("../../exemplos/poema.lep"),
             ),
             (
-                "examples/turma.lep",
-                include_str!("../../examples/turma.lep"),
+                "exemplos/turma.lep",
+                include_str!("../../exemplos/turma.lep"),
             ),
             (
-                "examples/palindromo.lep",
-                include_str!("../../examples/palindromo.lep"),
+                "exemplos/palindromo.lep",
+                include_str!("../../exemplos/palindromo.lep"),
             ),
             (
-                "examples/ascii.lep",
-                include_str!("../../examples/ascii.lep"),
+                "exemplos/ascii.lep",
+                include_str!("../../exemplos/ascii.lep"),
             ),
             (
-                "examples/caixa.lep",
-                include_str!("../../examples/caixa.lep"),
+                "exemplos/caixa.lep",
+                include_str!("../../exemplos/caixa.lep"),
             ),
             (
-                "examples/diario.lep",
-                include_str!("../../examples/diario.lep"),
+                "exemplos/diario.lep",
+                include_str!("../../exemplos/diario.lep"),
             ),
             (
-                "examples/contatos.lep",
-                include_str!("../../examples/contatos.lep"),
+                "exemplos/contatos.lep",
+                include_str!("../../exemplos/contatos.lep"),
             ),
             (
-                "examples/usa_matematica.lep",
-                include_str!("../../examples/usa_matematica.lep"),
+                "exemplos/usa_matematica.lep",
+                include_str!("../../exemplos/usa_matematica.lep"),
             ),
             (
-                "examples/closures.lep",
-                include_str!("../../examples/closures.lep"),
+                "exemplos/closures.lep",
+                include_str!("../../exemplos/closures.lep"),
             ),
             (
-                "examples/escola/bhaskara.lep",
-                include_str!("../../examples/escola/bhaskara.lep"),
+                "exemplos/escola/bhaskara.lep",
+                include_str!("../../exemplos/escola/bhaskara.lep"),
             ),
             (
-                "examples/escola/juros.lep",
-                include_str!("../../examples/escola/juros.lep"),
+                "exemplos/escola/juros.lep",
+                include_str!("../../exemplos/escola/juros.lep"),
             ),
             (
-                "examples/escola/regra_de_tres.lep",
-                include_str!("../../examples/escola/regra_de_tres.lep"),
+                "exemplos/escola/regra_de_tres.lep",
+                include_str!("../../exemplos/escola/regra_de_tres.lep"),
             ),
             (
-                "examples/escola/progressoes.lep",
-                include_str!("../../examples/escola/progressoes.lep"),
+                "exemplos/escola/progressoes.lep",
+                include_str!("../../exemplos/escola/progressoes.lep"),
             ),
             (
-                "examples/escola/estatistica.lep",
-                include_str!("../../examples/escola/estatistica.lep"),
+                "exemplos/escola/estatistica.lep",
+                include_str!("../../exemplos/escola/estatistica.lep"),
             ),
             (
-                "examples/escola/pitagoras.lep",
-                include_str!("../../examples/escola/pitagoras.lep"),
+                "exemplos/escola/pitagoras.lep",
+                include_str!("../../exemplos/escola/pitagoras.lep"),
             ),
             (
-                "examples/escola/geometria.lep",
-                include_str!("../../examples/escola/geometria.lep"),
+                "exemplos/escola/geometria.lep",
+                include_str!("../../exemplos/escola/geometria.lep"),
             ),
             (
-                "examples/escola/mdc_mmc.lep",
-                include_str!("../../examples/escola/mdc_mmc.lep"),
+                "exemplos/escola/mdc_mmc.lep",
+                include_str!("../../exemplos/escola/mdc_mmc.lep"),
             ),
             (
-                "examples/escola/media_ponderada.lep",
-                include_str!("../../examples/escola/media_ponderada.lep"),
+                "exemplos/escola/media_ponderada.lep",
+                include_str!("../../exemplos/escola/media_ponderada.lep"),
             ),
             (
-                "examples/escola/cinematica.lep",
-                include_str!("../../examples/escola/cinematica.lep"),
+                "exemplos/escola/cinematica.lep",
+                include_str!("../../exemplos/escola/cinematica.lep"),
             ),
         ];
         for (file, src) in examples {
@@ -1852,7 +1853,7 @@ mod tests {
 
     #[test]
     fn erros_example_does_not_crash() {
-        let src = include_str!("../../examples/erros.lep");
+        let src = include_str!("../../exemplos/erros.lep");
         let out = run_to_string(src, "erros.lep").unwrap();
         assert_eq!(out, "");
     }
@@ -2521,7 +2522,7 @@ boom()
 
     #[test]
     fn helpers_used_by_eval() {
-        assert_eq!(base_dir_of("examples/media.lep").as_os_str(), "examples");
+        assert_eq!(base_dir_of("exemplos/media.lep").as_os_str(), "exemplos");
         assert_eq!(base_dir_of("media.lep").as_os_str(), ".");
         assert_eq!(Value::Numero(3.0).format_with(NumeroLocale::PtBr), "3");
         assert_eq!(
