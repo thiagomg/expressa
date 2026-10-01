@@ -1,3 +1,7 @@
+importe "matriz"
+importe "tela"
+importe "mat"
+
 // Cria um novo jogo aleatório
 inicia_jogo = funcao(m) {
     para i de 1 até m.nlinhas() {

@@ -14,13 +14,13 @@ fim
 ingredientes = ["farinha", "açúcar", "ovos", "manteiga", "leite"]
 unidades = ["g", "g", "un", "g", "ml"]
 
-base = mapa inicio
-    "farinha" -> 200
-    "açúcar" -> 150
-    "ovos" -> 3
-    "manteiga" -> 100
-    "leite" -> 120
-fim
+base = mapa([
+    "farinha" -> 200,
+    "açúcar" -> 150,
+    "ovos" -> 3,
+    "manteiga" -> 100,
+    "leite" -> 120,
+])
 
 rende = 8
 quero = 12

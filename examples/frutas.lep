@@ -1,3 +1,5 @@
+importe "matriz"
+importe "tela"
 
 // Retorna maior valor de uma matriz
 maior_valor = função(m) {
@@ -65,12 +67,12 @@ a = 6 // Azeitona
 c = 2 // Cereja
 
 criar = função() {
-    matriz {
+    matriz([
         [ b, m, a, b ],
         [ a, c, b, a ],
         [ m, m, m, c ],
-        [ m, b, b, a ]
-    }
+        [ m, b, b, a ],
+    ])
 }
 
 

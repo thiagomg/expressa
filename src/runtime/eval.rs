@@ -11,7 +11,7 @@ use crate::parser::{
     AssignTarget, BinaryOp, Block, Expr, Import, Item, Param, Program, Stmt, UnaryOp, parse,
 };
 
-use super::builtins::BUILTINS;
+use super::nativas;
 use super::debug::{DebugAction, DebugCtx, DebugHook, NoopHook};
 use super::env::{AssignError, Env, FrameKind};
 use super::error::{CallFrame, EvalError, RuntimeError};
@@ -61,6 +61,7 @@ pub(crate) struct Vm<'a> {
     builtins: Rc<RefCell<Env>>,
     loading: HashSet<PathBuf>,
     modules: HashMap<PathBuf, Rc<RefCell<Env>>>,
+    native_modules: HashMap<String, Rc<RefCell<Env>>>,
     /// If set, file I/O and `importe` must stay under this directory.
     workspace_root: Option<PathBuf>,
     deadline: Option<Instant>,
@@ -324,9 +325,8 @@ impl<'a> Vm<'a> {
         script_args: &[String],
     ) -> Self {
         let builtins = Env::new(FrameKind::Builtins, None);
-        for name in BUILTINS {
-            builtins.borrow_mut().define(*name, Value::Builtin(name));
-        }
+        nativas::bind_nucleo(&builtins);
+        let native_modules = nativas::make_native_modules();
         builtins
             .borrow_mut()
             .define("argumentos", script_args_value(script_args));
@@ -343,6 +343,7 @@ impl<'a> Vm<'a> {
             builtins,
             loading: HashSet::new(),
             modules: HashMap::new(),
+            native_modules,
             workspace_root,
             deadline: time_limit.map(|d| Instant::now() + d),
             leia_host,
@@ -427,6 +428,20 @@ impl<'a> Vm<'a> {
     }
 
     fn eval_import(&mut self, import: &Import, env: &Rc<RefCell<Env>>) -> Result<(), EvalError> {
+        if is_bare_module_spec(&import.path) {
+            if let Some(native) = self.native_modules.get(&import.path).cloned() {
+                if self.native_conflicts_with_file(&import.path, import.span)? {
+                    return Err(self.err(
+                        format!(
+                            "'{}' é um módulo nativo e existe {}.lep nesta pasta. Use importe \"./{}\" para o arquivo, ou mude o nome/pasta do arquivo para usar o nativo.",
+                            import.path, import.path, import.path
+                        ),
+                        import.span,
+                    ));
+                }
+                return self.bind_imported(import, env, native);
+            }
+        }
         let path = self.resolve_import_path(&import.path, import.span)?;
         let key = std::fs::canonicalize(&path).unwrap_or_else(|_| path.clone());
 
@@ -481,6 +496,15 @@ impl<'a> Vm<'a> {
             module_env
         };
 
+        self.bind_imported(import, env, module_env)
+    }
+
+    fn bind_imported(
+        &mut self,
+        import: &Import,
+        env: &Rc<RefCell<Env>>,
+        module_env: Rc<RefCell<Env>>,
+    ) -> Result<(), EvalError> {
         if let Some(alias) = &import.alias {
             self.assign_name(env, alias, Value::Modulo(module_env), import.span)?;
         } else {
@@ -490,6 +514,11 @@ impl<'a> Vm<'a> {
             }
         }
         Ok(())
+    }
+
+    fn native_conflicts_with_file(&self, spec: &str, span: Span) -> Result<bool, EvalError> {
+        let path = self.resolve_import_path(spec, span)?;
+        Ok(path.exists())
     }
 
     fn resolve_import_path(&self, spec: &str, span: Span) -> Result<PathBuf, EvalError> {
@@ -563,6 +592,12 @@ impl<'a> Vm<'a> {
                                     value,
                                     *span,
                                 )?;
+                            }
+                            Value::Par(_, _) => {
+                                return Err(self.err(
+                                    "par não pode ser alterado; :chave e :valor só leem",
+                                    *span,
+                                ));
                             }
                             Value::Modulo(_) => {
                                 return Err(self.err(
@@ -725,36 +760,13 @@ impl<'a> Vm<'a> {
                 }
                 Ok(Value::lista(xs))
             }
-            Expr::Map { entries, span } => {
-                let mut map = Vec::with_capacity(entries.len());
-                for entry in entries {
-                    let k = self.eval_expr(&entry.key, env)?;
-                    let v = self.eval_expr(&entry.value, env)?;
-                    let key = MapKey::from_value(&k).ok_or_else(|| {
-                        self.err(format!("chave de mapa inválida ({})", k.type_name()), *span)
-                    })?;
-                    if let Some(slot) = map.iter_mut().find(|(mk, _)| *mk == key) {
-                        slot.1 = v;
-                    } else {
-                        map.push((key, v));
-                    }
-                }
-                Ok(Value::mapa(map))
-            }
-            Expr::Matrix { rows, span } => self.eval_matrix(rows, *span, env),
-            Expr::Conjunto { elements, span } => {
-                let mut xs = Vec::new();
-                for e in elements {
-                    let v = self.eval_expr(e, env)?;
-                    let k = MapKey::from_value(&v).ok_or_else(|| {
-                        self.err(
-                            format!("elemento de conjunto inválido ({})", v.type_name()),
-                            *span,
-                        )
-                    })?;
-                    super::value::conjunto_insert(&mut xs, k);
-                }
-                Ok(Value::conjunto(xs))
+            Expr::Par { key, value, span } => {
+                let k = self.eval_expr(key, env)?;
+                let v = self.eval_expr(value, env)?;
+                let key = MapKey::from_value(&k).ok_or_else(|| {
+                    self.err(format!("chave de par inválida ({})", k.type_name()), *span)
+                })?;
+                Ok(Value::Par(key, Box::new(v)))
             }
             Expr::Function { params, body, span } => {
                 check_unique_params(params)
@@ -797,6 +809,14 @@ impl<'a> Vm<'a> {
                 let obj = self.eval_expr(object, env)?;
                 match &obj {
                     Value::Mapa(_) => self.index_get(&obj, &Value::Texto(field.clone()), *span),
+                    Value::Par(k, v) => match field.as_str() {
+                        "chave" => Ok(k.to_value()),
+                        "valor" => Ok(v.as_ref().clone()),
+                        _ => Err(self.err(
+                            format!("par só tem :chave e :valor, não `{field}`"),
+                            *span,
+                        )),
+                    },
                     Value::Modulo(_) => {
                         Err(self.err(format!("módulo usa '::' — tente o_modulo::{field}"), *span))
                     }
@@ -1226,23 +1246,22 @@ impl<'a> Vm<'a> {
         Ok(())
     }
 
-    fn eval_matrix(
-        &mut self,
-        rows: &[Expr],
-        span: Span,
-        env: &Rc<RefCell<Env>>,
-    ) -> Result<Value, EvalError> {
+    pub(crate) fn lista_para_matriz(&self, rows: &Value, span: Span) -> Result<Value, EvalError> {
+        let xs = self.expect_lista(rows, span)?;
+        let borrowed = xs.borrow();
+        if borrowed.is_empty() {
+            return Err(self.err("matriz precisa de pelo menos uma linha", span));
+        }
         let mut grid: Vec<Vec<f64>> = Vec::new();
         let mut width = None;
-        for row_expr in rows {
-            let v = self.eval_expr(row_expr, env)?;
-            let xs = self.expect_lista(&v, row_expr.span())?;
+        for row in borrowed.iter() {
+            let cells = self.expect_lista(row, span)?;
             let mut nums = Vec::new();
-            for item in xs.borrow().iter() {
-                nums.push(self.expect_numero(item, row_expr.span())?);
+            for item in cells.borrow().iter() {
+                nums.push(self.expect_numero(item, span)?);
             }
             if nums.is_empty() {
-                return Err(self.err("linha de matriz não pode ser vazia", row_expr.span()));
+                return Err(self.err("linha de matriz não pode ser vazia", span));
             }
             match width {
                 None => width = Some(nums.len()),
@@ -1635,6 +1654,13 @@ fn base_dir_of(file: &str) -> PathBuf {
     }
 }
 
+fn is_bare_module_spec(spec: &str) -> bool {
+    !spec.contains('/')
+        && !spec.contains('\\')
+        && !spec.starts_with('.')
+        && Path::new(spec).extension().is_none()
+}
+
 fn callee_name(expr: &Expr) -> String {
     match expr {
         Expr::Ident { name, .. } => name.clone(),
@@ -2011,17 +2037,17 @@ escreva(f())
     fn conjunto_unique_contem_union_remova() {
         assert_eq!(
             run(r#"
-s = conjunto { :ana, :bia, :ana, 1 }
+s = conjunto([:ana, :bia, :ana, 1])
 escreva(s contem :ana)
 escreva(s contem :carlos)
 escreva(tamanho(s))
 s += :carlos
 escreva(s contem :carlos)
-s += conjunto { :bia, :dani }
+s += conjunto([:bia, :dani])
 escreva(tamanho(s))
 s = s.remova(:ana)
 escreva(s contem :ana)
-para x em conjunto { 10, 20 }
+para x em conjunto([10, 20])
 inicio
     escreva(x)
 fim
@@ -2029,10 +2055,10 @@ fim
             "verdadeiro\nfalso\n3\nverdadeiro\n5\nfalso\n10\n20\n"
         );
         assert_eq!(
-            run("escreva(conjunto { 1, 2 } == conjunto { 2, 1 })"),
+            run("escreva(conjunto([1, 2]) == conjunto([2, 1]))"),
             "verdadeiro\n"
         );
-        assert!(run_err("conjunto { [1] }").contains("inválido"));
+        assert!(run_err("conjunto([[1]])").contains("inválido"));
     }
 
     #[test]
@@ -2134,10 +2160,10 @@ escreva(x)
             run(r#"escreva(se 2 > 1 { "sim" } senao { "nao" })"#),
             "sim\n"
         );
-        assert_eq!(run("m = mapa { \"a\" -> 1 }\nescreva(m[\"a\"])"), "1\n");
+        assert_eq!(run("m = mapa([\"a\" -> 1])\nescreva(m[\"a\"])"), "1\n");
         assert_eq!(
             run(r#"
-p = mapa { :nome -> "Thiago" :idade -> 25 }
+p = mapa([:nome -> "Thiago", :idade -> 25])
 escreva(p:nome)
 escreva(p[:nome])
 escreva(:nome)
@@ -2148,12 +2174,12 @@ escreva(p contem :idade)
         );
         assert_eq!(
             run(r#"
-opções = mapa { :nome -> "Thiago" }
+opções = mapa([:nome -> "Thiago"])
 args_pos = ["a"]
-res = mapa {
-    :op -> opções
-    :args -> args_pos
-}
+res = mapa([
+    :op -> opções,
+    :args -> args_pos,
+])
 escreva(res:args[1])
 "#),
             "a\n"
@@ -2163,10 +2189,11 @@ escreva(res:args[1])
     #[test]
     fn matriz_ops() {
         let src = r#"
-A = matriz {
+importe "matriz"
+A = matriz([
     [1, 2],
-    [3, 4]
-}
+    [3, 4],
+])
 escreva(A[1, 2])
 escreva(tamanho(A))
 escreva(tamanho(A[1]))
@@ -2229,7 +2256,7 @@ escreva(a[1])
     #[test]
     fn map_colon_and_ufcs() {
         let src = r#"
-p = mapa { "nome" -> "Ana" }
+p = mapa(["nome" -> "Ana"])
 escreva(p:nome)
 p:nome = "Bia"
 escreva(p:nome)
@@ -2241,10 +2268,10 @@ escreva([10, 20, 30].tamanho())
     #[test]
     fn maps_and_contem() {
         let src = r#"
-p = mapa inicio
-    "nome" -> "Ana"
-    "idade" -> 25
-fim
+p = mapa([
+    "nome" -> "Ana",
+    "idade" -> 25,
+])
 escreva(p["nome"])
 p["cidade"] = "Fortaleza"
 escreva(tamanho(p))
@@ -2386,19 +2413,89 @@ fim
         let dir = std::env::temp_dir().join(format!("expressa-imp-{nanos}"));
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::write(
-            dir.join("mat.lep"),
+            dir.join("aritmetica.lep"),
             "soma = funcao(a, b)\ninicio\n    a + b\nfim\n",
         )
         .unwrap();
         let main = dir.join("main.lep");
         let src = r#"
-m = importe "mat"
+m = importe "aritmetica"
 escreva(m::soma(2, 3))
-importe "mat"
+importe "aritmetica"
 escreva(soma(4, 5))
 "#;
         let out = run_to_string(src, main.to_str().unwrap()).unwrap();
         assert_eq!(out, "5\n9\n");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn par_mapa_conjunto_and_native_modules() {
+        assert_eq!(
+            run(r#"
+p = :nome -> "Ana"
+escreva(p:chave)
+escreva(p:valor)
+m = mapa([p, :idade -> 25])
+escreva(m:nome)
+escreva(tamanho(m))
+s = conjunto([1, 1, 2])
+escreva(tamanho(s))
+escreva(tamanho(mapa()))
+escreva(tamanho(conjunto()))
+"#),
+            "nome\nAna\nAna\n2\n2\n0\n0\n"
+        );
+        assert!(run_err("1 -> 2 -> 3").contains("encadeados"));
+        assert!(run_err("mapa([:a -> 1, :a -> 2])").contains("duplicada"));
+        assert!(run_err("[] -> 1").contains("chave de par"));
+        assert_eq!(
+            run(r#"
+importe "matriz"
+A = matriz([[1, 2], [3, 4]])
+escreva(A.transposta()[1, 2])
+m = importe "matriz"
+escreva(A.m::transposta()[1, 2])
+escreva(m::nlinhas(A))
+"#),
+            "3\n3\n2\n"
+        );
+        assert_eq!(
+            run(r#"
+matriz = importe "matriz"
+A = matriz::matriz([[1, 2], [3, 4]])
+escreva(A.matriz::transposta()[1, 2])
+"#),
+            "3\n"
+        );
+        assert!(run_err("zeros(2)").contains("não definida"));
+    }
+
+    #[test]
+    fn native_import_conflicts_with_file() {
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let dir = std::env::temp_dir().join(format!("expressa-nat-{nanos}"));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("matriz.lep"), "x = 1\n").unwrap();
+        let main = dir.join("main.lep");
+        let err = match run_to_string(r#"importe "matriz""#, main.to_str().unwrap()) {
+            Err(e) => e.message,
+            Ok(out) => panic!("expected conflict, got {out:?}"),
+        };
+        assert!(err.contains("módulo nativo"), "{err}");
+        assert!(err.contains("./matriz"), "{err}");
+        let out = run_to_string(
+            r#"
+importe "./matriz"
+escreva(x)
+"#,
+            main.to_str().unwrap(),
+        )
+        .unwrap();
+        assert_eq!(out, "1\n");
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -2471,7 +2568,10 @@ fim
     fn workspace_root_blocks_path_escape() {
         let dir = std::env::temp_dir().join("expressa-ws-test");
         std::fs::create_dir_all(&dir).unwrap();
-        let src = r#"leia_arquivo("../secret.txt")"#;
+        let src = r#"
+importe "arquivo"
+leia_arquivo("../secret.txt")
+"#;
         let file = dir.join("main.lep");
         let err = run_to_string_with(src, file.to_str().unwrap(), "", Some(dir.clone()), None)
             .expect_err("should block escape");

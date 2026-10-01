@@ -1,3 +1,5 @@
+importe "arquivo"
+
 // Agenda em CSV: salva, lê de volta e procura um nome.
 
 agenda = [

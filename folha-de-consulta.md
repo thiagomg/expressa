@@ -25,9 +25,10 @@ chmod +x prog.lep && ./prog.lep
 | `texto` | `"olá"` |
 | `bool` | `verdadeiro` `falso` |
 | lista | `[1, 2, 3]` |
-| mapa | `mapa { "nome" -> "Ana" }` |
-| matriz | `matriz { [1, 2], [3, 4] }` só números |
-| conjunto | `conjunto { :ana, 1 }` valores únicos |
+| par | `:nome -> "Ana"` |
+| mapa | `mapa([:nome -> "Ana"])` |
+| matriz | `matriz([[1, 2], [3, 4]])` só números; `importe "matriz"` |
+| conjunto | `conjunto([:ana, 1])` valores únicos |
 
 Não há literal `nada`. `escreva` e gravar arquivo devolvem `nada`.
 
@@ -62,6 +63,7 @@ Funções **leem** nomes de fora, mas **não alteram**.
 ```text
 +  -  *  /  %                  // + também concatena se um lado é texto
 ==  !=  >  <  >=  <=           // sem a < b < c; use a < b e b < c
+chave -> valor                 // par; p:chave  p:valor
 e  ou  nao
 lista contem 20
 "Maria Silva" contem "Silva"
@@ -103,6 +105,7 @@ enquanto i <= 3 {
 }
 
 valor = 10 / 0 se_falhar 0
+importe "arquivo"
 linhas = leia_arquivo("x.txt") se_falhar []
 ```
 
@@ -151,18 +154,21 @@ junte(["a", "b"], " - ")
 formate("{:<8} {:>5}", "Ana", 10)  // colunas: < esquerda  > direita  ^ centro
 
 :nome                          // o texto "nome"
-pessoa = mapa { :nome -> "Ana"  :idade -> 25 }
+p = :nome -> "Ana"
+p:chave  p:valor
+pessoa = mapa([:nome -> "Ana", :idade -> 25])
 pessoa:nome  pessoa[:nome]  pessoa["nome"]
 pessoa:nome = "Bia"
 pessoa["cidade"] = "Fortaleza"
 pessoa = pessoa.remova("idade")
 
-s = conjunto { :ana, :bia }
+s = conjunto([:ana, :bia])
 s contem :ana
 s += :carlos
 s = s.remova(:bia)
 
-A = matriz { [1, 2, 3], [4, 5, 6] }
+importe "matriz"
+A = matriz([[1, 2, 3], [4, 5, 6]])
 A[1, 2]                        // 2
 A[1]                           // linha → lista
 A + B    3 * A    A * B
@@ -179,8 +185,6 @@ tamanho(A)                     // também linhas
 ```text
 escreva("Média:", 7.5)         // stdout
 escreva_erro("falhou")         // stderr (não entra em > arquivo)
-cls()                          // limpa a tela  (também limpe_tela())
-casa()                         // cursor no canto, sem apagar (animações)
 durma(1)                       // espera 1 segundo  (aceita 0.5)
 sair()                         // encerra, código 0
 sair(1)                        // encerra com falha (não pega se_falhar)
@@ -190,6 +194,10 @@ idade = numero(leia("Idade: ")) se_falhar 0
 linhas = leia_linhas()         // resto da entrada → lista; vazio = []
 
 busca = argumentos[1]          // depois do .lep; REPL → []
+
+importe "tela"
+cls()                          // limpa a tela  (também limpe_tela())
+casa()                         // cursor no canto, sem apagar (animações)
 eh_terminal()                  // teclado?  também é_terminal()
 ```
 
@@ -197,13 +205,17 @@ eh_terminal()                  // teclado?  também é_terminal()
 formato("pt")                  // 1.000,5   (padrão)
 formato("en")                  // 1,000.5
 numero("3,14")                 // segue o formato atual
+
+importe "mat"
 aleatorio(1, 6)                // inteiro inclusive; também aleatório()
 semente(1)                     // mesma sequência de aleatorio
+raiz(9)                        // 3
 ```
 
 Literais no código sempre com ponto: `3.14`.
 
 ```text
+importe "arquivo"
 linhas = leia_arquivo("dados.txt") se_falhar []
 salve_arquivo("saida.txt", linhas)
 adicione_arquivo("saida.txt", ["nova"])
@@ -224,23 +236,38 @@ mat::soma(10, 5)
 
 importe "matematica"           // nomes no escopo atual
 soma(10, 5)
+
+importe "matriz"               // nativo: construtor + zeros, transposta…
+matriz = importe "matriz"      // alias: matriz::zeros, A.matriz::transposta()
+importe "./matriz"             // arquivo local se o nativo colidir
 ```
+
+Nativos: `matriz`, `arquivo`, `tela`, `mat`. Nome nu sem `/` nem `.lep` procura o nativo; se existir também `matriz.lep` no mesmo diretório, `importe "matriz"` é erro.
 
 ---
 
 ## Nativas (resumo)
 
+Núcleo (sempre no escopo):
+
 | | |
 |---|---|
-| `escreva` `escreva_erro` `sair` `cls` `casa` `durma` | imprimir / encerrar / limpar / cursor / esperar |
-| `leia` `leia_linhas` `eh_terminal` | teclado / pipe |
+| `escreva` `escreva_erro` `sair` `durma` | imprimir / encerrar / esperar |
+| `leia` `leia_linhas` | teclado / pipe |
 | `argumentos` | lista (não é função) |
-| `numero` `formato` `raiz` `aleatorio` `semente` | número |
+| `numero` `formato` | número |
+| `mapa` `conjunto` | construtores |
 | `tamanho` `primeiro` `ultimo` | coleção |
 | `maiuscula` `minuscula` `sem_acento` `remova` `substitua` `separe` `junte` `limpe` `formate` | texto / lista / mapa / conjunto |
-| `leia_arquivo` `salve_arquivo` `adicione_arquivo` | arquivo |
-| `leia_csv` `salve_csv` | CSV |
-| `transposta` `det` `identidade` `zeros` `uns` `cheia` `nlinhas` `ncolunas` | matriz |
+
+Módulos (`importe "…"`):
+
+| | |
+|---|---|
+| `tela` | `cls` `casa` `eh_terminal` |
+| `mat` | `raiz` `aleatorio` `semente` |
+| `matriz` | `matriz` `transposta` `det` `identidade` `zeros` `uns` `cheia` `nlinhas` `ncolunas` |
+| `arquivo` | `leia_arquivo` `salve_arquivo` `adicione_arquivo` `leia_csv` `salve_csv` |
 
 Nativas não podem ser reatribuídas (`escreva = 1` é erro).
 
@@ -262,7 +289,7 @@ Abre `.lep` em `expressa-mode` (palavras-chave, nativas, comentários, strings).
 ```text
 expressa                  // ↑ ↓ histórico
 ajuda    ajuda funcoes    ajuda linguagem    ajuda escreva
-cls                       // limpa a tela (também limpe_tela)
+cls                       // comando do REPL: limpa a tela
 sair
 ```
 

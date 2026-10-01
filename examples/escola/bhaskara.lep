@@ -1,3 +1,5 @@
+importe "mat"
+
 // Equação do 2º grau: a·x² + b·x + c = 0
 // Fórmula de Bhaskara: x = (-b ± √Δ) / (2a),  Δ = b² - 4ac
 //

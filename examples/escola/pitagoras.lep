@@ -1,3 +1,5 @@
+importe "mat"
+
 // Teorema de Pitágoras e distância entre dois pontos no plano.
 // a² + b² = c²     d = √((x2−x1)² + (y2−y1)²)
 //

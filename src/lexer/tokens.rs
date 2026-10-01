@@ -38,9 +38,6 @@ pub enum TokenKind {
     Repita,     // repita
     Enquanto,   // enquanto
     Vezes,      // vezes
-    Mapa,       // mapa
-    Matriz,     // matriz
-    Conjunto,   // conjunto
     Importe,    // importe
     Contem,     // contem (infix operator, but reserved word)
     Verdadeiro, // verdadeiro
@@ -107,9 +104,6 @@ pub fn keyword(s: &str) -> Option<TokenKind> {
         "repita" => TokenKind::Repita,
         "enquanto" => TokenKind::Enquanto,
         "vezes" => TokenKind::Vezes,
-        "mapa" => TokenKind::Mapa,
-        "matriz" => TokenKind::Matriz,
-        "conjunto" => TokenKind::Conjunto,
         "importe" => TokenKind::Importe,
         "contem" | "contém" => TokenKind::Contem,
         "verdadeiro" => TokenKind::Verdadeiro,

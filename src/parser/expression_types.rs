@@ -22,20 +22,10 @@ pub enum Expr {
         elements: Vec<Expr>,
         span: Span,
     },
-    /// `mapa {}` or `mapa inicio k -> v ... fim` or `mapa { k -> v }`
-    Map {
-        /// Empty if `mapa {}`
-        entries: Vec<MapEntry>,
-        span: Span,
-    },
-    /// `matriz { [1, 2], [3, 4] }` — each row is an expression (usually a list).
-    Matrix {
-        rows: Vec<Expr>,
-        span: Span,
-    },
-    /// `conjunto { 1, :ana }` — unique key-like values.
-    Conjunto {
-        elements: Vec<Expr>,
+    /// `chave -> valor` — a pair (map entry as a value).
+    Par {
+        key: Box<Expr>,
+        value: Box<Expr>,
         span: Span,
     },
     /// `funcao (a, b) inicio ... fim` or `{ ... }`
@@ -124,13 +114,6 @@ pub enum Expr {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct MapEntry {
-    pub key: Expr,
-    pub value: Expr,
-    pub span: Span,
-}
-
-#[derive(Debug, Clone, PartialEq)]
 pub struct Param {
     pub name: String,
     pub span: Span,
@@ -150,9 +133,7 @@ impl Expr {
             | Expr::String { span, .. }
             | Expr::Bool { span, .. }
             | Expr::List { span, .. }
-            | Expr::Map { span, .. }
-            | Expr::Matrix { span, .. }
-            | Expr::Conjunto { span, .. }
+            | Expr::Par { span, .. }
             | Expr::Function { span, .. }
             | Expr::Ident { span, .. }
             | Expr::Field { span, .. }

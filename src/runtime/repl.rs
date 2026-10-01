@@ -289,7 +289,7 @@ fn print_help(topic: Option<&str>) {
                      argumentos[1]           primeiro (índices começam em 1)\n  \
                      exemplo: expressa grep.lep Thiago"
                 ),
-                name => match super::builtins::lookup_builtin_doc(name) {
+                name => match super::nativas::lookup_builtin_doc(name) {
                     Some(doc) => print_help_builtin(doc),
                     None => {
                         println!(
@@ -315,23 +315,49 @@ fn print_help_geral() {
          formato(\"pt\") / en     padrão de números em texto\n  \
          sair                   encerra o REPL (também Ctrl+D)\n  \
          sair() / sair(1)       nativa: encerra o processo\n  \
-         cls                    limpa a tela (também limpe_tela / cls())\n  \
+         cls                    comando do REPL: limpa a tela\n  \
+         importe \"tela\"         cls() / casa() / eh_terminal()\n  \
          ↑ ↓                    comandos anteriores"
     );
 }
 
 fn print_help_funcoes() {
-    println!("Funções nativas:\n");
-    for doc in super::builtins::BUILTIN_DOCS {
-        println!("  {:<22} {}", doc.sig, doc.summary);
+    println!("Núcleo (sempre no escopo):\n");
+    print_docs_for(None);
+    for (mod_name, title) in [
+        ("matriz", r#"Módulo matriz — importe "matriz":"#),
+        ("arquivo", r#"Módulo arquivo — importe "arquivo":"#),
+        ("tela", r#"Módulo tela — importe "tela":"#),
+        ("mat", r#"Módulo mat — importe "mat":"#),
+    ] {
+        println!("\n{title}\n");
+        print_docs_for(Some(mod_name));
     }
     println!("\n  ajuda <nome>          detalhe, ex.: ajuda raiz");
 }
 
-fn print_help_builtin(doc: &super::builtins::BuiltinDoc) {
+fn print_docs_for(module: Option<&str>) {
+    for n in super::nativas::NATIVAS {
+        if n.module != module {
+            continue;
+        }
+        let canon = n.names[0];
+        if let Some(doc) = super::nativas::lookup_builtin_doc(canon) {
+            println!("  {:<22} {}", doc.sig, doc.summary);
+        }
+    }
+}
+
+fn print_help_builtin(doc: &super::nativas::BuiltinDoc) {
+    let modulo = super::nativas::NATIVAS
+        .iter()
+        .find(|n| n.names[0] == doc.name)
+        .and_then(|n| n.module)
+        .map(|m| format!("\n  módulo: importe \"{m}\""))
+        .unwrap_or_default();
     println!(
-        "  {}\n  {}\n  exemplo: {}",
-        doc.sig, doc.summary, doc.example
+        "  {}\n  {}{}\n  exemplo: {}",
+        doc.sig, doc.summary, modulo, doc.example
     );
 }
 
@@ -350,9 +376,10 @@ fn print_help_linguagem() {
          funcao(a, b) {{ … }}            último valor é o resultado\n  \
          expr se_falhar outro            captura erro (divisão, arquivo, índice)\n  \
          :nome                           o texto \"nome\" (chave de mapa)\n  \
-         mapa {{ :nome -> \"Ana\" }}     vazio: mapa {{}}\n  \
-         conjunto {{ :ana, 1 }}          únicos; s += :bia; s.remova(:ana)\n  \
-         matriz {{ [1, 2], [3, 4] }}     A[1, 2]  nlinhas(A)  ncolunas(A)\n  \
+         :nome -> \"Ana\"                par; mapa([:nome -> \"Ana\"])\n  \
+         conjunto([:ana, 1])             únicos; s += :bia; s.remova(:ana)\n  \
+         importe \"matriz\"              matriz([[1, 2], [3, 4]])\n  \
+         importe \"arquivo\" / \"tela\" / \"mat\"\n  \
          lista[1]  texto[1..3]  t[2..]   fatia corta no fim; t[2] fora ainda é erro\n  \
          pessoa:nome                     chave de mapa (pessoa[\"nome\"])\n  \
          mat::soma(1, 2)                 nome em um módulo\n  \
@@ -427,7 +454,7 @@ mod tests {
             Some(ReplCommand::Ajuda(Some("raiz")))
         ));
         assert_eq!(normalize_topic("funções"), "funcoes");
-        assert!(super::super::builtins::lookup_builtin_doc("escreva").is_some());
+        assert!(super::super::nativas::lookup_builtin_doc("escreva").is_some());
         assert!(matches!(parse_repl_command("cls"), Some(ReplCommand::Cls)));
         assert!(matches!(
             parse_repl_command("limpe_tela"),

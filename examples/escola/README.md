@@ -52,6 +52,6 @@ Substitutos de conta no caderno: mude as constantes e execute de novo.
 | `tabuada.lep` | tabuada |
 | `turma.lep` | notas e situação |
 
-A raiz quadrada é a função nativa `raiz(n)`. Não há `π` nativo: `geometria.lep` define `pi` no começo.
+A raiz quadrada é `raiz(n)` no módulo `mat` (`importe "mat"`). Não há `π` nativo: `geometria.lep` define `pi` no começo.
 
 `diario.lep` e `contatos.lep` gravam em `examples/saida/` (pasta ignorada pelo git).

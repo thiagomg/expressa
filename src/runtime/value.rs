@@ -14,6 +14,7 @@ pub enum Value {
     Texto(String),
     Bool(bool),
     Lista(Rc<RefCell<Vec<Value>>>),
+    Par(MapKey, Box<Value>),
     Mapa(Rc<RefCell<Vec<(MapKey, Value)>>>),
     Conjunto(Rc<RefCell<Vec<MapKey>>>),
     Matriz(Rc<RefCell<Vec<Vec<f64>>>>),
@@ -78,6 +79,13 @@ impl Value {
                     .collect();
                 format!("[{}]", inner.join(", "))
             }
+            Value::Par(k, v) => {
+                let vs = match v.as_ref() {
+                    Value::Texto(s) => format!("\"{}\"", escape_texto(s)),
+                    other => other.format_with(loc),
+                };
+                format!("{k} -> {vs}")
+            }
             Value::Mapa(xs) => {
                 let inner: Vec<_> = xs
                     .borrow()
@@ -108,6 +116,7 @@ impl Value {
             Value::Texto(_) => "texto",
             Value::Bool(_) => "bool",
             Value::Lista(_) => "lista",
+            Value::Par(_, _) => "par",
             Value::Mapa(_) => "mapa",
             Value::Conjunto(_) => "conjunto",
             Value::Matriz(_) => "matriz",
@@ -126,6 +135,7 @@ impl PartialEq for Value {
             (Value::Texto(a), Value::Texto(b)) => a == b,
             (Value::Bool(a), Value::Bool(b)) => a == b,
             (Value::Lista(a), Value::Lista(b)) => a.borrow()[..] == b.borrow()[..],
+            (Value::Par(ak, av), Value::Par(bk, bv)) => ak == bk && av == bv,
             (Value::Mapa(a), Value::Mapa(b)) => a.borrow()[..] == b.borrow()[..],
             (Value::Conjunto(a), Value::Conjunto(b)) => {
                 let a = a.borrow();
@@ -169,6 +179,10 @@ impl fmt::Display for Value {
                     write_debug_value(f, v)?;
                 }
                 write!(f, "]")
+            }
+            Value::Par(k, v) => {
+                write!(f, "{k} -> ")?;
+                write_debug_value(f, v)
             }
             Value::Mapa(xs) => {
                 write!(f, "mapa{{")?;
@@ -473,6 +487,10 @@ mod tests {
         assert_eq!(Value::Texto("x".into()).type_name(), "texto");
         assert_eq!(Value::Bool(true).type_name(), "bool");
         assert_eq!(Value::lista(vec![]).type_name(), "lista");
+        assert_eq!(
+            Value::Par(MapKey::Texto("n".into()), Box::new(Value::Numero(1.0))).type_name(),
+            "par"
+        );
         assert_eq!(Value::mapa(vec![]).type_name(), "mapa");
         assert_eq!(Value::conjunto(vec![]).type_name(), "conjunto");
         assert_eq!(Value::Builtin("escreva").type_name(), "funcao");
@@ -489,6 +507,10 @@ mod tests {
         assert_eq!(
             Value::lista(vec![Value::Numero(1.0), Value::Texto("a".into())]).to_string(),
             "[1, \"a\"]"
+        );
+        assert_eq!(
+            Value::Par(MapKey::Texto("n".into()), Box::new(Value::Numero(1.0))).to_string(),
+            "\"n\" -> 1"
         );
         assert_eq!(
             Value::mapa(vec![(MapKey::Texto("n".into()), Value::Numero(1.0))]).to_string(),

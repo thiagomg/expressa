@@ -71,9 +71,6 @@
       <keyword>repita</keyword>
       <keyword>enquanto</keyword>
       <keyword>vezes</keyword>
-      <keyword>mapa</keyword>
-      <keyword>matriz</keyword>
-      <keyword>conjunto</keyword>
       <keyword>importe</keyword>
       <keyword>contem</keyword>
     </context>
@@ -95,6 +92,9 @@
       <keyword>numero</keyword>
       <keyword>formato</keyword>
       <keyword>formate</keyword>
+      <keyword>mapa</keyword>
+      <keyword>conjunto</keyword>
+      <keyword>matriz</keyword>
       <keyword>raiz</keyword>
       <keyword>aleatorio</keyword>
       <keyword>aleatório</keyword>

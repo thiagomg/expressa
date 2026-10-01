@@ -1,10 +1,20 @@
 # Expressa: Funções Nativas
 
-Funções nativas vêm instaladas em todo programa. Não é preciso importar nada: basta chamá-las pelo nome.
-
-Elas **não podem ser reatribuídas** (`escreva = 1` causa erro). Qualquer falha (arquivo inexistente, lista vazia, tipo errado) interrompe o programa, a menos que a chamada esteja protegida com `se_falhar`.
+O **núcleo** (`escreva`, `leia`, `tamanho`, `mapa`, `conjunto`…) está no escopo de todo programa. O restante vive em módulos nativos:
 
 ```text
+importe "matriz"     // construtor matriz, zeros, transposta…
+importe "arquivo"    // leia_arquivo, salve_csv…
+importe "tela"       // cls, casa, eh_terminal
+importe "mat"        // raiz, aleatorio, semente
+```
+
+`importe "matriz"` espalha os nomes no escopo atual. `matriz = importe "matriz"` guarda o módulo (`matriz::zeros`, `A.matriz::transposta()`).
+
+Nativas **não podem ser reatribuídas** (`escreva = 1` causa erro). Qualquer falha (arquivo inexistente, lista vazia, tipo errado) interrompe o programa, a menos que a chamada esteja protegida com `se_falhar`.
+
+```text
+importe "arquivo"
 linhas = leia_arquivo("dados.txt") se_falhar []
 ```
 
@@ -14,31 +24,21 @@ Caminhos de arquivo **relativos** são resolvidos a partir da pasta do `.lep` em
 
 ## Índice
 
+**Núcleo**
+
 | Função | Resumo |
 |--------|--------|
 | [`escreva`](#escreva) | Imprime valores na saída (stdout) |
 | [`escreva_erro`](#escreva_erro) | Imprime na saída de erro (stderr) |
 | [`sair`](#sair) | Encerra o programa |
-| [`cls`](#cls) | Limpa a tela (`limpe_tela` também) |
-| [`casa`](#casa) | Cursor no canto, sem apagar |
 | [`durma`](#durma) | Espera um número de segundos |
 | [`leia`](#leia) | Lê uma linha do teclado |
 | [`leia_linhas`](#leia_linhas) | Lê todas as linhas da entrada padrão |
-| [`eh_terminal`](#eh_terminal) | Entrada é o teclado? (`é_terminal` também) |
 | [`argumentos`](#argumentos) | Lista dos valores após o `.lep` |
 | [`numero`](#numero) | Transforma texto em número |
 | [`formate`](#formate) | Monta texto com alinhamento (`{:<n}` `{:>n}` `{:^n}`) |
-| [`raiz`](#raiz) | Raiz quadrada |
-| [`aleatorio`](#aleatorio) | Inteiro ao acaso (`aleatório` também) |
-| [`semente`](#semente) | Fixa a sequência de `aleatorio` |
-| [`transposta`](#transposta) | Transposta |
-| [`det`](#det) | Determinante 1×1–3×3 |
-| [`identidade`](#identidade) | Matriz identidade |
-| [`zeros`](#zeros) | Matriz de zeros |
-| [`uns`](#uns) | Matriz de uns |
-| [`cheia`](#cheia) | Matriz preenchida com um valor |
-| [`nlinhas`](#nlinhas) | Número de linhas |
-| [`ncolunas`](#ncolunas) | Número de colunas |
+| [`mapa`](#mapa) | Constrói um mapa a partir de uma lista de pares |
+| [`conjunto`](#conjunto) | Constrói um conjunto a partir de uma lista |
 | [`tamanho`](#tamanho) | Quantidade de itens ou caracteres |
 | [`primeiro`](#primeiro) | Primeiro elemento de uma lista |
 | [`ultimo`](#ultimo) | Último elemento de uma lista |
@@ -50,6 +50,41 @@ Caminhos de arquivo **relativos** são resolvidos a partir da pasta do `.lep` em
 | [`separe`](#separe) | Parte um texto em lista |
 | [`junte`](#junte) | Junta uma lista em um texto |
 | [`limpe`](#limpe) | Remove espaços das extremidades |
+
+**`importe "tela"`**
+
+| Função | Resumo |
+|--------|--------|
+| [`cls`](#cls) | Limpa a tela (`limpe_tela` também) |
+| [`casa`](#casa) | Cursor no canto, sem apagar |
+| [`eh_terminal`](#eh_terminal) | Entrada é o teclado? (`é_terminal` também) |
+
+**`importe "mat"`**
+
+| Função | Resumo |
+|--------|--------|
+| [`raiz`](#raiz) | Raiz quadrada |
+| [`aleatorio`](#aleatorio) | Inteiro ao acaso (`aleatório` também) |
+| [`semente`](#semente) | Fixa a sequência de `aleatorio` |
+
+**`importe "matriz"`**
+
+| Função | Resumo |
+|--------|--------|
+| [`matriz`](#matriz) | Constrói uma matriz a partir de uma lista de listas |
+| [`transposta`](#transposta) | Transposta |
+| [`det`](#det) | Determinante 1×1–3×3 |
+| [`identidade`](#identidade) | Matriz identidade |
+| [`zeros`](#zeros) | Matriz de zeros |
+| [`uns`](#uns) | Matriz de uns |
+| [`cheia`](#cheia) | Matriz preenchida com um valor |
+| [`nlinhas`](#nlinhas) | Número de linhas |
+| [`ncolunas`](#ncolunas) | Número de colunas |
+
+**`importe "arquivo"`**
+
+| Função | Resumo |
+|--------|--------|
 | [`leia_arquivo`](#leia_arquivo) | Lê um arquivo em lista de linhas |
 | [`salve_arquivo`](#salve_arquivo) | Grava uma lista de linhas em um arquivo |
 | [`adicione_arquivo`](#adicione_arquivo) | Acrescenta linhas ao final de um arquivo |
@@ -118,6 +153,8 @@ fim
 
 ### `cls`
 
+Módulo `tela`: `importe "tela"`.
+
 ```text
 cls()
 limpe_tela()
@@ -144,6 +181,8 @@ fim
 Em uma animação, `cls()` a cada quadro **pisca**: a tela fica vazia um instante antes do próximo `escreva`. Use [`casa`](#casa) no laço e `cls()` só uma vez no começo.
 
 ### `casa`
+
+Módulo `tela`: `importe "tela"`.
 
 ```text
 casa()
@@ -239,6 +278,8 @@ cat arquivo.txt | expressa prog.lep
 ```
 
 ### `eh_terminal`
+
+Módulo `tela`: `importe "tela"`.
 
 ```text
 eh_terminal() -> bool
@@ -362,17 +403,33 @@ Bruno            10
 
 ---
 
-## Matrizes
+## Módulo `matriz`
 
 ```text
-A = matriz {
+importe "matriz"
+A = matriz([
     [1, 2],
-    [3, 4]
-}
+    [3, 4],
+])
 ```
 
 Índices em 1: `A[1, 2]`. `A[1]` é a linha como lista. `A + B`, `k * A`, `A * B` (produto).
 `nlinhas(A)` e `ncolunas(A)` são o tamanho; `tamanho(A)` também é o número de linhas.
+Depois de espalhar o módulo, o nome `matriz` é o construtor; `A.transposta()` equivale a `transposta(A)`.
+
+### `matriz`
+
+```text
+matriz(linhas) -> matriz
+```
+
+Monta uma matriz a partir de uma lista de listas de números. Todas as linhas precisam ter o mesmo comprimento.
+
+```text
+A = matriz([[1, 2, 3], [4, 5, 6]])
+```
+
+**Erros:** falta o argumento; linhas que não são listas de números; retângulo irregular.
 
 ### `nlinhas`
 
@@ -380,7 +437,7 @@ A = matriz {
 nlinhas(A) -> numero
 ```
 
-Quantidade de linhas. `nlinhas(matriz { [1, 2, 3], [4, 5, 6] })` vale `2`.
+Quantidade de linhas. `nlinhas(matriz([[1, 2, 3], [4, 5, 6]]))` vale `2`.
 
 **Erros:** o argumento não é matriz.
 
@@ -390,7 +447,7 @@ Quantidade de linhas. `nlinhas(matriz { [1, 2, 3], [4, 5, 6] })` vale `2`.
 ncolunas(A) -> numero
 ```
 
-Quantidade de colunas. `ncolunas(matriz { [1, 2, 3], [4, 5, 6] })` vale `3`.
+Quantidade de colunas. `ncolunas(matriz([[1, 2, 3], [4, 5, 6]]))` vale `3`.
 
 **Erros:** o argumento não é matriz.
 
@@ -457,6 +514,12 @@ A[2, 3] = 1
 
 ---
 
+## Módulo `mat`
+
+```text
+importe "mat"
+```
+
 ### `raiz`
 
 ```text
@@ -511,6 +574,40 @@ Retorna `nada`.
 
 ## Coleções
 
+### `mapa`
+
+```text
+mapa() -> mapa
+mapa(pares) -> mapa
+```
+
+Monta um mapa. Sem argumento (ou com `[]`) o mapa é vazio. Com uma lista, cada item precisa ser um **par** (`chave -> valor`). Chaves duplicadas são erro.
+
+```text
+devs = [:developer -> "Thiago", "co-developer" -> "Grok"]
+quem = mapa(devs)
+pessoa = mapa([:nome -> "Ana", :idade -> 25])
+vazio = mapa()
+```
+
+**Erros:** mais de um argumento; item que não é par; chave inválida (lista, mapa, outro par); chave repetida.
+
+### `conjunto`
+
+```text
+conjunto() -> conjunto
+conjunto(xs) -> conjunto
+```
+
+Monta um conjunto. Sem argumento (ou com `[]`) o conjunto é vazio. Com uma lista, duplicatas caem e a ordem de inserção permanece. Elementos: texto, número inteiro ou bool.
+
+```text
+nomes = conjunto(["Thiago", "Adriana", "Thiago"])
+vazio = conjunto()
+```
+
+**Erros:** mais de um argumento; elemento que não é texto, inteiro nem bool.
+
 ### `tamanho`
 
 ```text
@@ -524,10 +621,7 @@ Retorna a quantidade de elementos (lista, mapa ou conjunto), de caracteres (text
 ```text
 tamanho("olá")             // 3
 tamanho([10, 20, 30])      // 3
-tamanho(mapa inicio
-    "a" -> 1
-    "b" -> 2
-fim)                       // 2
+tamanho(mapa([:a -> 1, :b -> 2]))   // 2
 ```
 
 ### `primeiro`
@@ -710,7 +804,11 @@ limpe("  Maria Silva  ")   // "Maria Silva"
 
 ---
 
-## Arquivos
+## Módulo `arquivo`
+
+```text
+importe "arquivo"
+```
 
 Caminhos relativos partem da pasta do programa `.lep`. Caminhos absolutos (`/casa/dados.txt`) são usados como estão. Se a pasta de destino ainda não existir, `salve_arquivo`, `adicione_arquivo` e `salve_csv` tentam criá-la.
 
@@ -811,7 +909,7 @@ salve_csv("saida.csv", [
 
 | Situação | Exemplo de tratamento |
 |----------|------------------------|
-| Arquivo inexistente | `leia_arquivo("x.txt") se_falhar []` |
+| Arquivo inexistente | `importe "arquivo"` e `leia_arquivo("x.txt") se_falhar []` |
 | Lista vazia | `primeiro(lista) se_falhar 0` — ou teste `tamanho(lista) == 0` antes |
 | Tipo inesperado | não há coerção automática: `tamanho(10)` é erro |
 

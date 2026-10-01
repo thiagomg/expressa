@@ -14,7 +14,7 @@ pub mod ast;
 pub use block_types::Block;
 pub use core_types::{Import, Item, Program};
 pub use error::ParseError;
-pub use expression_types::{Expr, IfBranch, MapEntry, Param};
+pub use expression_types::{Expr, IfBranch, Param};
 pub use incomplete::needs_more_input;
 pub use operator_types::{BinaryOp, UnaryOp};
 pub use parser::parse;

@@ -5,7 +5,7 @@ use crate::lexer::{Span, TokenKind};
 use crate::parser::block_types::Block;
 use crate::parser::core_types::{Import, Item, Program};
 use crate::parser::error::ParseError;
-use crate::parser::expression_types::{Expr, IfBranch, MapEntry, Param};
+use crate::parser::expression_types::{Expr, IfBranch, Param};
 use crate::parser::operator_types::{BinaryOp, UnaryOp};
 use crate::parser::statement_types::{AssignTarget, Stmt};
 
@@ -21,9 +21,8 @@ pub fn parse(source: &str) -> Result<Program, ParseError> {
 struct Parser {
     tokens: Vec<Token>,
     pos: usize,
-    /// `obj:campo` postfix. Off while parsing a mapa *value* so the next
-    /// `:chave` starts a new entry (`:a -> x :b -> y`). Use `(obj:campo)` to
-    /// force field access in that position.
+    /// `obj:campo` postfix, only when `:` is on the same line.
+    /// Inside `(…)`, field access is always allowed (`(obj:campo)`).
     allow_colon_field: bool,
 }
 
@@ -395,6 +394,22 @@ impl Parser {
             // We pass *right_bp* as the new min_bp so the RHS only
             // absorbs *tighter* operators (see infix_info docs).
             self.remove();
+            if matches!(op_kind, TokenKind::Arrow) {
+                if matches!(lhs, Expr::Par { .. }) {
+                    return Err(self.err_at(
+                        "pares não podem ser encadeados (a -> b -> c); use parênteses no valor",
+                        lhs.span(),
+                    ));
+                }
+                let rhs = self.parse_bp(r_bp)?;
+                let span = lhs.span().join(rhs.span());
+                lhs = Expr::Par {
+                    key: Box::new(lhs),
+                    value: Box::new(rhs),
+                    span,
+                };
+                continue;
+            }
             let rhs = self.parse_bp(r_bp)?;
             let span = lhs.span().join(rhs.span());
 
@@ -532,18 +547,6 @@ impl Parser {
                 self.pos -= 1;
                 self.parse_function()
             }
-            TokenKind::Mapa => {
-                self.pos -= 1;
-                self.parse_map()
-            }
-            TokenKind::Matriz => {
-                self.pos -= 1;
-                self.parse_matrix()
-            }
-            TokenKind::Conjunto => {
-                self.pos -= 1;
-                self.parse_conjunto()
-            }
             _ => Err(self.err_at(
                 format!("expressão inválida (token inesperado: {:?})", tok.kind),
                 tok.span,
@@ -664,7 +667,8 @@ impl Parser {
         }
     }
 
-    /// `xs.anexe(1)` → `anexe(xs, 1)`. Bare `xs.anexe` is an error.
+    /// `xs.anexe(1)` → `anexe(xs, 1)`. `a.mod::f(x)` → `mod::f(a, x)`.
+    /// Bare `xs.anexe` is an error.
     fn finish_ufcs(&mut self, object: Expr) -> Result<Expr, ParseError> {
         let start = object.span();
         self.remove(); // .
@@ -672,16 +676,19 @@ impl Parser {
         let TokenKind::Ident(name) = field_tok.kind else {
             return Err(self.err_at("esperado nome de função após '.'", field_tok.span));
         };
+        let mut callee = Expr::Ident {
+            name,
+            span: field_tok.span,
+        };
+        while matches!(self.peek_kind(), TokenKind::ColonColon) {
+            callee = self.finish_module_field(callee)?;
+        }
         if !matches!(self.peek_kind(), TokenKind::LParen) {
             return Err(self.err(
                 "esperado '(' após '.' (xs.tamanho() é tamanho(xs); sem parênteses não vale)",
             ));
         }
-        let method_span = field_tok.span;
-        let call = self.finish_call(Expr::Ident {
-            name,
-            span: method_span,
-        })?;
+        let call = self.finish_call(callee)?;
         match call {
             Expr::Call {
                 callee,
@@ -789,180 +796,6 @@ impl Parser {
             body,
         })
     }
-
-    fn parse_map(&mut self) -> Result<Expr, ParseError> {
-        let start = self
-            .expect_kind(|k| matches!(k, TokenKind::Mapa), "esperado 'mapa'")?
-            .span;
-
-        let brace = match self.peek_kind() {
-            TokenKind::LBrace => true,
-            TokenKind::Inicio => false,
-            _ => {
-                return Err(self.err("esperado 'inicio' ou '{' após 'mapa'"));
-            }
-        };
-        let open = self.remove();
-
-        if brace && matches!(self.peek_kind(), TokenKind::RBrace) {
-            let end = self.remove();
-            return Ok(Expr::Map {
-                entries: vec![],
-                span: start.join(end.span),
-            });
-        }
-
-        let mut entries = Vec::new();
-        loop {
-            match self.peek_kind() {
-                TokenKind::Eof => break,
-                TokenKind::Fim if !brace => break,
-                TokenKind::RBrace if brace => break,
-                TokenKind::Fim if brace => {
-                    return Err(self.err("esperado '}' (mapa aberto com '{')"));
-                }
-                TokenKind::RBrace if !brace => {
-                    return Err(self.err("esperado 'fim' (mapa aberto com 'inicio')"));
-                }
-                _ => {
-                    let key = self.parse_expr()?;
-                    self.expect_kind(
-                        |k| matches!(k, TokenKind::Arrow),
-                        "esperado '->' entre chave e valor do mapa",
-                    )?;
-                    let prev = self.allow_colon_field;
-                    self.allow_colon_field = false;
-                    let value = self.parse_expr();
-                    self.allow_colon_field = prev;
-                    let value = value?;
-                    let span = key.span().join(value.span());
-                    entries.push(MapEntry { key, value, span });
-                }
-            }
-        }
-
-        let end = if brace {
-            self.expect_kind(|k| matches!(k, TokenKind::RBrace), "esperado '}' do mapa")?
-        } else {
-            self.expect_kind(|k| matches!(k, TokenKind::Fim), "esperado 'fim' do mapa")?
-        };
-        if entries.is_empty() {
-            return Err(self.err_at(
-                "literal de mapa com 'inicio'/'fim' precisa de entradas; use 'mapa {}' para vazio",
-                open.span.join(end.span),
-            ));
-        }
-
-        Ok(Expr::Map {
-            entries,
-            span: start.join(end.span),
-        })
-    }
-
-    fn parse_matrix(&mut self) -> Result<Expr, ParseError> {
-        let start = self
-            .expect_kind(|k| matches!(k, TokenKind::Matriz), "esperado 'matriz'")?
-            .span;
-        let brace = match self.peek_kind() {
-            TokenKind::LBrace => true,
-            TokenKind::Inicio => false,
-            _ => {
-                return Err(self.err("esperado 'inicio' ou '{' após 'matriz'"));
-            }
-        };
-        self.remove();
-        let mut rows = Vec::new();
-        loop {
-            match self.peek_kind() {
-                TokenKind::Eof => break,
-                TokenKind::Fim if !brace => break,
-                TokenKind::RBrace if brace => break,
-                TokenKind::Fim if brace => {
-                    return Err(self.err("esperado '}' (matriz aberta com '{')"));
-                }
-                TokenKind::RBrace if !brace => {
-                    return Err(self.err("esperado 'fim' (matriz aberta com 'inicio')"));
-                }
-                _ => {
-                    rows.push(self.parse_expr()?);
-                    if matches!(self.peek_kind(), TokenKind::Comma) {
-                        self.remove();
-                    }
-                }
-            }
-        }
-        let end = if brace {
-            self.expect_kind(|k| matches!(k, TokenKind::RBrace), "esperado '}' da matriz")?
-        } else {
-            self.expect_kind(|k| matches!(k, TokenKind::Fim), "esperado 'fim' da matriz")?
-        };
-        if rows.is_empty() {
-            return Err(self.err_at(
-                "matriz precisa de pelo menos uma linha",
-                start.join(end.span),
-            ));
-        }
-        Ok(Expr::Matrix {
-            rows,
-            span: start.join(end.span),
-        })
-    }
-
-    fn parse_conjunto(&mut self) -> Result<Expr, ParseError> {
-        let start = self
-            .expect_kind(|k| matches!(k, TokenKind::Conjunto), "esperado 'conjunto'")?
-            .span;
-        let brace = match self.peek_kind() {
-            TokenKind::LBrace => true,
-            TokenKind::Inicio => false,
-            _ => {
-                return Err(self.err("esperado 'inicio' ou '{' após 'conjunto'"));
-            }
-        };
-        self.remove();
-        if brace && matches!(self.peek_kind(), TokenKind::RBrace) {
-            let end = self.remove();
-            return Ok(Expr::Conjunto {
-                elements: vec![],
-                span: start.join(end.span),
-            });
-        }
-        let mut elements = Vec::new();
-        loop {
-            match self.peek_kind() {
-                TokenKind::Eof => break,
-                TokenKind::Fim if !brace => break,
-                TokenKind::RBrace if brace => break,
-                TokenKind::Fim if brace => {
-                    return Err(self.err("esperado '}' (conjunto aberto com '{')"));
-                }
-                TokenKind::RBrace if !brace => {
-                    return Err(self.err("esperado 'fim' (conjunto aberto com 'inicio')"));
-                }
-                _ => {
-                    elements.push(self.parse_expr()?);
-                    if matches!(self.peek_kind(), TokenKind::Comma) {
-                        self.remove();
-                    }
-                }
-            }
-        }
-        let end = if brace {
-            self.expect_kind(
-                |k| matches!(k, TokenKind::RBrace),
-                "esperado '}' do conjunto",
-            )?
-        } else {
-            self.expect_kind(
-                |k| matches!(k, TokenKind::Fim),
-                "esperado 'fim' do conjunto",
-            )?
-        };
-        Ok(Expr::Conjunto {
-            elements,
-            span: start.join(end.span),
-        })
-    }
 }
 
 fn map_field_receiver(expr: &Expr) -> bool {
@@ -991,9 +824,6 @@ fn expr_can_start(kind: &TokenKind) -> bool {
             | TokenKind::LBrace
             | TokenKind::Se
             | TokenKind::Funcao
-            | TokenKind::Mapa
-            | TokenKind::Matriz
-            | TokenKind::Conjunto
             | TokenKind::Minus
             | TokenKind::Nao
             | TokenKind::Colon
@@ -1069,6 +899,7 @@ fn infix_info(kind: &TokenKind) -> Option<(TokenKind, u8, u8)> {
     // Higher bp = tighter binding.
     let (l_bp, r_bp) = match kind {
         TokenKind::SeFalhar => (1, 2),
+        TokenKind::Arrow => (2, 3),
         TokenKind::Ou => (3, 4),
         TokenKind::E => (5, 6),
         TokenKind::EqEq
@@ -1354,9 +1185,17 @@ mod tests {
         }
         let p = parse_ok("f = funcao(n) { n * 2 }");
         assert!(matches!(&p.items[0], Item::Stmt(Stmt::Assign { .. })));
-        let p = parse_ok(r#"mapa { "a" -> 1 }"#);
+        let p = parse_ok(r#"mapa(["a" -> 1])"#);
         match expr_stmt(&p) {
-            Expr::Map { entries, .. } => assert_eq!(entries.len(), 1),
+            Expr::Call { args, .. } => {
+                assert_eq!(args.len(), 1);
+                match &args[0] {
+                    Expr::List { elements, .. } => {
+                        assert!(matches!(elements[0], Expr::Par { .. }));
+                    }
+                    other => panic!("{other:?}"),
+                }
+            }
             other => panic!("{other:?}"),
         }
         let err = parse("inicio 1 }").unwrap_err();
@@ -1366,18 +1205,11 @@ mod tests {
     }
 
     #[test]
-    fn matriz_literal_and_index2() {
-        let p = parse_ok(
-            r#"
-A = matriz {
-    [1, 2, 3],
-    [4, 5, 6]
-}
-"#,
-        );
+    fn matriz_call_and_index2() {
+        let p = parse_ok("A = matriz([[1, 2, 3], [4, 5, 6]])");
         match &p.items[0] {
             Item::Stmt(Stmt::Assign { value, .. }) => {
-                assert!(matches!(value, Expr::Matrix { rows, .. } if rows.len() == 2));
+                assert!(matches!(value, Expr::Call { .. }));
             }
             other => panic!("{other:?}"),
         }
@@ -1423,6 +1255,15 @@ fim
         match expr_stmt(&parse_ok("xs.tamanho()")) {
             Expr::Call { callee, args, .. } => {
                 assert!(matches!(callee.as_ref(), Expr::Ident { name, .. } if name == "tamanho"));
+                assert_eq!(args.len(), 1);
+            }
+            other => panic!("{other:?}"),
+        }
+        match expr_stmt(&parse_ok("A.matriz::transposta()")) {
+            Expr::Call { callee, args, .. } => {
+                assert!(
+                    matches!(callee.as_ref(), Expr::Field { field, .. } if field == "transposta")
+                );
                 assert_eq!(args.len(), 1);
             }
             other => panic!("{other:?}"),
@@ -1510,17 +1351,9 @@ fim
     }
 
     #[test]
-    fn conjunto_literal() {
-        parse_ok("conjunto {}");
-        parse_ok("conjunto { 1, :ana, verdadeiro }");
-        parse_ok(
-            r#"
-conjunto inicio
-    1
-    2
-fim
-"#,
-        );
+    fn conjunto_call() {
+        parse_ok("conjunto()");
+        parse_ok("conjunto([1, :ana, verdadeiro])");
     }
 
     #[test]
@@ -1529,16 +1362,16 @@ fim
             Expr::String { value, .. } if value == "nome" => {}
             other => panic!("{other:?}"),
         }
-        parse_ok(r#"mapa { :nome -> "Thiago" }"#);
+        parse_ok(r#"mapa([:nome -> "Thiago"])"#);
         parse_ok(
             r#"
-mapa {
-    :op -> opções
-    :args -> args_pos
-}
+mapa([
+    :op -> opções,
+    :args -> args_pos,
+])
 "#,
         );
-        parse_ok("mapa { :op -> (opções:campo) :args -> 1 }");
+        parse_ok("mapa([:op -> (opções:campo), :args -> 1])");
         parse_ok("pessoa:nome");
         parse_ok("escreva(pessoa:nome)");
         let err = parse("escreva(pessoa\n:nome)").unwrap_err();
@@ -1551,24 +1384,20 @@ mapa {
     }
 
     #[test]
-    fn mapa_vazio_and_entries() {
-        let p = parse_ok("mapa {}");
-        assert!(matches!(
-            expr_stmt(&p),
-            Expr::Map { entries, .. } if entries.is_empty()
-        ));
-
-        let src = r#"
-mapa
-inicio
-    "a" -> 1
-fim
-"#;
-        let p = parse_ok(src);
-        match expr_stmt(&p) {
-            Expr::Map { entries, .. } => assert_eq!(entries.len(), 1),
+    fn pair_and_mapa_call() {
+        match expr_stmt(&parse_ok(r#":a -> 1"#)) {
+            Expr::Par { .. } => {}
             other => panic!("{other:?}"),
         }
+        let p = parse_ok("mapa()");
+        assert!(matches!(expr_stmt(&p), Expr::Call { .. }));
+        let p = parse_ok(r#"mapa(["a" -> 1])"#);
+        match expr_stmt(&p) {
+            Expr::Call { args, .. } => assert_eq!(args.len(), 1),
+            other => panic!("{other:?}"),
+        }
+        let err = parse("1 -> 2 -> 3").unwrap_err();
+        assert!(err.message.contains("encadeados"), "{err}");
     }
 
     #[test]

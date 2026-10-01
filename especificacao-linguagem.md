@@ -24,7 +24,7 @@ Todo bloco (`inicio`/`fim` ou `{`/`}`) é uma expressão e retorna o valor da ú
 | `texto`  | `"olá"`, `"123"`                  |
 | `bool`   | `verdadeiro`, `falso`             |
 
-Tipos compostos: **lista**, **mapa**, **conjunto** e **matriz**.
+Tipos compostos: **lista**, **par**, **mapa**, **conjunto** e **matriz**.
 
 ---
 
@@ -73,10 +73,11 @@ A **primeira linha** do arquivo pode ser um shebang Unix (`#!…`). A Expressa i
 **Atribuição composta:** `+=` (número, texto, lista), `-=` (número) — `alvo += v` é `alvo = alvo + v`.  
 **Comparação:** `==` `!=` `>` `<` `>=` `<=`  
 **Lógicos:** `e` `ou` `nao`  
-**Raiz quadrada (nativa):** `raiz(n)` — erro se `n < 0` (tratável com `se_falhar`)  
-**Ao acaso:** `aleatorio(min, max)` (também `aleatório`) inteiro inclusive; `semente(n)` fixa a sequência.  
+**Par:** `chave -> valor` produz um valor do tipo `par`. Não encadeia: `a -> b -> c` é erro.  
+**Raiz quadrada:** `importe "mat"` e então `raiz(n)` — erro se `n < 0` (tratável com `se_falhar`)  
+**Ao acaso:** no mesmo módulo, `aleatorio(min, max)` (também `aleatório`) inteiro inclusive; `semente(n)` fixa a sequência.  
 **Texto ↔ número:** `numero(t)` lê o padrão atual; `formato("pt")` / `formato("en")` escolhe pt-BR (`1.000,5`) ou en-US (`1,000.5`). Padrão pt-BR. Literais no código usam `.`.  
-**Acesso:** `mat::soma` (módulo), `pessoa:nome` (chave de mapa), `xs.tamanho()` (= `tamanho(xs)`).
+**Acesso:** `mat::soma` (módulo), `pessoa:nome` (chave de mapa), `p:chave` / `p:valor` (par), `xs.tamanho()` (= `tamanho(xs)`).
 
 ```text
 10 + 5
@@ -101,19 +102,21 @@ resultado = { 10 + 5 }    // igual
 
 ## 5.1. Matrizes
 
-Retangulares, só números. Índices começam em 1: `A[linha, coluna]`. `A[i]` devolve a linha como lista.
+Retangulares, só números. Vêm do módulo `matriz`. Índices começam em 1: `A[linha, coluna]`. `A[i]` devolve a linha como lista.
 
 ```text
-A = matriz {
+importe "matriz"
+
+A = matriz([
     [1, 2, 3],
-    [4, 5, 6]
-}
+    [4, 5, 6],
+])
 
 A[1, 2]          // 2
 A + B            // mesma ordem
 3 * A
 A * B            // produto de matrizes
-transposta(A)
+transposta(A)    // ou A.transposta()
 det(A)           // 1×1, 2×2 ou 3×3
 identidade(3)
 zeros(2, 5)      // só zeros; uns(2, 5); cheia(2, 5, 7)
@@ -121,6 +124,8 @@ nlinhas(A)       // 2
 ncolunas(A)      // 3
 tamanho(A)       // também linhas
 ```
+
+O construtor é a função `matriz(linhas)`: uma lista de listas de números, retângulo obrigatório. Depois de `importe "matriz"`, o nome `matriz` é essa função; `A.matriz::transposta()` só vale com alias (`matriz = importe "matriz"`, então `matriz::matriz([[…]])` e `A.matriz::transposta()`).
 
 ---
 
@@ -251,16 +256,19 @@ numeros[2..]                   // do 2 até o fim
 
 ---
 
-## 10. Mapas
+## 10. Pares e mapas
 
-`:nome` é o texto `"nome"` (só um identificador). Palavras-chave e textos com espaço continuam com aspas.
+`chave -> valor` é um **par**. Campos: `p:chave` e `p:valor`. Chaves de par são texto, número inteiro ou bool (`:nome` é o texto `"nome"`). Palavras-chave e textos com espaço continuam com aspas. Um par **não** serve de chave de mapa nem de elemento de conjunto.
+
+`mapa` e `conjunto` são funções do núcleo. `mapa()` (ou `mapa([])`) é o mapa vazio. `mapa(xs)` recebe **uma** lista de pares; chaves duplicadas são erro.
 
 ```text
-pessoa = mapa {
-    :nome -> "Thiago"
-    :idade -> 25
-    "cidade natal" -> "Fortaleza"
-}
+devs = [:developer -> "Thiago", "co-developer" -> "Grok"]
+pessoa = mapa([
+    :nome -> "Thiago",
+    :idade -> 25,
+    "cidade natal" -> "Fortaleza",
+])
 
 pessoa:nome                    // "Thiago"
 pessoa[:nome]                  // igual a pessoa["nome"]
@@ -277,27 +285,25 @@ opções
 :args                // não é opções:args
 ```
 
-Num `mapa { }`, o valor também não come o próximo `:chave`. Campo como valor: `:op -> (obj:campo)`.
-
-A forma `mapa inicio … fim` também vale (`"nome" = "Ana"` ou `:nome -> "Ana"`).
+Campo como valor de um par: `:op -> (obj:campo)`. `{ }` e `inicio`/`fim` são só blocos; `[ ]` é só lista (vírgulas obrigatórias, vírgula final permitida).
 
 ---
 
 ## 11. Conjuntos
 
-Valores únicos (texto, número inteiro ou bool). Sem repetir, sem ordem de índice.
+Valores únicos (texto, número inteiro ou bool). Sem repetir, sem ordem de índice. `conjunto()` (ou `conjunto([])`) é vazio. `conjunto(xs)` recebe uma lista e descarta duplicatas na ordem de inserção.
 
 ```text
-s = conjunto { :ana, :bia, 1 }
+s = conjunto([:ana, :bia, 1])
 s contem :ana              // verdadeiro
 s += :carlos               // acrescenta um elemento
-s += conjunto { :bia, :dani }    // união
+s += conjunto([:bia, :dani])    // união
 s = s.remova(:ana)         // por valor, devolve cópia
 tamanho(s)
 para x em s { escreva(x) }
 ```
 
-`conjunto {}` é vazio. Lista e mapa **não** viram conjunto sozinhos. `remova` no conjunto é o elemento, não um índice.
+Lista e mapa **não** viram conjunto sozinhos. `remova` no conjunto é o elemento, não um índice.
 
 ---
 
@@ -354,13 +360,12 @@ fim
 cat nomes.txt | expressa grep.lep Thiago
 ```
 
-`eh_terminal()` (também `é_terminal()`) é `verdadeiro` se a entrada é o teclado, `falso` se é um pipe ou um arquivo.
+`eh_terminal()` (também `é_terminal()`), no módulo `tela`, é `verdadeiro` se a entrada é o teclado, `falso` se é um pipe ou um arquivo.
 
 `argumentos` é a lista dos valores depois do `.lep` na linha de comando (`argumentos[1]` é o primeiro; índices começam em 1). Sem argumentos extras, a lista é `[]`. Não dá para reatribuir `argumentos`.
 
 `escreva` vai para a saída padrão (stdout). `escreva_erro` vai para a saída de erro (stderr).  
-`cls()` (também `limpe_tela()`) limpa a tela.  
-`casa()` manda o cursor ao canto sem apagar — use no lugar de `cls()` em animações para não piscar.  
+Com `importe "tela"`: `cls()` (também `limpe_tela()`) limpa a tela; `casa()` manda o cursor ao canto sem apagar — use no lugar de `cls()` em animações para não piscar.  
 `durma(segundos)` espera; `durma(0.5)` é meio segundo.
 
 `sair()` encerra o programa com código 0. `sair(1)` encerra com falha (o shell vê o código). Não é capturado por `se_falhar`.
@@ -382,7 +387,10 @@ escreva_erro("falhou")
 
 ## 14. Arquivos
 
+Funções do módulo `arquivo`:
+
 ```text
+importe "arquivo"
 linhas = leia_arquivo("dados.txt")          // retorna lista de linhas
 salve_arquivo("saida.txt", linhas)          // salva lista
 adicione_arquivo("saida.txt", ["nova"])     // adiciona linhas
@@ -402,6 +410,7 @@ salve_csv("saida.csv", dados)
 - Para tratar, usa-se `se_falhar`
 
 ```text
+importe "arquivo"
 linhas = leia_arquivo("arquivo.txt") se_falhar []
 
 valor = 10 / 0 se_falhar 0
@@ -413,13 +422,19 @@ item = lista[99] se_falhar "não existe"
 
 ## 16. Módulos / Importação
 
+A mesma forma vale para arquivos `.lep` e para os módulos nativos `matriz`, `arquivo`, `tela` e `mat`.
+
 ```text
-mat = importe "matematica"     // com namespace
+mat = importe "matematica"     // alias: nomes em mat::
 mat::soma(10, 5)
 
-importe "matematica"           // sem namespace (traz tudo)
+importe "matematica"           // espalha os nomes no escopo atual
 soma(10, 5)
 ```
+
+Nome **sem** `/`, `./` nem `.lep` procura primeiro um módulo nativo. Caminho com `./`, `/` ou sufixo `.lep` é arquivo. Se o nome nativo também existir como arquivo no mesmo diretório (`matriz.lep` ao lado do programa), `importe "matriz"` é **erro**: use `importe "./matriz"` para o arquivo. Enquanto o arquivo estiver no caminho do nome nu, o nativo fica inacessível por esse nome.
+
+Depois de espalhar `importe "matriz"`, o construtor `matriz` ocupa o identificador; use `A.transposta()`. Com alias `matriz = importe "matriz"`, use `matriz::matriz([[…]])` e `A.matriz::transposta()`.
 
 ---
 

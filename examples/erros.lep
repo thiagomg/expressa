@@ -1,3 +1,5 @@
+importe "arquivo"
+
 linhas = leia_arquivo("arquivo.txt") se_falhar []
 
 valor = 10 / 0 se_falhar 0

@@ -18,12 +18,13 @@
     "retorne" "pare" "continue" "continua"
     "inicio" "início" "fim" "funcao" "função"
     "para" "de" "ate" "até" "em" "repita" "enquanto" "vezes"
-    "mapa" "matriz" "conjunto" "importe" "contem" "contém"))
+    "importe" "contem" "contém"))
 
 (defconst expressa-builtins
   '("escreva" "escreva_erro" "sair" "cls" "limpe_tela" "casa" "durma" "leia" "leia_linhas"
     "eh_terminal" "é_terminal" "argumentos"
     "numero" "formato" "formate" "raiz" "aleatorio" "aleatório" "semente"
+    "mapa" "conjunto" "matriz"
     "transposta" "det" "identidade" "zeros" "uns" "cheia" "nlinhas" "ncolunas"
     "tamanho" "primeiro" "ultimo"
     "maiuscula" "minuscula" "sem_acento" "remova" "substitua" "separe" "junte" "limpe"

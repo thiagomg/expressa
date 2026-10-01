@@ -140,24 +140,9 @@ fn check_expr(expr: &Expr, use_: Use) -> Result<(), ParseError> {
             }
             Ok(())
         }
-        Expr::Map { entries, .. } => {
-            for e in entries {
-                check_expr(&e.key, Use::Value)?;
-                check_expr(&e.value, Use::Value)?;
-            }
-            Ok(())
-        }
-        Expr::Matrix { rows, .. } => {
-            for r in rows {
-                check_expr(r, Use::Value)?;
-            }
-            Ok(())
-        }
-        Expr::Conjunto { elements, .. } => {
-            for e in elements {
-                check_expr(e, Use::Value)?;
-            }
-            Ok(())
+        Expr::Par { key, value, .. } => {
+            check_expr(key, Use::Value)?;
+            check_expr(value, Use::Value)
         }
         Expr::Field { object, .. } | Expr::MapField { object, .. } => {
             check_expr(object, Use::Value)

@@ -1,3 +1,5 @@
+importe "arquivo"
+
 // Caderno de bordo: grava, acrescenta e relê um arquivo de texto.
 
 arquivo = "saida/diario.txt"

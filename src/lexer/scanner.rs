@@ -774,7 +774,7 @@ mod tests {
         // One source with every ASCII keyword from the language (space-separated).
         let src = "\
 se senao ou e nao inicio fim funcao para de ate em \
-repita enquanto vezes mapa matriz conjunto importe contem verdadeiro falso se_falhar retorne \
+repita enquanto vezes importe contem verdadeiro falso se_falhar retorne \
 pare continue";
 
         assert_eq!(
@@ -795,9 +795,6 @@ pare continue";
                 TokenKind::Repita,
                 TokenKind::Enquanto,
                 TokenKind::Vezes,
-                TokenKind::Mapa,
-                TokenKind::Matriz,
-                TokenKind::Conjunto,
                 TokenKind::Importe,
                 TokenKind::Contem,
                 TokenKind::Verdadeiro,
@@ -1070,11 +1067,11 @@ pare continue";
     }
 
     #[test]
-    fn mapa_vazio_tokens() {
+    fn mapa_is_identifier() {
         assert_eq!(
             kinds("mapa {}"),
             vec![
-                TokenKind::Mapa,
+                TokenKind::Ident("mapa".into()),
                 TokenKind::LBrace,
                 TokenKind::RBrace,
                 TokenKind::Eof,
