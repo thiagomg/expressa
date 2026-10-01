@@ -195,6 +195,7 @@ fn build_ui(app: &Application) {
     let err_tag = TextTag::new(Some("stderr"));
     err_tag.set_foreground(Some("#e53935"));
     output.buffer().tag_table().add(&err_tag);
+    add_ansi_tags(output.buffer().tag_table());
     let error_link_tag = TextTag::new(Some("error-link"));
     error_link_tag.set_foreground(Some("#e53935"));
     error_link_tag.set_underline(gtk::pango::Underline::Single);
@@ -1274,24 +1275,190 @@ fn append_output_tagged(ui: &Rc<RefCell<Ui>>, text: &str, stderr: bool) {
         let end = buf.end_iter();
         let current = buf.text(&start, &end, false);
         let next = apply_screen_codes(current.as_str(), text);
-        buf.set_text(&next);
+        buf.set_text("");
+        insert_ansi_text(&buf, &next, None);
         return;
     }
-    let mut start = buf.end_iter();
-    let start_off = start.offset();
-    buf.insert(&mut start, text);
-    if stderr {
-        let a = buf.iter_at_offset(start_off);
-        let b = buf.end_iter();
-        buf.apply_tag(&u.err_tag, &a, &b);
-    }
+    let extra = if stderr { Some(&u.err_tag) } else { None };
+    insert_ansi_text(&buf, text, extra);
 }
 
 const ANSI_ERASE_DISPLAY: &str = "\x1b[2J";
 const ANSI_CURSOR_HOME: &str = "\x1b[H";
 
+const ANSI_FG: &[(&str, &str)] = &[
+    ("ansi-fg-preto", "#212121"),
+    ("ansi-fg-vermelho", "#c62828"),
+    ("ansi-fg-verde", "#2e7d32"),
+    ("ansi-fg-amarelo", "#f9a825"),
+    ("ansi-fg-azul", "#1565c0"),
+    ("ansi-fg-magenta", "#6a1b9a"),
+    ("ansi-fg-ciano", "#00838f"),
+    ("ansi-fg-branco", "#424242"),
+];
+const ANSI_BG: &[(&str, &str)] = &[
+    ("ansi-bg-preto", "#212121"),
+    ("ansi-bg-vermelho", "#ef9a9a"),
+    ("ansi-bg-verde", "#a5d6a7"),
+    ("ansi-bg-amarelo", "#fff59d"),
+    ("ansi-bg-azul", "#90caf9"),
+    ("ansi-bg-magenta", "#ce93d8"),
+    ("ansi-bg-ciano", "#80deea"),
+    ("ansi-bg-branco", "#eeeeee"),
+];
+
+fn add_ansi_tags(table: gtk::TextTagTable) {
+    for (name, color) in ANSI_FG {
+        let tag = TextTag::new(Some(name));
+        tag.set_foreground(Some(color));
+        table.add(&tag);
+    }
+    for (name, color) in ANSI_BG {
+        let tag = TextTag::new(Some(name));
+        tag.set_background(Some(color));
+        table.add(&tag);
+    }
+    let bold = TextTag::new(Some("ansi-negrito"));
+    bold.set_weight(700);
+    table.add(&bold);
+}
+
 fn has_screen_code(text: &str) -> bool {
     text.contains(ANSI_ERASE_DISPLAY) || text.contains(ANSI_CURSOR_HOME)
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+struct AnsiStyle {
+    fg: Option<u8>,
+    bg: Option<u8>,
+    bold: bool,
+}
+
+fn ansi_fg_tag(code: u8) -> Option<&'static str> {
+    Some(match code {
+        30 => "ansi-fg-preto",
+        31 => "ansi-fg-vermelho",
+        32 => "ansi-fg-verde",
+        33 => "ansi-fg-amarelo",
+        34 => "ansi-fg-azul",
+        35 => "ansi-fg-magenta",
+        36 => "ansi-fg-ciano",
+        37 => "ansi-fg-branco",
+        _ => return None,
+    })
+}
+
+fn ansi_bg_tag(code: u8) -> Option<&'static str> {
+    Some(match code {
+        40 => "ansi-bg-preto",
+        41 => "ansi-bg-vermelho",
+        42 => "ansi-bg-verde",
+        43 => "ansi-bg-amarelo",
+        44 => "ansi-bg-azul",
+        45 => "ansi-bg-magenta",
+        46 => "ansi-bg-ciano",
+        47 => "ansi-bg-branco",
+        _ => return None,
+    })
+}
+
+fn apply_sgr(style: &mut AnsiStyle, params: &str) {
+    if params.is_empty() {
+        *style = AnsiStyle::default();
+        return;
+    }
+    for p in params.split(';') {
+        match p.parse::<u8>().unwrap_or(0) {
+            0 => *style = AnsiStyle::default(),
+            1 => style.bold = true,
+            22 => style.bold = false,
+            39 => style.fg = None,
+            49 => style.bg = None,
+            n @ 30..=37 => style.fg = Some(n),
+            n @ 40..=47 => style.bg = Some(n),
+            _ => {}
+        }
+    }
+}
+
+/// Visible spans after stripping CSI. SGR updates style; other CSI is skipped.
+fn ansi_spans(text: &str) -> Vec<(String, AnsiStyle)> {
+    let mut out = Vec::new();
+    let mut style = AnsiStyle::default();
+    let mut chunk = String::new();
+    let mut pos = 0;
+    let flush = |chunk: &mut String, style: AnsiStyle, out: &mut Vec<(String, AnsiStyle)>| {
+        if !chunk.is_empty() {
+            out.push((std::mem::take(chunk), style));
+        }
+    };
+    while pos < text.len() {
+        let rest = &text[pos..];
+        if rest.as_bytes().first() == Some(&0x1b) {
+            if let Some((len, final_byte, params)) = parse_csi(rest) {
+                flush(&mut chunk, style, &mut out);
+                if final_byte == b'm' {
+                    apply_sgr(&mut style, params);
+                }
+                pos += len;
+                continue;
+            }
+        }
+        let ch = rest.chars().next().unwrap();
+        chunk.push(ch);
+        pos += ch.len_utf8();
+    }
+    flush(&mut chunk, style, &mut out);
+    out
+}
+
+/// `\x1b[` + params + final byte (0x40..=0x7E). `params` is the inner string.
+fn parse_csi(text: &str) -> Option<(usize, u8, &str)> {
+    let bytes = text.as_bytes();
+    if bytes.len() < 2 || bytes[0] != 0x1b || bytes[1] != b'[' {
+        return None;
+    }
+    let mut i = 2;
+    while i < bytes.len() && (0x30..=0x3f).contains(&bytes[i]) {
+        i += 1;
+    }
+    while i < bytes.len() && (0x20..=0x2f).contains(&bytes[i]) {
+        i += 1;
+    }
+    if i >= bytes.len() || !(0x40..=0x7e).contains(&bytes[i]) {
+        return None;
+    }
+    let params = std::str::from_utf8(&bytes[2..i]).ok()?;
+    Some((i + 1, bytes[i], params))
+}
+
+fn insert_ansi_text(buf: &gtk::TextBuffer, text: &str, extra: Option<&TextTag>) {
+    let table = buf.tag_table();
+    for (chunk, style) in ansi_spans(text) {
+        let mut end = buf.end_iter();
+        let start_off = end.offset();
+        buf.insert(&mut end, &chunk);
+        let a = buf.iter_at_offset(start_off);
+        let b = buf.end_iter();
+        if let Some(tag) = extra {
+            buf.apply_tag(tag, &a, &b);
+        }
+        if let Some(name) = style.fg.and_then(ansi_fg_tag) {
+            if let Some(tag) = table.lookup(name) {
+                buf.apply_tag(&tag, &a, &b);
+            }
+        }
+        if let Some(name) = style.bg.and_then(ansi_bg_tag) {
+            if let Some(tag) = table.lookup(name) {
+                buf.apply_tag(&tag, &a, &b);
+            }
+        }
+        if style.bold {
+            if let Some(tag) = table.lookup("ansi-negrito") {
+                buf.apply_tag(&tag, &a, &b);
+            }
+        }
+    }
 }
 
 /// `cls()` / `casa()` in the output pane: erase-display and cursor-home
@@ -1927,7 +2094,7 @@ fn parse_importe(line: &str) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{apply_screen_codes, leia_call_count, leia_prompts};
+    use super::{ansi_spans, apply_screen_codes, leia_call_count, leia_prompts, AnsiStyle};
 
     #[test]
     fn leia_count_ignores_leia_arquivo() {
@@ -1963,5 +2130,35 @@ mod tests {
     fn apply_screen_codes_casa_replaces_frame() {
         let out = apply_screen_codes("quadro 1\n", "\x1b[Hquadro 2\n");
         assert_eq!(out, "quadro 2\n");
+    }
+
+    #[test]
+    fn apply_screen_codes_keeps_sgr_in_frame() {
+        let out = apply_screen_codes("velho", "\x1b[H\x1b[32m*\x1b[0m");
+        assert_eq!(out, "\x1b[32m*\x1b[0m");
+    }
+
+    #[test]
+    fn ansi_spans_splits_color_and_reset() {
+        let spans = ansi_spans("\x1b[32mHP\x1b[0m!");
+        assert_eq!(spans.len(), 2);
+        assert_eq!(spans[0].0, "HP");
+        assert_eq!(spans[0].1, AnsiStyle { fg: Some(32), bg: None, bold: false });
+        assert_eq!(spans[1].0, "!");
+        assert_eq!(spans[1].1, AnsiStyle::default());
+    }
+
+    #[test]
+    fn ansi_spans_frente_e_fundo() {
+        let spans = ansi_spans("\x1b[37;41mGO\x1b[0m");
+        assert_eq!(spans[0].0, "GO");
+        assert_eq!(
+            spans[0].1,
+            AnsiStyle {
+                fg: Some(37),
+                bg: Some(41),
+                bold: false
+            }
+        );
     }
 }

@@ -1,6 +1,11 @@
-use crate::lexer::Span;
+use std::cell::RefCell;
+use std::rc::Rc;
 
-use super::super::error::EvalError;
+use crate::lexer::Span;
+use crate::parser::parse;
+
+use super::super::env::Env;
+use super::super::error::{CallFrame, EvalError};
 use super::super::eval::Vm;
 use super::super::value::{MapKey, NumeroLocale, Value, conjunto_insert};
 use super::{sem_acento, value_as_texto};
@@ -413,4 +418,29 @@ impl Vm<'_> {
         }
     }
 
+    pub(crate) fn bi_avaliar(
+        &mut self,
+        args: &[Value],
+        span: Span,
+        env: &Rc<RefCell<Env>>,
+    ) -> Result<Value, EvalError> {
+        self.expect_arity(args, 1, span)?;
+        let src = self.expect_texto(&args[0], span)?;
+        let program = parse(&src).map_err(|e| self.err(format!("avaliar: {}", e.message), span))?;
+        if program.items.is_empty() {
+            return Err(self.err("avaliar espera uma expressão", span));
+        }
+        self.stack.push(CallFrame {
+            name: "avaliar".into(),
+            file: self.file.clone(),
+            span,
+        });
+        let prev_file = std::mem::replace(&mut self.file, "<avaliar>".into());
+        let prev_source = std::mem::replace(&mut self.source, src);
+        let result = self.eval_items_value(&program.items, env);
+        self.source = prev_source;
+        self.file = prev_file;
+        self.stack.pop();
+        result
+    }
 }

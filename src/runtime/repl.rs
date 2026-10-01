@@ -380,6 +380,8 @@ fn print_help_linguagem() {
          conjunto([:ana, 1])             únicos; s += :bia; s.remova(:ana)\n  \
          importe \"matriz\"              matriz([[1, 2], [3, 4]])\n  \
          importe \"arquivo\" / \"tela\" / \"mat\"\n  \
+         avaliar(\"2 + 3 * 4\")          executa o texto no escopo atual\n  \
+         \"HP\".pinte(:verde)            cor no terminal (módulo tela)\n  \
          lista[1]  texto[1..3]  t[2..]   fatia corta no fim; t[2] fora ainda é erro\n  \
          pessoa:nome                     chave de mapa (pessoa[\"nome\"])\n  \
          mat::soma(1, 2)                 nome em um módulo\n  \
