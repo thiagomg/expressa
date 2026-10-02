@@ -1,0 +1,251 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "Expressa",
+  "scopeName": "source.expressa",
+  "fileTypes": [
+    "lep"
+  ],
+  "patterns": [
+    {
+      "include": "#shebang"
+    },
+    {
+      "include": "#comentarios"
+    },
+    {
+      "include": "#textos"
+    },
+    {
+      "include": "#numeros"
+    },
+    {
+      "include": "#chave"
+    },
+    {
+      "include": "#definicao-funcao"
+    },
+    {
+      "include": "#modulo"
+    },
+    {
+      "include": "#constantes"
+    },
+    {
+      "include": "#operadores-palavra"
+    },
+    {
+      "include": "#blocos"
+    },
+    {
+      "include": "#palavra-funcao"
+    },
+    {
+      "include": "#palavra-importe"
+    },
+    {
+      "include": "#controle"
+    },
+    {
+      "include": "#nativas"
+    },
+    {
+      "include": "#valores-nativos"
+    },
+    {
+      "include": "#chamada"
+    },
+    {
+      "include": "#operadores"
+    },
+    {
+      "include": "#pontuacao"
+    }
+  ],
+  "repository": {
+    "shebang": {
+      "name": "comment.line.shebang.expressa",
+      "match": "\\A#!.*$"
+    },
+    "comentarios": {
+      "patterns": [
+        {
+          "name": "comment.line.double-slash.expressa",
+          "begin": "//",
+          "beginCaptures": {
+            "0": {
+              "name": "punctuation.definition.comment.expressa"
+            }
+          },
+          "end": "$"
+        },
+        {
+          "name": "comment.block.expressa",
+          "begin": "/\\*",
+          "beginCaptures": {
+            "0": {
+              "name": "punctuation.definition.comment.expressa"
+            }
+          },
+          "end": "\\*/",
+          "endCaptures": {
+            "0": {
+              "name": "punctuation.definition.comment.expressa"
+            }
+          }
+        }
+      ]
+    },
+    "textos": {
+      "name": "string.quoted.double.expressa",
+      "begin": "\"",
+      "beginCaptures": {
+        "0": {
+          "name": "punctuation.definition.string.begin.expressa"
+        }
+      },
+      "end": "\"",
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.definition.string.end.expressa"
+        }
+      },
+      "patterns": [
+        {
+          "name": "constant.character.escape.expressa",
+          "match": "\\\\[\"\\\\nrt]"
+        },
+        {
+          "name": "invalid.illegal.escape.expressa",
+          "match": "\\\\."
+        },
+        {
+          "name": "constant.other.placeholder.expressa",
+          "match": "\\{(?:\\d+)?(?::[^{}]?[<>^]\\d+)?\\}"
+        }
+      ]
+    },
+    "numeros": {
+      "name": "constant.numeric.decimal.expressa",
+      "match": "(?<![\\p{L}\\p{N}_])[0-9][0-9_]*(?:\\.[0-9][0-9_]*)?(?![\\p{L}\\p{N}_])"
+    },
+    "chave": {
+      "comment": ":nome is the text \"nome\" (map keys, colors); not ::",
+      "name": "constant.other.symbol.expressa",
+      "match": "(?<!:):(?!:)[\\p{L}_][\\p{L}\\p{N}_]*"
+    },
+    "definicao-funcao": {
+      "match": "([\\p{L}_][\\p{L}\\p{N}_]*)\\s*(=)\\s*(?=(?:funcao|função)(?![\\p{L}\\p{N}_]))",
+      "captures": {
+        "1": {
+          "name": "entity.name.function.expressa"
+        },
+        "2": {
+          "name": "keyword.operator.assignment.expressa"
+        }
+      }
+    },
+    "modulo": {
+      "match": "([\\p{L}_][\\p{L}\\p{N}_]*)(::)",
+      "captures": {
+        "1": {
+          "name": "entity.name.namespace.expressa"
+        },
+        "2": {
+          "name": "punctuation.separator.namespace.expressa"
+        }
+      }
+    },
+    "constantes": {
+      "name": "constant.language.boolean.expressa",
+      "match": "(?<![\\p{L}\\p{N}_])(?:verdadeiro|falso)(?![\\p{L}\\p{N}_])"
+    },
+    "operadores-palavra": {
+      "name": "keyword.operator.word.expressa",
+      "match": "(?<![\\p{L}\\p{N}_])(?:contem|contém|nao|não|ou|e)(?![\\p{L}\\p{N}_])"
+    },
+    "blocos": {
+      "name": "keyword.control.block.expressa",
+      "match": "(?<![\\p{L}\\p{N}_])(?:inicio|início|fim)(?![\\p{L}\\p{N}_])"
+    },
+    "palavra-funcao": {
+      "name": "storage.type.function.expressa",
+      "match": "(?<![\\p{L}\\p{N}_])(?:funcao|função)(?![\\p{L}\\p{N}_])"
+    },
+    "palavra-importe": {
+      "name": "keyword.control.import.expressa",
+      "match": "(?<![\\p{L}\\p{N}_])(?:importe)(?![\\p{L}\\p{N}_])"
+    },
+    "controle": {
+      "name": "keyword.control.expressa",
+      "match": "(?<![\\p{L}\\p{N}_])(?:se_falhar|continua|continue|enquanto|retorne|repita|senao|senão|vezes|para|pare|ate|até|de|em|se)(?![\\p{L}\\p{N}_])"
+    },
+    "nativas": {
+      "name": "support.function.builtin.expressa",
+      "match": "(?<![\\p{L}\\p{N}_])(?:adicione_arquivo|salve_arquivo|escreva_erro|leia_arquivo|eh_terminal|leia_linhas|é_terminal|identidade|limpe_tela|sem_acento|transposta|aleatorio|aleatório|maiuscula|minuscula|salve_csv|substitua|conjunto|leia_csv|ncolunas|primeiro|avaliar|escreva|formate|formato|negrito|nlinhas|semente|tamanho|matriz|numero|remova|separe|ultimo|cheia|durma|fundo|junte|limpe|pinte|zeros|casa|leia|mapa|raiz|sair|cls|det|uns)(?![\\p{L}\\p{N}_])"
+    },
+    "valores-nativos": {
+      "name": "variable.language.expressa",
+      "match": "(?<![\\p{L}\\p{N}_])(?:argumentos)(?![\\p{L}\\p{N}_])"
+    },
+    "chamada": {
+      "match": "([\\p{L}_][\\p{L}\\p{N}_]*)\\s*(?=\\()",
+      "captures": {
+        "1": {
+          "name": "entity.name.function.call.expressa"
+        }
+      }
+    },
+    "operadores": {
+      "patterns": [
+        {
+          "name": "keyword.operator.arrow.expressa",
+          "match": "->"
+        },
+        {
+          "name": "keyword.operator.range.expressa",
+          "match": "\\.\\."
+        },
+        {
+          "name": "keyword.operator.comparison.expressa",
+          "match": "==|!=|<=|>=|<|>"
+        },
+        {
+          "name": "keyword.operator.assignment.compound.expressa",
+          "match": "\\+=|-="
+        },
+        {
+          "name": "keyword.operator.assignment.expressa",
+          "match": "="
+        },
+        {
+          "name": "keyword.operator.arithmetic.expressa",
+          "match": "[-+*/%]"
+        },
+        {
+          "name": "punctuation.accessor.expressa",
+          "match": "\\.|:"
+        }
+      ]
+    },
+    "pontuacao": {
+      "patterns": [
+        {
+          "name": "punctuation.separator.comma.expressa",
+          "match": ","
+        },
+        {
+          "name": "punctuation.section.block.expressa",
+          "match": "[{}]"
+        },
+        {
+          "name": "punctuation.section.brackets.expressa",
+          "match": "[\\[\\]]"
+        },
+        {
+          "name": "punctuation.section.parens.expressa",
+          "match": "[()]"
+        }
+      ]
+    }
+  }
+}

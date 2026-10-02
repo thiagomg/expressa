@@ -1,3 +1,4 @@
+mod exec;
 mod indent;
 mod rpc;
 
@@ -20,7 +21,8 @@ use sourceview5::{
     StyleSchemeManager, View as SourceView,
 };
 
-use rpc::{ExecEvent, Rpc, ensure_server};
+use exec::{ExecEvent, Workspace};
+use rpc::{Rpc, ensure_server};
 
 const APP_ID: &str = "dev.expressa.aula";
 const DEFAULT_URL: &str = "http://127.0.0.1:50051";
@@ -48,6 +50,8 @@ struct Ui {
     status: Label,
     window: ApplicationWindow,
     debug_cmd: Option<std::sync::mpsc::Sender<String>>,
+    /// Terminal state of the output pane once `cls()` / `casa()` ran.
+    screen: Screen,
     breakpoints: HashSet<u32>,
     watches: Vec<String>,
     debug_tag: TextTag,
@@ -238,6 +242,7 @@ fn build_ui(app: &Application) {
         status,
         window: win.clone(),
         debug_cmd: None,
+        screen: Screen::default(),
         breakpoints: HashSet::new(),
         watches: Vec::new(),
         debug_tag,
@@ -509,33 +514,38 @@ fn build_ui(app: &Application) {
         let shortcuts = gtk::ShortcutController::new();
         shortcuts.set_propagation_phase(gtk::PropagationPhase::Bubble);
         // Do not use EventControllerKey on the window (defaults to Capture
-        // and eats dead keys). Do not Capture here either.
+        // and eats dead keys). Function keys go in their own Capture
+        // controller: GtkPaned binds F6/F8 (cycle focus) and would swallow
+        // them in Bubble. A ShortcutController only matches its own keys, so
+        // dead keys still reach the editor.
+        let fkeys = gtk::ShortcutController::new();
+        fkeys.set_propagation_phase(gtk::PropagationPhase::Capture);
         let ui_k = Rc::clone(&ui);
-        add_shortcut(&shortcuts, "F5", {
+        add_shortcut(&fkeys, "F5", {
             let ui = Rc::clone(&ui_k);
             move || rodar(&ui, false)
         });
-        add_shortcut(&shortcuts, "F6", {
+        add_shortcut(&fkeys, "F6", {
             let ui = Rc::clone(&ui_k);
             move || rodar(&ui, true)
         });
-        add_shortcut(&shortcuts, "F7", {
+        add_shortcut(&fkeys, "F7", {
             let b = btn_files.clone();
             move || b.set_active(!b.is_active())
         });
-        add_shortcut(&shortcuts, "F8", {
+        add_shortcut(&fkeys, "F8", {
             let b = btn_panel.clone();
             move || b.set_active(!b.is_active())
         });
-        add_shortcut(&shortcuts, "F9", {
+        add_shortcut(&fkeys, "F9", {
             let ui = Rc::clone(&ui_k);
             move || toggle_breakpoint_here(&ui)
         });
-        add_shortcut(&shortcuts, "F10", {
+        add_shortcut(&fkeys, "F10", {
             let ui = Rc::clone(&ui_k);
             move || send_debug_cmd(&ui, "proximo")
         });
-        add_shortcut(&shortcuts, "F11", {
+        add_shortcut(&fkeys, "F11", {
             let ui = Rc::clone(&ui_k);
             move || send_debug_cmd(&ui, "entrar")
         });
@@ -551,6 +561,7 @@ fn build_ui(app: &Application) {
             let ui = Rc::clone(&ui_k);
             move || show_search(&ui)
         });
+        win.add_controller(fkeys);
         win.add_controller(shortcuts);
     }
     {
@@ -857,7 +868,8 @@ fn confirm_discard(ui: &Rc<RefCell<Ui>>, then: impl FnOnce() + 'static) {
 }
 
 fn set_output(ui: &Rc<RefCell<Ui>>, text: &str) {
-    let u = ui.borrow();
+    let mut u = ui.borrow_mut();
+    u.screen = Screen::default();
     u.output.buffer().set_text(text);
 }
 
@@ -1115,7 +1127,7 @@ fn remove_watch(ui: &Rc<RefCell<Ui>>) {
     refresh_watch_values(ui, &[]);
 }
 
-fn refresh_watch_values(ui: &Rc<RefCell<Ui>>, vars: &[expressa_aula_proto::DebugVar]) {
+fn refresh_watch_values(ui: &Rc<RefCell<Ui>>, vars: &[expressa::runtime::DebugBinding]) {
     let u = ui.borrow();
     u.watch_store.clear();
     for name in &u.watches {
@@ -1231,7 +1243,7 @@ fn mark_debug_line(ui: &Rc<RefCell<Ui>>, line: u32) {
         .scroll_to_iter(&mut a.clone(), 0.2, false, 0.0, 0.0);
 }
 
-fn fill_debug_views(ui: &Rc<RefCell<Ui>>, paused: &expressa_aula_proto::DebugPaused) {
+fn fill_debug_views(ui: &Rc<RefCell<Ui>>, paused: &expressa::runtime::DebugPaused) {
     {
         let u = ui.borrow();
         u.vars_store.clear();
@@ -1268,19 +1280,96 @@ fn append_stderr(ui: &Rc<RefCell<Ui>>, text: &str) {
 }
 
 fn append_output_tagged(ui: &Rc<RefCell<Ui>>, text: &str, stderr: bool) {
-    let u = ui.borrow();
+    let mut u = ui.borrow_mut();
     let buf = u.output.buffer();
-    if !stderr && has_screen_code(text) {
-        let start = buf.start_iter();
-        let end = buf.end_iter();
-        let current = buf.text(&start, &end, false);
-        let next = apply_screen_codes(current.as_str(), text);
-        buf.set_text("");
-        insert_ansi_text(&buf, &next, None);
+    if !stderr && (u.screen.row.is_some() || has_screen_code(text)) {
+        write_screen(&buf, &mut u.screen, text);
         return;
     }
     let extra = if stderr { Some(&u.err_tag) } else { None };
     insert_ansi_text(&buf, text, extra);
+    trim_output(&buf);
+}
+
+/// Lines kept in the output pane. A program that never ends keeps only the
+/// tail instead of growing the buffer without limit.
+const MAX_OUTPUT_LINES: i32 = 5000;
+
+/// Drops the oldest lines past [`MAX_OUTPUT_LINES`]; returns how many.
+fn trim_output(buf: &gtk::TextBuffer) -> i32 {
+    let extra = buf.line_count() - MAX_OUTPUT_LINES;
+    if extra <= 0 {
+        return 0;
+    }
+    let mut start = buf.start_iter();
+    if let Some(mut end) = buf.iter_at_line(extra) {
+        buf.delete(&mut start, &mut end);
+    }
+    extra
+}
+
+/// Cursor of the output pane after `cls()` / `casa()`. `row: None` means
+/// plain appending (no screen codes seen in this run).
+#[derive(Default)]
+struct Screen {
+    row: Option<i32>,
+    /// Text of the current line not yet ended by `\n` (may hold SGR codes).
+    partial: String,
+}
+
+/// Terminal-like writing: cursor home goes back to the first line and each
+/// new line overwrites the old one, so an animation keeps showing the
+/// previous frame while the program computes the next (no blank flicker).
+/// Erase-display clears the pane. Granularity is whole lines.
+fn write_screen(buf: &gtk::TextBuffer, screen: &mut Screen, text: &str) {
+    let mut row = screen.row.unwrap_or_else(|| (buf.line_count() - 1).max(0));
+    let mut rest = text;
+    while let Some(c) = rest.chars().next() {
+        if rest.starts_with(ANSI_ERASE_DISPLAY) {
+            buf.set_text("");
+            row = 0;
+            screen.partial.clear();
+            rest = &rest[ANSI_ERASE_DISPLAY.len()..];
+        } else if rest.starts_with(ANSI_CURSOR_HOME) {
+            row = 0;
+            screen.partial.clear();
+            rest = &rest[ANSI_CURSOR_HOME.len()..];
+        } else if c == '\n' {
+            replace_line(buf, row, &screen.partial);
+            screen.partial.clear();
+            row += 1;
+            if row >= buf.line_count() {
+                let mut end = buf.end_iter();
+                buf.insert(&mut end, "\n");
+            }
+            row -= trim_output(buf);
+            rest = &rest[1..];
+        } else {
+            screen.partial.push(c);
+            rest = &rest[c.len_utf8()..];
+        }
+    }
+    if !screen.partial.is_empty() {
+        replace_line(buf, row, &screen.partial);
+    }
+    screen.row = Some(row);
+}
+
+fn replace_line(buf: &gtk::TextBuffer, row: i32, content: &str) {
+    while row >= buf.line_count() {
+        let mut end = buf.end_iter();
+        buf.insert(&mut end, "\n");
+    }
+    let Some(mut start) = buf.iter_at_line(row) else {
+        return;
+    };
+    let mut end = start.clone();
+    if !end.ends_line() {
+        end.forward_to_line_end();
+    }
+    let offset = start.offset();
+    buf.delete(&mut start, &mut end);
+    insert_ansi_at(buf, offset, content, None);
 }
 
 const ANSI_ERASE_DISPLAY: &str = "\x1b[2J";
@@ -1433,13 +1522,18 @@ fn parse_csi(text: &str) -> Option<(usize, u8, &str)> {
 }
 
 fn insert_ansi_text(buf: &gtk::TextBuffer, text: &str, extra: Option<&TextTag>) {
+    insert_ansi_at(buf, buf.end_iter().offset(), text, extra);
+}
+
+/// Insert `text` at char `offset`, turning SGR codes into tags.
+fn insert_ansi_at(buf: &gtk::TextBuffer, mut offset: i32, text: &str, extra: Option<&TextTag>) {
     let table = buf.tag_table();
     for (chunk, style) in ansi_spans(text) {
-        let mut end = buf.end_iter();
-        let start_off = end.offset();
-        buf.insert(&mut end, &chunk);
-        let a = buf.iter_at_offset(start_off);
-        let b = buf.end_iter();
+        let mut at = buf.iter_at_offset(offset);
+        buf.insert(&mut at, &chunk);
+        let a = buf.iter_at_offset(offset);
+        offset += chunk.chars().count() as i32;
+        let b = buf.iter_at_offset(offset);
         if let Some(tag) = extra {
             buf.apply_tag(tag, &a, &b);
         }
@@ -1459,30 +1553,6 @@ fn insert_ansi_text(buf: &gtk::TextBuffer, text: &str, extra: Option<&TextTag>) 
             }
         }
     }
-}
-
-/// `cls()` / `casa()` in the output pane: erase-display and cursor-home
-/// start a new frame so animation replaces the text instead of stacking it.
-fn apply_screen_codes(current: &str, incoming: &str) -> String {
-    let mut screen = current.to_string();
-    let mut pos = 0;
-    while pos < incoming.len() {
-        let rest = &incoming[pos..];
-        if rest.starts_with(ANSI_ERASE_DISPLAY) {
-            screen.clear();
-            pos += ANSI_ERASE_DISPLAY.len();
-            continue;
-        }
-        if rest.starts_with(ANSI_CURSOR_HOME) {
-            screen.clear();
-            pos += ANSI_CURSOR_HOME.len();
-            continue;
-        }
-        let ch = rest.chars().next().unwrap();
-        screen.push(ch);
-        pos += ch.len_utf8();
-    }
-    screen
 }
 
 fn append_error_link(ui: &Rc<RefCell<Ui>>, text: &str) {
@@ -1525,9 +1595,15 @@ fn parse_error_line(line: &str) -> Option<u32> {
     loc[colon + 1..].trim().parse().ok()
 }
 
+/// Events handled per 16 ms tick, so a program that prints without end
+/// cannot freeze the window. The rest wait in the (bounded) channel.
+const EVENTS_PER_TICK: usize = 200;
+
 fn rodar(ui: &Rc<RefCell<Ui>>, debug: bool) {
-    set_output(ui, "");
-    clear_debug_views(ui);
+    if ui.borrow().debug_cmd.is_some() {
+        set_status(ui, "já tem um programa rodando — aperte Parar primeiro");
+        return;
+    }
     let (student, name, src, bps, args) = {
         let u = ui.borrow();
         (
@@ -1538,37 +1614,34 @@ fn rodar(ui: &Rc<RefCell<Ui>>, debug: bool) {
             parse_run_args(&u.args_entry.text()),
         )
     };
+    // Fresh copy of the project; the editor text replaces the file on disk
+    // so `importe` of sibling files and the program itself match the screen.
+    let ws = {
+        let u = ui.borrow();
+        Workspace::download(&u.rpc, &student).and_then(|ws| ws.write(&name, &src).map(|()| ws))
+    };
+    let ws = match ws {
+        Ok(ws) => ws,
+        Err(e) => {
+            set_status(ui, &format!("não copiou o projeto: {e}"));
+            return;
+        }
+    };
+    set_output(ui, "");
+    clear_debug_views(ui);
     set_status(
         ui,
         &format!("{} {name}…", if debug { "depurando" } else { "rodando" }),
     );
 
-    let (event_tx, event_rx) = std::sync::mpsc::channel::<ExecEvent>();
-    let (line_tx, line_rx) = std::sync::mpsc::channel::<String>();
-    let (dcmd_tx, dcmd_rx) = std::sync::mpsc::channel::<String>();
-    ui.borrow_mut().debug_cmd = Some(dcmd_tx);
+    let run = exec::spawn(&ws, &name, src, debug, bps, args);
+    ui.borrow_mut().debug_cmd = Some(run.debug_cmd.clone());
     set_debug_buttons(ui, false, true);
 
-    {
-        let u = ui.borrow();
-        u.rpc.spawn_exec(
-            student,
-            name.clone(),
-            src,
-            debug,
-            bps,
-            args,
-            event_tx,
-            line_rx,
-            dcmd_rx,
-        );
-    }
-
     let ui_ev = Rc::clone(ui);
-    let event_rx = Rc::new(RefCell::new(event_rx));
     glib::timeout_add_local(std::time::Duration::from_millis(16), move || {
-        loop {
-            match event_rx.borrow().try_recv() {
+        for _ in 0..EVENTS_PER_TICK {
+            match run.events.try_recv() {
                 Ok(ExecEvent::Stdout(s)) => append_output(&ui_ev, &s),
                 Ok(ExecEvent::Stderr(s)) => append_stderr(&ui_ev, &s),
                 Ok(ExecEvent::Paused(p)) => {
@@ -1587,12 +1660,21 @@ fn rodar(ui: &Rc<RefCell<Ui>>, debug: bool) {
                     };
                     let window = ui_ev.borrow().window.clone();
                     let line = perguntar_linha(&window, &pergunta).unwrap_or_default();
-                    let _ = line_tx.send(line);
+                    let _ = run.lines.send(line);
                 }
                 Ok(ExecEvent::Finished(f)) => {
                     ui_ev.borrow_mut().debug_cmd = None;
                     set_debug_buttons(&ui_ev, false, false);
                     clear_debug_views(&ui_ev);
+                    // Files the program wrote (salve_arquivo, …) and the
+                    // source that ran go back to the server.
+                    let sent = {
+                        let u = ui_ev.borrow();
+                        ws.upload_changes(&u.rpc, &student)
+                    };
+                    if matches!(sent, Ok(n) if n > 0) {
+                        conectar(&ui_ev);
+                    }
                     if f.ok {
                         set_status(&ui_ev, &format!("ok — {name}"));
                     } else {
@@ -1608,10 +1690,15 @@ fn rodar(ui: &Rc<RefCell<Ui>>, debug: bool) {
                             ir_para_linha(&ui_ev, f.error_line);
                         }
                     }
+                    if let Err(e) = sent {
+                        set_status(&ui_ev, &format!("não enviou os arquivos: {e}"));
+                    }
                     return glib::ControlFlow::Break;
                 }
                 Err(std::sync::mpsc::TryRecvError::Empty) => break,
                 Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                    ui_ev.borrow_mut().debug_cmd = None;
+                    set_debug_buttons(&ui_ev, false, false);
                     return glib::ControlFlow::Break;
                 }
             }
@@ -2094,7 +2181,8 @@ fn parse_importe(line: &str) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{ansi_spans, apply_screen_codes, leia_call_count, leia_prompts, AnsiStyle};
+    use super::{ansi_spans, leia_call_count, leia_prompts, write_screen, AnsiStyle, Screen};
+    use gtk::prelude::*;
 
     #[test]
     fn leia_count_ignores_leia_arquivo() {
@@ -2120,22 +2208,37 @@ mod tests {
         );
     }
 
-    #[test]
-    fn apply_screen_codes_cls_clears_then_appends() {
-        let out = apply_screen_codes("velho\n", "\x1b[2J\x1b[Hnovo\n");
-        assert_eq!(out, "novo\n");
+    fn screen_text(chunks: &[&str]) -> Option<String> {
+        if !gtk::is_initialized() && gtk::init().is_err() {
+            return None; // no display
+        }
+        let buf = gtk::TextBuffer::new(None);
+        let mut screen = Screen::default();
+        for c in chunks {
+            write_screen(&buf, &mut screen, c);
+        }
+        let (s, e) = buf.bounds();
+        Some(buf.text(&s, &e, false).to_string())
     }
 
+    // One test: GTK objects must stay on the thread that initialized GTK.
     #[test]
-    fn apply_screen_codes_casa_replaces_frame() {
-        let out = apply_screen_codes("quadro 1\n", "\x1b[Hquadro 2\n");
-        assert_eq!(out, "quadro 2\n");
-    }
-
-    #[test]
-    fn apply_screen_codes_keeps_sgr_in_frame() {
-        let out = apply_screen_codes("velho", "\x1b[H\x1b[32m*\x1b[0m");
-        assert_eq!(out, "\x1b[32m*\x1b[0m");
+    fn write_screen_like_a_terminal() {
+        let Some(t) = screen_text(&["velho\n", "\x1b[2J\x1b[Hnovo\n"]) else {
+            return;
+        };
+        assert_eq!(t, "novo\n", "cls clears then appends");
+        // casa(): old frame stays until each line is overwritten.
+        let t = screen_text(&["q1 a\nq1 b\n", "\x1b[H", "q2 a\n"]).unwrap();
+        assert_eq!(t, "q2 a\nq1 b\n");
+        let t = screen_text(&["q1 a\nq1 b\n", "\x1b[H", "q2 a\n", "q2 b\n"]).unwrap();
+        assert_eq!(t, "q2 a\nq2 b\n");
+        // Writes split across chunks, and SGR codes become tags, not text.
+        let t = screen_text(&["\x1b[H", "\x1b[32m*", "\x1b[0m!\n"]).unwrap();
+        assert_eq!(t, "*!\n");
+        // After cls, plain lines keep appending.
+        let t = screen_text(&["\x1b[2J\x1b[H", "a\n", "b\n"]).unwrap();
+        assert_eq!(t, "a\nb\n");
     }
 
     #[test]

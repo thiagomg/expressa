@@ -3,9 +3,10 @@ name = "expressa-aula"
 version.workspace = true
 edition.workspace = true
 publish = false
-description = "Editor GTK da Expressa Aula (cliente do servidor)"
+description = "Editor GTK da Expressa Aula (roda os programas; o servidor guarda os arquivos)"
 
 [dependencies]
+expressa = { workspace = true }
 expressa-aula-proto = { workspace = true }
 tonic = { workspace = true }
 tokio = { workspace = true }

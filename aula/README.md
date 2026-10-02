@@ -5,9 +5,9 @@ Classroom editor services for Expressa. **Texted is a separate project and is no
 | Crate | Role |
 |-------|------|
 | `expressa` (repo root) | Language: lexer, parser, runner |
-| `expressa-aula-proto` | gRPC: `Turma` (files) + `Runner` (execute) |
-| `expressa-aula-server` | Sandboxed backend: student folders + `run_to_string_with` |
-| `expressa-aula` (`aula/ui`) | GTK editor: lista, código, Rodar (F5) |
+| `expressa-aula-proto` | gRPC: `Turma` (files) |
+| `expressa-aula-server` | File repository: student folders only, runs nothing |
+| `expressa-aula` (`aula/ui`) | GTK editor: lista, código, Rodar (F5) / Depurar (F6) in-process |
 
 ## Why this repo, not Texted
 
@@ -23,7 +23,11 @@ The language still changes often (`raiz`, debugger, sandbox). Aula must call `ex
   bruno/
 ```
 
-Runs cannot read or write outside the student folder (`..`, absolute paths). A time limit stops `repita` that never ends.
+## Running programs
+
+The editor runs and debugs programs itself; the server only stores files. On Rodar/Depurar the editor copies the whole project into `~/.cache/expressa-aula/{projeto}/` (`$XDG_CACHE_HOME` if set), writes the editor text over the open file, and runs there. When the program ends, files that are new or changed (the source that ran, `salve_arquivo`, `salve_csv`, …) are sent back to the server.
+
+Runs cannot read or write outside the project folder (`..`, absolute paths). There is no time limit, so games and other endless loops (`exemplos/jogos/conway_jogo_da_vida.lep`) keep running until **Parar**. The output pane keeps the last 5000 lines; after `cls()`/`casa()` it behaves like a terminal (each line overwrites the previous frame).
 
 ## Run the server
 

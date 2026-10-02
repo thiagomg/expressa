@@ -1,0 +1,36 @@
+{
+  "comments": {
+    "lineComment": "//",
+    "blockComment": ["/*", "*/"]
+  },
+  "brackets": [
+    ["{", "}"],
+    ["[", "]"],
+    ["(", ")"]
+  ],
+  "autoClosingPairs": [
+    { "open": "{", "close": "}" },
+    { "open": "[", "close": "]" },
+    { "open": "(", "close": ")" },
+    { "open": "\"", "close": "\"", "notIn": ["string", "comment"] },
+    { "open": "/*", "close": " */", "notIn": ["string"] }
+  ],
+  "surroundingPairs": [
+    ["{", "}"],
+    ["[", "]"],
+    ["(", ")"],
+    ["\"", "\""]
+  ],
+  "indentationRules": {
+    "increaseIndentPattern": "^.*(\\{|(^|[^\\p{L}\\p{N}_])(inicio|início))\\s*(//.*)?$",
+    "decreaseIndentPattern": "^\\s*(\\}|fim(?![\\p{L}\\p{N}_]))"
+  },
+  "onEnterRules": [
+    {
+      "beforeText": "^\\s*/\\*\\*?(?!/)([^*]|\\*(?!/))*$",
+      "afterText": "^\\s*\\*/$",
+      "action": { "indent": "indentOutdent", "appendText": " " }
+    }
+  ],
+  "wordPattern": "(-?\\d+(?:\\.\\d+)?)|([\\p{L}_][\\p{L}\\p{N}_]*)"
+}

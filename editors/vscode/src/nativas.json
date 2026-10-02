@@ -1,0 +1,592 @@
+{
+  "keywords": {
+    "constantes": [
+      "verdadeiro",
+      "falso"
+    ],
+    "operadores": [
+      "e",
+      "ou",
+      "nao",
+      "não",
+      "contem",
+      "contém"
+    ],
+    "blocos": [
+      "inicio",
+      "início",
+      "fim"
+    ],
+    "funcao": [
+      "funcao",
+      "função"
+    ],
+    "importe": [
+      "importe"
+    ],
+    "controle": [
+      "se",
+      "senao",
+      "senão",
+      "para",
+      "de",
+      "ate",
+      "até",
+      "em",
+      "repita",
+      "enquanto",
+      "vezes",
+      "se_falhar",
+      "retorne",
+      "pare",
+      "continue",
+      "continua"
+    ]
+  },
+  "modules": [
+    "arquivo",
+    "mat",
+    "matriz",
+    "tela"
+  ],
+  "nativas": [
+    {
+      "name": "escreva",
+      "aliases": [],
+      "module": null,
+      "kind": "funcao",
+      "signatures": [
+        "escreva(valor, ...)"
+      ],
+      "summary": "Imprime valores na saída (stdout)",
+      "doc": "Escreve os argumentos na saída padrão, separados por um espaço, e termina com uma quebra de linha.\n\n- Aceita **zero ou mais** argumentos. Sem argumentos, imprime só a linha vazia.\n- Números inteiros aparecem sem casas decimais (`10` e não `10.0`).\n- Booleanos aparecem como `verdadeiro` e `falso`.\n- Listas e mapas são impressos de forma legível, por exemplo `[1, 2, 3]`.\n- Retorna `nada`.\n\n```expressa\nescreva(\"Olá\")\nescreva(\"Média:\", 7.5)\nescreva()                  // linha em branco\n```"
+    },
+    {
+      "name": "escreva_erro",
+      "aliases": [],
+      "module": null,
+      "kind": "funcao",
+      "signatures": [
+        "escreva_erro(valor, ...)"
+      ],
+      "summary": "Imprime na saída de erro (stderr)",
+      "doc": "Igual a `escreva`, mas escreve na **saída de erro** (stderr). Não entra em arquivos redirecionados com `>`.\n\n```expressa\nescreva_erro(\"nome vazio\")\n```\n\nRetorna `nada`."
+    },
+    {
+      "name": "sair",
+      "aliases": [],
+      "module": null,
+      "kind": "funcao",
+      "signatures": [
+        "sair()",
+        "sair(codigo)"
+      ],
+      "summary": "Encerra o programa",
+      "doc": "Encerra o programa na hora. Nada depois da chamada roda.\n\n- Sem argumento, o código de saída é **0** (sucesso).\n- Com um número inteiro, esse é o código (use `1` para falha, como em `exit(1)`).\n- **Não** é capturado por `se_falhar`.\n- No REPL, a linha `sair` (sem parênteses) continua sendo o comando que sai do interpretador; `sair()` / `sair(1)` é esta função e encerra o processo.\n\n```expressa\nse nome == \"\"\ninicio\n    escreva_erro(\"nome vazio\")\n    sair(1)\nfim\n```"
+    },
+    {
+      "name": "durma",
+      "aliases": [],
+      "module": null,
+      "kind": "funcao",
+      "signatures": [
+        "durma(segundos)"
+      ],
+      "summary": "Espera um número de segundos",
+      "doc": "Pausa o programa pelo número de **segundos** indicado. Aceita fração: `durma(0.5)` espera meio segundo. `durma(0)` não espera.\n\nNa Aula, o tempo-limite do programa continua valendo: uma espera longa vira `tempo esgotado`.\n\nRetorna `nada`.\n\n```expressa\nescreva(\"3\")\ndurma(1)\nescreva(\"2\")\ndurma(1)\nescreva(\"1\")\n```\n\n**Erros:** falta o argumento, valor que não é número, ou número negativo."
+    },
+    {
+      "name": "leia",
+      "aliases": [],
+      "module": null,
+      "kind": "funcao",
+      "signatures": [
+        "leia() -> texto",
+        "leia(prompt) -> texto"
+      ],
+      "summary": "Lê uma linha do teclado",
+      "doc": "Lê uma linha da entrada padrão (teclado) e devolve o texto **sem** a quebra de linha. Espaços no começo e no fim são preservados.\n\n- Sem argumentos, apenas espera a linha.\n- Com um `prompt` (texto), imprime o prompt **sem** quebra de linha, descarrega a saída e então espera. Assim o cursor fica na mesma linha: `Nome: _`.\n- Fim da entrada (Ctrl+D no Linux/macOS, Ctrl+Z no Windows) é erro: `\"fim da entrada\"`. Use `se_falhar` se quiser um valor padrão.\n\n**Erros:** mais de um argumento; `prompt` não é texto; não há mais entrada.\n\n```expressa\nnome = leia(\"Qual o seu nome? \")\nescreva(\"Olá, \" + nome)\n\nlinha = leia() se_falhar \"\"\n```\n\nNo modo `expressa debug`, a entrada do programa e os comandos do depurador compartilham o mesmo teclado."
+    },
+    {
+      "name": "leia_linhas",
+      "aliases": [],
+      "module": null,
+      "kind": "funcao",
+      "signatures": [
+        "leia_linhas() -> lista"
+      ],
+      "summary": "Lê todas as linhas da entrada padrão",
+      "doc": "Lê o restante da entrada padrão até o fim e devolve uma **lista de textos** (uma linha cada, sem a quebra de linha). Entrada vazia devolve `[]`. Linhas em branco entram na lista como `\"\"`.\n\n- Sem argumentos.\n- Depois de um `leia()`, `leia_linhas()` continua do que ainda não foi lido.\n- Na Aula (diálogo), não há fim de arquivo: a chamada é um erro. Use `leia()` ou `leia_arquivo`.\n\n```expressa\npara linha em leia_linhas()\ninicio\n    escreva(linha)\nfim\n```\n\n```expressa\ncat arquivo.txt | expressa prog.lep\n```"
+    },
+    {
+      "name": "numero",
+      "aliases": [],
+      "module": null,
+      "kind": "funcao",
+      "signatures": [
+        "numero(texto) -> numero",
+        "numero(numero) -> numero"
+      ],
+      "summary": "Transforma texto em número",
+      "doc": "Converte um texto em número, para usar o que veio de `leia()` em contas.\n\n- Aceita espaços nas pontas (`\"  7 \"`).\n- Aceita `_` como em literais (`\"1_000\"`).\n- O padrão de texto é **pt-BR** (`1.000,5`). Mude com `formato(\"en\")` para en-US (`1,000.5`).\n- Em pt-BR: `,` é decimal; `.` em grupos de três é milhar (`\"1.000\"`). Um único `.` com 1–2 casas (`\"3.14\"`) ainda vale (texto colado do código).\n- Se o argumento já é número, devolve o mesmo valor.\n- Texto que não é número é erro (`se_falhar` ajuda).\n\n```expressa\nidade = numero(leia(\"Quantos anos você tem? \")) se_falhar 0\nescreva(\"ano que vem: \" + (idade + 1))\n```\n\n**Erros:** argumento que não é texto nem número; texto que não representa um número."
+    },
+    {
+      "name": "formato",
+      "aliases": [],
+      "module": null,
+      "kind": "funcao",
+      "signatures": [
+        "formato(\"pt\")",
+        "formato(\"en\")"
+      ],
+      "summary": "Define como `numero()` lê texto e como `escreva` / `\"a\" + n` escrevem números",
+      "doc": "Define como `numero()` lê texto e como `escreva` / `\"a\" + n` escrevem números. Padrão: pt-BR.\n\nTambém: `formato(\"pt-br\")`, `formato(\"en-us\")`, `formato(\"br\")`, `formato(\"eua\")`.  \nNa linha de comando: `expressa --numeros en arquivo.lep` (ou `EXPRESSA_NUMEROS=en`).\n\nLiterais no código continuam com ponto: `media = 7.3`."
+    },
+    {
+      "name": "formate",
+      "aliases": [],
+      "module": null,
+      "kind": "funcao",
+      "signatures": [
+        "formate(modelo, valor, ...) -> texto"
+      ],
+      "summary": "Monta texto com alinhamento (`{:<n}` `{:>n}` `{:^n}`)",
+      "doc": "Monta um texto a partir de um **modelo**. Cada `{}` (ou `{1}`, `{2}`, …) é substituído pelo valor correspondente. O resultado é texto: use em `escreva`, `+`, arquivos, etc.\n\nAlinhamento (útil em tabelas). `n` é a largura em caracteres:\n\n| no modelo | efeito |\n|-----------|--------|\n| `{}` | o valor, sem padding |\n| `{:<n}` | encosta à **esquerda** |\n| `{:>n}` | encosta à **direita** |\n| `{:^n}` | **centro** |\n| `{:-<n}` | esquerda, preenchido com `-` (qualquer caractere no lugar de `-`) |\n\nSem `<` `>` `^`, texto encosta à esquerda e número à direita: `{:8}`.\n\nSe o valor já é mais largo que `n`, ele entra inteiro (não corta). `{1}` é o **primeiro** valor (índices começam em 1). `{{` e `}}` escrevem `{` e `}`. Números seguem o `formato` atual (`7,5` em pt).\n\n```expressa\nformate(\"Hello {:<5}!\", \"x\")     // \"Hello x    !\"\nformate(\"Hello {:-<5}!\", \"x\")    // \"Hello x----!\"\nformate(\"Hello {:^5}!\", \"x\")     // \"Hello   x  !\"\nformate(\"Hello {:>5}!\", \"x\")     // \"Hello     x!\"\n\nescreva(formate(\"{:<10} {:>6}\", \"Ana\", 7.5))\nescreva(formate(\"{:<10} {:>6}\", \"Bruno\", 10))\n```\n\n```expressa\nAna             7,5\nBruno            10\n```\n\n**Erros:** o modelo não é texto; `{` sem `}`; valor a menos ou a mais; misturar `{}` e `{1}`; índice `0` (use `{1}`)."
+    },
+    {
+      "name": "avaliar",
+      "aliases": [],
+      "module": null,
+      "kind": "funcao",
+      "signatures": [
+        "avaliar(texto) -> valor"
+      ],
+      "summary": "Executa um texto como código Expressa",
+      "doc": "Executa `texto` como código Expressa **no escopo atual** e devolve o valor da última expressão. Serve para calculadora (`leia` + `avaliar`) e para fórmulas em jogos.\n\nVê as variáveis e funções já definidas; uma atribuição no texto altera o escopo de quem chamou (mesma regra de sempre: função não escreve nomes de fora).\n\n```expressa\nescreva(avaliar(\"2 + 3 * 4\"))     // 14\nx = 10\nescreva(avaliar(\"x + 1\"))         // 11\nconta = leia(\"conta: \")\nescreva(avaliar(conta) se_falhar \"conta inválida\")\n```\n\nUFCS: `\"2 + 2\".avaliar()`.\n\n**Erros:** o argumento não é texto; o texto está vazio; erro de sintaxe ou de execução no código avaliado. Tudo isso pode ir em `se_falhar`."
+    },
+    {
+      "name": "tamanho",
+      "aliases": [],
+      "module": null,
+      "kind": "funcao",
+      "signatures": [
+        "tamanho(valor) -> numero"
+      ],
+      "summary": "Quantidade de itens ou caracteres",
+      "doc": "Retorna a quantidade de elementos (lista, mapa ou conjunto), de caracteres (texto) ou de linhas (matriz). A contagem de texto usa caracteres Unicode, não bytes. Para colunas de matriz, use `ncolunas`.\n\n**Erros:** o argumento não é texto, lista, mapa, conjunto nem matriz.\n\n```expressa\ntamanho(\"olá\")             // 3\ntamanho([10, 20, 30])      // 3\ntamanho(mapa([:a -> 1, :b -> 2]))   // 2\n```"
+    },
+    {
+      "name": "primeiro",
+      "aliases": [],
+      "module": null,
+      "kind": "funcao",
+      "signatures": [
+        "primeiro(lista) -> valor"
+      ],
+      "summary": "Primeiro elemento de uma lista",
+      "doc": "Retorna o primeiro elemento da lista (o de índice `1`).\n\n**Erros:** o argumento não é lista, ou a lista está vazia.\n\n```expressa\nprimeiro([10, 20, 30])     // 10\nprimeiro([]) se_falhar 0   // 0\n```"
+    },
+    {
+      "name": "ultimo",
+      "aliases": [],
+      "module": null,
+      "kind": "funcao",
+      "signatures": [
+        "ultimo(lista) -> valor"
+      ],
+      "summary": "Último elemento de uma lista",
+      "doc": "Retorna o último elemento da lista.\n\n**Erros:** o argumento não é lista, ou a lista está vazia.\n\n```expressa\nultimo([10, 20, 30])       // 30\n```"
+    },
+    {
+      "name": "maiuscula",
+      "aliases": [],
+      "module": null,
+      "kind": "funcao",
+      "signatures": [
+        "maiuscula(texto) -> texto"
+      ],
+      "summary": "Texto em letras maiúsculas",
+      "doc": "Converte todas as letras para maiúsculas (respeita Unicode: `\"olá\"` vira `\"OLÁ\"`).\n\n**Erros:** o argumento não é texto.\n\n```expressa\nmaiuscula(\"Olá, mundo\")    // \"OLÁ, MUNDO\"\n```"
+    },
+    {
+      "name": "minuscula",
+      "aliases": [],
+      "module": null,
+      "kind": "funcao",
+      "signatures": [
+        "minuscula(texto) -> texto"
+      ],
+      "summary": "Texto em letras minúsculas",
+      "doc": "Converte todas as letras para minúsculas.\n\n**Erros:** o argumento não é texto.\n\n```expressa\nminuscula(\"Olá, Mundo\")    // \"olá, mundo\"\n```"
+    },
+    {
+      "name": "sem_acento",
+      "aliases": [],
+      "module": null,
+      "kind": "funcao",
+      "signatures": [
+        "sem_acento(texto) -> texto"
+      ],
+      "summary": "Tira acentos e cedilha",
+      "doc": "Devolve uma cópia sem acentos nem cedilha. **Não** muda maiúscula/minúscula.\n\n| vira | de |\n|------|-----|\n| `a` / `A` | á à â ã ä |\n| `e` / `E` | é è ê |\n| `i` / `I` | í ì î |\n| `o` / `O` | ó ò ô õ |\n| `u` / `U` | ú ù û ü |\n| `c` / `C` | ç |\n\n**Erros:** o argumento não é texto.\n\n```expressa\nsem_acento(\"São Paulo\")    // \"Sao Paulo\"\nminuscula(sem_acento(\"OLÁ\"))    // \"ola\"\n```"
+    },
+    {
+      "name": "remova",
+      "aliases": [],
+      "module": null,
+      "kind": "funcao",
+      "signatures": [
+        "remova(lista, i) -> lista",
+        "remova(lista, inicio, fim) -> lista",
+        "remova(texto, i) -> texto",
+        "remova(texto, inicio, fim) -> texto",
+        "remova(mapa, chave) -> mapa",
+        "remova(conjunto, elemento) -> conjunto"
+      ],
+      "summary": "Tira índice/faixa de lista ou texto, ou chave de mapa",
+      "doc": "Devolve uma **cópia** sem aquele pedaço. Índices começam em 1; a faixa é inclusiva (como `xs[2..3]`). No mapa, a chave some; no conjunto, o **elemento** some.\n\n```expressa\nxs = [10, 20, 30, 40]\nxs.remova(2)           // [10, 30, 40]\nxs.remova(2, 3)        // [10, 40]\n\"abcd\".remova(2, 3)    // \"ad\"\npessoa = pessoa.remova(\"idade\")\ns = s.remova(:ana)\n```\n\n**Erros:** índice menor que 1; início maior que o fim; chave inexistente; mapa com 3 argumentos. Fatia/`remova` com fim além do tamanho só corta até o último."
+    },
+    {
+      "name": "substitua",
+      "aliases": [],
+      "module": null,
+      "kind": "funcao",
+      "signatures": [
+        "substitua(texto, antigo, novo) -> texto"
+      ],
+      "summary": "Troca trechos de um texto",
+      "doc": "Troca **todas** as ocorrências de `antigo` por `novo`.\n\n**Erros:** algum argumento não é texto.\n\n```expressa\nsubstitua(\"Maria Silva\", \"Maria\", \"Ana\")\n// \"Ana Silva\"\n\nsubstitua(\"aaa\", \"a\", \"b\")\n// \"bbb\"\n```"
+    },
+    {
+      "name": "separe",
+      "aliases": [],
+      "module": null,
+      "kind": "funcao",
+      "signatures": [
+        "separe(texto, separador) -> lista"
+      ],
+      "summary": "Parte um texto em lista",
+      "doc": "Parte o texto em uma lista de textos.\n\n- Se `separador` for `\"\"` (vazio), cada caractere vira um item.\n- Caso contrário, o texto é dividido em cada ocorrência do separador.\n- Trechos vazios entre separadores entram na lista (`separe(\"a,,b\", \",\")` → `[\"a\", \"\", \"b\"]`).\n\n**Erros:** algum argumento não é texto.\n\n```expressa\nsepare(\"a,b,c\", \",\")       // [\"a\", \"b\", \"c\"]\nsepare(\"ola\", \"\")          // [\"o\", \"l\", \"a\"]\n```"
+    },
+    {
+      "name": "junte",
+      "aliases": [],
+      "module": null,
+      "kind": "funcao",
+      "signatures": [
+        "junte(lista, separador) -> texto"
+      ],
+      "summary": "Junta uma lista em um texto",
+      "doc": "Concatena os itens da lista, intercalando `separador`. Cada item é convertido para texto (números entram na forma usual, booleanos como `verdadeiro`/`falso`).\n\n**Erros:** o primeiro argumento não é lista, ou o segundo não é texto.\n\n```expressa\njunte([\"a\", \"b\", \"c\"], \" - \")   // \"a - b - c\"\njunte([1, 2, 3], \",\")           // \"1,2,3\"\njunte([], \",\")                  // \"\"\n```"
+    },
+    {
+      "name": "limpe",
+      "aliases": [],
+      "module": null,
+      "kind": "funcao",
+      "signatures": [
+        "limpe(texto) -> texto"
+      ],
+      "summary": "Remove espaços das extremidades",
+      "doc": "Remove espaços em branco (incluindo tabulações e quebras de linha) do começo e do fim. Espaços no meio do texto permanecem.\n\n**Erros:** o argumento não é texto.\n\n```expressa\nlimpe(\"  Maria Silva  \")   // \"Maria Silva\"\n```"
+    },
+    {
+      "name": "mapa",
+      "aliases": [],
+      "module": null,
+      "kind": "funcao",
+      "signatures": [
+        "mapa() -> mapa",
+        "mapa(pares) -> mapa"
+      ],
+      "summary": "Constrói um mapa a partir de uma lista de pares",
+      "doc": "Monta um mapa. Sem argumento (ou com `[]`) o mapa é vazio. Com uma lista, cada item precisa ser um **par** (`chave -> valor`). Chaves duplicadas são erro.\n\n```expressa\ndevs = [:developer -> \"Thiago\", \"co-developer\" -> \"Grok\"]\nquem = mapa(devs)\npessoa = mapa([:nome -> \"Ana\", :idade -> 25])\nvazio = mapa()\n```\n\n**Erros:** mais de um argumento; item que não é par; chave inválida (lista, mapa, outro par); chave repetida."
+    },
+    {
+      "name": "conjunto",
+      "aliases": [],
+      "module": null,
+      "kind": "funcao",
+      "signatures": [
+        "conjunto() -> conjunto",
+        "conjunto(xs) -> conjunto"
+      ],
+      "summary": "Constrói um conjunto a partir de uma lista",
+      "doc": "Monta um conjunto. Sem argumento (ou com `[]`) o conjunto é vazio. Com uma lista, duplicatas caem e a ordem de inserção permanece. Elementos: texto, número inteiro ou bool.\n\n```expressa\nnomes = conjunto([\"Thiago\", \"Adriana\", \"Thiago\"])\nvazio = conjunto()\n```\n\n**Erros:** mais de um argumento; elemento que não é texto, inteiro nem bool."
+    },
+    {
+      "name": "cls",
+      "aliases": [
+        "limpe_tela"
+      ],
+      "module": "tela",
+      "kind": "funcao",
+      "signatures": [
+        "cls()",
+        "limpe_tela()"
+      ],
+      "summary": "Limpa a tela (`limpe_tela` também)",
+      "doc": "Limpa a tela do terminal e coloca o cursor no canto superior esquerdo. Sem argumentos. As duas grafias são a mesma função.\n\nNo REPL, a linha `cls` (sem parênteses) também limpa a tela; `cls()` é esta função.\n\nNa Aula, limpa o painel de saída. Quando a saída não é um terminal (pipe, arquivo), ainda assim escreve o código ANSI de limpar a tela.\n\nRetorna `nada`.\n\n```expressa\nrepita 3 vezes\ninicio\n    cls()\n    escreva(\"contador\")\nfim\n```\n\n**Erros:** qualquer argumento.\n\nEm uma animação, `cls()` a cada quadro **pisca**: a tela fica vazia um instante antes do próximo `escreva`. Use [`casa`](#casa) no laço e `cls()` só uma vez no começo."
+    },
+    {
+      "name": "casa",
+      "aliases": [],
+      "module": "tela",
+      "kind": "funcao",
+      "signatures": [
+        "casa()"
+      ],
+      "summary": "Cursor no canto, sem apagar",
+      "doc": "Manda o cursor para o canto superior esquerdo **sem apagar** o que já está na tela. O próximo `escreva` desenha por cima. Sem argumentos.\n\n```expressa\ncls()\nrepita 20 vezes\ninicio\n    casa()\n    escreva(quadro)\n    durma(0.1)\nfim\n```\n\nMonte o quadro inteiro numa variável e dê um `escreva` só: vários `escreva` no meio do quadro ainda aparecem aos poucos.\n\nNa Aula, o painel de saída trata `casa()` como um novo quadro (substitui o texto).\n\nRetorna `nada`.\n\n**Erros:** qualquer argumento."
+    },
+    {
+      "name": "eh_terminal",
+      "aliases": [
+        "é_terminal"
+      ],
+      "module": "tela",
+      "kind": "funcao",
+      "signatures": [
+        "eh_terminal() -> bool",
+        "é_terminal() -> bool"
+      ],
+      "summary": "Entrada é o teclado? (`é_terminal` também)",
+      "doc": "`verdadeiro` se a entrada padrão é o **teclado** (terminal). `falso` se veio de um pipe, de um arquivo (`< dados.txt`) ou da Aula.\n\nSem argumentos. As duas grafias são a mesma função.\n\n```expressa\nse eh_terminal()\ninicio\n    nome = leia(\"Seu nome: \")\nfim\nsenao\ninicio\n    nome = leia() se_falhar \"\"\nfim\n```"
+    },
+    {
+      "name": "pinte",
+      "aliases": [],
+      "module": "tela",
+      "kind": "funcao",
+      "signatures": [
+        "pinte(texto, frente) -> texto",
+        "pinte(texto, frente, fundo) -> texto"
+      ],
+      "summary": "Cor da letra (e fundo opcional)",
+      "doc": "Devolve `texto` envolvido em códigos ANSI: tinta + texto + reset (`\\x1b[0m`). A cor não vaza para o próximo pedaço.\n\nCores: `normal`, `preto`, `vermelho`, `verde`, `amarelo`, `azul`, `magenta`, `ciano`, `branco`. `:verde` é o texto `\"verde\"`. `normal` é a cor padrão do terminal naquele slot.\n\n```expressa\nescreva(\"vida\".pinte(:verde))\nescreva(\"GAME OVER\".pinte(:branco, :vermelho))\nescreva(\"HP\".pinte(:verde, :normal))\nescreva(\"    \".pinte(:normal, :azul))\n```\n\n**Erros:** 1º argumento que não é texto; 2 ou 3 argumentos; nome de cor desconhecido."
+    },
+    {
+      "name": "fundo",
+      "aliases": [],
+      "module": "tela",
+      "kind": "funcao",
+      "signatures": [
+        "fundo(texto, cor) -> texto"
+      ],
+      "summary": "Só a cor de fundo",
+      "doc": "Só o papel (fundo). Letra no padrão do terminal.\n\n```expressa\nescreva(\"    \".fundo(:verde))\n```\n\n**Erros:** iguais aos de `pinte` (cor desconhecida; tipos)."
+    },
+    {
+      "name": "negrito",
+      "aliases": [],
+      "module": "tela",
+      "kind": "funcao",
+      "signatures": [
+        "negrito(texto) -> texto"
+      ],
+      "summary": "Texto em negrito",
+      "doc": "Devolve o texto em negrito, com reset no fim.\n\n```expressa\nescreva(\"GO\".negrito().pinte(:vermelho))\n```"
+    },
+    {
+      "name": "raiz",
+      "aliases": [],
+      "module": "mat",
+      "kind": "funcao",
+      "signatures": [
+        "raiz(numero) -> numero"
+      ],
+      "summary": "Raiz quadrada",
+      "doc": "Raiz quadrada. `raiz(9)` vale `3`, `raiz(0)` vale `0`.\n\n**Erros:** o argumento não é número; o número é negativo (`\"raiz de número negativo\"`). Use `se_falhar` se o valor puder ser negativo.\n\n```expressa\nescreva(raiz(9 + 16))            // 5\nx = raiz(delta) se_falhar 0\n```"
+    },
+    {
+      "name": "aleatorio",
+      "aliases": [
+        "aleatório"
+      ],
+      "module": "mat",
+      "kind": "funcao",
+      "signatures": [
+        "aleatorio(min, max) -> numero",
+        "aleatório(min, max) -> numero"
+      ],
+      "summary": "Inteiro ao acaso (`aleatório` também)",
+      "doc": "Devolve um **inteiro** ao acaso entre `min` e `max`, inclusive. `aleatorio(1, 6)` é um dado.\n\nAs duas grafias são a mesma função. Sem `semente()`, cada execução do programa gera uma sequência diferente.\n\n```expressa\ndado = aleatorio(1, 6)\nescreva(\"saiu\", dado)\n```\n\n**Erros:** faltam 2 argumentos; `min` ou `max` não é inteiro; `min > max`."
+    },
+    {
+      "name": "semente",
+      "aliases": [],
+      "module": "mat",
+      "kind": "funcao",
+      "signatures": [
+        "semente(n)"
+      ],
+      "summary": "Fixa a sequência de `aleatorio`",
+      "doc": "Fixa o gerador de `aleatorio`. O mesmo `n` produz a mesma sequência — útil para repetir um teste.\n\n```expressa\nsemente(1)\nescreva(aleatorio(1, 6))\n```\n\nRetorna `nada`.\n\n**Erros:** falta o argumento, ou valor que não é inteiro."
+    },
+    {
+      "name": "matriz",
+      "aliases": [],
+      "module": "matriz",
+      "kind": "funcao",
+      "signatures": [
+        "matriz(linhas) -> matriz"
+      ],
+      "summary": "Constrói uma matriz a partir de uma lista de listas",
+      "doc": "Monta uma matriz a partir de uma lista de listas de números. Todas as linhas precisam ter o mesmo comprimento.\n\n```expressa\nA = matriz([[1, 2, 3], [4, 5, 6]])\n```\n\n**Erros:** falta o argumento; linhas que não são listas de números; retângulo irregular."
+    },
+    {
+      "name": "transposta",
+      "aliases": [],
+      "module": "matriz",
+      "kind": "funcao",
+      "signatures": [
+        "transposta(A) -> matriz"
+      ],
+      "summary": "Transposta",
+      "doc": ""
+    },
+    {
+      "name": "det",
+      "aliases": [],
+      "module": "matriz",
+      "kind": "funcao",
+      "signatures": [
+        "det(A) -> numero"
+      ],
+      "summary": "Determinante 1×1–3×3",
+      "doc": "Só 1×1, 2×2 e 3×3."
+    },
+    {
+      "name": "identidade",
+      "aliases": [],
+      "module": "matriz",
+      "kind": "funcao",
+      "signatures": [
+        "identidade(n) -> matriz"
+      ],
+      "summary": "Matriz identidade",
+      "doc": ""
+    },
+    {
+      "name": "zeros",
+      "aliases": [],
+      "module": "matriz",
+      "kind": "funcao",
+      "signatures": [
+        "zeros(n) -> matriz",
+        "zeros(linhas, colunas) -> matriz"
+      ],
+      "summary": "Matriz de zeros",
+      "doc": "Matriz só de zeros. Um argumento: quadrada `n×n`. Dois: `linhas` × `colunas`.\n\n```expressa\nzeros(3)        // 3×3\nzeros(2, 5)     // 2 linhas, 5 colunas\n```\n\n**Erros:** falta argumento; valor que não é inteiro `>= 1`."
+    },
+    {
+      "name": "uns",
+      "aliases": [],
+      "module": "matriz",
+      "kind": "funcao",
+      "signatures": [
+        "uns(n) -> matriz",
+        "uns(linhas, colunas) -> matriz"
+      ],
+      "summary": "Matriz de uns",
+      "doc": "Como `zeros`, mas preenchida com `1`."
+    },
+    {
+      "name": "cheia",
+      "aliases": [],
+      "module": "matriz",
+      "kind": "funcao",
+      "signatures": [
+        "cheia(linhas, colunas, valor) -> matriz"
+      ],
+      "summary": "Matriz preenchida com um valor",
+      "doc": "Retangular, todas as células iguais a `valor` (um número).\n\n```expressa\ncheia(2, 3, 7)\nA = zeros(14, 36)\nA[2, 3] = 1\n```\n\n**Erros:** não são 3 argumentos; linhas/colunas que não são inteiro `>= 1`; `valor` que não é número."
+    },
+    {
+      "name": "nlinhas",
+      "aliases": [],
+      "module": "matriz",
+      "kind": "funcao",
+      "signatures": [
+        "nlinhas(A) -> numero"
+      ],
+      "summary": "Número de linhas",
+      "doc": "Quantidade de linhas. `nlinhas(matriz([[1, 2, 3], [4, 5, 6]]))` vale `2`.\n\n**Erros:** o argumento não é matriz."
+    },
+    {
+      "name": "ncolunas",
+      "aliases": [],
+      "module": "matriz",
+      "kind": "funcao",
+      "signatures": [
+        "ncolunas(A) -> numero"
+      ],
+      "summary": "Número de colunas",
+      "doc": "Quantidade de colunas. `ncolunas(matriz([[1, 2, 3], [4, 5, 6]]))` vale `3`.\n\n**Erros:** o argumento não é matriz."
+    },
+    {
+      "name": "leia_arquivo",
+      "aliases": [],
+      "module": "arquivo",
+      "kind": "funcao",
+      "signatures": [
+        "leia_arquivo(caminho) -> lista"
+      ],
+      "summary": "Lê um arquivo em lista de linhas",
+      "doc": "Lê o arquivo de texto e devolve uma lista de linhas **sem** o caractere de quebra de linha. Arquivo vazio devolve `[]`.\n\n**Erros:** `caminho` não é texto, ou o arquivo não pôde ser lido.\n\n```expressa\nlinhas = leia_arquivo(\"dados.txt\") se_falhar []\nescreva(tamanho(linhas))\n```"
+    },
+    {
+      "name": "salve_arquivo",
+      "aliases": [],
+      "module": "arquivo",
+      "kind": "funcao",
+      "signatures": [
+        "salve_arquivo(caminho, linhas)"
+      ],
+      "summary": "Grava uma lista de linhas em um arquivo",
+      "doc": "Grava `linhas` no arquivo, **substituindo** o conteúdo anterior. Cada item vira uma linha, com `\\n` no final.\n\n**Erros:** `caminho` não é texto, `linhas` não é uma lista de textos, ou a gravação falhou.\n\n```expressa\nsalve_arquivo(\"saida.txt\", [\"primeira\", \"segunda\"])\n```"
+    },
+    {
+      "name": "adicione_arquivo",
+      "aliases": [],
+      "module": "arquivo",
+      "kind": "funcao",
+      "signatures": [
+        "adicione_arquivo(caminho, linhas)"
+      ],
+      "summary": "Acrescenta linhas ao final de um arquivo",
+      "doc": "Acrescenta `linhas` ao **final** do arquivo. Se o arquivo não existir, ele é criado.\n\n**Erros:** iguais aos de `salve_arquivo`.\n\n```expressa\nadicione_arquivo(\"saida.txt\", [\"nova linha\"])\n```"
+    },
+    {
+      "name": "leia_csv",
+      "aliases": [],
+      "module": "arquivo",
+      "kind": "funcao",
+      "signatures": [
+        "leia_csv(caminho) -> lista"
+      ],
+      "summary": "Lê um CSV em lista de listas",
+      "doc": "Lê o arquivo e devolve uma lista de linhas, cada linha sendo uma lista de células.\n\n**Erros:** `caminho` não é texto, ou o arquivo não pôde ser lido.\n\n```expressa\n// pessoas.csv:\n// Ana,25\n// Bruno,30\n\ndados = leia_csv(\"pessoas.csv\")\nescreva(dados[1][1])       // Ana\nescreva(dados[2][2])       // 30  (texto)\n```"
+    },
+    {
+      "name": "salve_csv",
+      "aliases": [],
+      "module": "arquivo",
+      "kind": "funcao",
+      "signatures": [
+        "salve_csv(caminho, dados)"
+      ],
+      "summary": "Grava uma lista de listas como CSV",
+      "doc": "Grava `dados` (lista de listas) como CSV, **substituindo** o arquivo. Cada célula é convertida para texto; as células de uma linha são unidas por vírgula, e cada linha termina com `\\n`.\n\n**Erros:** `caminho` não é texto, `dados` não é uma lista de listas, ou a gravação falhou.\n\n```expressa\nsalve_csv(\"saida.csv\", [\n    [\"nome\", \"idade\"],\n    [\"Ana\", 25],\n    [\"Bruno\", 30]\n])\n```"
+    },
+    {
+      "name": "argumentos",
+      "aliases": [],
+      "module": null,
+      "kind": "valor",
+      "signatures": [],
+      "summary": "Lista dos valores após o `.lep`",
+      "doc": "Não é uma função: é uma **lista** já definida em todo programa.\n\n\n\n```expressa\nexpressa grep.lep Thiago\n// argumentos == [\"Thiago\"]\n```\n\nNo REPL a lista é `[]`. Não dá para fazer `argumentos = …` (nome nativo). Os itens ainda são uma lista comum (`tamanho(argumentos)`, `contem`, etc.).\n\n```expressa\nbusca = argumentos[1] se_falhar \"\"\n```"
+    }
+  ]
+}
