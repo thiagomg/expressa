@@ -1,0 +1,52 @@
+{
+  "se": {
+    "prefix": "se",
+    "body": ["se ${1:condicao} {", "\t$0", "}"],
+    "description": "se … { }"
+  },
+  "se senao": {
+    "prefix": ["se senao", "sesenao"],
+    "body": ["se ${1:condicao} {", "\t$2", "} senao {", "\t$0", "}"],
+    "description": "se … { } senao { }"
+  },
+  "se inicio": {
+    "prefix": "se inicio",
+    "body": ["se ${1:condicao}", "inicio", "\t$0", "fim"],
+    "description": "se … inicio … fim"
+  },
+  "para de ate": {
+    "prefix": ["para de", "para ate"],
+    "body": ["para ${1:i} de ${2:1} ate ${3:10} {", "\t$0", "}"],
+    "description": "para i de 1 ate n { }"
+  },
+  "para em": {
+    "prefix": "para em",
+    "body": ["para ${1:item} em ${2:lista} {", "\t$0", "}"],
+    "description": "para item em lista { }"
+  },
+  "repita vezes": {
+    "prefix": ["repita", "repita vezes"],
+    "body": ["repita ${1:3} vezes {", "\t$0", "}"],
+    "description": "repita n vezes { }"
+  },
+  "enquanto": {
+    "prefix": "enquanto",
+    "body": ["enquanto ${1:condicao} {", "\t$0", "}"],
+    "description": "enquanto … { }"
+  },
+  "funcao": {
+    "prefix": ["funcao", "função"],
+    "body": ["${1:nome} = funcao(${2:a, b}) {", "\t$0", "}"],
+    "description": "nome = funcao(a, b) { }"
+  },
+  "funcao inicio": {
+    "prefix": "funcao inicio",
+    "body": ["${1:nome} = funcao(${2:a, b})", "inicio", "\t$0", "fim"],
+    "description": "nome = funcao(a, b) inicio … fim"
+  },
+  "se_falhar": {
+    "prefix": "se_falhar",
+    "body": ["${1:valor} = ${2:expressao} se_falhar ${0:padrao}"],
+    "description": "valor = expressão se_falhar padrão"
+  }
+}

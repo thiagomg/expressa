@@ -1,14 +1,12 @@
-use expressa_aula_proto::runner_client::RunnerClient;
 use expressa_aula_proto::turma_client::TurmaClient;
 use expressa_aula_proto::{
-    DebugPaused, DeleteFileRequest, ExecFinished, ExecIn, ListFilesRequest, MkdirRequest,
-    ReadFileRequest, RenameRequest, RunRequest, TreeEntry, WriteFileRequest,
+    DeleteFileRequest, ListFilesRequest, MkdirRequest, ReadFileRequest, RenameRequest,
+    TreeEntry, WriteFileRequest,
 };
 use std::process::Child;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicU32, Ordering};
 
-use tokio_stream::StreamExt;
 use tonic::transport::{Channel, Endpoint};
 
 static SPAWNED_PID: Mutex<Option<u32>> = Mutex::new(None);
@@ -92,14 +90,6 @@ pub struct Rpc {
     channel: Channel,
     /// Set only when this client started `expressa-aula-server`.
     spawned_server: Option<Child>,
-}
-
-pub enum ExecEvent {
-    Stdout(String),
-    Stderr(String),
-    Leia(String),
-    Paused(DebugPaused),
-    Finished(ExecFinished),
 }
 
 impl Rpc {
@@ -210,111 +200,6 @@ impl Rpc {
             }))
             .map_err(|e| e.to_string())?;
         Ok(())
-    }
-
-    pub fn spawn_exec(
-        &self,
-        student: String,
-        path: String,
-        source: String,
-        debug: bool,
-        breakpoints: Vec<u32>,
-        args: Vec<String>,
-        event_tx: std::sync::mpsc::Sender<ExecEvent>,
-        line_rx: std::sync::mpsc::Receiver<String>,
-        debug_cmd_rx: std::sync::mpsc::Receiver<String>,
-    ) {
-        let channel = self.channel.clone();
-        self.rt.spawn(async move {
-            let mut client = RunnerClient::new(channel);
-            let (in_tx, in_rx) = tokio::sync::mpsc::channel::<ExecIn>(8);
-            let start = ExecIn {
-                payload: Some(expressa_aula_proto::exec_in::Payload::Start(RunRequest {
-                    student,
-                    path,
-                    source,
-                    debug,
-                    breakpoint_lines: breakpoints,
-                    args,
-                })),
-            };
-            if in_tx.send(start).await.is_err() {
-                return;
-            }
-
-            let in_tx_lines = in_tx.clone();
-            tokio::task::spawn_blocking(move || {
-                while let Ok(line) = line_rx.recv() {
-                    let msg = ExecIn {
-                        payload: Some(expressa_aula_proto::exec_in::Payload::Line(line)),
-                    };
-                    if in_tx_lines.blocking_send(msg).is_err() {
-                        break;
-                    }
-                }
-            });
-
-            let in_tx_dbg = in_tx.clone();
-            tokio::task::spawn_blocking(move || {
-                while let Ok(cmd) = debug_cmd_rx.recv() {
-                    let msg = ExecIn {
-                        payload: Some(expressa_aula_proto::exec_in::Payload::DebugCmd(cmd)),
-                    };
-                    if in_tx_dbg.blocking_send(msg).is_err() {
-                        break;
-                    }
-                }
-            });
-
-            let outbound = tokio_stream::wrappers::ReceiverStream::new(in_rx);
-            let mut inbound = match client.exec(outbound).await {
-                Ok(s) => s.into_inner(),
-                Err(e) => {
-                    let _ = event_tx.send(ExecEvent::Finished(ExecFinished {
-                        ok: false,
-                        error_message: e.to_string(),
-                        error_file: String::new(),
-                        error_line: 0,
-                        error_col: 0,
-                    }));
-                    return;
-                }
-            };
-
-            while let Some(msg) = inbound.next().await {
-                match msg {
-                    Ok(out) => match out.payload {
-                        Some(expressa_aula_proto::exec_out::Payload::Stdout(s)) => {
-                            let _ = event_tx.send(ExecEvent::Stdout(s));
-                        }
-                        Some(expressa_aula_proto::exec_out::Payload::LeiaPrompt(p)) => {
-                            let _ = event_tx.send(ExecEvent::Leia(p));
-                        }
-                        Some(expressa_aula_proto::exec_out::Payload::Finished(f)) => {
-                            let _ = event_tx.send(ExecEvent::Finished(f));
-                            return;
-                        }
-                        Some(expressa_aula_proto::exec_out::Payload::Paused(p)) => {
-                            let _ = event_tx.send(ExecEvent::Paused(p));
-                        }
-                        Some(expressa_aula_proto::exec_out::Payload::Stderr(s)) => {
-                            let _ = event_tx.send(ExecEvent::Stderr(s));
-                        }
-                        None => {}
-                    },
-                    Err(e) => {
-                        let _ = event_tx.send(ExecEvent::Finished(ExecFinished {
-                            ok: false,
-                            error_message: e.to_string(),
-                            error_file: String::new(),
-                            error_line: 0,
-                            error_col: 0,
-                        }));
-                        return;
-                    }
-                }
-            }
-        });
     }
 }
 

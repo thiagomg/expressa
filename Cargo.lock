@@ -200,6 +200,7 @@ dependencies = [
 name = "expressa-aula"
 version = "0.1.0"
 dependencies = [
+ "expressa",
  "expressa-aula-proto",
  "gdk-pixbuf",
  "gtk4",
@@ -223,11 +224,9 @@ dependencies = [
 name = "expressa-aula-server"
 version = "0.1.0"
 dependencies = [
- "expressa",
  "expressa-aula-proto",
  "prost",
  "tokio",
- "tokio-stream",
  "tonic",
 ]
 

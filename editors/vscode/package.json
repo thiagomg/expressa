@@ -1,0 +1,72 @@
+{
+  "name": "expressa",
+  "displayName": "Expressa",
+  "description": "Linguagem Expressa (.lep): cores, autocompletar, ajuda das funções nativas e ir para a definição.",
+  "version": "0.1.0",
+  "publisher": "thiagomg",
+  "license": "MIT",
+  "author": "Thiago Massari Guedes",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/thiagomg/expressa.git",
+    "directory": "editors/vscode"
+  },
+  "engines": {
+    "vscode": "^1.75.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Snippets"
+  ],
+  "keywords": [
+    "expressa",
+    "lep",
+    "português",
+    "educação"
+  ],
+  "main": "./src/extension.js",
+  "activationEvents": [],
+  "contributes": {
+    "languages": [
+      {
+        "id": "expressa",
+        "aliases": [
+          "Expressa",
+          "expressa"
+        ],
+        "extensions": [
+          ".lep"
+        ],
+        "firstLine": "^#!.*\\bexpressa\\b",
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "expressa",
+        "scopeName": "source.expressa",
+        "path": "./syntaxes/expressa.tmLanguage.json"
+      }
+    ],
+    "snippets": [
+      {
+        "language": "expressa",
+        "path": "./snippets/expressa.code-snippets"
+      }
+    ]
+  },
+  "scripts": {
+    "gerar": "node scripts/gerar.js",
+    "verificar": "node scripts/gerar.js --check",
+    "test": "node --test test/",
+    "empacotar": "sh scripts/empacotar.sh"
+  },
+  "devDependencies": {
+    "@vscode/vsce": "^2.32.0",
+    "vscode-oniguruma": "^2.0.1",
+    "vscode-textmate": "^9.3.2"
+  },
+  "overrides": {
+    "undici": "^6.21.0"
+  }
+}
