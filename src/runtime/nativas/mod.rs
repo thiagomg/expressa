@@ -21,52 +21,190 @@ pub struct Nativa {
 }
 
 pub const NATIVAS: &[Nativa] = &[
-    Nativa { names: &["escreva"], module: None },
-    Nativa { names: &["escreva_erro"], module: None },
-    Nativa { names: &["sair"], module: None },
-    Nativa { names: &["durma"], module: None },
-    Nativa { names: &["leia"], module: None },
-    Nativa { names: &["leia_linhas"], module: None },
-    Nativa { names: &["numero", "número"], module: None },
-    Nativa { names: &["formato"], module: None },
-    Nativa { names: &["formate"], module: None },
-    Nativa { names: &["avaliar"], module: None },
-    Nativa { names: &["tamanho"], module: None },
-    Nativa { names: &["primeiro"], module: None },
-    Nativa { names: &["ultimo"], module: None },
-    Nativa { names: &["maiuscula"], module: None },
-    Nativa { names: &["minuscula"], module: None },
-    Nativa { names: &["sem_acento"], module: None },
-    Nativa { names: &["remova"], module: None },
-    Nativa { names: &["substitua"], module: None },
-    Nativa { names: &["separe"], module: None },
-    Nativa { names: &["junte"], module: None },
-    Nativa { names: &["limpe"], module: None },
-    Nativa { names: &["mapa"], module: None },
-    Nativa { names: &["conjunto"], module: None },
-    Nativa { names: &["cls", "limpe_tela"], module: Some("tela") },
-    Nativa { names: &["casa"], module: Some("tela") },
-    Nativa { names: &["eh_terminal", "é_terminal"], module: Some("tela") },
-    Nativa { names: &["pinte"], module: Some("tela") },
-    Nativa { names: &["fundo"], module: Some("tela") },
-    Nativa { names: &["negrito"], module: Some("tela") },
-    Nativa { names: &["raiz"], module: Some("mat") },
-    Nativa { names: &["aleatorio", "aleatório"], module: Some("mat") },
-    Nativa { names: &["semente"], module: Some("mat") },
-    Nativa { names: &["matriz"], module: Some("matriz") },
-    Nativa { names: &["transposta"], module: Some("matriz") },
-    Nativa { names: &["det"], module: Some("matriz") },
-    Nativa { names: &["identidade"], module: Some("matriz") },
-    Nativa { names: &["zeros"], module: Some("matriz") },
-    Nativa { names: &["uns"], module: Some("matriz") },
-    Nativa { names: &["cheia"], module: Some("matriz") },
-    Nativa { names: &["nlinhas"], module: Some("matriz") },
-    Nativa { names: &["ncolunas"], module: Some("matriz") },
-    Nativa { names: &["leia_arquivo"], module: Some("arquivo") },
-    Nativa { names: &["salve_arquivo"], module: Some("arquivo") },
-    Nativa { names: &["adicione_arquivo"], module: Some("arquivo") },
-    Nativa { names: &["leia_csv"], module: Some("arquivo") },
-    Nativa { names: &["salve_csv"], module: Some("arquivo") },
+    Nativa {
+        names: &["escreva"],
+        module: None,
+    },
+    Nativa {
+        names: &["escreva_erro"],
+        module: None,
+    },
+    Nativa {
+        names: &["sair"],
+        module: None,
+    },
+    Nativa {
+        names: &["durma"],
+        module: None,
+    },
+    Nativa {
+        names: &["leia"],
+        module: None,
+    },
+    Nativa {
+        names: &["leia_linhas"],
+        module: None,
+    },
+    Nativa {
+        names: &["numero", "número"],
+        module: None,
+    },
+    Nativa {
+        names: &["formato"],
+        module: None,
+    },
+    Nativa {
+        names: &["formate"],
+        module: None,
+    },
+    Nativa {
+        names: &["avaliar"],
+        module: None,
+    },
+    Nativa {
+        names: &["tamanho"],
+        module: None,
+    },
+    Nativa {
+        names: &["primeiro"],
+        module: None,
+    },
+    Nativa {
+        names: &["ultimo"],
+        module: None,
+    },
+    Nativa {
+        names: &["maiuscula"],
+        module: None,
+    },
+    Nativa {
+        names: &["minuscula"],
+        module: None,
+    },
+    Nativa {
+        names: &["sem_acento"],
+        module: None,
+    },
+    Nativa {
+        names: &["remova"],
+        module: None,
+    },
+    Nativa {
+        names: &["substitua"],
+        module: None,
+    },
+    Nativa {
+        names: &["separe"],
+        module: None,
+    },
+    Nativa {
+        names: &["junte"],
+        module: None,
+    },
+    Nativa {
+        names: &["limpe"],
+        module: None,
+    },
+    Nativa {
+        names: &["mapa"],
+        module: None,
+    },
+    Nativa {
+        names: &["conjunto"],
+        module: None,
+    },
+    Nativa {
+        names: &["cls", "limpe_tela"],
+        module: Some("tela"),
+    },
+    Nativa {
+        names: &["casa"],
+        module: Some("tela"),
+    },
+    Nativa {
+        names: &["eh_terminal", "é_terminal"],
+        module: Some("tela"),
+    },
+    Nativa {
+        names: &["pinte"],
+        module: Some("tela"),
+    },
+    Nativa {
+        names: &["fundo"],
+        module: Some("tela"),
+    },
+    Nativa {
+        names: &["negrito"],
+        module: Some("tela"),
+    },
+    Nativa {
+        names: &["raiz"],
+        module: Some("mat"),
+    },
+    Nativa {
+        names: &["aleatorio", "aleatório"],
+        module: Some("mat"),
+    },
+    Nativa {
+        names: &["semente"],
+        module: Some("mat"),
+    },
+    Nativa {
+        names: &["matriz"],
+        module: Some("matriz"),
+    },
+    Nativa {
+        names: &["transposta"],
+        module: Some("matriz"),
+    },
+    Nativa {
+        names: &["det"],
+        module: Some("matriz"),
+    },
+    Nativa {
+        names: &["identidade"],
+        module: Some("matriz"),
+    },
+    Nativa {
+        names: &["zeros"],
+        module: Some("matriz"),
+    },
+    Nativa {
+        names: &["uns"],
+        module: Some("matriz"),
+    },
+    Nativa {
+        names: &["cheia"],
+        module: Some("matriz"),
+    },
+    Nativa {
+        names: &["nlinhas"],
+        module: Some("matriz"),
+    },
+    Nativa {
+        names: &["ncolunas"],
+        module: Some("matriz"),
+    },
+    Nativa {
+        names: &["leia_arquivo"],
+        module: Some("arquivo"),
+    },
+    Nativa {
+        names: &["salve_arquivo"],
+        module: Some("arquivo"),
+    },
+    Nativa {
+        names: &["adicione_arquivo"],
+        module: Some("arquivo"),
+    },
+    Nativa {
+        names: &["leia_csv"],
+        module: Some("arquivo"),
+    },
+    Nativa {
+        names: &["salve_csv"],
+        module: Some("arquivo"),
+    },
 ];
 
 pub fn bind_nucleo(env: &Rc<RefCell<Env>>) {
@@ -573,7 +711,10 @@ mod tests {
 
     #[test]
     fn builtins_are_registered() {
-        let names: Vec<_> = NATIVAS.iter().flat_map(|n| n.names.iter().copied()).collect();
+        let names: Vec<_> = NATIVAS
+            .iter()
+            .flat_map(|n| n.names.iter().copied())
+            .collect();
         assert!(names.contains(&"escreva"));
         assert!(names.contains(&"leia"));
         assert!(names.contains(&"leia_linhas"));
@@ -599,10 +740,7 @@ mod tests {
             lookup_builtin_doc("aleatório").map(|d| d.name),
             Some("aleatorio")
         );
-        assert_eq!(
-            lookup_builtin_doc("número").map(|d| d.name),
-            Some("numero")
-        );
+        assert_eq!(lookup_builtin_doc("número").map(|d| d.name), Some("numero"));
         for name in &names {
             assert!(
                 lookup_builtin_doc(name).is_some(),
@@ -611,7 +749,11 @@ mod tests {
         }
         for n in NATIVAS {
             if n.module.is_none() {
-                assert!(n.names.iter().any(|nm| *nm == "escreva" || lookup_builtin_doc(nm).is_some()));
+                assert!(
+                    n.names
+                        .iter()
+                        .any(|nm| *nm == "escreva" || lookup_builtin_doc(nm).is_some())
+                );
             }
         }
         let _ = BUILTIN_DOCS.len();
@@ -622,23 +764,19 @@ mod tests {
         assert_eq!(run(r#"escreva(avaliar("2 + 3 * 4"))"#), "14\n");
         assert_eq!(run(r#"escreva("10 - 3".avaliar())"#), "7\n");
         assert_eq!(
-            run(
-                r#"
+            run(r#"
 x = 10
 escreva(avaliar("x + 1"))
 avaliar("x = 20")
 escreva(x)
-"#
-            ),
+"#),
             "11\n20\n"
         );
         assert_eq!(
-            run(
-                r#"
+            run(r#"
 f = funcao(n) { avaliar("n * 2") }
 escreva(f(3))
-"#
-            ),
+"#),
             "6\n"
         );
         assert_eq!(run(r#"escreva(avaliar("1 / 0") se_falhar 0)"#), "0\n");
@@ -674,29 +812,25 @@ escreva(numero("1,000.5"))"#),
     #[test]
     fn aleatorio_inclusive_and_seed() {
         assert_eq!(
-            run(
-                r#"
+            run(r#"
 semente(1)
 a = aleatorio(1, 6)
 semente(1)
 b = aleatorio(1, 6)
 escreva(a == b)
 escreva(aleatorio(5, 5))
-"#
-            ),
+"#),
             "verdadeiro\n5\n"
         );
         assert_eq!(
-            run(
-                r#"
+            run(r#"
 semente(3)
 para i de 1 ate 40
 inicio
     n = aleatorio(1, 6)
     se n < 1 ou n > 6 { escreva("fora") }
 fim
-"#
-            ),
+"#),
             ""
         );
         assert_eq!(run("escreva(aleatório(-2, -2))"), "-2\n");
@@ -796,10 +930,7 @@ escreva(p:nome)
             run(r#"escreva(formate("{:<8} {:>6}", "Ana", 7.5))"#),
             "Ana         7,5\n"
         );
-        assert_eq!(
-            run(r#"escreva("{1} {1}".formate("oi"))"#),
-            "oi oi\n"
-        );
+        assert_eq!(run(r#"escreva("{1} {1}".formate("oi"))"#), "oi oi\n");
         assert!(run_err(r#"formate("{}")"#).contains("espera pelo menos"));
         assert!(run_err(r#"formate(10, "x")"#).contains("texto"));
     }
@@ -810,13 +941,11 @@ escreva(p:nome)
         assert_eq!(run("cls()"), CLEAR_SCREEN);
         assert_eq!(run("limpe_tela()"), CLEAR_SCREEN);
         assert_eq!(
-            run(
-                r#"
+            run(r#"
 escreva("a")
 cls()
 escreva("b")
-"#
-            ),
+"#),
             format!("a\n{CLEAR_SCREEN}b\n")
         );
         assert!(run_err("cls(1)").contains("não espera argumentos"));
@@ -828,13 +957,11 @@ escreva("b")
         use crate::runtime::CURSOR_HOME;
         assert_eq!(run("casa()"), CURSOR_HOME);
         assert_eq!(
-            run(
-                r#"
+            run(r#"
 escreva("a")
 casa()
 escreva("b")
-"#
-            ),
+"#),
             format!("a\n{CURSOR_HOME}b\n")
         );
         assert!(run_err("casa(1)").contains("não espera argumentos"));
@@ -862,10 +989,7 @@ escreva("b")
             run(r#"escreva("    ".fundo(:verde))"#),
             "\x1b[42m    \x1b[0m\n"
         );
-        assert_eq!(
-            run(r#"escreva("GO".negrito())"#),
-            "\x1b[1mGO\x1b[0m\n"
-        );
+        assert_eq!(run(r#"escreva("GO".negrito())"#), "\x1b[1mGO\x1b[0m\n");
         assert!(run_err(r#"pinte("HP", :roxo)"#).contains("cor desconhecida"));
         assert!(run_err(r#"pinte("HP")"#).contains("2 ou 3"));
         assert!(run_err(r#"fundo("HP")"#).contains("esperado 2"));
@@ -929,8 +1053,7 @@ escreva_erro("falhou")"#,
     #[test]
     fn zeros_uns_cheia() {
         assert_eq!(
-            run(
-                r#"
+            run(r#"
 Z = zeros(2, 3)
 escreva(nlinhas(Z))
 escreva(ncolunas(Z))
@@ -944,8 +1067,7 @@ C = cheia(2, 3, 7)
 escreva(C[2, 1])
 C[1, 2] = 9
 escreva(C[1, 2])
-"#
-            ),
+"#),
             "2\n3\n0\n0\n2\n1\n7\n9\n"
         );
         assert!(run_err("zeros(0)").contains(">= 1"));
@@ -957,8 +1079,7 @@ escreva(C[1, 2])
     #[test]
     fn nlinhas_e_ncolunas() {
         assert_eq!(
-            run(
-                r#"
+            run(r#"
 A = matriz([
     [1, 2, 3],
     [4, 5, 6],
@@ -967,8 +1088,7 @@ escreva(nlinhas(A))
 escreva(ncolunas(A))
 escreva(A.nlinhas())
 escreva(A.ncolunas())
-"#
-            ),
+"#),
             "2\n3\n2\n3\n"
         );
         assert_eq!(run("escreva(nlinhas(identidade(1)))"), "1\n");

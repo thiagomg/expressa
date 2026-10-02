@@ -1,12 +1,12 @@
-mod nativas;
 mod debug;
 mod env;
 mod error;
 mod eval;
 mod formate;
 mod leia;
-mod rng;
+mod nativas;
 mod repl;
+mod rng;
 mod value;
 
 pub use debug::{

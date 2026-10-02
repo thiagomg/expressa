@@ -15,11 +15,7 @@ enum Indexing {
     Manual,
 }
 
-pub(crate) fn formate(
-    template: &str,
-    args: &[Value],
-    loc: NumeroLocale,
-) -> Result<String, String> {
+pub(crate) fn formate(template: &str, args: &[Value], loc: NumeroLocale) -> Result<String, String> {
     let chars: Vec<char> = template.chars().collect();
     let mut i = 0;
     let mut out = String::new();
@@ -48,7 +44,8 @@ pub(crate) fn formate(
                 }
                 let inner: String = chars[spec_start..i].iter().collect();
                 i += 1; // skip '}'
-                let (idx, piece) = render_placeholder(&inner, args, loc, &mut auto_next, &mut indexing)?;
+                let (idx, piece) =
+                    render_placeholder(&inner, args, loc, &mut auto_next, &mut indexing)?;
                 if idx >= args.len() {
                     return Err(format!(
                         "índice {} fora do intervalo (há {} valor(es))",

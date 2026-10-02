@@ -25,7 +25,11 @@ impl Vm<'_> {
         self.out.flush().map_err(|e| self.io_err(e, _span))?;
         Ok(Value::Nada)
     }
-    pub(crate) fn bi_escreva_erro(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
+    pub(crate) fn bi_escreva_erro(
+        &mut self,
+        args: &[Value],
+        span: Span,
+    ) -> Result<Value, EvalError> {
         let mut first = true;
         for arg in args {
             if !first {
@@ -95,7 +99,11 @@ impl Vm<'_> {
         super::super::leia::strip_newline(&mut line);
         Ok(Value::Texto(line))
     }
-    pub(crate) fn bi_leia_linhas(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
+    pub(crate) fn bi_leia_linhas(
+        &mut self,
+        args: &[Value],
+        span: Span,
+    ) -> Result<Value, EvalError> {
         if !args.is_empty() {
             return Err(self.err(
                 format!(
@@ -161,10 +169,7 @@ impl Vm<'_> {
     }
     pub(crate) fn bi_formate(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
         if args.is_empty() {
-            return Err(self.err(
-                "formate() espera um modelo (texto) e os valores",
-                span,
-            ));
+            return Err(self.err("formate() espera um modelo (texto) e os valores", span));
         }
         let modelo = self.expect_texto(&args[0], span)?;
         let text = super::super::formate::formate(&modelo, &args[1..], self.numero_locale)
@@ -261,7 +266,12 @@ impl Vm<'_> {
             )),
         }
     }
-    pub(crate) fn remova_mapa(&self, map: &Value, key_v: &Value, span: Span) -> Result<Value, EvalError> {
+    pub(crate) fn remova_mapa(
+        &self,
+        map: &Value,
+        key_v: &Value,
+        span: Span,
+    ) -> Result<Value, EvalError> {
         let Value::Mapa(xs) = map else {
             unreachable!();
         };
@@ -279,7 +289,12 @@ impl Vm<'_> {
         }
         Ok(Value::mapa(entries))
     }
-    pub(crate) fn remova_conjunto(&self, set: &Value, elem: &Value, span: Span) -> Result<Value, EvalError> {
+    pub(crate) fn remova_conjunto(
+        &self,
+        set: &Value,
+        elem: &Value,
+        span: Span,
+    ) -> Result<Value, EvalError> {
         let Value::Conjunto(xs) = set else {
             unreachable!();
         };

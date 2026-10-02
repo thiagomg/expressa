@@ -10,7 +10,11 @@ use super::super::value::Value;
 use super::{csv_cell, lines_to_text};
 
 impl Vm<'_> {
-    pub(crate) fn bi_leia_arquivo(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
+    pub(crate) fn bi_leia_arquivo(
+        &mut self,
+        args: &[Value],
+        span: Span,
+    ) -> Result<Value, EvalError> {
         self.expect_arity(args, 1, span)?;
         let path = self.resolve_data_path(&self.expect_texto(&args[0], span)?, span)?;
         let contents = fs::read_to_string(&path).map_err(|e| {
@@ -25,7 +29,11 @@ impl Vm<'_> {
             .collect();
         Ok(Value::lista(lines))
     }
-    pub(crate) fn bi_salve_arquivo(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
+    pub(crate) fn bi_salve_arquivo(
+        &mut self,
+        args: &[Value],
+        span: Span,
+    ) -> Result<Value, EvalError> {
         self.expect_arity(args, 2, span)?;
         let path = self.resolve_data_path(&self.expect_texto(&args[0], span)?, span)?;
         let linhas = self.expect_lista(&args[1], span)?;
@@ -39,7 +47,11 @@ impl Vm<'_> {
         })?;
         Ok(Value::Nada)
     }
-    pub(crate) fn bi_adicione_arquivo(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
+    pub(crate) fn bi_adicione_arquivo(
+        &mut self,
+        args: &[Value],
+        span: Span,
+    ) -> Result<Value, EvalError> {
         self.expect_arity(args, 2, span)?;
         let path = self.resolve_data_path(&self.expect_texto(&args[0], span)?, span)?;
         let linhas = self.expect_lista(&args[1], span)?;

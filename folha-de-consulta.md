@@ -150,6 +150,7 @@ tamanho(xs)  primeiro(xs)  ultimo(xs)
 
 t = "  Maria Silva  "
 t[1]  t[1..5]
+t[2] = "x"                     // um caractere; reatribui t
 tamanho(t)  maiuscula(t)  minuscula(t)  limpe(t)  sem_acento(t)
 substitua(t, "Maria", "Ana")
 separe("a,b,c", ",")           // ["a", "b", "c"]

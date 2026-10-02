@@ -48,10 +48,7 @@ impl Vm<'_> {
     pub(crate) fn expect_dim(&self, v: &Value, span: Span, nome: &str) -> Result<usize, EvalError> {
         let n = self.expect_int(v, span)?;
         if n < 1 {
-            return Err(self.err(
-                format!("{nome}() espera um inteiro >= 1"),
-                span,
-            ));
+            return Err(self.err(format!("{nome}() espera um inteiro >= 1"), span));
         }
         Ok(n as usize)
     }
@@ -71,7 +68,10 @@ impl Vm<'_> {
                 self.expect_dim(w, span, nome)?,
             )),
             _ => Err(self.err(
-                format!("{nome}() espera 1 ou 2 argumentos (linhas, colunas), recebeu {}", args.len()),
+                format!(
+                    "{nome}() espera 1 ou 2 argumentos (linhas, colunas), recebeu {}",
+                    args.len()
+                ),
                 span,
             )),
         }
@@ -128,5 +128,4 @@ impl Vm<'_> {
         self.expect_arity(args, 1, span)?;
         self.lista_para_matriz(&args[0], span)
     }
-
 }

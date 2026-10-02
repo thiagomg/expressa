@@ -254,6 +254,14 @@ numeros[2..]                   // do 2 até o fim
 "b"[1..3]                      // "b" (corta no tamanho)
 ```
 
+Índices de **texto** também começam em **1** e falam de caracteres Unicode (não bytes). `t[2]` lê um caractere. `t[2] = "b"` troca esse caractere e reatribui o texto; o valor precisa ser um texto de tamanho 1. O tamanho do texto permanece o mesmo. `a = t` depois `t[1] = "x"` deixa `a` com o texto antigo.
+
+```text
+s = "ABCDE"
+s[2] = "b"                     // "AbCDE"
+linhas[1][2] = "x"             // se linhas[1] é texto, reescreve o caractere
+```
+
 ---
 
 ## 10. Pares e mapas

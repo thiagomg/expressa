@@ -1,4 +1,5 @@
 importe "mat"
+importe "tela"
 
 escreva("Tente adivinhar o número secreto de 1 até 100")
 
@@ -31,9 +32,9 @@ fim
 
 se adivinhou == verdadeiro
 início
-    escreva("Parabéns. Você adivinhou o número secreto!")
+    escreva("Parabéns. Você adivinhou o número secreto!".pinte(:verde).negrito())
 fim
 senão
 início
-    escreva("Você não adivinhou, que pena!")
+    escreva("Você não adivinhou, que pena!".pinte(:amarelo))
 fim

@@ -73,7 +73,11 @@ impl Vm<'_> {
         write!(self.out, "{CURSOR_HOME}").map_err(|e| self.io_err(e, span))?;
         Ok(Value::Nada)
     }
-    pub(crate) fn bi_eh_terminal(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
+    pub(crate) fn bi_eh_terminal(
+        &mut self,
+        args: &[Value],
+        span: Span,
+    ) -> Result<Value, EvalError> {
         if !args.is_empty() {
             return Err(self.err(
                 format!(

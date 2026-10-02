@@ -58,7 +58,7 @@ pub enum AssignTarget {
         name: String,
         span: Span,
     },
-    /// `lista[i]` or `mapa[k]` (not a slice).
+    /// `lista[i]`, `mapa[k]` or `texto[i]` (not a slice).
     Index {
         object: Expr,
         index: Expr,
