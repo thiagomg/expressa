@@ -11,11 +11,11 @@ use crate::parser::{
     AssignTarget, BinaryOp, Block, Expr, Import, Item, Param, Program, Stmt, UnaryOp, parse,
 };
 
-use super::nativas;
 use super::debug::{DebugAction, DebugCtx, DebugHook, NoopHook};
 use super::env::{AssignError, Env, FrameKind};
 use super::error::{CallFrame, EvalError, RuntimeError};
 use super::leia::LeiaHost;
+use super::nativas;
 use super::rng::Rng;
 use super::value::{
     Closure, MapKey, NumeroLocale, Value, default_numero_locale, format_numero, parse_numero,
@@ -587,69 +587,7 @@ impl<'a> Vm<'a> {
             Stmt::Expr { expr, .. } => self.eval_expr(expr, env),
             Stmt::Assign { target, value, .. } => {
                 let value = self.eval_expr(value, env)?;
-                match target {
-                    AssignTarget::Name { name, span } => {
-                        self.assign_name(env, name, value, *span)?;
-                    }
-                    AssignTarget::Index {
-                        object,
-                        index,
-                        span,
-                    } => {
-                        let obj = self.eval_expr(object, env)?;
-                        let idx = self.eval_expr(index, env)?;
-                        self.assign_index(&obj, &idx, value, *span)?;
-                    }
-                    AssignTarget::Index2 {
-                        object,
-                        row,
-                        col,
-                        span,
-                    } => {
-                        let obj = self.eval_expr(object, env)?;
-                        let i = self.eval_expr(row, env)?;
-                        let j = self.eval_expr(col, env)?;
-                        self.assign_index2(&obj, &i, &j, value, *span)?;
-                    }
-                    AssignTarget::MapField {
-                        object,
-                        field,
-                        span,
-                    } => {
-                        let obj = self.eval_expr(object, env)?;
-                        match &obj {
-                            Value::Mapa(_) => {
-                                self.assign_index(
-                                    &obj,
-                                    &Value::Texto(field.clone()),
-                                    value,
-                                    *span,
-                                )?;
-                            }
-                            Value::Par(_, _) => {
-                                return Err(self.err(
-                                    "par não pode ser alterado; :chave e :valor só leem",
-                                    *span,
-                                ));
-                            }
-                            Value::Modulo(_) => {
-                                return Err(self.err(
-                                    format!("módulo usa '::' — tente o_modulo::{field}"),
-                                    *span,
-                                ));
-                            }
-                            other => {
-                                return Err(self.err(
-                                    format!(
-                                        "acesso ':' espera um mapa, encontrado {}",
-                                        other.type_name()
-                                    ),
-                                    *span,
-                                ));
-                            }
-                        }
-                    }
-                }
+                self.assign_target(target, value, env)?;
                 Ok(Value::Nada)
             }
             Stmt::Repita { count, body, .. } => {
@@ -844,14 +782,14 @@ impl<'a> Vm<'a> {
                 let obj = self.eval_expr(object, env)?;
                 match &obj {
                     Value::Mapa(_) => self.index_get(&obj, &Value::Texto(field.clone()), *span),
-                    Value::Par(k, v) => match field.as_str() {
-                        "chave" => Ok(k.to_value()),
-                        "valor" => Ok(v.as_ref().clone()),
-                        _ => Err(self.err(
-                            format!("par só tem :chave e :valor, não `{field}`"),
-                            *span,
-                        )),
-                    },
+                    Value::Par(k, v) => {
+                        match field.as_str() {
+                            "chave" => Ok(k.to_value()),
+                            "valor" => Ok(v.as_ref().clone()),
+                            _ => Err(self
+                                .err(format!("par só tem :chave e :valor, não `{field}`"), *span)),
+                        }
+                    }
                     Value::Modulo(_) => {
                         Err(self.err(format!("módulo usa '::' — tente o_modulo::{field}"), *span))
                     }
@@ -1415,6 +1353,167 @@ impl<'a> Vm<'a> {
             }
             other => Err(self.err(format!("não é possível fatiar {}", other.type_name()), span)),
         }
+    }
+
+    fn assign_target(
+        &mut self,
+        target: &AssignTarget,
+        value: Value,
+        env: &Rc<RefCell<Env>>,
+    ) -> Result<(), EvalError> {
+        match target {
+            AssignTarget::Name { name, span } => self.assign_name(env, name, value, *span),
+            AssignTarget::Index {
+                object,
+                index,
+                span,
+            } => {
+                let idx = self.eval_expr(index, env)?;
+                self.assign_indexed(object, &idx, value, *span, env)
+            }
+            AssignTarget::Index2 {
+                object,
+                row,
+                col,
+                span,
+            } => {
+                let obj = self.eval_expr(object, env)?;
+                let i = self.eval_expr(row, env)?;
+                let j = self.eval_expr(col, env)?;
+                self.assign_index2(&obj, &i, &j, value, *span)
+            }
+            AssignTarget::MapField {
+                object,
+                field,
+                span,
+            } => self.assign_map_field(object, field, value, *span, env),
+        }
+    }
+
+    /// Write `value` into `lista[i]` / `mapa[k]` in place, or replace one
+    /// character of a texto and rebind the location (`s[2] = "b"`).
+    fn assign_indexed(
+        &mut self,
+        object: &Expr,
+        index: &Value,
+        value: Value,
+        span: Span,
+        env: &Rc<RefCell<Env>>,
+    ) -> Result<(), EvalError> {
+        let obj = self.eval_expr(object, env)?;
+        match &obj {
+            Value::Lista(_) | Value::Mapa(_) => self.assign_index(&obj, index, value, span),
+            Value::Texto(s) => {
+                let novo = self.replace_texto_char(s, index, &value, span)?;
+                self.assign_location(object, Value::Texto(novo), env, span)
+            }
+            other => Err(self.err(
+                format!("não é possível atribuir índice em {}", other.type_name()),
+                span,
+            )),
+        }
+    }
+
+    fn assign_location(
+        &mut self,
+        loc: &Expr,
+        value: Value,
+        env: &Rc<RefCell<Env>>,
+        span: Span,
+    ) -> Result<(), EvalError> {
+        match loc {
+            Expr::Ident { name, span: nspan } => self.assign_name(env, name, value, *nspan),
+            Expr::Index {
+                object,
+                index,
+                span: ispan,
+            } => {
+                let idx = self.eval_expr(index, env)?;
+                self.assign_indexed(object, &idx, value, *ispan, env)
+            }
+            Expr::Index2 {
+                object,
+                row,
+                col,
+                span: ispan,
+            } => {
+                let obj = self.eval_expr(object, env)?;
+                let i = self.eval_expr(row, env)?;
+                let j = self.eval_expr(col, env)?;
+                self.assign_index2(&obj, &i, &j, value, *ispan)
+            }
+            Expr::MapField {
+                object,
+                field,
+                span: fspan,
+            } => self.assign_map_field(object, field, value, *fspan, env),
+            Expr::String { .. } => Err(self.err("não é possível alterar um texto literal", span)),
+            _ => Err(self.err("não é possível atribuir neste alvo", span)),
+        }
+    }
+
+    fn assign_map_field(
+        &mut self,
+        object: &Expr,
+        field: &str,
+        value: Value,
+        span: Span,
+        env: &Rc<RefCell<Env>>,
+    ) -> Result<(), EvalError> {
+        let obj = self.eval_expr(object, env)?;
+        match &obj {
+            Value::Mapa(_) => {
+                self.assign_index(&obj, &Value::Texto(field.to_string()), value, span)
+            }
+            Value::Par(_, _) => {
+                Err(self.err("par não pode ser alterado; :chave e :valor só leem", span))
+            }
+            Value::Modulo(_) => {
+                Err(self.err(format!("módulo usa '::' — tente o_modulo::{field}"), span))
+            }
+            other => Err(self.err(
+                format!(
+                    "acesso ':' espera um mapa, encontrado {}",
+                    other.type_name()
+                ),
+                span,
+            )),
+        }
+    }
+
+    fn replace_texto_char(
+        &self,
+        s: &str,
+        index: &Value,
+        value: &Value,
+        span: Span,
+    ) -> Result<String, EvalError> {
+        let mut chars: Vec<char> = s.chars().collect();
+        let i = self.to_index(index, chars.len(), span)?;
+        let Value::Texto(t) = value else {
+            return Err(self.err(
+                format!(
+                    "atribuição em texto espera um caractere, encontrado {}",
+                    value.type_name()
+                ),
+                span,
+            ));
+        };
+        let mut repl = t.chars();
+        let Some(ch) = repl.next() else {
+            return Err(self.err("atribuição em texto espera um caractere (tamanho 1)", span));
+        };
+        if repl.next().is_some() {
+            return Err(self.err(
+                format!(
+                    "atribuição em texto espera um caractere (tamanho 1), encontrado {}",
+                    t.chars().count()
+                ),
+                span,
+            ));
+        }
+        chars[i] = ch;
+        Ok(chars.into_iter().collect())
     }
 
     fn assign_index(
@@ -2146,6 +2245,16 @@ xs -= [1]"#
             )
             .contains("numero")
         );
+        assert_eq!(
+            run(r#"
+tentativas = []
+para i de 1 ate 6 {
+    tentativas += [["", "", "", "", ""]]
+}
+escreva(tamanho(tentativas))
+"#),
+            "6\n"
+        );
     }
 
     #[test]
@@ -2197,6 +2306,17 @@ fim
 f()
 "#;
         let msg = run_err(src);
+        assert!(msg.contains("função não pode alterar"), "{msg}");
+        let msg = run_err(
+            r#"
+s = "ABC"
+f = funcao()
+inicio
+    s[1] = "x"
+fim
+f()
+"#,
+        );
         assert!(msg.contains("função não pode alterar"), "{msg}");
     }
 
@@ -2434,6 +2554,98 @@ fim
     }
 
     #[test]
+    fn text_index_assign_replaces_one_char() {
+        assert_eq!(
+            run(r#"
+s = "ABCDE"
+s[2] = "b"
+escreva(s)
+"#),
+            "AbCDE\n"
+        );
+        assert_eq!(
+            run(r#"
+s = "ação"
+s[2] = "Ç"
+escreva(s)
+"#),
+            "aÇão\n"
+        );
+        assert_eq!(
+            run(r#"
+linhas = ["ABC", "DEF"]
+linhas[1][2] = "x"
+escreva(linhas)
+"#),
+            "[\"AxC\", \"DEF\"]\n"
+        );
+        assert_eq!(
+            run(r#"
+m = mapa([:s -> "ABC"])
+m:s[2] = "x"
+escreva(m:s)
+"#),
+            "AxC\n"
+        );
+        assert_eq!(
+            run(r#"
+s = "ABC"
+a = s
+s[1] = "x"
+escreva(a)
+escreva(s)
+"#),
+            "ABC\nxBC\n"
+        );
+        assert!(
+            run_err(
+                r#"
+s = "ABC"
+s[2] = "ab"
+"#
+            )
+            .contains("tamanho 1")
+        );
+        assert!(
+            run_err(
+                r#"
+s = "ABC"
+s[2] = ""
+"#
+            )
+            .contains("tamanho 1")
+        );
+        assert!(
+            run_err(
+                r#"
+s = "ABC"
+s[2] = 1
+"#
+            )
+            .contains("caractere")
+        );
+        assert!(run_err(r#""ABC"[2] = "b""#).contains("literal"));
+        assert!(
+            run_err(
+                r#"
+s = "ABC"
+s[0] = "x"
+"#
+            )
+            .contains(">= 1")
+        );
+        assert!(
+            run_err(
+                r#"
+s = "ABC"
+s[4] = "x"
+"#
+            )
+            .contains("fora do intervalo")
+        );
+    }
+
+    #[test]
     fn se_falhar_catches_undefined_and_bad_index() {
         assert_eq!(run(r#"escreva(lista[1] se_falhar "não")"#), "não\n");
         assert_eq!(run(r#"escreva([1][99] se_falhar 0)"#), "0\n");
@@ -2639,7 +2851,12 @@ leia_arquivo("../secret.txt")
 
     /// Runs `src` under a ChannelDebugger, answering every pause with
     /// `continuar`; returns the pauses seen and the result.
-    fn debug_pauses(src: &str) -> (Vec<super::super::debug::DebugPaused>, Result<i32, RuntimeError>) {
+    fn debug_pauses(
+        src: &str,
+    ) -> (
+        Vec<super::super::debug::DebugPaused>,
+        Result<i32, RuntimeError>,
+    ) {
         use super::super::debug::ChannelDebugger;
         let (pause_tx, pause_rx) = std::sync::mpsc::channel();
         let (cmd_tx, cmd_rx) = std::sync::mpsc::channel::<String>();
@@ -2686,7 +2903,18 @@ leia_arquivo("../secret.txt")
         std::thread::spawn(move || {
             let mut input = io::Cursor::new("");
             let (mut out, mut err) = (Vec::new(), Vec::new());
-            let r = run_with(&src, "t.lep", Box::new(ChannelDebugger::new(pause_tx, cmd_rx)), &mut input, &mut out, &mut err, None, None, None, &[]);
+            let r = run_with(
+                &src,
+                "t.lep",
+                Box::new(ChannelDebugger::new(pause_tx, cmd_rx)),
+                &mut input,
+                &mut out,
+                &mut err,
+                None,
+                None,
+                None,
+                &[],
+            );
             let _ = done_tx.send(r);
         });
         (pause_rx, cmd_tx, done_rx)
@@ -2701,24 +2929,35 @@ leia_arquivo("../secret.txt")
         cmds.send("continuar".into()).unwrap();
         std::thread::sleep(std::time::Duration::from_millis(50));
         cmds.send("terminar".into()).unwrap();
-        assert!(done.recv_timeout(WAIT).is_ok(), "Parar after Continuar must end the program");
+        assert!(
+            done.recv_timeout(WAIT).is_ok(),
+            "Parar after Continuar must end the program"
+        );
     }
 
     #[test]
     fn breakpoint_added_while_running_is_hit() {
-        let (pauses, cmds, done) = debug_session("enquanto verdadeiro {\n    x = 1\n    y = 2\n}\n");
+        let (pauses, cmds, done) =
+            debug_session("enquanto verdadeiro {\n    x = 1\n    y = 2\n}\n");
         pauses.recv_timeout(WAIT).expect("pause on start");
         cmds.send("continuar".into()).unwrap();
         std::thread::sleep(std::time::Duration::from_millis(50));
         cmds.send("ponto t.lep:3".into()).unwrap();
-        let p = pauses.recv_timeout(WAIT).expect("stops at the new breakpoint");
+        let p = pauses
+            .recv_timeout(WAIT)
+            .expect("stops at the new breakpoint");
         assert_eq!(p.line, 3);
         // Removed while running: Continuar runs freely again until Parar.
         cmds.send("remover t.lep:3".into()).unwrap();
         // While paused, a breakpoint change answers with a fresh snapshot.
         assert_eq!(pauses.recv_timeout(WAIT).unwrap().line, 3);
         cmds.send("continuar".into()).unwrap();
-        assert!(pauses.recv_timeout(std::time::Duration::from_millis(300)).is_err(), "breakpoint was removed");
+        assert!(
+            pauses
+                .recv_timeout(std::time::Duration::from_millis(300))
+                .is_err(),
+            "breakpoint was removed"
+        );
         cmds.send("terminar".into()).unwrap();
         assert!(done.recv_timeout(WAIT).is_ok());
     }
@@ -2741,12 +2980,26 @@ leia_arquivo("../secret.txt")
         std::thread::spawn(move || {
             let mut input = io::Cursor::new("");
             let (mut out, mut err) = (Vec::new(), Vec::new());
-            let r = run_with("durma(30)\n", "t.lep", Box::new(StopHook::new(rx)), &mut input, &mut out, &mut err, None, None, None, &[]);
+            let r = run_with(
+                "durma(30)\n",
+                "t.lep",
+                Box::new(StopHook::new(rx)),
+                &mut input,
+                &mut out,
+                &mut err,
+                None,
+                None,
+                None,
+                &[],
+            );
             let _ = done_tx.send(r);
         });
         std::thread::sleep(std::time::Duration::from_millis(100));
         tx.send("terminar".into()).unwrap();
-        assert!(done_rx.recv_timeout(WAIT).is_ok(), "Rodar: Parar during durma");
+        assert!(
+            done_rx.recv_timeout(WAIT).is_ok(),
+            "Rodar: Parar during durma"
+        );
     }
 
     #[test]
@@ -2772,14 +3025,22 @@ leia_arquivo("../secret.txt")
             .as_nanos();
         let dir = std::env::temp_dir().join(format!("expressa-mod-file-{nanos}"));
         std::fs::create_dir_all(dir.join("lib")).unwrap();
-        std::fs::write(dir.join("lib/m.lep"), "divide = funcao(a, b) {\n    q = a / b\n    q\n}\n").unwrap();
+        std::fs::write(
+            dir.join("lib/m.lep"),
+            "divide = funcao(a, b) {\n    q = a / b\n    q\n}\n",
+        )
+        .unwrap();
         let main = dir.join("main.lep");
         let src = "importe \"lib/m\"\nescreva(divide(1, 0))\n";
         let err = run_to_string(src, main.to_str().unwrap()).unwrap_err();
         assert!(err.file.ends_with("lib/m.lep"), "{err}");
         assert_eq!(err.span.line, 2);
         // The call site stays in the caller's file.
-        assert!(err.stack.last().unwrap().file.ends_with("main.lep"), "{:?}", err.stack);
+        assert!(
+            err.stack.last().unwrap().file.ends_with("main.lep"),
+            "{:?}",
+            err.stack
+        );
 
         // The debugger stops in the module, showing the module's line.
         use super::super::debug::ChannelDebugger;
@@ -2789,7 +3050,18 @@ leia_arquivo("../secret.txt")
         let runner = std::thread::spawn(move || {
             let mut input = io::Cursor::new("");
             let (mut out, mut errb) = (Vec::new(), Vec::new());
-            run_with(src, &main_s, Box::new(ChannelDebugger::new(pause_tx, cmd_rx)), &mut input, &mut out, &mut errb, None, None, None, &[])
+            run_with(
+                src,
+                &main_s,
+                Box::new(ChannelDebugger::new(pause_tx, cmd_rx)),
+                &mut input,
+                &mut out,
+                &mut errb,
+                None,
+                None,
+                None,
+                &[],
+            )
         });
         let mut last = None;
         while let Ok(p) = pause_rx.recv() {
