@@ -388,6 +388,7 @@ fn print_help_linguagem() {
          xs.tamanho()                    igual a tamanho(xs)\n  \
          i += 1  xs += [x]  nome += \" a\"\n  \
          xs.remova(2)  t.remova(1, 3)  m.remova(\"k\")\n  \
+         procurar(\"onde\", \"n\")       2; 0 se não achar\n  \
          e  ou  nao  contem\n  \
          #!/usr/bin/env expressa primeira linha (arquivo executável)"
     );

@@ -116,7 +116,8 @@ impl Console {
         self.view.set_cursor_visible(true);
         buf.place_cursor(&buf.end_iter());
         self.view.grab_focus();
-        self.view.scroll_to_mark(&buf.get_insert(), 0.0, false, 0.0, 0.0);
+        self.view
+            .scroll_to_mark(&buf.get_insert(), 0.0, false, 0.0, 0.0);
     }
 
     pub fn is_reading(&self) -> bool {
@@ -170,9 +171,9 @@ impl Console {
 
     /// Text of the output line at widget coordinates (for error links).
     pub fn line_at(&self, x: f64, y: f64) -> Option<String> {
-        let (bx, by) = self
-            .view
-            .window_to_buffer_coords(gtk::TextWindowType::Text, x as i32, y as i32);
+        let (bx, by) =
+            self.view
+                .window_to_buffer_coords(gtk::TextWindowType::Text, x as i32, y as i32);
         let iter = self.view.iter_at_location(bx, by)?;
         let buf = self.buffer();
         let a = buf.iter_at_line(iter.line())?;
@@ -462,15 +463,20 @@ fn insert_ansi_at(buf: &gtk::TextBuffer, mut offset: i32, text: &str, extra: Opt
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
     fn error_location() {
-        assert_eq!(parse_error_location("erro: x em lib/a.lep:12"), Some(("lib/a.lep".into(), 12)));
-        assert_eq!(parse_error_location("erro: divisão em main.lep:3\n"), Some(("main.lep".into(), 3)));
+        assert_eq!(
+            parse_error_location("erro: x em lib/a.lep:12"),
+            Some(("lib/a.lep".into(), 12))
+        );
+        assert_eq!(
+            parse_error_location("erro: divisão em main.lep:3\n"),
+            Some(("main.lep".into(), 3))
+        );
         assert_eq!(parse_error_location("nada aqui"), None);
     }
 
@@ -514,7 +520,14 @@ mod tests {
         let spans = ansi_spans("\x1b[32mHP\x1b[0m!");
         assert_eq!(spans.len(), 2);
         assert_eq!(spans[0].0, "HP");
-        assert_eq!(spans[0].1, AnsiStyle { fg: Some(32), bg: None, bold: false });
+        assert_eq!(
+            spans[0].1,
+            AnsiStyle {
+                fg: Some(32),
+                bg: None,
+                bold: false
+            }
+        );
         assert_eq!(spans[1].0, "!");
         assert_eq!(spans[1].1, AnsiStyle::default());
     }

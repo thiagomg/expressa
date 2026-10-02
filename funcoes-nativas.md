@@ -48,6 +48,7 @@ Caminhos de arquivo **relativos** são resolvidos a partir da pasta do `.lep` em
 | [`sem_acento`](#sem_acento) | Tira acentos e cedilha |
 | [`remova`](#remova) | Tira índice/faixa de lista ou texto, ou chave de mapa |
 | [`substitua`](#substitua) | Troca trechos de um texto |
+| [`procurar`](#procurar) | Índice da primeira ocorrência (0 se não achar) |
 | [`separe`](#separe) | Parte um texto em lista |
 | [`junte`](#junte) | Junta uma lista em um texto |
 | [`limpe`](#limpe) | Remove espaços das extremidades |
@@ -831,6 +832,26 @@ substitua("Maria Silva", "Maria", "Ana")
 
 substitua("aaa", "a", "b")
 // "bbb"
+```
+
+### `procurar`
+
+```text
+procurar(texto, trecho) -> numero
+procurar(lista, item) -> numero
+```
+
+Devolve o índice (começando em 1) da **primeira** ocorrência. Se não achar, devolve `0`.
+
+No texto, `trecho` é um pedaço (um ou mais caracteres Unicode). Na lista, compara o item com `==`.
+
+**Erros:** primeiro argumento não é texto nem lista; em texto, o segundo não é texto; trecho vazio (`""`).
+
+```text
+procurar("onde", "n")     // 2
+"onde".procurar("a")      // 0
+procurar("banana", "na")  // 3
+procurar([10, 20, 30], 20)  // 2
 ```
 
 ### `separe`

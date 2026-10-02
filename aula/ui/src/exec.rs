@@ -221,7 +221,10 @@ pub fn spawn(
     }
 
     let file = ws.abs(rel_path);
-    let breakpoints: Vec<(String, u32)> = breakpoints.into_iter().map(|(f, l)| (ws.abs(&f), l)).collect();
+    let breakpoints: Vec<(String, u32)> = breakpoints
+        .into_iter()
+        .map(|(f, l)| (ws.abs(&f), l))
+        .collect();
     let root = ws.dir.clone();
     let rel = move |p: &str| {
         Path::new(p)

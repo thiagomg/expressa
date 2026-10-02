@@ -71,7 +71,12 @@ fn scope(path: &str, text: &str) -> Scope {
 
 fn file_defs(help: &Help, path: &str) -> Vec<Def> {
     (help.file_text)(path)
-        .map(|t| lang::parse_definitions(&t).into_iter().filter(|d| d.top_level).collect())
+        .map(|t| {
+            lang::parse_definitions(&t)
+                .into_iter()
+                .filter(|d| d.top_level)
+                .collect()
+        })
         .unwrap_or_default()
 }
 
@@ -79,7 +84,10 @@ fn file_defs(help: &Help, path: &str) -> Vec<Def> {
 pub enum Found {
     Native(&'static Native),
     /// `file: None` = this document.
-    Def { def: Def, file: Option<String> },
+    Def {
+        def: Def,
+        file: Option<String>,
+    },
 }
 
 fn lookup(help: &Help, path: &str, text: &str, alias: Option<&str>, name: &str) -> Option<Found> {
@@ -91,7 +99,9 @@ fn lookup(help: &Help, path: &str, text: &str, alias: Option<&str>, name: &str) 
             .cloned()
             .or_else(|| lang::native_module(alias).map(Module::Native))?;
         return match target {
-            Module::Native(m) => lang::native(name).filter(|n| n.module == Some(m)).map(Found::Native),
+            Module::Native(m) => lang::native(name)
+                .filter(|n| n.module == Some(m))
+                .map(Found::Native),
             Module::File(f) => file_defs(help, &f)
                 .into_iter()
                 .find(|d| d.name == name)
@@ -99,11 +109,17 @@ fn lookup(help: &Help, path: &str, text: &str, alias: Option<&str>, name: &str) 
         };
     }
     if let Some(def) = sc.defs.iter().find(|d| d.name == name) {
-        return Some(Found::Def { def: def.clone(), file: None });
+        return Some(Found::Def {
+            def: def.clone(),
+            file: None,
+        });
     }
     for f in &sc.files {
         if let Some(def) = file_defs(help, f).into_iter().find(|d| d.name == name) {
-            return Some(Found::Def { def, file: Some(f.clone()) });
+            return Some(Found::Def {
+                def,
+                file: Some(f.clone()),
+            });
         }
     }
     lang::native(name).map(Found::Native)
@@ -163,7 +179,11 @@ fn native_item(n: &'static Native, name: &str, method: bool, import: Option<&'st
         .unwrap_or_default();
     Item {
         label: name.to_string(),
-        kind: if n.is_value { Kind::Value } else { Kind::Function },
+        kind: if n.is_value {
+            Kind::Value
+        } else {
+            Kind::Function
+        },
         params: params_text,
         detail,
         doc: native_doc(n),
@@ -176,11 +196,19 @@ fn native_item(n: &'static Native, name: &str, method: bool, import: Option<&'st
 fn def_item(d: &Def, where_: &str, method: bool) -> Item {
     let (insert, cursor, kind) = match &d.kind {
         DefKind::Function(p) => {
-            let n = if method { p.len().saturating_sub(1) } else { p.len() };
+            let n = if method {
+                p.len().saturating_sub(1)
+            } else {
+                p.len()
+            };
             let (i, c) = call_insert(&d.name, n);
             (i, c, Kind::Function)
         }
-        DefKind::Module => (format!("{}::", d.name), d.name.chars().count() + 2, Kind::Module),
+        DefKind::Module => (
+            format!("{}::", d.name),
+            d.name.chars().count() + 2,
+            Kind::Module,
+        ),
         DefKind::Value => (d.name.clone(), d.name.chars().count(), Kind::Value),
     };
     Item {
@@ -212,44 +240,60 @@ pub fn items(help: &Help, path: &str, text: &str, before: &str) -> (Completion, 
         Completion::Nothing => {}
         Completion::Import { .. } => {
             for m in lang::modules() {
-                let funcs: Vec<&str> = lang::natives().iter().filter(|n| n.module == Some(m)).map(|n| n.name).collect();
-                push(&mut out, Item {
-                    label: m.to_string(),
-                    kind: Kind::Module,
-                    params: String::new(),
-                    detail: "módulo nativo".into(),
-                    doc: funcs.join(", "),
-                    insert: m.to_string(),
-                    cursor: m.chars().count(),
-                    import: None,
-                });
+                let funcs: Vec<&str> = lang::natives()
+                    .iter()
+                    .filter(|n| n.module == Some(m))
+                    .map(|n| n.name)
+                    .collect();
+                push(
+                    &mut out,
+                    Item {
+                        label: m.to_string(),
+                        kind: Kind::Module,
+                        params: String::new(),
+                        detail: "módulo nativo".into(),
+                        doc: funcs.join(", "),
+                        insert: m.to_string(),
+                        cursor: m.chars().count(),
+                        import: None,
+                    },
+                );
             }
             let dir = path.rsplit_once('/').map_or("", |(d, _)| d);
             for f in (help.project_files)() {
                 if f == path || !f.ends_with(".lep") {
                     continue;
                 }
-                let Some(rel) = relative_to(dir, &f) else { continue };
+                let Some(rel) = relative_to(dir, &f) else {
+                    continue;
+                };
                 let mut spec = rel.trim_end_matches(".lep").to_string();
                 // A bare name that is also a native module needs ./ for the file.
                 if lang::native_module(&spec).is_some() {
                     spec = format!("./{spec}");
                 }
-                push(&mut out, Item {
-                    label: spec.clone(),
-                    kind: Kind::File,
-                    params: String::new(),
-                    detail: "arquivo".into(),
-                    doc: f.clone(),
-                    cursor: spec.chars().count(),
-                    insert: spec,
-                    import: None,
-                });
+                push(
+                    &mut out,
+                    Item {
+                        label: spec.clone(),
+                        kind: Kind::File,
+                        params: String::new(),
+                        detail: "arquivo".into(),
+                        doc: f.clone(),
+                        cursor: spec.chars().count(),
+                        insert: spec,
+                        import: None,
+                    },
+                );
             }
         }
         Completion::Module { alias, .. } => {
             let sc = scope(path, text);
-            let target = sc.aliases.get(alias).cloned().or_else(|| lang::native_module(alias).map(Module::Native));
+            let target = sc
+                .aliases
+                .get(alias)
+                .cloned()
+                .or_else(|| lang::native_module(alias).map(Module::Native));
             match target {
                 Some(Module::Native(m)) => {
                     for n in lang::natives().iter().filter(|n| n.module == Some(m)) {
@@ -290,7 +334,10 @@ pub fn items(help: &Help, path: &str, text: &str, before: &str) -> (Completion, 
                 })
                 .collect();
             for n in lang::natives() {
-                let params = n.signatures.first().map_or(0, |s| lang::signature_params(s).len());
+                let params = n
+                    .signatures
+                    .first()
+                    .map_or(0, |s| lang::signature_params(s).len());
                 if method && (n.is_value || params == 0) {
                     continue;
                 }
@@ -310,28 +357,34 @@ pub fn items(help: &Help, path: &str, text: &str, before: &str) -> (Completion, 
             }
             if !method {
                 for alias in sc.aliases.keys() {
-                    push(&mut out, Item {
-                        label: alias.clone(),
-                        kind: Kind::Module,
-                        params: String::new(),
-                        detail: "módulo".into(),
-                        doc: String::new(),
-                        insert: format!("{alias}::"),
-                        cursor: alias.chars().count() + 2,
-                        import: None,
-                    });
+                    push(
+                        &mut out,
+                        Item {
+                            label: alias.clone(),
+                            kind: Kind::Module,
+                            params: String::new(),
+                            detail: "módulo".into(),
+                            doc: String::new(),
+                            insert: format!("{alias}::"),
+                            cursor: alias.chars().count() + 2,
+                            import: None,
+                        },
+                    );
                 }
                 for k in lang::KEYWORDS {
-                    push(&mut out, Item {
-                        label: k.to_string(),
-                        kind: Kind::Keyword,
-                        params: String::new(),
-                        detail: "palavra-chave".into(),
-                        doc: String::new(),
-                        insert: k.to_string(),
-                        cursor: k.chars().count(),
-                        import: None,
-                    });
+                    push(
+                        &mut out,
+                        Item {
+                            label: k.to_string(),
+                            kind: Kind::Keyword,
+                            params: String::new(),
+                            detail: "palavra-chave".into(),
+                            doc: String::new(),
+                            insert: k.to_string(),
+                            cursor: k.chars().count(),
+                            import: None,
+                        },
+                    );
                 }
             }
         }
@@ -349,7 +402,12 @@ fn relative_to(dir: &str, b: &str) -> Option<String> {
 }
 
 fn matches_prefix(label: &str, prefix: &str) -> bool {
-    let fold = |s: &str| -> String { s.chars().flat_map(char::to_lowercase).map(fold_accent).collect() };
+    let fold = |s: &str| -> String {
+        s.chars()
+            .flat_map(char::to_lowercase)
+            .map(fold_accent)
+            .collect()
+    };
     fold(label).starts_with(&fold(prefix))
 }
 
@@ -367,9 +425,22 @@ fn fold_accent(c: char) -> char {
 
 fn prefix_of(ctx: &Completion) -> &str {
     match ctx {
-        Completion::Import { prefix } | Completion::Module { prefix, .. } | Completion::Method { prefix } | Completion::Name { prefix } => prefix,
+        Completion::Import { prefix }
+        | Completion::Module { prefix, .. }
+        | Completion::Method { prefix }
+        | Completion::Name { prefix } => prefix,
         Completion::Nothing => "",
     }
+}
+
+/// Prefix the GtkSourceView `refilter` must use: the Expressa token at the
+/// cursor (`lib/a` after `importe "`, not the Gtk word `a` after `/`).
+fn prefix_before_cursor(buffer: &impl IsA<gtk::TextBuffer>) -> String {
+    let buffer = buffer.as_ref();
+    let cursor = buffer.iter_at_mark(&buffer.get_insert());
+    let (s, _) = buffer.bounds();
+    let before = buffer.text(&s, &cursor, true).to_string();
+    prefix_of(&lang::completion_context(&before)).to_string()
 }
 
 // ── Help text ──────────────────────────────────────────────────────────────
@@ -398,23 +469,29 @@ pub fn help_markup(help: &Help, path: &str, text: &str, line: &str, col: usize) 
     if lang::KEYWORDS.contains(&w.name.as_str()) {
         return None;
     }
-    Some(match lookup(help, path, text, w.alias.as_deref(), &w.name)? {
-        Found::Native(n) => {
-            let sigs = if n.signatures.is_empty() { n.name.to_string() } else { n.signatures.join("\n") };
-            format!("<tt><b>{}</b></tt>\n{}", esc(&sigs), esc(&native_doc(n)))
-        }
-        Found::Def { def, file } => {
-            let where_ = match file {
-                Some(f) => format!("{f}, linha {}", def.line + 1),
-                None => format!("linha {}", def.line + 1),
-            };
-            let shown = match &def.kind {
-                DefKind::Function(p) => format!("{} = funcao({})", def.name, p.join(", ")),
-                _ => def.name.clone(),
-            };
-            format!("<tt><b>{}</b></tt>\n{}", esc(&shown), esc(&where_))
-        }
-    })
+    Some(
+        match lookup(help, path, text, w.alias.as_deref(), &w.name)? {
+            Found::Native(n) => {
+                let sigs = if n.signatures.is_empty() {
+                    n.name.to_string()
+                } else {
+                    n.signatures.join("\n")
+                };
+                format!("<tt><b>{}</b></tt>\n{}", esc(&sigs), esc(&native_doc(n)))
+            }
+            Found::Def { def, file } => {
+                let where_ = match file {
+                    Some(f) => format!("{f}, linha {}", def.line + 1),
+                    None => format!("linha {}", def.line + 1),
+                };
+                let shown = match &def.kind {
+                    DefKind::Function(p) => format!("{} = funcao({})", def.name, p.join(", ")),
+                    _ => def.name.clone(),
+                };
+                format!("<tt><b>{}</b></tt>\n{}", esc(&shown), esc(&where_))
+            }
+        },
+    )
 }
 
 /// Pango markup for the call around the cursor, the current parameter in
@@ -422,13 +499,20 @@ pub fn help_markup(help: &Help, path: &str, text: &str, line: &str, col: usize) 
 pub fn signature_markup(help: &Help, path: &str, text: &str, before: &str) -> Option<String> {
     let call = lang::call_context(before)?;
     let active = call.active + usize::from(call.method);
-    let (sigs, summary): (Vec<String>, String) = match lookup(help, path, text, call.alias.as_deref(), &call.name)? {
-        Found::Native(n) if !n.is_value => (n.signatures.clone(), n.summary.to_string()),
-        Found::Def { def: Def { name, kind: DefKind::Function(p), .. }, .. } => {
-            (vec![format!("{name}({})", p.join(", "))], String::new())
-        }
-        _ => return None,
-    };
+    let (sigs, summary): (Vec<String>, String) =
+        match lookup(help, path, text, call.alias.as_deref(), &call.name)? {
+            Found::Native(n) if !n.is_value => (n.signatures.clone(), n.summary.to_string()),
+            Found::Def {
+                def:
+                    Def {
+                        name,
+                        kind: DefKind::Function(p),
+                        ..
+                    },
+                ..
+            } => (vec![format!("{name}({})", p.join(", "))], String::new()),
+            _ => return None,
+        };
     let sig = sigs
         .iter()
         .find(|s| lang::signature_params(s).len() > active || s.contains("..."))
@@ -446,7 +530,12 @@ pub fn signature_markup(help: &Help, path: &str, text: &str, before: &str) -> Op
             }
         })
         .collect();
-    let mut m = format!("<tt>{}({}){}</tt>", esc(&sig[..a]), shown.join(", "), esc(&sig[z + 1..]));
+    let mut m = format!(
+        "<tt>{}({}){}</tt>",
+        esc(&sig[..a]),
+        shown.join(", "),
+        esc(&sig[z + 1..])
+    );
     if !summary.is_empty() {
         m.push_str(&format!("\n<small>{}</small>", esc(&summary)));
     }
@@ -478,7 +567,10 @@ pub fn definition(help: &Help, path: &str, text: &str, line: &str, col: usize) -
     let w = lang::word_at(line, col)?;
     match lookup(help, path, text, w.alias.as_deref(), &w.name)? {
         Found::Native(n) => Some(Target::Native(n.name)),
-        Found::Def { def, file } => Some(Target::Line { file, line: def.line as u32 + 1 }),
+        Found::Def { def, file } => Some(Target::Line {
+            file,
+            line: def.line as u32 + 1,
+        }),
     }
 }
 
@@ -559,7 +651,8 @@ mod imp {
         fn populate_future(
             &self,
             context: &sourceview5::CompletionContext,
-        ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<gio::ListModel, glib::Error>>>> {
+        ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<gio::ListModel, glib::Error>>>>
+        {
             let store = gio::ListStore::new::<super::Proposal>();
             if let (Some(help), Some(buffer)) = (self.help.borrow().clone(), context.buffer()) {
                 let path = (help.path_of)(&buffer).unwrap_or_default();
@@ -568,13 +661,10 @@ mod imp {
                 let cursor = buffer.iter_at_mark(&buffer.get_insert());
                 let before = buffer.text(&s, &cursor, true).to_string();
                 let (ctx, list) = super::items(&help, &path, &text, &before);
-                let all: Vec<super::Proposal> = list.into_iter().map(super::Proposal::new).collect();
+                let all: Vec<super::Proposal> =
+                    list.into_iter().map(super::Proposal::new).collect();
                 let prefix = super::prefix_of(&ctx).to_string();
-                for p in &all {
-                    if p.item().is_some_and(|i| super::matches_prefix(&i.label, &prefix)) {
-                        store.append(p);
-                    }
-                }
+                super::fill_store(&store, &all, &prefix);
                 *self.all.borrow_mut() = all;
             }
             Box::pin(std::future::ready(Ok(store.upcast())))
@@ -584,13 +674,11 @@ mod imp {
             let Some(store) = model.downcast_ref::<gio::ListStore>() else {
                 return;
             };
-            let word = context.word().to_string();
-            store.remove_all();
-            for p in self.all.borrow().iter() {
-                if p.item().is_some_and(|i| super::matches_prefix(&i.label, &word)) {
-                    store.append(p);
-                }
-            }
+            let prefix = context
+                .buffer()
+                .map(|b| super::prefix_before_cursor(&b))
+                .unwrap_or_else(|| context.word().to_string());
+            super::fill_store(store, &self.all.borrow(), &prefix);
         }
 
         fn display(
@@ -599,7 +687,10 @@ mod imp {
             proposal: &sourceview5::CompletionProposal,
             cell: &sourceview5::CompletionCell,
         ) {
-            let Some(item) = proposal.downcast_ref::<super::Proposal>().and_then(|p| p.item()) else {
+            let Some(item) = proposal
+                .downcast_ref::<super::Proposal>()
+                .and_then(|p| p.item())
+            else {
                 return;
             };
             match cell.column() {
@@ -618,26 +709,36 @@ mod imp {
             }
         }
 
-        fn activate(&self, context: &sourceview5::CompletionContext, proposal: &sourceview5::CompletionProposal) {
+        fn activate(
+            &self,
+            context: &sourceview5::CompletionContext,
+            proposal: &sourceview5::CompletionProposal,
+        ) {
             let (Some(buffer), Some(item)) = (
                 context.buffer(),
-                proposal.downcast_ref::<super::Proposal>().and_then(|p| p.item()),
+                proposal
+                    .downcast_ref::<super::Proposal>()
+                    .and_then(|p| p.item()),
             ) else {
                 return;
             };
             let cursor = buffer.iter_at_mark(&buffer.get_insert());
             let (mut begin, mut end) = context.bounds().unwrap_or((cursor.clone(), cursor.clone()));
-            if item.kind == Kind::File || item.kind == Kind::Module && {
-                let mut s = cursor.clone();
-                s.set_line_offset(0);
-                s.text(&cursor).contains("importe")
-            } {
+            if item.kind == Kind::File
+                || item.kind == Kind::Module && {
+                    let mut s = cursor.clone();
+                    s.set_line_offset(0);
+                    s.text(&cursor).contains("importe")
+                }
+            {
                 // Replace the whole spec typed after the quote (`lib/a`).
                 let mut s = cursor.clone();
                 s.set_line_offset(0);
                 let line = s.text(&cursor).to_string();
                 if let Some(q) = line.rfind('"') {
-                    begin = buffer.iter_at_line_offset(cursor.line(), line[..q + 1].chars().count() as i32).unwrap_or(begin);
+                    begin = buffer
+                        .iter_at_line_offset(cursor.line(), line[..q + 1].chars().count() as i32)
+                        .unwrap_or(begin);
                     end = cursor.clone();
                 }
             }
@@ -649,11 +750,19 @@ mod imp {
             if let Some(m) = item.import {
                 let (s, e) = buffer.bounds();
                 let text = buffer.text(&s, &e, true).to_string();
-                let already = lang::parse_imports(&text).iter().any(|i| i.alias.is_none() && i.spec == m);
+                let already = lang::parse_imports(&text)
+                    .iter()
+                    .any(|i| i.alias.is_none() && i.spec == m);
                 if !already {
                     let line = lang::import_insert_line(&text) as i32;
-                    let mut at = buffer.iter_at_line(line).unwrap_or_else(|| buffer.end_iter());
-                    let nl = if at.is_end() && !text.is_empty() && !text.ends_with('\n') { "\n" } else { "" };
+                    let mut at = buffer
+                        .iter_at_line(line)
+                        .unwrap_or_else(|| buffer.end_iter());
+                    let nl = if at.is_end() && !text.is_empty() && !text.ends_with('\n') {
+                        "\n"
+                    } else {
+                        ""
+                    };
                     buffer.insert(&mut at, &format!("{nl}importe \"{m}\"\n"));
                 }
             }
@@ -680,7 +789,8 @@ mod imp {
             &self,
             context: &sourceview5::HoverContext,
             display: &sourceview5::HoverDisplay,
-        ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<(), glib::Error>> + 'static>> {
+        ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<(), glib::Error>> + 'static>>
+        {
             let none = || -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<(), glib::Error>>>> {
                 Box::pin(std::future::ready(Err(glib::Error::new(gio::IOErrorEnum::NotSupported, "sem ajuda"))))
             };
@@ -690,8 +800,16 @@ mod imp {
                 return none();
             }
             let mut shown = false;
-            if let Some(msg) = self.diag.borrow().as_ref().and_then(|f| f(&buffer, iter.offset())) {
-                display.append(&super::help_label(&format!("<span foreground=\"#e53935\"><b>erro:</b></span> {}", esc(&msg))));
+            if let Some(msg) = self
+                .diag
+                .borrow()
+                .as_ref()
+                .and_then(|f| f(&buffer, iter.offset()))
+            {
+                display.append(&super::help_label(&format!(
+                    "<span foreground=\"#e53935\"><b>erro:</b></span> {}",
+                    esc(&msg)
+                )));
                 shown = true;
             }
             if let Some(help) = self.help.borrow().clone() {
@@ -711,7 +829,11 @@ mod imp {
                     shown = true;
                 }
             }
-            if shown { Box::pin(std::future::ready(Ok(()))) } else { none() }
+            if shown {
+                Box::pin(std::future::ready(Ok(())))
+            } else {
+                none()
+            }
         }
     }
 }
@@ -758,6 +880,9 @@ pub struct ViewHelp {
     info: gtk::Popover,
     info_label: gtk::Label,
     pending: Rc<Cell<bool>>,
+    /// GtkSourceCompletion list is showing: keep our popover down so the
+    /// two GtkPopovers do not steal the grab / hide each other.
+    completion_open: Cell<bool>,
 }
 
 impl ViewHelp {
@@ -771,16 +896,32 @@ impl ViewHelp {
     }
 }
 
-fn cursor_rect(view: &SourceView) -> gtk::gdk::Rectangle {
+fn fill_store(store: &gio::ListStore, all: &[Proposal], prefix: &str) {
+    store.remove_all();
+    for p in all {
+        if p.item().is_some_and(|i| matches_prefix(&i.label, prefix)) {
+            store.append(p);
+        }
+    }
+}
+
+fn cursor_rect(view: &SourceView, dest: &impl IsA<gtk::Widget>) -> gtk::gdk::Rectangle {
     let buffer = view.buffer();
     let it = buffer.iter_at_mark(&buffer.get_insert());
     let r = view.iter_location(&it);
     let (x, y) = view.buffer_to_window_coords(gtk::TextWindowType::Widget, r.x(), r.y());
-    gtk::gdk::Rectangle::new(x, y, 1, r.height().max(1))
+    let (x, y) = view
+        .translate_coordinates(dest, x as f64, y as f64)
+        .unwrap_or((x as f64, y as f64));
+    gtk::gdk::Rectangle::new(x.round() as i32, y.round() as i32, 1, r.height().max(1))
 }
 
 /// Completion, hover, the signature popup and F1 for one editor view.
-pub fn attach(view: &SourceView, help: &Rc<Help>, diag: impl Fn(&SourceBuffer, i32) -> Option<String> + 'static) -> Rc<ViewHelp> {
+pub fn attach(
+    view: &SourceView,
+    help: &Rc<Help>,
+    diag: impl Fn(&SourceBuffer, i32) -> Option<String> + 'static,
+) -> Rc<ViewHelp> {
     let completion = view.completion();
     let provider: Provider = glib::Object::new();
     *provider.imp().help.borrow_mut() = Some(Rc::clone(help));
@@ -807,15 +948,21 @@ pub fn attach(view: &SourceView, help: &Rc<Help>, diag: impl Fn(&SourceBuffer, i
     signature.set_autohide(false);
     signature.set_has_arrow(false);
     signature.set_can_focus(false);
+    signature.set_cascade_popdown(false);
     signature.set_position(gtk::PositionType::Top);
-    signature.set_parent(view);
+    // Not on the SourceView: GtkSourceCompletion's list is also a popover
+    // child of the view, and GTK 4 hides one when the other pops up.
+    let host = view.parent().unwrap_or_else(|| view.clone().upcast());
+    signature.set_parent(&host);
     signature.add_css_class("aula-signature");
 
     let info_label = help_label("");
     let info_pop = gtk::Popover::new();
     info_pop.set_child(Some(&info_label));
+    info_pop.set_can_focus(false);
+    info_pop.set_cascade_popdown(false);
     info_pop.set_position(gtk::PositionType::Bottom);
-    info_pop.set_parent(view);
+    info_pop.set_parent(&host);
 
     let vh = Rc::new(ViewHelp {
         signature,
@@ -823,6 +970,7 @@ pub fn attach(view: &SourceView, help: &Rc<Help>, diag: impl Fn(&SourceBuffer, i
         info: info_pop,
         info_label,
         pending: Rc::new(Cell::new(false)),
+        completion_open: Cell::new(false),
     });
     // Signature popup follows the cursor and the typing (once per idle).
     let update = {
@@ -840,7 +988,7 @@ pub fn attach(view: &SourceView, help: &Rc<Help>, diag: impl Fn(&SourceBuffer, i
             glib::idle_add_local_once(move || {
                 let Some(vh) = weak_vh.upgrade() else { return };
                 vh.pending.set(false);
-                if !view.has_focus() {
+                if vh.completion_open.get() || !view.has_focus() {
                     vh.signature.popdown();
                     return;
                 }
@@ -859,8 +1007,13 @@ pub fn attach(view: &SourceView, help: &Rc<Help>, diag: impl Fn(&SourceBuffer, i
                         vh.signature_label.set_markup(&m);
                         // A popover is centered on its target: aim at a box as
                         // wide as the popup so it starts at the cursor.
-                        let r = cursor_rect(&view);
-                        let (_, width, _, _) = vh.signature.measure(gtk::Orientation::Horizontal, -1);
+                        let dest = vh
+                            .signature
+                            .parent()
+                            .unwrap_or_else(|| view.clone().upcast());
+                        let r = cursor_rect(&view, &dest);
+                        let (_, width, _, _) =
+                            vh.signature.measure(gtk::Orientation::Horizontal, -1);
                         let r = gtk::gdk::Rectangle::new(r.x(), r.y(), width.max(1), r.height());
                         vh.signature.set_pointing_to(Some(&r));
                         if !vh.signature.is_visible() {
@@ -880,6 +1033,25 @@ pub fn attach(view: &SourceView, help: &Rc<Help>, diag: impl Fn(&SourceBuffer, i
     {
         let u = Rc::clone(&update);
         view.buffer().connect_changed(move |_| u());
+    }
+    {
+        let weak_vh = Rc::downgrade(&vh);
+        completion.connect_show(move |_| {
+            if let Some(vh) = weak_vh.upgrade() {
+                vh.completion_open.set(true);
+                vh.signature.popdown();
+            }
+        });
+    }
+    {
+        let weak_vh = Rc::downgrade(&vh);
+        let u = Rc::clone(&update);
+        completion.connect_hide(move |_| {
+            if let Some(vh) = weak_vh.upgrade() {
+                vh.completion_open.set(false);
+            }
+            u();
+        });
     }
     {
         let weak_vh = Rc::downgrade(&vh);
@@ -916,9 +1088,15 @@ pub fn show_info(view: &SourceView, vh: &ViewHelp, help: &Help) -> bool {
         return false;
     };
     vh.info_label.set_markup(&m);
-    let r = cursor_rect(view);
+    let dest = vh.info.parent().unwrap_or_else(|| view.clone().upcast());
+    let r = cursor_rect(view, &dest);
     let (_, width, _, _) = vh.info.measure(gtk::Orientation::Horizontal, -1);
-    vh.info.set_pointing_to(Some(&gtk::gdk::Rectangle::new(r.x(), r.y(), width.max(1), r.height())));
+    vh.info.set_pointing_to(Some(&gtk::gdk::Rectangle::new(
+        r.x(),
+        r.y(),
+        width.max(1),
+        r.height(),
+    )));
     vh.info.popup();
     true
 }
@@ -929,14 +1107,22 @@ mod tests {
 
     fn help_with(files: &'static [(&'static str, &'static str)]) -> Help {
         Help {
-            file_text: Box::new(move |p| files.iter().find(|(n, _)| *n == p).map(|(_, t)| t.to_string())),
+            file_text: Box::new(move |p| {
+                files
+                    .iter()
+                    .find(|(n, _)| *n == p)
+                    .map(|(_, t)| t.to_string())
+            }),
             project_files: Box::new(move || files.iter().map(|(n, _)| n.to_string()).collect()),
             path_of: Box::new(|_| None),
         }
     }
 
     const FILES: &[(&str, &str)] = &[
-        ("lib/ajuda.lep", "dobro = funcao(x) {\n    x * 2\n}\ninterno = 1\n"),
+        (
+            "lib/ajuda.lep",
+            "dobro = funcao(x) {\n    x * 2\n}\ninterno = 1\n",
+        ),
         ("main.lep", ""),
         ("matriz.lep", "x = 1\n"),
     ];
@@ -951,11 +1137,18 @@ mod tests {
         let text = "importe \"lib/ajuda\"\nm = importe \"mat\"\nsoma = funcao(a, b) { a + b }\n";
         let (_, it) = items(&h, "main.lep", text, "pi");
         let pinte = it.iter().find(|i| i.label == "pinte").unwrap();
-        assert_eq!(pinte.import, Some("tela"), "module function adds its importe");
+        assert_eq!(
+            pinte.import,
+            Some("tela"),
+            "module function adds its importe"
+        );
         assert_eq!((pinte.insert.as_str(), pinte.cursor), ("pinte()", 6));
         let l = labels(&it);
         assert!(l.contains(&"soma") && l.contains(&"dobro") && l.contains(&"interno"));
-        assert!(!l.contains(&"raiz"), "mat is only imported with an alias: m::raiz");
+        assert!(
+            !l.contains(&"raiz"),
+            "mat is only imported with an alias: m::raiz"
+        );
         assert!(l.contains(&"se_falhar") && l.contains(&"m"));
         let cls = it.iter().find(|i| i.label == "cls").unwrap();
         assert_eq!(cls.cursor, 5, "no parameters: cursor after ()");
@@ -964,17 +1157,32 @@ mod tests {
         assert_eq!(labels(&it), ["raiz", "aleatorio", "aleatório", "semente"]);
         let (_, it) = items(&h, "main.lep", text, "lista.");
         let l = labels(&it);
-        assert!(l.contains(&"tamanho") && l.contains(&"soma") && !l.contains(&"cls") && !l.contains(&"se"));
+        assert!(
+            l.contains(&"tamanho")
+                && l.contains(&"soma")
+                && !l.contains(&"cls")
+                && !l.contains(&"se")
+        );
         let t = it.iter().find(|i| i.label == "tamanho").unwrap();
-        assert_eq!(t.cursor, "tamanho()".len(), "the receiver is the only parameter");
+        assert_eq!(
+            t.cursor,
+            "tamanho()".len(),
+            "the receiver is the only parameter"
+        );
 
         let (_, it) = items(&h, "main.lep", text, "importe \"");
         let l = labels(&it);
         assert!(l.contains(&"tela") && l.contains(&"lib/ajuda") && l.contains(&"./matriz"));
         assert!(!l.contains(&"main"), "not the file itself");
         let (_, it) = items(&h, "lib/x.lep", "", "importe \"");
-        assert!(labels(&it).contains(&"ajuda"), "relative to the file's folder");
+        assert!(
+            labels(&it).contains(&"ajuda"),
+            "relative to the file's folder"
+        );
         assert!(items(&h, "main.lep", text, "x = \"te").1.is_empty());
+
+        let (_, it) = items(&h, "main.lep", text, r#"importe "lib/a"#);
+        assert!(labels(&it).contains(&"lib/ajuda"));
     }
 
     #[test]
@@ -983,6 +1191,12 @@ mod tests {
         assert!(matches_prefix("função", "func"));
         assert!(matches_prefix("Escreva", "esc"));
         assert!(!matches_prefix("escreva", "x"));
+        // GtkSourceView's word after `/` is just `a`; we keep the spec prefix.
+        assert!(matches_prefix("lib/ajuda", "lib/a"));
+        assert!(!matches_prefix("lib/ajuda", "a"));
+        let ctx = lang::completion_context(r#"importe "lib/a"#);
+        assert_eq!(prefix_of(&ctx), "lib/a");
+        assert!(matches_prefix("lib/ajuda", prefix_of(&ctx)));
     }
 
     #[test]
@@ -992,7 +1206,10 @@ mod tests {
         let m = signature_markup(&h, "main.lep", text, "pinte(\"a\", ").unwrap();
         assert!(m.contains("<b><u>frente</u></b>"), "{m}");
         let m = signature_markup(&h, "main.lep", text, "\"a\".pinte(:verde, ").unwrap();
-        assert!(m.contains("<b><u>fundo</u></b>"), "method call shifts by one: {m}");
+        assert!(
+            m.contains("<b><u>fundo</u></b>"),
+            "method call shifts by one: {m}"
+        );
         let m = signature_markup(&h, "main.lep", text, "soma(1, ").unwrap();
         assert!(m.contains("<b><u>b</u></b>"), "{m}");
         let m = signature_markup(&h, "main.lep", text, "escreva(1, 2, ").unwrap();
@@ -1002,21 +1219,43 @@ mod tests {
         let m = help_markup(&h, "main.lep", text, "escreva(soma(1, 2))", 2).unwrap();
         assert!(m.contains("escreva(valor, ...)"), "{m}");
         let m = help_markup(&h, "main.lep", text, "escreva(soma(1, 2))", 10).unwrap();
-        assert!(m.contains("soma = funcao(a, b)") && m.contains("linha 2"), "{m}");
+        assert!(
+            m.contains("soma = funcao(a, b)") && m.contains("linha 2"),
+            "{m}"
+        );
         assert_eq!(help_markup(&h, "main.lep", text, "se x {", 1), None);
     }
 
     #[test]
     fn go_to_definition() {
         let h = help_with(FILES);
-        let text = "importe \"lib/ajuda\"\nsoma = funcao(a, b) { a + b }\nescreva(soma(dobro(1), 2))\n";
-        assert_eq!(definition(&h, "main.lep", text, "escreva(soma(dobro(1), 2))", 9), Some(Target::Line { file: None, line: 2 }));
+        let text =
+            "importe \"lib/ajuda\"\nsoma = funcao(a, b) { a + b }\nescreva(soma(dobro(1), 2))\n";
+        assert_eq!(
+            definition(&h, "main.lep", text, "escreva(soma(dobro(1), 2))", 9),
+            Some(Target::Line {
+                file: None,
+                line: 2
+            })
+        );
         assert_eq!(
             definition(&h, "main.lep", text, "escreva(soma(dobro(1), 2))", 14),
-            Some(Target::Line { file: Some("lib/ajuda.lep".into()), line: 1 })
+            Some(Target::Line {
+                file: Some("lib/ajuda.lep".into()),
+                line: 1
+            })
         );
-        assert_eq!(definition(&h, "main.lep", text, "importe \"lib/ajuda\"", 12), Some(Target::File("lib/ajuda.lep".into())));
-        assert_eq!(definition(&h, "main.lep", text, "escreva(1)", 2), Some(Target::Native("escreva")));
-        assert_eq!(definition(&h, "main.lep", text, "importe \"tela\"", 10), None);
+        assert_eq!(
+            definition(&h, "main.lep", text, "importe \"lib/ajuda\"", 12),
+            Some(Target::File("lib/ajuda.lep".into()))
+        );
+        assert_eq!(
+            definition(&h, "main.lep", text, "escreva(1)", 2),
+            Some(Target::Native("escreva"))
+        );
+        assert_eq!(
+            definition(&h, "main.lep", text, "importe \"tela\"", 10),
+            None
+        );
     }
 }

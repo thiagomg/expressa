@@ -94,6 +94,10 @@ pub const NATIVAS: &[Nativa] = &[
         module: None,
     },
     Nativa {
+        names: &["procurar"],
+        module: None,
+    },
+    Nativa {
         names: &["separe"],
         module: None,
     },
@@ -278,6 +282,7 @@ impl Vm<'_> {
             "sem_acento" => self.bi_sem_acento(args, span),
             "remova" => self.bi_remova(args, span),
             "substitua" => self.bi_substitua(args, span),
+            "procurar" => self.bi_procurar(args, span),
             "separe" => self.bi_separe(args, span),
             "junte" => self.bi_junte(args, span),
             "limpe" => self.bi_limpe(args, span),
@@ -512,6 +517,12 @@ pub const BUILTIN_DOCS: &[BuiltinDoc] = &[
         example: r#"substitua("aa", "a", "b")    // "bb""#,
     },
     BuiltinDoc {
+        name: "procurar",
+        sig: "procurar(texto|lista, trecho) -> numero",
+        summary: "Índice (1…n) da primeira ocorrência; 0 se não achar.",
+        example: r#"procurar("onde", "n")    // 2"#,
+    },
+    BuiltinDoc {
         name: "separe",
         sig: "separe(texto, separador) -> lista",
         summary: "Parte o texto. Separador \"\" gera um item por caractere.",
@@ -725,6 +736,7 @@ mod tests {
         assert!(names.contains(&"é_terminal"));
         assert!(names.contains(&"sem_acento"));
         assert!(names.contains(&"remova"));
+        assert!(names.contains(&"procurar"));
         assert!(names.contains(&"mapa"));
         assert!(names.contains(&"conjunto"));
         assert!(names.contains(&"matriz"));
@@ -1132,6 +1144,21 @@ escreva(A.ncolunas())
         );
         assert_eq!(run(r#"escreva(substitua("aaa", "a", "b"))"#), "bbb\n");
         assert_eq!(run(r#"escreva(limpe("  x  "))"#), "x\n");
+    }
+
+    #[test]
+    fn procurar_first_index_or_zero() {
+        assert_eq!(run(r#"escreva(procurar("onde", "n"))"#), "2\n");
+        assert_eq!(run(r#"escreva("onde".procurar("n"))"#), "2\n");
+        assert_eq!(run(r#"escreva(procurar("onde", "a"))"#), "0\n");
+        assert_eq!(run(r#"escreva(procurar("banana", "na"))"#), "3\n");
+        assert_eq!(run(r#"escreva(procurar("ação", "ç"))"#), "2\n");
+        assert_eq!(run(r#"escreva(procurar("abc", "abc"))"#), "1\n");
+        assert_eq!(run(r#"escreva(procurar([10, 20, 30], 20))"#), "2\n");
+        assert_eq!(run(r#"escreva(procurar([10, 20], 99))"#), "0\n");
+        assert!(run_err(r#"procurar("onde", "")"#).contains("não vazio"));
+        assert!(run_err("procurar(10, 1)").contains("texto ou lista"));
+        assert!(run_err(r#"procurar("onde", 1)"#).contains("esperado texto"));
     }
 
     #[test]
