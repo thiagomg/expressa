@@ -35,7 +35,7 @@ Caminhos de arquivo **relativos** são resolvidos a partir da pasta do `.lep` em
 | [`leia`](#leia) | Lê uma linha do teclado |
 | [`leia_linhas`](#leia_linhas) | Lê todas as linhas da entrada padrão |
 | [`argumentos`](#argumentos) | Lista dos valores após o `.lep` |
-| [`numero`](#numero) | Transforma texto em número |
+| [`numero`](#numero) | Transforma texto em número (`número` também) |
 | [`formate`](#formate) | Monta texto com alinhamento (`{:<n}` `{:>n}` `{:^n}`) |
 | [`avaliar`](#avaliar) | Executa um texto como código Expressa |
 | [`mapa`](#mapa) | Constrói um mapa a partir de uma lista de pares |
@@ -408,9 +408,11 @@ UFCS: `"2 + 2".avaliar()`.
 ```text
 numero(texto) -> numero
 numero(numero) -> numero
+número(texto) -> numero
+número(numero) -> numero
 ```
 
-Converte um texto em número, para usar o que veio de `leia()` em contas.
+Converte um texto em número, para usar o que veio de `leia()` em contas. As duas grafias são a mesma função.
 
 - Aceita espaços nas pontas (`"  7 "`).
 - Aceita `_` como em literais (`"1_000"`).

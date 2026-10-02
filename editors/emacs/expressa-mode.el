@@ -23,7 +23,7 @@
 (defconst expressa-builtins
   '("escreva" "escreva_erro" "sair" "cls" "limpe_tela" "casa" "durma" "pinte" "fundo" "negrito" "leia" "leia_linhas"
     "eh_terminal" "é_terminal" "argumentos"
-    "numero" "formato" "formate" "avaliar" "raiz" "aleatorio" "aleatório" "semente"
+    "numero" "número" "formato" "formate" "avaliar" "raiz" "aleatorio" "aleatório" "semente"
     "mapa" "conjunto" "matriz"
     "transposta" "det" "identidade" "zeros" "uns" "cheia" "nlinhas" "ncolunas"
     "tamanho" "primeiro" "ultimo"

@@ -193,7 +193,7 @@ sair()                         // encerra, código 0
 sair(1)                        // encerra com falha (não pega se_falhar)
 
 nome = leia("Seu nome: ")      // uma linha, sem o Enter
-idade = numero(leia("Idade: ")) se_falhar 0
+idade = numero(leia("Idade: ")) se_falhar 0    // também número()
 linhas = leia_linhas()         // resto da entrada → lista; vazio = []
 
 busca = argumentos[1]          // depois do .lep; REPL → []
@@ -211,7 +211,7 @@ eh_terminal()                  // teclado?  também é_terminal()
 ```text
 formato("pt")                  // 1.000,5   (padrão)
 formato("en")                  // 1,000.5
-numero("3,14")                 // segue o formato atual
+numero("3,14")                 // segue o formato atual; também número()
 
 importe "mat"
 aleatorio(1, 6)                // inteiro inclusive; também aleatório()
@@ -262,7 +262,7 @@ Núcleo (sempre no escopo):
 | `escreva` `escreva_erro` `sair` `durma` | imprimir / encerrar / esperar |
 | `leia` `leia_linhas` | teclado / pipe |
 | `argumentos` | lista (não é função) |
-| `numero` `formato` `avaliar` | número / executar texto como código |
+| `numero` `número` `formato` `avaliar` | número / executar texto como código |
 | `mapa` `conjunto` | construtores |
 | `tamanho` `primeiro` `ultimo` | coleção |
 | `maiuscula` `minuscula` `sem_acento` `remova` `substitua` `separe` `junte` `limpe` `formate` | texto / lista / mapa / conjunto |

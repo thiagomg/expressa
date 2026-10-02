@@ -120,15 +120,19 @@
     },
     {
       "name": "numero",
-      "aliases": [],
+      "aliases": [
+        "número"
+      ],
       "module": null,
       "kind": "funcao",
       "signatures": [
         "numero(texto) -> numero",
-        "numero(numero) -> numero"
+        "numero(numero) -> numero",
+        "número(texto) -> numero",
+        "número(numero) -> numero"
       ],
-      "summary": "Transforma texto em número",
-      "doc": "Converte um texto em número, para usar o que veio de `leia()` em contas.\n\n- Aceita espaços nas pontas (`\"  7 \"`).\n- Aceita `_` como em literais (`\"1_000\"`).\n- O padrão de texto é **pt-BR** (`1.000,5`). Mude com `formato(\"en\")` para en-US (`1,000.5`).\n- Em pt-BR: `,` é decimal; `.` em grupos de três é milhar (`\"1.000\"`). Um único `.` com 1–2 casas (`\"3.14\"`) ainda vale (texto colado do código).\n- Se o argumento já é número, devolve o mesmo valor.\n- Texto que não é número é erro (`se_falhar` ajuda).\n\n```expressa\nidade = numero(leia(\"Quantos anos você tem? \")) se_falhar 0\nescreva(\"ano que vem: \" + (idade + 1))\n```\n\n**Erros:** argumento que não é texto nem número; texto que não representa um número."
+      "summary": "Transforma texto em número (`número` também)",
+      "doc": "Converte um texto em número, para usar o que veio de `leia()` em contas. As duas grafias são a mesma função.\n\n- Aceita espaços nas pontas (`\"  7 \"`).\n- Aceita `_` como em literais (`\"1_000\"`).\n- O padrão de texto é **pt-BR** (`1.000,5`). Mude com `formato(\"en\")` para en-US (`1,000.5`).\n- Em pt-BR: `,` é decimal; `.` em grupos de três é milhar (`\"1.000\"`). Um único `.` com 1–2 casas (`\"3.14\"`) ainda vale (texto colado do código).\n- Se o argumento já é número, devolve o mesmo valor.\n- Texto que não é número é erro (`se_falhar` ajuda).\n\n```expressa\nidade = numero(leia(\"Quantos anos você tem? \")) se_falhar 0\nescreva(\"ano que vem: \" + (idade + 1))\n```\n\n**Erros:** argumento que não é texto nem número; texto que não representa um número."
     },
     {
       "name": "formato",

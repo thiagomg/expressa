@@ -1,0 +1,39 @@
+importe "mat"
+
+escreva("Tente adivinhar o número secreto de 1 até 100")
+
+num_sec = aleatório(1, 100)
+
+num = leia("Palpite: ")
+adivinhou = falso
+enquanto num.tamanho() > 0 
+início
+    
+    // TODO: Adicionar acento
+    nv = numero(num)
+
+    se nv == num_sec
+    início
+        adivinhou = verdadeiro
+        pare
+    fim
+    ou se nv > num_sec
+    início
+        escreva("O seu palpite é maior do que o número secreto")
+    fim
+    ou se nv < num_sec
+    início
+        escreva("O seu palpite é menor do que o número secreto")
+    fim
+
+    num = leia("Próximo palpite: ")
+fim
+
+se adivinhou == verdadeiro
+início
+    escreva("Parabéns. Você adivinhou o número secreto!")
+fim
+senão
+início
+    escreva("Você não adivinhou, que pena!")
+fim

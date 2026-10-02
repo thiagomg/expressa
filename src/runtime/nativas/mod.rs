@@ -27,7 +27,7 @@ pub const NATIVAS: &[Nativa] = &[
     Nativa { names: &["durma"], module: None },
     Nativa { names: &["leia"], module: None },
     Nativa { names: &["leia_linhas"], module: None },
-    Nativa { names: &["numero"], module: None },
+    Nativa { names: &["numero", "número"], module: None },
     Nativa { names: &["formato"], module: None },
     Nativa { names: &["formate"], module: None },
     Nativa { names: &["avaliar"], module: None },
@@ -128,7 +128,7 @@ impl Vm<'_> {
             "cheia" => self.bi_cheia(args, span),
             "nlinhas" => self.bi_nlinhas(args, span),
             "ncolunas" => self.bi_ncolunas(args, span),
-            "numero" => self.bi_numero(args, span),
+            "numero" | "número" => self.bi_numero(args, span),
             "formato" => self.bi_formato(args, span),
             "formate" => self.bi_formate(args, span),
             "avaliar" => self.bi_avaliar(args, span, env),
@@ -238,7 +238,7 @@ pub const BUILTIN_DOCS: &[BuiltinDoc] = &[
     BuiltinDoc {
         name: "numero",
         sig: "numero(texto|numero) -> numero",
-        summary: "Transforma texto em número (aceita 3.14 ou 3,14). Erro se não for número.",
+        summary: "Transforma texto em número (aceita 3.14 ou 3,14). Também número().",
         example: r#"idade = numero(leia("Idade: ")) se_falhar 0"#,
     },
     BuiltinDoc {
@@ -484,6 +484,7 @@ pub fn lookup_builtin_doc(name: &str) -> Option<&'static BuiltinDoc> {
         "é_terminal" => "eh_terminal",
         "limpe_tela" => "cls",
         "aleatório" => "aleatorio",
+        "número" => "numero",
         other => other,
     };
     BUILTIN_DOCS.iter().find(|d| d.name == name)
@@ -578,6 +579,7 @@ mod tests {
         assert!(names.contains(&"leia_linhas"));
         assert!(names.contains(&"raiz"));
         assert!(names.contains(&"numero"));
+        assert!(names.contains(&"número"));
         assert!(names.contains(&"eh_terminal"));
         assert!(names.contains(&"é_terminal"));
         assert!(names.contains(&"sem_acento"));
@@ -596,6 +598,10 @@ mod tests {
         assert_eq!(
             lookup_builtin_doc("aleatório").map(|d| d.name),
             Some("aleatorio")
+        );
+        assert_eq!(
+            lookup_builtin_doc("número").map(|d| d.name),
+            Some("numero")
         );
         for name in &names {
             assert!(
@@ -651,6 +657,7 @@ escreva(f(3))
     #[test]
     fn numero_from_text() {
         assert_eq!(run(r#"escreva(numero("10"))"#), "10\n");
+        assert_eq!(run(r#"escreva(número("10"))"#), "10\n");
         assert_eq!(run(r#"escreva(numero("  3,14  "))"#), "3,14\n");
         assert_eq!(run(r#"escreva(numero("1_000"))"#), "1.000\n");
         assert_eq!(run(r#"escreva(numero(-8))"#), "-8\n");
