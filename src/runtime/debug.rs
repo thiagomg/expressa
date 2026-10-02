@@ -113,6 +113,11 @@ pub trait DebugHook {
     /// A runtime error not caught by `se_falhar`, seen from the statement
     /// where it happened. The error keeps unwinding after this returns.
     fn on_error(&mut self, _ctx: &DebugCtx<'_>, _message: &str) {}
+
+    /// Polled while the program sleeps (`durma`): true stops it.
+    fn interrupted(&mut self) -> bool {
+        false
+    }
 }
 
 pub struct NoopHook;
@@ -468,22 +473,45 @@ impl StopHook {
 }
 
 impl DebugHook for StopHook {
+    fn interrupted(&mut self) -> bool {
+        self.stop_requested()
+    }
+
     fn before_stmt(&mut self, _ctx: &DebugCtx<'_>) -> DebugAction {
+        if self.stop_requested() {
+            DebugAction::Quit
+        } else {
+            DebugAction::Continue
+        }
+    }
+}
+
+impl StopHook {
+    /// Whether `terminar` arrived (or the IDE went away).
+    fn stop_requested(&mut self) -> bool {
         loop {
             match self.cmd_rx.try_recv() {
                 Ok(cmd) => {
-                    let cmd = cmd.trim();
-                    if cmd == "terminar" || cmd == "q" || cmd == "quit" {
-                        return DebugAction::Quit;
+                    if is_quit(&cmd) {
+                        return true;
                     }
                 }
-                Err(std::sync::mpsc::TryRecvError::Empty) => return DebugAction::Continue,
-                Err(std::sync::mpsc::TryRecvError::Disconnected) => {
-                    return DebugAction::Quit;
-                }
+                Err(std::sync::mpsc::TryRecvError::Empty) => return false,
+                Err(std::sync::mpsc::TryRecvError::Disconnected) => return true,
             }
         }
     }
+}
+
+fn is_quit(cmd: &str) -> bool {
+    matches!(cmd.trim(), "terminar" | "q" | "quit")
+}
+
+fn is_breakpoint_cmd(cmd: &str) -> bool {
+    matches!(
+        cmd.split_whitespace().next(),
+        Some("ponto" | "break" | "b" | "remover" | "delete" | "d")
+    )
 }
 
 /// Pauses by sending a snapshot and waiting for a command string (Aula).
@@ -491,6 +519,9 @@ pub struct ChannelDebugger {
     pub session: DebugSession,
     pause_tx: std::sync::mpsc::Sender<DebugPaused>,
     cmd_rx: std::sync::mpsc::Receiver<String>,
+    /// Breakpoint changes received while running, applied before the next
+    /// statement (they need its context).
+    pending: Vec<String>,
 }
 
 impl ChannelDebugger {
@@ -502,12 +533,25 @@ impl ChannelDebugger {
             session: DebugSession::step_in(),
             pause_tx,
             cmd_rx,
+            pending: Vec::new(),
         }
     }
 }
 
 impl DebugHook for ChannelDebugger {
+    fn interrupted(&mut self) -> bool {
+        self.drain()
+    }
+
     fn before_stmt(&mut self, ctx: &DebugCtx<'_>) -> DebugAction {
+        // Commands sent while running: Parar stops now, and breakpoints
+        // added or removed after Continuar take effect.
+        if self.drain() {
+            return DebugAction::Quit;
+        }
+        for cmd in std::mem::take(&mut self.pending) {
+            self.session.handle_command(&cmd, ctx);
+        }
         if self.session.consume_pause_on_start() {
             // first statement
         } else if !self.session.should_pause(ctx) {
@@ -532,6 +576,21 @@ impl DebugHook for ChannelDebugger {
 }
 
 impl ChannelDebugger {
+    /// Read commands without waiting. Keeps breakpoint changes for the next
+    /// statement; true when the program must stop. Step commands only mean
+    /// something while paused and are dropped.
+    fn drain(&mut self) -> bool {
+        loop {
+            match self.cmd_rx.try_recv() {
+                Ok(cmd) if is_quit(&cmd) => return true,
+                Ok(cmd) if is_breakpoint_cmd(&cmd) => self.pending.push(cmd),
+                Ok(_) => {}
+                Err(std::sync::mpsc::TryRecvError::Empty) => return false,
+                Err(std::sync::mpsc::TryRecvError::Disconnected) => return true,
+            }
+        }
+    }
+
     /// Wait for a command while paused; `ponto` / `remover` stay paused.
     fn wait(&mut self, ctx: &DebugCtx<'_>, snap: &DebugPaused) -> DebugAction {
         loop {

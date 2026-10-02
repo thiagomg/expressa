@@ -296,8 +296,9 @@ fn build_ui(app: &Application) {
     args_row.append(&btn_bigger);
     args_row.append(&ui.borrow().btn_dark);
 
+    const FILES_WIDTH: i32 = 240;
     let file_scroll = ScrolledWindow::builder()
-        .min_content_width(220)
+        .min_content_width(FILES_WIDTH)
         .child(&ui.borrow().tree)
         .build();
     const OUTPUT_HEIGHT: i32 = 160;
@@ -329,6 +330,7 @@ fn build_ui(app: &Application) {
     main_split.set_start_child(Some(&editor_col));
     main_split.set_end_child(Some(&debug_panel));
     main_split.set_resize_start_child(true);
+    main_split.set_resize_end_child(false);
     main_split.set_shrink_end_child(false);
     main_split.set_wide_handle(false);
 
@@ -336,8 +338,11 @@ fn build_ui(app: &Application) {
     body.add_css_class("aula-paned");
     body.set_start_child(Some(&file_scroll));
     body.set_end_child(Some(&main_split));
+    // The file list keeps its width; the editor takes what the window gains.
+    body.set_resize_start_child(false);
+    body.set_shrink_start_child(false);
     body.set_resize_end_child(true);
-    body.set_position(200);
+    body.set_position(FILES_WIDTH);
 
     let root = GtkBox::new(Orientation::Vertical, 6);
     let search_bar = GtkBox::new(Orientation::Horizontal, 6);
@@ -566,18 +571,32 @@ fn build_ui(app: &Application) {
     win.maximize();
     win.present();
     {
+        // Place the splits once the window has its final size (the window
+        // manager may maximize it a moment after it appears): re-apply
+        // while the size changes, for up to 2 s.
+        let body = body.clone();
         let split = main_split.clone();
         let editor_split = editor_col.clone();
-        glib::timeout_add_local(std::time::Duration::from_millis(120), move || {
-            let w = split.allocated_width();
-            if w > DEBUG_PANEL_WIDTH + 400 {
-                split.set_position(w - DEBUG_PANEL_WIDTH);
+        let last = std::cell::Cell::new((0, 0));
+        let ticks = std::cell::Cell::new(0);
+        glib::timeout_add_local(std::time::Duration::from_millis(100), move || {
+            let size = (split.allocated_width(), editor_split.allocated_height());
+            if size != last.get() {
+                last.set(size);
+                body.set_position(FILES_WIDTH);
+                if size.0 > DEBUG_PANEL_WIDTH + 400 {
+                    split.set_position(size.0 - DEBUG_PANEL_WIDTH);
+                }
+                if size.1 > OUTPUT_HEIGHT + 200 {
+                    editor_split.set_position(size.1 - OUTPUT_HEIGHT);
+                }
             }
-            let h = editor_split.allocated_height();
-            if h > OUTPUT_HEIGHT + 200 {
-                editor_split.set_position(h - OUTPUT_HEIGHT);
+            ticks.set(ticks.get() + 1);
+            if ticks.get() >= 20 {
+                glib::ControlFlow::Break
+            } else {
+                glib::ControlFlow::Continue
             }
-            glib::ControlFlow::Break
         });
     }
 }
@@ -1297,8 +1316,16 @@ fn refresh_watch_values(ui: &UiRc, vars: &[expressa::runtime::DebugBinding]) {
 }
 
 fn send_debug_cmd(ui: &UiRc, cmd: &str) {
-    if let Some(run) = &ui.borrow().run {
-        let _ = run.debug_cmd.send(cmd.to_string());
+    let sent = match &ui.borrow().run {
+        Some(run) => run.debug_cmd.send(cmd.to_string()).is_ok(),
+        None => false,
+    };
+    // Resuming: the program runs until the next pause, so the step buttons
+    // are off and the stopped line is no longer current.
+    if sent && matches!(cmd, "continuar" | "proximo" | "entrar" | "sair") {
+        set_debug_buttons(ui, false, true);
+        clear_debug_views(ui);
+        set_status(ui, "rodando… (Parar encerra)");
     }
 }
 
@@ -1547,6 +1574,15 @@ fn refresh_tree(ui: &UiRc) {
     }
     preencher_arvore(ui, &projeto, &entries);
     ui.borrow().tree.expand_all();
+    // Long names must not leave the list scrolled sideways.
+    {
+        let tree = ui.borrow().tree.clone();
+        glib::idle_add_local_once(move || {
+            if let Some(h) = tree.hadjustment() {
+                h.set_value(0.0);
+            }
+        });
+    }
     match err {
         Some(e) => set_status(ui, &format!("conectar: {e}")),
         None => set_status(ui, &format!("projeto `{projeto}` — {} itens", entries.len())),

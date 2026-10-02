@@ -1530,7 +1530,7 @@ impl<'a> Vm<'a> {
         Ok(())
     }
 
-    pub(crate) fn sleep_secs(&self, secs: f64, span: Span) -> Result<(), EvalError> {
+    pub(crate) fn sleep_secs(&mut self, secs: f64, span: Span) -> Result<(), EvalError> {
         if !secs.is_finite() || secs < 0.0 {
             return Err(self.err("durma() espera um número >= 0 (segundos)", span));
         }
@@ -1555,7 +1555,18 @@ impl<'a> Vm<'a> {
             }
             None => want,
         };
-        thread::sleep(slice);
+        // In short slices, so Parar does not wait for a long `durma`.
+        let end = Instant::now() + slice;
+        loop {
+            let left = end.saturating_duration_since(Instant::now());
+            if left.is_zero() {
+                break;
+            }
+            thread::sleep(left.min(Duration::from_millis(50)));
+            if self.hook.interrupted() {
+                return Err(EvalError::Quit(0));
+            }
+        }
         self.check_deadline(span)
     }
 
@@ -2656,6 +2667,86 @@ leia_arquivo("../secret.txt")
             let _ = cmd_tx.send("continuar".into());
         }
         (pauses, runner.join().unwrap())
+    }
+
+    /// Starts `src` under a ChannelDebugger on a thread: (pauses, commands,
+    /// finished) channels.
+    fn debug_session(
+        src: &str,
+    ) -> (
+        std::sync::mpsc::Receiver<super::super::debug::DebugPaused>,
+        std::sync::mpsc::Sender<String>,
+        std::sync::mpsc::Receiver<Result<i32, RuntimeError>>,
+    ) {
+        use super::super::debug::ChannelDebugger;
+        let (pause_tx, pause_rx) = std::sync::mpsc::channel();
+        let (cmd_tx, cmd_rx) = std::sync::mpsc::channel::<String>();
+        let (done_tx, done_rx) = std::sync::mpsc::channel();
+        let src = src.to_string();
+        std::thread::spawn(move || {
+            let mut input = io::Cursor::new("");
+            let (mut out, mut err) = (Vec::new(), Vec::new());
+            let r = run_with(&src, "t.lep", Box::new(ChannelDebugger::new(pause_tx, cmd_rx)), &mut input, &mut out, &mut err, None, None, None, &[]);
+            let _ = done_tx.send(r);
+        });
+        (pause_rx, cmd_tx, done_rx)
+    }
+
+    const WAIT: std::time::Duration = std::time::Duration::from_secs(5);
+
+    #[test]
+    fn debugger_stops_when_asked_while_running() {
+        let (pauses, cmds, done) = debug_session("enquanto verdadeiro {\n    x = 1\n}\n");
+        pauses.recv_timeout(WAIT).expect("pause on start");
+        cmds.send("continuar".into()).unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(50));
+        cmds.send("terminar".into()).unwrap();
+        assert!(done.recv_timeout(WAIT).is_ok(), "Parar after Continuar must end the program");
+    }
+
+    #[test]
+    fn breakpoint_added_while_running_is_hit() {
+        let (pauses, cmds, done) = debug_session("enquanto verdadeiro {\n    x = 1\n    y = 2\n}\n");
+        pauses.recv_timeout(WAIT).expect("pause on start");
+        cmds.send("continuar".into()).unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(50));
+        cmds.send("ponto t.lep:3".into()).unwrap();
+        let p = pauses.recv_timeout(WAIT).expect("stops at the new breakpoint");
+        assert_eq!(p.line, 3);
+        // Removed while running: Continuar runs freely again until Parar.
+        cmds.send("remover t.lep:3".into()).unwrap();
+        // While paused, a breakpoint change answers with a fresh snapshot.
+        assert_eq!(pauses.recv_timeout(WAIT).unwrap().line, 3);
+        cmds.send("continuar".into()).unwrap();
+        assert!(pauses.recv_timeout(std::time::Duration::from_millis(300)).is_err(), "breakpoint was removed");
+        cmds.send("terminar".into()).unwrap();
+        assert!(done.recv_timeout(WAIT).is_ok());
+    }
+
+    #[test]
+    fn parar_interrupts_a_long_durma() {
+        let started = std::time::Instant::now();
+        let (pauses, cmds, done) = debug_session("durma(30)\n");
+        pauses.recv_timeout(WAIT).expect("pause on start");
+        cmds.send("continuar".into()).unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(100));
+        cmds.send("terminar".into()).unwrap();
+        assert!(done.recv_timeout(WAIT).is_ok());
+        assert!(started.elapsed() < std::time::Duration::from_secs(5));
+
+        // Same with Rodar's hook.
+        use super::super::debug::StopHook;
+        let (tx, rx) = std::sync::mpsc::channel::<String>();
+        let (done_tx, done_rx) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let mut input = io::Cursor::new("");
+            let (mut out, mut err) = (Vec::new(), Vec::new());
+            let r = run_with("durma(30)\n", "t.lep", Box::new(StopHook::new(rx)), &mut input, &mut out, &mut err, None, None, None, &[]);
+            let _ = done_tx.send(r);
+        });
+        std::thread::sleep(std::time::Duration::from_millis(100));
+        tx.send("terminar".into()).unwrap();
+        assert!(done_rx.recv_timeout(WAIT).is_ok(), "Rodar: Parar during durma");
     }
 
     #[test]
