@@ -82,8 +82,18 @@ impl Workspace {
         Ok(Self { dir, snapshot })
     }
 
-    pub fn write(&self, rel: &str, source: &str) -> Result<(), String> {
-        write_file(&self.dir.join(rel), source)
+    /// Put the editor's text of `rel` in the copy (open tabs, saved or not).
+    /// It counts as already on the server: only what the program itself
+    /// writes is uploaded afterwards.
+    pub fn write_editor_text(&mut self, rel: &str, source: &str) -> Result<(), String> {
+        write_file(&self.dir.join(rel), source)?;
+        self.snapshot.insert(rel.to_string(), source.to_string());
+        Ok(())
+    }
+
+    /// Absolute path of `rel` in the copy, as the interpreter names files.
+    pub fn abs(&self, rel: &str) -> String {
+        self.dir.join(rel).to_string_lossy().into_owned()
     }
 
     /// Send files that are new or differ from the download. Returns how many.
@@ -186,7 +196,7 @@ pub fn spawn(
     rel_path: &str,
     source: String,
     debug: bool,
-    breakpoints: Vec<u32>,
+    breakpoints: Vec<(String, u32)>,
     args: Vec<String>,
 ) -> RunHandle {
     let (event_tx, events) = std::sync::mpsc::sync_channel(EVENT_BACKLOG);
@@ -210,7 +220,8 @@ pub fn spawn(
         });
     }
 
-    let file = ws.dir.join(rel_path).to_string_lossy().into_owned();
+    let file = ws.abs(rel_path);
+    let breakpoints: Vec<(String, u32)> = breakpoints.into_iter().map(|(f, l)| (ws.abs(&f), l)).collect();
     let root = ws.dir.clone();
     let rel = move |p: &str| {
         Path::new(p)
@@ -252,8 +263,8 @@ pub fn spawn(
         };
         let hook: Box<dyn DebugHook> = if debug {
             let mut dbg = ChannelDebugger::new(pause_tx, dcmd_rx);
-            for line in breakpoints {
-                dbg.session.breakpoints.insert((file.clone(), line));
+            for bp in breakpoints {
+                dbg.session.breakpoints.insert(bp);
             }
             Box::new(dbg)
         } else {

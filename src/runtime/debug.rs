@@ -49,6 +49,8 @@ pub struct DebugPaused {
     pub source_line: String,
     pub vars: Vec<DebugBinding>,
     pub stack: Vec<DebugFrameInfo>,
+    /// Set when paused because of a runtime error (the program ends on resume).
+    pub error: Option<String>,
 }
 
 pub fn collect_vars(ctx: &DebugCtx<'_>) -> Vec<DebugBinding> {
@@ -101,11 +103,16 @@ pub fn snapshot(ctx: &DebugCtx<'_>) -> DebugPaused {
         source_line: source_line(ctx.source, ctx.span.line).to_string(),
         vars: collect_vars(ctx),
         stack: collect_stack(ctx),
+        error: None,
     }
 }
 
 pub trait DebugHook {
     fn before_stmt(&mut self, ctx: &DebugCtx<'_>) -> DebugAction;
+
+    /// A runtime error not caught by `se_falhar`, seen from the statement
+    /// where it happened. The error keeps unwinding after this returns.
+    fn on_error(&mut self, _ctx: &DebugCtx<'_>, _message: &str) {}
 }
 
 pub struct NoopHook;
@@ -229,8 +236,8 @@ impl DebugSession {
                 }
             },
             "remover" | "delete" | "d" => {
-                if let Some(line) = parts.next().and_then(|s| s.parse::<u32>().ok()) {
-                    self.breakpoints.remove(&(ctx.file.to_string(), line));
+                if let Some(bp) = parts.next().and_then(|s| parse_breakpoint(s, ctx.file)) {
+                    self.breakpoints.remove(&bp);
                 }
                 None
             }
@@ -506,9 +513,27 @@ impl DebugHook for ChannelDebugger {
         } else if !self.session.should_pause(ctx) {
             return DebugAction::Continue;
         }
-        if self.pause_tx.send(snapshot(ctx)).is_err() {
+        let snap = snapshot(ctx);
+        if self.pause_tx.send(snap.clone()).is_err() {
             return DebugAction::Quit;
         }
+        self.wait(ctx, &snap)
+    }
+
+    /// Stop on the failing statement so the variables can be inspected.
+    /// Any command resumes; the error then ends the program.
+    fn on_error(&mut self, ctx: &DebugCtx<'_>, message: &str) {
+        let mut snap = snapshot(ctx);
+        snap.error = Some(message.to_string());
+        if self.pause_tx.send(snap.clone()).is_ok() {
+            self.wait(ctx, &snap);
+        }
+    }
+}
+
+impl ChannelDebugger {
+    /// Wait for a command while paused; `ponto` / `remover` stay paused.
+    fn wait(&mut self, ctx: &DebugCtx<'_>, snap: &DebugPaused) -> DebugAction {
         loop {
             match self.cmd_rx.recv() {
                 Ok(cmd) => {
@@ -519,8 +544,7 @@ impl DebugHook for ChannelDebugger {
                     if let Some(action) = self.session.handle_command(cmd, ctx) {
                         return action;
                     }
-                    // ponto / remover: stay paused, send an updated snapshot
-                    let _ = self.pause_tx.send(snapshot(ctx));
+                    let _ = self.pause_tx.send(snap.clone());
                 }
                 Err(_) => return DebugAction::Quit,
             }
@@ -592,6 +616,20 @@ mod tests {
             Some(("lib.lep".into(), 3))
         );
         assert_eq!(parse_breakpoint("abc", "a.lep"), None);
+    }
+
+    #[test]
+    fn ponto_and_remover_take_file_and_line() {
+        let e = env();
+        let c = ctx("/p/main.lep", "", Span::new(1, 1, 0, 1), &e, &[]);
+        let mut s = DebugSession::step_in();
+        s.handle_command("ponto /p/lib/a.lep:4", &c);
+        s.handle_command("ponto 2", &c);
+        assert!(s.breakpoints.contains(&("/p/lib/a.lep".into(), 4)));
+        assert!(s.breakpoints.contains(&("/p/main.lep".into(), 2)));
+        s.handle_command("remover /p/lib/a.lep:4", &c);
+        s.handle_command("remover 2", &c);
+        assert!(s.breakpoints.is_empty());
     }
 
     #[test]

@@ -1,10 +1,17 @@
+mod assist;
+mod console;
+mod docs;
+mod editing;
 mod exec;
 mod indent;
+mod lang;
+mod prefs;
 mod rpc;
 
-use std::cell::{Cell, RefCell};
-use std::collections::HashSet;
-use std::rc::Rc;
+use std::cell::RefCell;
+use std::collections::HashMap;
+use std::path::PathBuf;
+use std::rc::{Rc, Weak};
 
 use gtk::gdk::Key;
 use gtk::glib;
@@ -12,49 +19,55 @@ use gtk::glib::prelude::*;
 use gtk::prelude::*;
 use gtk::{
     Application, ApplicationWindow, Box as GtkBox, Button, CellRendererText, Entry, Label,
-    Orientation, Paned, Revealer, ScrolledWindow, TextTag, TextView, ToggleButton, TreeStore,
-    TreeView, TreeViewColumn,
+    Orientation, Paned, Revealer, ScrolledWindow, ToggleButton, TreeStore, TreeView,
+    TreeViewColumn,
 };
 use sourceview5::prelude::*;
-use sourceview5::{
-    Buffer as SourceBuffer, LanguageManager, MarkAttributes, SearchContext, SearchSettings,
-    StyleSchemeManager, View as SourceView,
-};
+use sourceview5::{LanguageManager, SearchSettings, StyleSchemeManager};
 
+use assist::{Help, Target, ViewHelp};
+use console::Console;
+use docs::Doc;
 use exec::{ExecEvent, Workspace};
+use prefs::{FontCss, Prefs};
 use rpc::{Rpc, ensure_server};
 
 const APP_ID: &str = "dev.expressa.aula";
 const DEFAULT_URL: &str = "http://127.0.0.1:50051";
+const WELCOME: &str = "// F5 roda. F6 depura. Ctrl+F busca. F1 ajuda. Ctrl+clique vai para a definição.\n\nescreva(\"Olá, Expressa!\")\n";
+
+/// A program running or being debugged.
+struct Run {
+    debug_cmd: std::sync::mpsc::Sender<String>,
+    /// The local copy: breakpoints set while running name files there.
+    ws_dir: PathBuf,
+}
 
 struct Ui {
     rpc: Rpc,
     student: Entry,
-    filename: Entry,
+    /// Project whose files the tabs show (the student entry may be edited
+    /// before Conectar).
+    project: String,
     tree: TreeView,
     store: TreeStore,
-    editor: SourceView,
-    buffer: SourceBuffer,
-    output: TextView,
+    project_files: Vec<String>,
+    notebook: gtk::Notebook,
+    docs: Vec<(Rc<Doc>, Rc<ViewHelp>)>,
+    untitled_count: u32,
+    /// Server files read for help on imports (`None` = missing).
+    file_cache: RefCell<HashMap<String, Option<String>>>,
+    console: Rc<Console>,
     args_entry: Entry,
-    dirty: bool,
-    suppress_dirty: bool,
-    err_tag: TextTag,
-    error_link_tag: TextTag,
-    match_tag: TextTag,
     search_settings: SearchSettings,
-    search_ctx: SearchContext,
     search_entry: Entry,
     replace_entry: Entry,
     search_revealer: Revealer,
     status: Label,
+    diag_label: Label,
     window: ApplicationWindow,
-    debug_cmd: Option<std::sync::mpsc::Sender<String>>,
-    /// Terminal state of the output pane once `cls()` / `casa()` ran.
-    screen: Screen,
-    breakpoints: HashSet<u32>,
+    run: Option<Run>,
     watches: Vec<String>,
-    debug_tag: TextTag,
     vars_store: TreeStore,
     stack_store: TreeStore,
     watch_store: TreeStore,
@@ -64,9 +77,18 @@ struct Ui {
     btn_step: Button,
     btn_out: Button,
     btn_stop: Button,
+    btn_dark: ToggleButton,
     /// Kept alive so GtkSourceView does not drop the Expressa language spec.
-    _languages: LanguageManager,
+    languages: LanguageManager,
+    schemes: StyleSchemeManager,
+    prefs: Prefs,
+    font_css: FontCss,
+    help: Option<Rc<Help>>,
+    /// Unsaved changes were handled: the window may close now.
+    closing: bool,
 }
+
+type UiRc = Rc<RefCell<Ui>>;
 
 fn main() {
     rpc::install_signal_handlers();
@@ -103,13 +125,15 @@ fn build_ui(app: &Application) {
         settings.set_gtk_im_module(Some("gtk-im-context-simple"));
     }
 
+    let prefs = Prefs::load();
+    prefs::apply_widget_theme(prefs.dark);
+    let font_css = FontCss::install();
+    font_css.set_size(prefs.font_size);
+
     let student = Entry::builder()
         .text("local")
         .placeholder_text("aluno")
-        .build();
-    let filename = Entry::builder()
-        .text("sem-titulo.lep")
-        .placeholder_text("arquivo.lep")
+        .width_chars(10)
         .build();
     #[allow(deprecated)]
     let store = TreeStore::new(&[glib::Type::STRING, glib::Type::STRING, glib::Type::BOOL]);
@@ -125,30 +149,14 @@ fn build_ui(app: &Application) {
 
     let languages = language_manager();
     let lang_ok = languages.language("expressa").is_some();
-    let buffer = SourceBuffer::new(None::<&gtk::TextTagTable>);
-    if let Some(lang) = languages.language("expressa") {
-        buffer.set_language(Some(&lang));
+    let schemes = StyleSchemeManager::default();
+    if let Some(path) = data_dir().join("styles").to_str() {
+        schemes.prepend_search_path(path);
     }
-    apply_style_scheme(&buffer);
-    buffer.set_highlight_syntax(true);
-    let debug_tag = TextTag::new(Some("debug-current"));
-    debug_tag.set_background(Some("#fff3bf"));
-    buffer.tag_table().add(&debug_tag);
-    let match_tag = TextTag::new(Some("block-match"));
-    match_tag.set_background(Some("#c5e1a5"));
-    buffer.tag_table().add(&match_tag);
     let search_settings = SearchSettings::new();
     search_settings.set_wrap_around(true);
-    let search_ctx = SearchContext::new(&buffer, Some(&search_settings));
-    search_ctx.set_highlight(true);
-    let search_entry = Entry::builder()
-        .placeholder_text("buscar")
-        .hexpand(true)
-        .build();
-    let replace_entry = Entry::builder()
-        .placeholder_text("substituir por")
-        .hexpand(true)
-        .build();
+    let search_entry = Entry::builder().placeholder_text("buscar").hexpand(true).build();
+    let replace_entry = Entry::builder().placeholder_text("substituir por").hexpand(true).build();
     let search_revealer = Revealer::new();
     search_revealer.set_reveal_child(false);
 
@@ -158,9 +166,7 @@ fn build_ui(app: &Application) {
     let stack_store = TreeStore::new(&[glib::Type::STRING, glib::Type::STRING]);
     #[allow(deprecated)]
     let watch_store = TreeStore::new(&[glib::Type::STRING, glib::Type::STRING]);
-    let watch_entry = Entry::builder()
-        .placeholder_text("nome da variável")
-        .build();
+    let watch_entry = Entry::builder().placeholder_text("nome da variável").build();
     let btn_continue = Button::with_label("Continuar");
     let btn_next = Button::with_label("Próximo");
     let btn_step = Button::with_label("Entrar");
@@ -169,48 +175,28 @@ fn build_ui(app: &Application) {
     for b in [&btn_continue, &btn_next, &btn_step, &btn_out, &btn_stop] {
         b.set_sensitive(false);
     }
+    let btn_dark = ToggleButton::with_label("Escuro");
+    btn_dark.set_active(prefs.dark);
+    btn_dark.set_tooltip_text(Some("Tema escuro"));
 
-    let editor = SourceView::builder()
-        .buffer(&buffer)
-        .monospace(true)
-        .show_line_numbers(true)
-        .show_line_marks(true)
-        .highlight_current_line(true)
-        .auto_indent(false)
-        .indent_on_tab(false)
-        .tab_width(4)
-        .indent_width(4)
-        .build();
-    editor.set_wrap_mode(gtk::WrapMode::None);
-    editor.set_accepts_tab(true);
-    editor.set_input_hints(gtk::InputHints::NONE);
-    editor.set_input_purpose(gtk::InputPurpose::FreeForm);
-    buffer.set_highlight_matching_brackets(true);
-    let bp_attrs = MarkAttributes::new();
-    bp_attrs.set_pixbuf(&red_breakpoint_pixbuf());
-    editor.set_mark_attributes("breakpoint", &bp_attrs, 10);
+    let notebook = gtk::Notebook::new();
+    notebook.set_scrollable(true);
+    notebook.set_vexpand(true);
+    notebook.set_hexpand(true);
 
-    let output = TextView::builder()
-        .editable(false)
-        .monospace(true)
-        .cursor_visible(false)
-        .wrap_mode(gtk::WrapMode::WordChar)
-        .build();
-    let err_tag = TextTag::new(Some("stderr"));
-    err_tag.set_foreground(Some("#e53935"));
-    output.buffer().tag_table().add(&err_tag);
-    add_ansi_tags(output.buffer().tag_table());
-    let error_link_tag = TextTag::new(Some("error-link"));
-    error_link_tag.set_foreground(Some("#e53935"));
-    error_link_tag.set_underline(gtk::pango::Underline::Single);
-    output.buffer().tag_table().add(&error_link_tag);
+    let console = Rc::new(Console::new());
     let args_entry = Entry::builder()
         .placeholder_text("argumentos (ex.: Thiago --ajuda)")
         .hexpand(true)
         .build();
     let status = Label::new(Some("conectado a 127.0.0.1:50051"));
     status.set_xalign(0.0);
+    status.set_hexpand(true);
     status.add_css_class("dim-label");
+    let diag_label = Label::new(None);
+    diag_label.set_xalign(1.0);
+    diag_label.set_ellipsize(gtk::pango::EllipsizeMode::End);
+    diag_label.set_max_width_chars(80);
 
     let win = ApplicationWindow::builder()
         .application(app)
@@ -219,33 +205,28 @@ fn build_ui(app: &Application) {
         .default_height(900)
         .build();
 
-    let ui = Rc::new(RefCell::new(Ui {
+    let ui: UiRc = Rc::new(RefCell::new(Ui {
         rpc,
+        project: student.text().to_string(),
         student,
-        filename,
         tree,
         store,
-        editor,
-        buffer,
-        output,
+        project_files: Vec::new(),
+        notebook,
+        docs: Vec::new(),
+        untitled_count: 0,
+        file_cache: RefCell::new(HashMap::new()),
+        console,
         args_entry,
-        dirty: false,
-        suppress_dirty: false,
-        err_tag,
-        error_link_tag,
-        match_tag,
         search_settings,
-        search_ctx,
         search_entry,
         replace_entry,
         search_revealer,
         status,
+        diag_label,
         window: win.clone(),
-        debug_cmd: None,
-        screen: Screen::default(),
-        breakpoints: HashSet::new(),
+        run: None,
         watches: Vec::new(),
-        debug_tag,
         vars_store,
         stack_store,
         watch_store,
@@ -255,33 +236,47 @@ fn build_ui(app: &Application) {
         btn_step,
         btn_out,
         btn_stop,
-        _languages: languages,
+        btn_dark,
+        languages,
+        schemes,
+        prefs,
+        font_css,
+        help: None,
+        closing: false,
     }));
+    let help = make_help(&ui);
+    ui.borrow_mut().help = Some(help);
 
     let toolbar = GtkBox::new(Orientation::Horizontal, 8);
     toolbar.set_margin_start(8);
     toolbar.set_margin_end(8);
     toolbar.set_margin_top(8);
     let btn_new = Button::with_label("Novo");
+    btn_new.set_tooltip_text(Some("Arquivo novo em outra aba (Ctrl+N)"));
     let btn_save = Button::with_label("Salvar");
+    btn_save.set_tooltip_text(Some("Salvar a aba atual (Ctrl+S)"));
     let btn_run = Button::with_label("Rodar");
+    btn_run.set_tooltip_text(Some("Rodar a aba atual (F5)"));
     let btn_debug = Button::with_label("Depurar");
+    btn_debug.set_tooltip_text(Some("Depurar a aba atual (F6)"));
     let btn_bp = Button::with_label("Ponto");
+    btn_bp.set_tooltip_text(Some("Ponto de parada na linha (F9)"));
     let btn_refresh = Button::with_label("Conectar");
-    toolbar.append(&btn_new);
-    toolbar.append(&btn_save);
-    toolbar.append(&btn_run);
-    toolbar.append(&btn_debug);
-    toolbar.append(&btn_bp);
-    toolbar.append(&ui.borrow().btn_continue);
-    toolbar.append(&ui.borrow().btn_next);
-    toolbar.append(&ui.borrow().btn_step);
-    toolbar.append(&ui.borrow().btn_out);
-    toolbar.append(&ui.borrow().btn_stop);
-    toolbar.append(&Label::new(Some("arquivo:")));
-    toolbar.append(&ui.borrow().filename);
-    toolbar.append(&Label::new(Some("projeto:")));
-    toolbar.append(&ui.borrow().student);
+    let btn_smaller = Button::with_label("A−");
+    btn_smaller.set_tooltip_text(Some("Letra menor (Ctrl+-)"));
+    let btn_bigger = Button::with_label("A+");
+    btn_bigger.set_tooltip_text(Some("Letra maior (Ctrl+=)"));
+    for b in [&btn_new, &btn_save, &btn_run, &btn_debug, &btn_bp] {
+        toolbar.append(b);
+    }
+    {
+        let u = ui.borrow();
+        for b in [&u.btn_continue, &u.btn_next, &u.btn_step, &u.btn_out, &u.btn_stop] {
+            toolbar.append(b);
+        }
+        toolbar.append(&Label::new(Some("projeto:")));
+        toolbar.append(&u.student);
+    }
     toolbar.append(&btn_refresh);
     let btn_files = ToggleButton::with_label("Arquivos");
     btn_files.set_active(true);
@@ -297,21 +292,19 @@ fn build_ui(app: &Application) {
     args_row.set_margin_end(8);
     args_row.append(&Label::new(Some("argumentos:")));
     args_row.append(&ui.borrow().args_entry);
+    args_row.append(&btn_smaller);
+    args_row.append(&btn_bigger);
+    args_row.append(&ui.borrow().btn_dark);
 
     let file_scroll = ScrolledWindow::builder()
         .min_content_width(220)
         .child(&ui.borrow().tree)
         .build();
-    let editor_scroll = ScrolledWindow::builder()
-        .vexpand(true)
-        .hexpand(true)
-        .child(&ui.borrow().editor)
-        .build();
     const OUTPUT_HEIGHT: i32 = 160;
     let output_scroll = ScrolledWindow::builder()
         .min_content_height(80)
         .hexpand(true)
-        .child(&ui.borrow().output)
+        .child(&ui.borrow().console.view)
         .build();
 
     let debug_panel = make_debug_panel(&ui);
@@ -319,12 +312,12 @@ fn build_ui(app: &Application) {
     debug_panel.set_width_request(DEBUG_PANEL_WIDTH);
     debug_panel.set_hexpand(false);
 
-    install_paned_css();
+    install_css();
 
     let editor_col = Paned::new(Orientation::Vertical);
     editor_col.add_css_class("aula-paned");
     editor_col.set_wide_handle(false);
-    editor_col.set_start_child(Some(&editor_scroll));
+    editor_col.set_start_child(Some(&ui.borrow().notebook));
     editor_col.set_end_child(Some(&output_scroll));
     editor_col.set_resize_start_child(true);
     editor_col.set_resize_end_child(false);
@@ -366,89 +359,63 @@ fn build_ui(app: &Application) {
     search_bar.append(&btn_find_close);
     ui.borrow().search_revealer.set_child(Some(&search_bar));
 
+    let status_row = GtkBox::new(Orientation::Horizontal, 12);
+    status_row.set_margin_start(8);
+    status_row.set_margin_end(8);
+    status_row.set_margin_bottom(6);
+    status_row.append(&ui.borrow().status);
+    status_row.append(&ui.borrow().diag_label);
+
     root.append(&toolbar);
     root.append(&args_row);
     root.append(&ui.borrow().search_revealer);
     root.append(&body);
-    root.append(&ui.borrow().status);
-    ui.borrow().status.set_margin_start(8);
-    ui.borrow().status.set_margin_bottom(6);
+    root.append(&status_row);
     body.set_vexpand(true);
-
     win.set_child(Some(&root));
 
+    connect(&btn_new, &ui, new_untitled_tab);
+    connect(&btn_save, &ui, |ui| {
+        if let Some(d) = current_doc(ui) {
+            save_doc(ui, &d);
+        }
+    });
+    connect(&btn_run, &ui, |ui| rodar(ui, false));
+    connect(&btn_debug, &ui, |ui| rodar(ui, true));
+    connect(&btn_bp, &ui, toggle_breakpoint_here);
+    connect(&btn_refresh, &ui, conectar);
+    connect(&btn_smaller, &ui, |ui| zoom(ui, -1));
+    connect(&btn_bigger, &ui, |ui| zoom(ui, 1));
     {
-        let ui_n = Rc::clone(&ui);
-        btn_new.connect_clicked(move |_| {
-            let ui = Rc::clone(&ui_n);
-            confirm_discard(&ui_n, move || novo(&ui));
-        });
-    }
-    {
-        let ui_s = Rc::clone(&ui);
-        btn_save.connect_clicked(move |_| salvar(&ui_s));
-    }
-    {
-        let ui_r = Rc::clone(&ui);
-        btn_run.connect_clicked(move |_| rodar(&ui_r, false));
+        let u = ui.borrow();
+        connect(&u.btn_continue, &ui, |ui| send_debug_cmd(ui, "continuar"));
+        connect(&u.btn_next, &ui, |ui| send_debug_cmd(ui, "proximo"));
+        connect(&u.btn_step, &ui, |ui| send_debug_cmd(ui, "entrar"));
+        connect(&u.btn_out, &ui, |ui| send_debug_cmd(ui, "sair"));
+        connect(&u.btn_stop, &ui, |ui| send_debug_cmd(ui, "terminar"));
     }
     {
         let ui_d = Rc::clone(&ui);
-        btn_debug.connect_clicked(move |_| rodar(&ui_d, true));
-    }
-    {
-        let ui_b = Rc::clone(&ui);
-        btn_bp.connect_clicked(move |_| toggle_breakpoint_here(&ui_b));
-    }
-    {
-        let ui_c = Rc::clone(&ui);
-        ui.borrow()
-            .btn_continue
-            .connect_clicked(move |_| send_debug_cmd(&ui_c, "continuar"));
-    }
-    {
-        let ui_n = Rc::clone(&ui);
-        ui.borrow()
-            .btn_next
-            .connect_clicked(move |_| send_debug_cmd(&ui_n, "proximo"));
-    }
-    {
-        let ui_s = Rc::clone(&ui);
-        ui.borrow()
-            .btn_step
-            .connect_clicked(move |_| send_debug_cmd(&ui_s, "entrar"));
-    }
-    {
-        let ui_o = Rc::clone(&ui);
-        ui.borrow()
-            .btn_out
-            .connect_clicked(move |_| send_debug_cmd(&ui_o, "sair"));
-    }
-    {
-        let ui_t = Rc::clone(&ui);
-        ui.borrow()
-            .btn_stop
-            .connect_clicked(move |_| send_debug_cmd(&ui_t, "terminar"));
-    }
-    {
-        let ui_f = Rc::clone(&ui);
-        btn_refresh.connect_clicked(move |_| conectar(&ui_f));
+        ui.borrow().btn_dark.connect_toggled(move |b| set_dark(&ui_d, b.is_active()));
     }
     {
         let ui_e = Rc::clone(&ui);
-        ui.borrow()
-            .student
-            .connect_activate(move |_| conectar(&ui_e));
+        ui.borrow().student.connect_activate(move |_| conectar(&ui_e));
     }
     {
         let ui_o = Rc::clone(&ui);
-        ui.borrow()
-            .tree
-            .connect_row_activated(move |_, path, _col| {
-                let ui_cb = Rc::clone(&ui_o);
-                let p = path.clone();
-                confirm_discard(&ui_o, move || abrir_no(&ui_cb, &p));
+        ui.borrow().tree.connect_row_activated(move |_, path, _col| abrir_no(&ui_o, path));
+    }
+    {
+        let ui_t = Rc::clone(&ui);
+        ui.borrow().notebook.connect_switch_page(move |_, _, _| {
+            let ui_t = Rc::clone(&ui_t);
+            // After the switch completes (current_page is still the old one).
+            glib::idle_add_local_once(move || {
+                refresh_title(&ui_t);
+                refresh_diag_label(&ui_t);
             });
+        });
     }
     {
         let pane = file_scroll.clone();
@@ -459,76 +426,55 @@ fn build_ui(app: &Application) {
         btn_panel.connect_toggled(move |b| pane.set_visible(b.is_active()));
     }
     {
-        let ui_g = Rc::clone(&ui);
-        let click = gtk::GestureClick::new();
-        click.set_button(1);
-        click.connect_pressed(move |_, _, x, y| {
-            if x > 56.0 {
-                return;
-            }
-            let line = {
-                let u = ui_g.borrow();
-                let (_, by) = u.editor.window_to_buffer_coords(
-                    gtk::TextWindowType::Widget,
-                    x as i32,
-                    y as i32,
-                );
-                u.editor
-                    .iter_at_location(0, by)
-                    .map(|it| (it.line() + 1) as u32)
-            };
-            if let Some(line) = line {
-                toggle_breakpoint_line(&ui_g, line);
-            }
-        });
-        ui.borrow().editor.add_controller(click);
-    }
-    {
-        let ui_ch = Rc::clone(&ui);
-        let buffer = ui.borrow().buffer.clone();
-        buffer.connect_changed(move |_| {
-            let Ok(mut u) = ui_ch.try_borrow_mut() else {
-                return;
-            };
-            if u.suppress_dirty {
-                return;
-            }
-            if !u.dirty {
-                u.dirty = true;
-                drop(u);
-                refresh_title(&ui_ch);
-            }
-        });
-    }
-    {
+        // Click on `erro: … em arquivo:linha`; clicks while reading keep the
+        // cursor in the answer.
         let ui_o = Rc::clone(&ui);
         let click = gtk::GestureClick::new();
         click.set_button(1);
-        click.connect_pressed(move |_, _, x, y| {
-            jump_from_output_click(&ui_o, x, y);
+        click.connect_released(move |_, _, x, y| {
+            let console = Rc::clone(&ui_o.borrow().console);
+            if console.is_reading() {
+                console.keep_cursor_in_input();
+                return;
+            }
+            if let Some((file, line)) = console.line_at(x, y).and_then(|l| console::parse_error_location(&l)) {
+                goto_file_line(&ui_o, &file, line);
+            }
         });
-        ui.borrow().output.add_controller(click);
+        ui.borrow().console.view.add_controller(click);
+    }
+    {
+        // Enter in the output pane answers `leia`.
+        let console = Rc::clone(&ui.borrow().console);
+        let keys = gtk::ShortcutController::new();
+        keys.set_propagation_phase(gtk::PropagationPhase::Capture);
+        for accel in ["Return", "KP_Enter"] {
+            let c = Rc::clone(&console);
+            add_shortcut_if(&keys, accel, move || c.commit_input());
+        }
+        console.view.add_controller(keys);
     }
 
     {
-        let shortcuts = gtk::ShortcutController::new();
-        shortcuts.set_propagation_phase(gtk::PropagationPhase::Bubble);
         // Do not use EventControllerKey on the window (defaults to Capture
         // and eats dead keys). Function keys go in their own Capture
         // controller: GtkPaned binds F6/F8 (cycle focus) and would swallow
         // them in Bubble. A ShortcutController only matches its own keys, so
         // dead keys still reach the editor.
+        let shortcuts = gtk::ShortcutController::new();
+        shortcuts.set_propagation_phase(gtk::PropagationPhase::Bubble);
         let fkeys = gtk::ShortcutController::new();
         fkeys.set_propagation_phase(gtk::PropagationPhase::Capture);
-        let ui_k = Rc::clone(&ui);
-        add_shortcut(&fkeys, "F5", {
-            let ui = Rc::clone(&ui_k);
-            move || rodar(&ui, false)
-        });
-        add_shortcut(&fkeys, "F6", {
-            let ui = Rc::clone(&ui_k);
-            move || rodar(&ui, true)
-        });
+        let k = |c: &gtk::ShortcutController, accel: &str, f: fn(&UiRc)| {
+            let ui = Rc::clone(&ui);
+            add_shortcut(c, accel, move || f(&ui));
+        };
+        k(&fkeys, "F5", |ui| rodar(ui, false));
+        k(&fkeys, "F6", |ui| rodar(ui, true));
+        k(&fkeys, "F9", toggle_breakpoint_here);
+        k(&fkeys, "F10", |ui| send_debug_cmd(ui, "proximo"));
+        k(&fkeys, "F11", |ui| send_debug_cmd(ui, "entrar"));
+        k(&fkeys, "<Shift>F11", |ui| send_debug_cmd(ui, "sair"));
         add_shortcut(&fkeys, "F7", {
             let b = btn_files.clone();
             move || b.set_active(!b.is_active())
@@ -537,58 +483,37 @@ fn build_ui(app: &Application) {
             let b = btn_panel.clone();
             move || b.set_active(!b.is_active())
         });
-        add_shortcut(&fkeys, "F9", {
-            let ui = Rc::clone(&ui_k);
-            move || toggle_breakpoint_here(&ui)
+        k(&shortcuts, "<Primary>s", |ui| {
+            if let Some(d) = current_doc(ui) {
+                save_doc(ui, &d);
+            }
         });
-        add_shortcut(&fkeys, "F10", {
-            let ui = Rc::clone(&ui_k);
-            move || send_debug_cmd(&ui, "proximo")
+        k(&shortcuts, "<Primary>n", new_untitled_tab);
+        k(&shortcuts, "<Primary>w", |ui| {
+            if let Some(d) = current_doc(ui) {
+                close_doc(ui, &d);
+            }
         });
-        add_shortcut(&fkeys, "F11", {
-            let ui = Rc::clone(&ui_k);
-            move || send_debug_cmd(&ui, "entrar")
-        });
-        add_shortcut(&shortcuts, "<Primary>s", {
-            let ui = Rc::clone(&ui_k);
-            move || salvar(&ui)
-        });
-        add_shortcut(&shortcuts, "<Primary>f", {
-            let ui = Rc::clone(&ui_k);
-            move || show_search(&ui)
-        });
-        add_shortcut(&shortcuts, "<Primary>h", {
-            let ui = Rc::clone(&ui_k);
-            move || show_search(&ui)
-        });
+        k(&shortcuts, "<Primary>f", show_search);
+        k(&shortcuts, "<Primary>h", show_search);
+        for accel in ["<Primary>equal", "<Primary>plus", "<Primary>KP_Add"] {
+            k(&fkeys, accel, |ui| zoom(ui, 1));
+        }
+        for accel in ["<Primary>minus", "<Primary>KP_Subtract"] {
+            k(&fkeys, accel, |ui| zoom(ui, -1));
+        }
+        k(&fkeys, "<Primary>0", |ui| zoom(ui, 0));
         win.add_controller(fkeys);
         win.add_controller(shortcuts);
     }
+    connect(&btn_find_next, &ui, search_next);
+    connect(&btn_find_prev, &ui, search_prev);
+    connect(&btn_repl, &ui, search_replace_one);
+    connect(&btn_repl_all, &ui, search_replace_all);
+    connect(&btn_find_close, &ui, hide_search);
     {
         let ui_s = Rc::clone(&ui);
-        btn_find_next.connect_clicked(move |_| search_next(&ui_s));
-    }
-    {
-        let ui_s = Rc::clone(&ui);
-        btn_find_prev.connect_clicked(move |_| search_prev(&ui_s));
-    }
-    {
-        let ui_s = Rc::clone(&ui);
-        btn_repl.connect_clicked(move |_| search_replace_one(&ui_s));
-    }
-    {
-        let ui_s = Rc::clone(&ui);
-        btn_repl_all.connect_clicked(move |_| search_replace_all(&ui_s));
-    }
-    {
-        let ui_s = Rc::clone(&ui);
-        btn_find_close.connect_clicked(move |_| hide_search(&ui_s));
-    }
-    {
-        let ui_s = Rc::clone(&ui);
-        ui.borrow()
-            .search_entry
-            .connect_activate(move |_| search_next(&ui_s));
+        ui.borrow().search_entry.connect_activate(move |_| search_next(&ui_s));
     }
     {
         let ui_s = Rc::clone(&ui);
@@ -603,106 +528,40 @@ fn build_ui(app: &Application) {
         ui.borrow().search_entry.add_controller(search_keys);
     }
     {
-        // Emacs-style indentation keys. Capture so they run before the
-        // TextView inserts a tab; only these keys match, the rest passes on.
-        let shortcuts = gtk::ShortcutController::new();
-        shortcuts.set_propagation_phase(gtk::PropagationPhase::Capture);
-        let buffer = ui.borrow().buffer.clone();
-        add_shortcut(&shortcuts, "Tab", {
-            let b = buffer.clone();
-            move || indent::tab(&b)
-        });
-        for accel in ["<Shift>Tab", "<Shift>ISO_Left_Tab"] {
-            let b = buffer.clone();
-            add_shortcut(&shortcuts, accel, move || indent::backtab(&b));
-        }
-        add_shortcut(&shortcuts, "<Control><Alt>backslash", {
-            let b = buffer.clone();
-            move || indent::indent_region_or_line(&b)
-        });
-        ui.borrow().editor.add_controller(shortcuts);
-    }
-    {
-        // Electric indent: Enter indents the new line; typing `}` or the `m`
-        // of `fim` reindents a line that starts with a closer.
-        #[derive(Clone, Copy)]
-        enum Pending {
-            None,
-            Newline,
-            Closer,
-        }
-        let pending = Rc::new(Cell::new(Pending::None));
-        let buffer = ui.borrow().buffer.clone();
-        {
-            let pending = Rc::clone(&pending);
-            let ui_ind = Rc::clone(&ui);
-            buffer.connect_insert_text(move |_, _, text| {
-                if ui_ind
-                    .try_borrow()
-                    .map(|u| u.suppress_dirty)
-                    .unwrap_or(true)
-                {
-                    return;
-                }
-                pending.set(match text {
-                    "\n" => Pending::Newline,
-                    "}" | "m" => Pending::Closer,
-                    _ => Pending::None,
-                });
-            });
-        }
-        let buffer_ch = buffer.clone();
-        buffer.connect_changed(move |_| {
-            let line = buffer_ch.iter_at_mark(&buffer_ch.get_insert()).line();
-            match pending.replace(Pending::None) {
-                Pending::None => {}
-                Pending::Newline => indent::indent_line(&buffer_ch, line),
-                Pending::Closer => indent::indent_if_closer(&buffer_ch, line),
-            }
-        });
-    }
-    {
-        let ui_c = Rc::clone(&ui);
-        let click = gtk::GestureClick::new();
-        click.set_button(1);
-        click.connect_pressed(move |g, _, x, y| {
-            if !g
-                .current_event_state()
-                .contains(gtk::gdk::ModifierType::CONTROL_MASK)
-            {
-                return;
-            }
-            open_import_at(&ui_c, x, y);
-        });
-        ui.borrow().editor.add_controller(click);
-    }
-    {
         let ui_t = Rc::clone(&ui);
         let right = gtk::GestureClick::new();
         right.set_button(3);
-        right.connect_pressed(move |_, _, x, y| {
-            tree_popup(&ui_t, x, y);
-        });
+        right.connect_pressed(move |_, _, x, y| tree_popup(&ui_t, x, y));
         ui.borrow().tree.add_controller(right);
+    }
+    {
+        let ui_close = Rc::clone(&ui);
+        win.connect_close_request(move |w| {
+            if ui_close.borrow().closing {
+                ui_close.borrow_mut().rpc.shutdown_spawned_server();
+                return glib::Propagation::Proceed;
+            }
+            let dirty: Vec<Rc<Doc>> = dirty_docs(&ui_close);
+            if dirty.is_empty() {
+                ui_close.borrow_mut().rpc.shutdown_spawned_server();
+                return glib::Propagation::Proceed;
+            }
+            let ui_c = Rc::clone(&ui_close);
+            let w = w.clone();
+            confirm_unsaved(&ui_close, dirty, move || {
+                ui_c.borrow_mut().closing = true;
+                w.close();
+            });
+            glib::Propagation::Stop
+        });
     }
 
     conectar(&ui);
+    let doc = open_doc(&ui, None, WELCOME);
+    doc.mark_saved();
+    apply_theme(&ui);
     if !lang_ok {
-        set_status(
-            &ui,
-            "aviso: gramática Expressa não carregou; o texto fica sem cores",
-        );
-    }
-    set_source(
-        &ui,
-        "// F5 roda. F6 depura. Ctrl+F busca. Ctrl+clique em importe \"mod\".\n\nescreva(\"Olá, Expressa!\")\n",
-    );
-    {
-        let ui_close = Rc::clone(&ui);
-        win.connect_close_request(move |_| {
-            ui_close.borrow_mut().rpc.shutdown_spawned_server();
-            glib::Propagation::Proceed
-        });
+        set_status(&ui, "aviso: gramática Expressa não carregou; o texto fica sem cores");
     }
     win.maximize();
     win.present();
@@ -723,20 +582,36 @@ fn build_ui(app: &Application) {
     }
 }
 
+fn connect(button: &impl IsA<Button>, ui: &UiRc, f: impl Fn(&UiRc) + 'static) {
+    let ui = Rc::clone(ui);
+    button.connect_clicked(move |_| f(&ui));
+}
+
 fn add_shortcut(controller: &gtk::ShortcutController, accel: &str, f: impl Fn() + 'static) {
+    add_shortcut_if(controller, accel, move || {
+        f();
+        true
+    });
+}
+
+/// Like `add_shortcut`, but `f` returning false lets the key through.
+fn add_shortcut_if(controller: &gtk::ShortcutController, accel: &str, f: impl Fn() -> bool + 'static) {
     let Some(trigger) = gtk::ShortcutTrigger::parse_string(accel) else {
         return;
     };
     controller.add_shortcut(gtk::Shortcut::new(
         Some(trigger),
         Some(gtk::CallbackAction::new(move |_, _| {
-            f();
-            glib::Propagation::Stop
+            if f() {
+                glib::Propagation::Stop
+            } else {
+                glib::Propagation::Proceed
+            }
         })),
     ));
 }
 
-fn install_paned_css() {
+fn install_css() {
     let css = gtk::CssProvider::new();
     css.load_from_data(
         "
@@ -749,14 +624,13 @@ fn install_paned_css() {
         paned.aula-paned > separator:hover {
             background-color: alpha(currentColor, 0.28);
         }
+        popover.aula-signature > contents {
+            padding: 4px 8px;
+        }
         ",
     );
     if let Some(display) = gtk::gdk::Display::default() {
-        gtk::style_context_add_provider_for_display(
-            &display,
-            &css,
-            gtk::STYLE_PROVIDER_PRIORITY_APPLICATION,
-        );
+        gtk::style_context_add_provider_for_display(&display, &css, gtk::STYLE_PROVIDER_PRIORITY_APPLICATION);
     }
 }
 
@@ -768,82 +642,361 @@ fn language_manager() -> LanguageManager {
     // GtkSourceView 5 search paths are the folders that *contain* *.lang
     // files (e.g. .../language-specs), not the parent of that folder.
     let lm = LanguageManager::default();
-    let specs = data_dir().join("language-specs");
-    if let Some(path) = specs.to_str() {
+    if let Some(path) = data_dir().join("language-specs").to_str() {
         lm.prepend_search_path(path);
     }
     lm
 }
 
-fn apply_style_scheme(buffer: &SourceBuffer) {
-    let sm = StyleSchemeManager::default();
-    let styles = data_dir().join("styles");
-    if let Some(path) = styles.to_str() {
-        sm.prepend_search_path(path);
+fn set_status(ui: &UiRc, text: &str) {
+    if let Ok(u) = ui.try_borrow() {
+        u.status.set_text(text);
     }
-    for id in ["expressa-aula", "Yaru", "Yaru-dark", "Adwaita", "classic"] {
-        if let Some(scheme) = sm.scheme(id) {
-            buffer.set_style_scheme(Some(&scheme));
-            return;
-        }
-    }
-}
-
-fn student(ui: &Ui) -> String {
-    let s = ui.student.text();
-    if s.is_empty() {
-        "local".into()
-    } else {
-        s.to_string()
-    }
-}
-
-fn filename(ui: &Ui) -> String {
-    let s = ui.filename.text();
-    if s.is_empty() {
-        "sem-titulo.lep".into()
-    } else if s.ends_with(".lep") {
-        s.to_string()
-    } else {
-        format!("{s}.lep")
-    }
-}
-
-fn source_text(ui: &Ui) -> String {
-    let (start, end) = ui.buffer.bounds();
-    ui.buffer.text(&start, &end, true).to_string()
-}
-
-fn set_source(ui: &Rc<RefCell<Ui>>, text: &str) {
-    ui.borrow_mut().suppress_dirty = true;
-    let buffer = ui.borrow().buffer.clone();
-    buffer.set_text(text);
-    {
-        let mut u = ui.borrow_mut();
-        u.suppress_dirty = false;
-        u.dirty = false;
-    }
-    refresh_title(ui);
-}
-
-fn refresh_title(ui: &Rc<RefCell<Ui>>) {
-    let u = ui.borrow();
-    let name = filename(&u);
-    let star = if u.dirty { "*" } else { "" };
-    u.window
-        .set_title(Some(&format!("{star}{name} — Expressa Aula")));
 }
 
 fn parse_run_args(s: &str) -> Vec<String> {
     s.split_whitespace().map(|w| w.to_string()).collect()
 }
 
-fn confirm_discard(ui: &Rc<RefCell<Ui>>, then: impl FnOnce() + 'static) {
-    if !ui.borrow().dirty {
-        then();
+// ── Help backed by the open tabs and the server ───────────────────────────
+
+fn make_help(ui: &UiRc) -> Rc<Help> {
+    let w1: Weak<RefCell<Ui>> = Rc::downgrade(ui);
+    let w2 = w1.clone();
+    let w3 = w1.clone();
+    Rc::new(Help {
+        file_text: Box::new(move |path| {
+            let ui = w1.upgrade()?;
+            let u = ui.try_borrow().ok()?;
+            if let Some((d, _)) = u.docs.iter().find(|(d, _)| d.name() == path) {
+                return Some(d.text());
+            }
+            if let Some(hit) = u.file_cache.borrow().get(path) {
+                return hit.clone();
+            }
+            let text = u.rpc.read_file(&u.project, path).ok();
+            u.file_cache.borrow_mut().insert(path.to_string(), text.clone());
+            text
+        }),
+        project_files: Box::new(move || {
+            w2.upgrade()
+                .and_then(|ui| ui.try_borrow().ok().map(|u| u.project_files.clone()))
+                .unwrap_or_default()
+        }),
+        path_of: Box::new(move |buffer| {
+            let ui = w3.upgrade()?;
+            let u = ui.try_borrow().ok()?;
+            u.docs.iter().find(|(d, _)| &d.buffer == buffer).map(|(d, _)| d.name())
+        }),
+    })
+}
+
+// ── Tabs ───────────────────────────────────────────────────────────────────
+
+fn current_doc(ui: &UiRc) -> Option<Rc<Doc>> {
+    let u = ui.try_borrow().ok()?;
+    let page = u.notebook.nth_page(u.notebook.current_page())?;
+    u.docs.iter().find(|(d, _)| d.page.upcast_ref::<gtk::Widget>() == &page).map(|(d, _)| Rc::clone(d))
+}
+
+fn doc_by_name(ui: &UiRc, name: &str) -> Option<Rc<Doc>> {
+    ui.borrow().docs.iter().find(|(d, _)| d.name() == name).map(|(d, _)| Rc::clone(d))
+}
+
+fn view_help(ui: &UiRc, doc: &Rc<Doc>) -> Option<Rc<ViewHelp>> {
+    ui.borrow().docs.iter().find(|(d, _)| Rc::ptr_eq(d, doc)).map(|(_, v)| Rc::clone(v))
+}
+
+fn all_docs(ui: &UiRc) -> Vec<Rc<Doc>> {
+    ui.borrow().docs.iter().map(|(d, _)| Rc::clone(d)).collect()
+}
+
+fn dirty_docs(ui: &UiRc) -> Vec<Rc<Doc>> {
+    all_docs(ui).into_iter().filter(|d| d.is_dirty()).collect()
+}
+
+fn switch_to(ui: &UiRc, doc: &Rc<Doc>) {
+    let nb = ui.borrow().notebook.clone();
+    if let Some(n) = nb.page_num(&doc.page) {
+        nb.set_current_page(Some(n));
+    }
+    doc.view.grab_focus();
+    refresh_title(ui);
+}
+
+/// New tab for `path` (or untitled) with `text`, wired to the editor.
+fn open_doc(ui: &UiRc, path: Option<String>, text: &str) -> Rc<Doc> {
+    let untitled = {
+        let mut u = ui.borrow_mut();
+        u.untitled_count += 1;
+        if u.untitled_count == 1 {
+            "sem-titulo.lep".to_string()
+        } else {
+            format!("sem-titulo-{}.lep", u.untitled_count)
+        }
+    };
+    let doc = {
+        let u = ui.borrow();
+        Doc::new(path, untitled, text, &u.languages, &u.search_settings)
+    };
+    {
+        let weak = Rc::downgrade(ui);
+        *doc.on_diag.borrow_mut() = Some(Box::new(move |_| {
+            if let Some(ui) = weak.upgrade() {
+                refresh_diag_label(&ui);
+            }
+        }));
+    }
+    {
+        let weak = Rc::downgrade(ui);
+        doc.buffer.connect_modified_changed(move |_| {
+            if let Some(ui) = weak.upgrade() {
+                refresh_title(&ui);
+            }
+        });
+    }
+    let help = ui.borrow().help.clone().expect("help");
+    let vh = {
+        let weak = Rc::downgrade(&doc);
+        assist::attach(&doc.view, &help, move |_, offset| {
+            weak.upgrade().and_then(|d| d.diag_at(offset)).map(|d| d.message)
+        })
+    };
+    attach_editor_input(ui, &doc, &vh);
+    {
+        let ui_c = Rc::clone(ui);
+        let weak = Rc::downgrade(&doc);
+        doc.close_button.connect_clicked(move |_| {
+            if let Some(d) = weak.upgrade() {
+                close_doc(&ui_c, &d);
+            }
+        });
+    }
+    {
+        let (dark, scheme) = theme_scheme(ui);
+        doc.set_theme(scheme.as_ref(), dark);
+    }
+    ui.borrow_mut().docs.push((Rc::clone(&doc), vh));
+    let nb = ui.borrow().notebook.clone();
+    let n = nb.append_page(&doc.page, Some(&doc.tab));
+    nb.set_tab_reorderable(&doc.page, true);
+    nb.set_current_page(Some(n));
+    doc.view.grab_focus();
+    refresh_title(ui);
+    doc
+}
+
+/// Mouse and keys of one editor view.
+fn attach_editor_input(ui: &UiRc, doc: &Rc<Doc>, vh: &Rc<ViewHelp>) {
+    let view = doc.view.clone();
+    {
+        // Click left of the text (line numbers): breakpoint. Ctrl+click on a
+        // name: go to its definition.
+        let ui_g = Rc::clone(ui);
+        let weak = Rc::downgrade(doc);
+        // The line-number gutter is a child widget that takes the click:
+        // look at it first (Capture), without claiming it.
+        let gutter = gtk::GestureClick::new();
+        gutter.set_button(1);
+        gutter.set_propagation_phase(gtk::PropagationPhase::Capture);
+        {
+            let ui_g = Rc::clone(&ui_g);
+            let weak = weak.clone();
+            gutter.connect_pressed(move |_, _, x, y| {
+                let Some(doc) = weak.upgrade() else { return };
+                let gutter_width = sourceview5::prelude::ViewExt::gutter(&doc.view, gtk::TextWindowType::Left).width();
+                if (x as i32) < gutter_width {
+                    let (_, by) = doc.view.window_to_buffer_coords(gtk::TextWindowType::Widget, x as i32, y as i32);
+                    let (it, _) = doc.view.line_at_y(by);
+                    toggle_breakpoint(&ui_g, &doc, it.line() as u32 + 1);
+                }
+            });
+        }
+        view.add_controller(gutter);
+        let click = gtk::GestureClick::new();
+        click.set_button(1);
+        click.connect_released(move |g, _, x, y| {
+            let Some(doc) = weak.upgrade() else { return };
+            if g.current_event_state().contains(gtk::gdk::ModifierType::CONTROL_MASK) {
+                let (tx, ty) = doc.view.window_to_buffer_coords(gtk::TextWindowType::Widget, x as i32, y as i32);
+                if let Some(it) = doc.view.iter_at_location(tx, ty) {
+                    go_to_definition(&ui_g, &doc, &it);
+                }
+            }
+        });
+        view.add_controller(click);
+    }
+    // Editing keys: Capture so they run before the TextView's own bindings
+    // (Tab inserts a tab, Ctrl+/ selects all). Only these keys match.
+    let keys = gtk::ShortcutController::new();
+    keys.set_propagation_phase(gtk::PropagationPhase::Capture);
+    let b = doc.buffer.clone();
+    {
+        let b = b.clone();
+        add_shortcut(&keys, "Tab", move || indent::tab(&b));
+    }
+    for accel in ["<Shift>Tab", "<Shift>ISO_Left_Tab"] {
+        let b = b.clone();
+        add_shortcut(&keys, accel, move || indent::backtab(&b));
+    }
+    let on = |accel: &str, f: fn(&sourceview5::Buffer)| {
+        let b = b.clone();
+        add_shortcut(&keys, accel, move || f(&b));
+    };
+    on("<Control><Alt>backslash", indent::indent_region_or_line);
+    on("<Primary>slash", editing::toggle_comment);
+    on("<Primary>KP_Divide", editing::toggle_comment);
+    on("<Primary>d", editing::duplicate_lines);
+    on("<Alt>Up", |b| editing::move_lines(b, true));
+    on("<Alt>Down", |b| editing::move_lines(b, false));
+    {
+        let ui_h = Rc::clone(ui);
+        let weak = Rc::downgrade(doc);
+        let vh = Rc::downgrade(vh);
+        add_shortcut(&keys, "F1", move || {
+            let (Some(doc), Some(vh)) = (weak.upgrade(), vh.upgrade()) else { return };
+            let help = ui_h.borrow().help.clone().expect("help");
+            if !assist::show_info(&doc.view, &vh, &help) {
+                set_status(&ui_h, "F1: coloque o cursor no nome de uma função");
+            }
+        });
+    }
+    {
+        let ui_d = Rc::clone(ui);
+        let weak = Rc::downgrade(doc);
+        add_shortcut(&keys, "F12", move || {
+            if let Some(doc) = weak.upgrade() {
+                go_to_definition(&ui_d, &doc, &doc.cursor());
+            }
+        });
+    }
+    {
+        let vh = Rc::downgrade(vh);
+        add_shortcut_if(&keys, "Escape", move || {
+            if let Some(vh) = vh.upgrade() {
+                vh.hide_signature();
+            }
+            false
+        });
+    }
+    view.add_controller(keys);
+}
+
+fn new_untitled_tab(ui: &UiRc) {
+    open_doc(ui, None, "escreva(\"Olá\")\n");
+    set_status(ui, "arquivo novo (ainda não salvo)");
+}
+
+/// Open `path` from the project (or switch to its tab).
+fn open_path(ui: &UiRc, path: &str) -> Option<Rc<Doc>> {
+    if let Some(d) = doc_by_name(ui, path) {
+        switch_to(ui, &d);
+        return Some(d);
+    }
+    let result = {
+        let u = ui.borrow();
+        u.rpc.read_file(&u.project, path)
+    };
+    match result {
+        Ok(src) => {
+            let doc = open_doc(ui, Some(path.to_string()), &src);
+            set_status(ui, &format!("aberto {path}"));
+            Some(doc)
+        }
+        Err(e) => {
+            set_status(ui, &format!("abrir {path}: {e}"));
+            None
+        }
+    }
+}
+
+fn goto_file_line(ui: &UiRc, file: &str, line: u32) {
+    let doc = doc_by_name(ui, file).or_else(|| open_path(ui, file));
+    if let Some(d) = doc {
+        switch_to(ui, &d);
+        d.goto_line(line);
+    }
+}
+
+fn remove_tab(ui: &UiRc, doc: &Rc<Doc>) {
+    let (nb, vh) = {
+        let mut u = ui.borrow_mut();
+        let pos = u.docs.iter().position(|(d, _)| Rc::ptr_eq(d, doc));
+        let vh = pos.map(|p| u.docs.remove(p).1);
+        (u.notebook.clone(), vh)
+    };
+    if let Some(vh) = vh {
+        vh.detach();
+    }
+    if let Some(n) = nb.page_num(&doc.page) {
+        nb.remove_page(Some(n));
+    }
+    if ui.borrow().docs.is_empty() {
+        let d = open_doc(ui, None, "");
+        d.mark_saved();
+    }
+    refresh_title(ui);
+}
+
+fn close_doc(ui: &UiRc, doc: &Rc<Doc>) {
+    if !doc.is_dirty() {
+        remove_tab(ui, doc);
         return;
     }
+    let ui_c = Rc::clone(ui);
+    let d = Rc::clone(doc);
+    confirm_unsaved(ui, vec![Rc::clone(doc)], move || remove_tab(&ui_c, &d));
+}
+
+/// Save one tab; an untitled one asks for a name. False if not saved.
+fn save_doc(ui: &UiRc, doc: &Rc<Doc>) -> bool {
+    if doc.is_untitled() {
+        let window = ui.borrow().window.clone();
+        let Some(name) = perguntar_linha(&window, &format!("Salvar `{}` como:", doc.untitled)) else {
+            return false;
+        };
+        let name = name.trim().trim_start_matches('/').to_string();
+        if name.is_empty() {
+            return false;
+        }
+        let name = if name.contains('.') { name } else { format!("{name}.lep") };
+        if doc_by_name(ui, &name).is_some() {
+            set_status(ui, &format!("`{name}` já está aberto em outra aba"));
+            return false;
+        }
+        doc.set_path(name);
+    }
+    let name = doc.name();
+    let result = {
+        let u = ui.borrow();
+        u.rpc.write_file(&u.project, &name, &doc.text())
+    };
+    match result {
+        Ok(()) => {
+            doc.mark_saved();
+            ui.borrow().file_cache.borrow_mut().remove(&name);
+            refresh_tree(ui);
+            refresh_title(ui);
+            set_status(ui, &format!("salvo {name}"));
+            true
+        }
+        Err(e) => {
+            set_status(ui, &format!("erro ao salvar {name}: {e}"));
+            false
+        }
+    }
+}
+
+/// Unsaved changes in `docs`: Salvar (all), Descartar or Cancelar. `then`
+/// runs unless cancelled or a save failed.
+fn confirm_unsaved(ui: &UiRc, docs: Vec<Rc<Doc>>, then: impl FnOnce() + 'static) {
     let window = ui.borrow().window.clone();
+    let names: Vec<String> = docs.iter().map(|d| d.name()).collect();
+    let (title, detail) = if names.len() == 1 {
+        (format!("Salvar as alterações em `{}`?", names[0]), "Se não salvar, as alterações se perdem.".to_string())
+    } else {
+        ("Há arquivos com alterações não salvas".to_string(), names.join("\n"))
+    };
     let then = RefCell::new(Some(then));
     #[allow(deprecated)]
     let dlg = gtk::MessageDialog::builder()
@@ -851,14 +1004,26 @@ fn confirm_discard(ui: &Rc<RefCell<Ui>>, then: impl FnOnce() + 'static) {
         .modal(true)
         .message_type(gtk::MessageType::Warning)
         .buttons(gtk::ButtonsType::None)
-        .text("Há alterações não salvas")
-        .secondary_text("Descartar e continuar?")
+        .text(&title)
+        .secondary_text(&detail)
         .build();
-    dlg.add_button("Cancelar", gtk::ResponseType::Cancel);
-    dlg.add_button("Descartar", gtk::ResponseType::Accept);
+    #[allow(deprecated)]
+    {
+        dlg.add_button("Cancelar", gtk::ResponseType::Cancel);
+        dlg.add_button("Descartar", gtk::ResponseType::Reject);
+        dlg.add_button(if names.len() == 1 { "Salvar" } else { "Salvar todos" }, gtk::ResponseType::Accept);
+        dlg.set_default_response(gtk::ResponseType::Accept);
+    }
+    let ui_c = Rc::clone(ui);
+    #[allow(deprecated)]
     dlg.connect_response(move |d, resp| {
         d.close();
-        if resp == gtk::ResponseType::Accept {
+        let go = match resp {
+            gtk::ResponseType::Reject => true,
+            gtk::ResponseType::Accept => docs.iter().all(|doc| save_doc(&ui_c, doc)),
+            _ => false,
+        };
+        if go {
             if let Some(f) = then.borrow_mut().take() {
                 f();
             }
@@ -867,95 +1032,101 @@ fn confirm_discard(ui: &Rc<RefCell<Ui>>, then: impl FnOnce() + 'static) {
     dlg.present();
 }
 
-fn set_output(ui: &Rc<RefCell<Ui>>, text: &str) {
+fn refresh_title(ui: &UiRc) {
+    let Some(doc) = current_doc(ui) else { return };
+    let Ok(u) = ui.try_borrow() else { return };
+    let star = if doc.is_dirty() { "● " } else { "" };
+    u.window
+        .set_title(Some(&format!("{star}{} — {} — Expressa Aula", doc.name(), u.project)));
+}
+
+fn refresh_diag_label(ui: &UiRc) {
+    let doc = current_doc(ui);
+    let Ok(u) = ui.try_borrow() else { return };
+    match doc.and_then(|d| d.diag.borrow().clone()) {
+        Some(d) => {
+            u.diag_label.set_markup(&format!(
+                "<span foreground=\"#e53935\">⚠ linha {}: {}</span>",
+                d.line,
+                glib::markup_escape_text(&d.message)
+            ));
+        }
+        None => u.diag_label.set_text(""),
+    }
+}
+
+fn go_to_definition(ui: &UiRc, doc: &Rc<Doc>, at: &gtk::TextIter) {
+    let help = ui.borrow().help.clone().expect("help");
+    let mut ls = at.clone();
+    ls.set_line_offset(0);
+    let mut le = at.clone();
+    if !le.ends_line() {
+        le.forward_to_line_end();
+    }
+    let line = ls.text(&le).to_string();
+    let col = ls.text(at).len();
+    match assist::definition(&help, &doc.name(), &doc.text(), &line, col) {
+        Some(Target::Line { file: None, line }) => doc.goto_line(line),
+        Some(Target::Line { file: Some(f), line }) => goto_file_line(ui, &f, line),
+        Some(Target::File(f)) => {
+            open_path(ui, &f);
+        }
+        Some(Target::Native(name)) => {
+            doc.buffer.place_cursor(at);
+            if let Some(vh) = view_help(ui, doc) {
+                assist::show_info(&doc.view, &vh, &help);
+            }
+            set_status(ui, &format!("`{name}` é uma função nativa"));
+        }
+        None => {}
+    }
+}
+
+// ── Prefs ──────────────────────────────────────────────────────────────────
+
+fn zoom(ui: &UiRc, step: i32) {
     let mut u = ui.borrow_mut();
-    u.screen = Screen::default();
-    u.output.buffer().set_text(text);
+    u.prefs.zoom(step);
+    u.font_css.set_size(u.prefs.font_size);
+    u.prefs.save();
+    let size = u.prefs.font_size;
+    drop(u);
+    set_status(ui, &format!("letra {size}pt (Ctrl+0 volta ao normal)"));
 }
 
-fn set_status(ui: &Rc<RefCell<Ui>>, text: &str) {
-    ui.borrow().status.set_text(text);
-}
-
-fn novo(ui: &Rc<RefCell<Ui>>) {
-    ui.borrow().filename.set_text("sem-titulo.lep");
-    ui.borrow_mut().breakpoints.clear();
-    set_source(ui, "escreva(\"Olá\")\n");
-    set_output(ui, "");
-    paint_breakpoints(ui);
-    set_status(ui, "arquivo novo (ainda não salvo)");
-}
-
-fn salvar(ui: &Rc<RefCell<Ui>>) {
-    let (rpc_result, name) = {
-        let u = ui.borrow();
-        let name = filename(&u);
-        let stu = student(&u);
-        let src = source_text(&u);
-        (u.rpc.write_file(&stu, &name, &src), name)
+fn theme_scheme(ui: &UiRc) -> (bool, Option<sourceview5::StyleScheme>) {
+    let u = ui.borrow();
+    let dark = u.prefs.dark;
+    let ids: &[&str] = if dark {
+        &["expressa-aula-dark", "Adwaita-dark", "classic-dark"]
+    } else {
+        &["expressa-aula", "Adwaita", "classic"]
     };
-    match rpc_result {
-        Ok(()) => {
-            ui.borrow_mut().dirty = false;
-            refresh_title(ui);
-            set_status(ui, &format!("salvo {name}"));
-            conectar(ui);
-        }
-        Err(e) => set_status(ui, &format!("erro ao salvar: {e}")),
-    }
+    (dark, ids.iter().find_map(|id| u.schemes.scheme(id)))
 }
 
-#[cfg(test)]
-fn leia_call_count(src: &str) -> usize {
-    leia_prompts(src).len()
+fn apply_theme(ui: &UiRc) {
+    let (dark, scheme) = theme_scheme(ui);
+    prefs::apply_widget_theme(dark);
+    for d in all_docs(ui) {
+        d.set_theme(scheme.as_ref(), dark);
+    }
+    ui.borrow().console.set_dark(dark);
 }
 
-/// Prompt string of each `leia(...)` call, in order. `None` if there is no
-/// string literal (`leia()` or `leia(nome)`).
-#[cfg(test)]
-fn leia_prompts(src: &str) -> Vec<Option<String>> {
-    let mut out = Vec::new();
-    let mut rest = src;
-    while let Some(i) = rest.find("leia") {
-        let before = if i == 0 {
-            None
-        } else {
-            rest[..i].chars().last()
-        };
-        let ident_cont = before.is_some_and(|c| c.is_alphanumeric() || c == '_');
-        let after = rest[i + 4..].trim_start();
-        if !ident_cont && after.starts_with('(') {
-            let inside = after[1..].trim_start();
-            out.push(parse_string_literal(inside));
+fn set_dark(ui: &UiRc, dark: bool) {
+    {
+        let mut u = ui.borrow_mut();
+        if u.prefs.dark == dark {
+            return;
         }
-        rest = &rest[i + 4..];
+        u.prefs.dark = dark;
+        u.prefs.save();
     }
-    out
+    apply_theme(ui);
 }
 
-#[cfg(test)]
-fn parse_string_literal(s: &str) -> Option<String> {
-    let s = s.trim_start();
-    if !s.starts_with('"') {
-        return None;
-    }
-    let mut out = String::new();
-    let mut chars = s[1..].chars();
-    while let Some(c) = chars.next() {
-        match c {
-            '"' => return Some(out),
-            '\\' => match chars.next()? {
-                'n' => out.push('\n'),
-                't' => out.push('\t'),
-                '"' => out.push('"'),
-                '\\' => out.push('\\'),
-                other => out.push(other),
-            },
-            _ => out.push(c),
-        }
-    }
-    None
-}
+// ── Dialogs ────────────────────────────────────────────────────────────────
 
 fn perguntar_linha(parent: &impl IsA<gtk::Window>, pergunta: &str) -> Option<String> {
     let dialog = gtk::Window::builder()
@@ -1027,6 +1198,8 @@ fn perguntar_linha(parent: &impl IsA<gtk::Window>, pergunta: &str) -> Option<Str
     out.borrow_mut().take()
 }
 
+// ── Debugger panel ─────────────────────────────────────────────────────────
+
 fn make_string_tree(store: &TreeStore, titles: &[&str]) -> TreeView {
     let tree = TreeView::with_model(store);
     tree.set_headers_visible(true);
@@ -1042,7 +1215,7 @@ fn make_string_tree(store: &TreeStore, titles: &[&str]) -> TreeView {
     tree
 }
 
-fn make_debug_panel(ui: &Rc<RefCell<Ui>>) -> GtkBox {
+fn make_debug_panel(ui: &UiRc) -> GtkBox {
     let panel = GtkBox::new(Orientation::Vertical, 4);
     panel.set_margin_start(4);
     panel.set_margin_end(4);
@@ -1054,28 +1227,17 @@ fn make_debug_panel(ui: &Rc<RefCell<Ui>>) -> GtkBox {
     let btn_add = Button::with_label("+");
     let btn_del = Button::with_label("−");
     watch_row.append(&lbl);
-    {
-        let u = ui.borrow();
-        watch_row.append(&u.watch_entry);
-    }
+    watch_row.append(&ui.borrow().watch_entry);
     watch_row.append(&btn_add);
     watch_row.append(&btn_del);
     panel.append(&watch_row);
 
+    connect(&btn_add, ui, add_watch);
     {
         let ui_a = Rc::clone(ui);
-        btn_add.connect_clicked(move |_| add_watch(&ui_a));
+        ui.borrow().watch_entry.connect_activate(move |_| add_watch(&ui_a));
     }
-    {
-        let ui_a = Rc::clone(ui);
-        ui.borrow()
-            .watch_entry
-            .connect_activate(move |_| add_watch(&ui_a));
-    }
-    {
-        let ui_d = Rc::clone(ui);
-        btn_del.connect_clicked(move |_| remove_watch(&ui_d));
-    }
+    connect(&btn_del, ui, remove_watch);
 
     let u = ui.borrow();
     let watch_tree = make_string_tree(&u.watch_store, &["observado", "valor"]);
@@ -1083,9 +1245,7 @@ fn make_debug_panel(ui: &Rc<RefCell<Ui>>) -> GtkBox {
     let stack_tree = make_string_tree(&u.stack_store, &["função", "linha"]);
     drop(u);
 
-    panel.append(&Label::new(Some(
-        "Observados (ficam visíveis a cada passo)",
-    )));
+    panel.append(&Label::new(Some("Observados (ficam visíveis a cada passo)")));
     panel.append(&scroll_tree(&watch_tree, 70));
     panel.append(&Label::new(Some("Variáveis")));
     panel.append(&scroll_tree(&vars_tree, 120));
@@ -1102,11 +1262,8 @@ fn scroll_tree(tree: &TreeView, min_h: i32) -> ScrolledWindow {
         .build()
 }
 
-fn add_watch(ui: &Rc<RefCell<Ui>>) {
-    let name = {
-        let u = ui.borrow();
-        u.watch_entry.text().trim().to_string()
-    };
+fn add_watch(ui: &UiRc) {
+    let name = ui.borrow().watch_entry.text().trim().to_string();
     if name.is_empty() {
         return;
     }
@@ -1120,14 +1277,12 @@ fn add_watch(ui: &Rc<RefCell<Ui>>) {
     refresh_watch_values(ui, &[]);
 }
 
-fn remove_watch(ui: &Rc<RefCell<Ui>>) {
-    let mut u = ui.borrow_mut();
-    u.watches.pop();
-    drop(u);
+fn remove_watch(ui: &UiRc) {
+    ui.borrow_mut().watches.pop();
     refresh_watch_values(ui, &[]);
 }
 
-fn refresh_watch_values(ui: &Rc<RefCell<Ui>>, vars: &[expressa::runtime::DebugBinding]) {
+fn refresh_watch_values(ui: &UiRc, vars: &[expressa::runtime::DebugBinding]) {
     let u = ui.borrow();
     u.watch_store.clear();
     for name in &u.watches {
@@ -1141,14 +1296,13 @@ fn refresh_watch_values(ui: &Rc<RefCell<Ui>>, vars: &[expressa::runtime::DebugBi
     }
 }
 
-fn send_debug_cmd(ui: &Rc<RefCell<Ui>>, cmd: &str) {
-    let u = ui.borrow();
-    if let Some(tx) = &u.debug_cmd {
-        let _ = tx.send(cmd.to_string());
+fn send_debug_cmd(ui: &UiRc, cmd: &str) {
+    if let Some(run) = &ui.borrow().run {
+        let _ = run.debug_cmd.send(cmd.to_string());
     }
 }
 
-fn set_debug_buttons(ui: &Rc<RefCell<Ui>>, paused: bool, running: bool) {
+fn set_debug_buttons(ui: &UiRc, paused: bool, running: bool) {
     let u = ui.borrow();
     u.btn_continue.set_sensitive(paused);
     u.btn_next.set_sensitive(paused);
@@ -1157,101 +1311,33 @@ fn set_debug_buttons(ui: &Rc<RefCell<Ui>>, paused: bool, running: bool) {
     u.btn_stop.set_sensitive(running);
 }
 
-fn red_breakpoint_pixbuf() -> gdk_pixbuf::Pixbuf {
-    let pb = gdk_pixbuf::Pixbuf::new(gdk_pixbuf::Colorspace::Rgb, true, 8, 12, 12).expect("pixbuf");
-    pb.fill(0x0000_0000);
-    for y in 0..12 {
-        for x in 0..12 {
-            let dx = x as i32 - 5;
-            let dy = y as i32 - 5;
-            if dx * dx + dy * dy <= 16 {
-                pb.put_pixel(x as u32, y as u32, 0xe5, 0x39, 0x35, 0xff);
-            }
-        }
-    }
-    pb
-}
-
-fn toggle_breakpoint_here(ui: &Rc<RefCell<Ui>>) {
-    let line = {
-        let u = ui.borrow();
-        let insert = u.buffer.iter_at_mark(&u.buffer.get_insert());
-        (insert.line() + 1) as u32
-    };
-    toggle_breakpoint_line(ui, line);
-}
-
-fn toggle_breakpoint_line(ui: &Rc<RefCell<Ui>>, line: u32) {
-    if line == 0 {
-        return;
-    }
-    {
-        let mut u = ui.borrow_mut();
-        if !u.breakpoints.remove(&line) {
-            u.breakpoints.insert(line);
-        }
-    }
-    paint_breakpoints(ui);
-    let u = ui.borrow();
-    if u.debug_cmd.is_some() {
-        if u.breakpoints.contains(&line) {
-            drop(u);
-            send_debug_cmd(ui, &format!("ponto {line}"));
-        } else {
-            drop(u);
-            send_debug_cmd(ui, &format!("remover {line}"));
-        }
+fn toggle_breakpoint_here(ui: &UiRc) {
+    if let Some(doc) = current_doc(ui) {
+        let line = doc.cursor().line() as u32 + 1;
+        toggle_breakpoint(ui, &doc, line);
     }
 }
 
-fn paint_breakpoints(ui: &Rc<RefCell<Ui>>) {
-    let u = ui.borrow();
-    let (start, end) = u.buffer.bounds();
-    u.buffer
-        .remove_source_marks(&start, &end, Some("breakpoint"));
-    let lines: Vec<u32> = u.breakpoints.iter().copied().collect();
-    let buffer = u.buffer.clone();
-    drop(u);
-    for line in lines {
-        if line == 0 {
-            continue;
-        }
-        let Some(a) = buffer.iter_at_line((line - 1) as i32) else {
-            continue;
-        };
-        buffer.create_source_mark(Some(&format!("bp-{line}")), "breakpoint", &a);
+fn toggle_breakpoint(ui: &UiRc, doc: &Rc<Doc>, line: u32) {
+    let on = doc.toggle_breakpoint(line);
+    // While running, tell the debugger (it names files by their copy).
+    let cmd = ui.borrow().run.as_ref().map(|run| {
+        let file = run.ws_dir.join(doc.name()).to_string_lossy().into_owned();
+        format!("{} {file}:{line}", if on { "ponto" } else { "remover" })
+    });
+    if let Some(cmd) = cmd {
+        send_debug_cmd(ui, &cmd);
     }
 }
 
-fn mark_debug_line(ui: &Rc<RefCell<Ui>>, line: u32) {
-    let u = ui.borrow();
-    let (start, end) = u.buffer.bounds();
-    u.buffer.remove_tag(&u.debug_tag, &start, &end);
-    if line == 0 {
-        return;
-    }
-    let Some(a) = u.buffer.iter_at_line((line - 1) as i32) else {
-        return;
-    };
-    let mut b = a.clone();
-    if !b.forward_line() {
-        b = u.buffer.end_iter();
-    }
-    u.buffer.apply_tag(&u.debug_tag, &a, &b);
-    u.buffer.place_cursor(&a);
-    u.editor
-        .scroll_to_iter(&mut a.clone(), 0.2, false, 0.0, 0.0);
-}
-
-fn fill_debug_views(ui: &Rc<RefCell<Ui>>, paused: &expressa::runtime::DebugPaused) {
+fn fill_debug_views(ui: &UiRc, paused: &expressa::runtime::DebugPaused) {
     {
         let u = ui.borrow();
         u.vars_store.clear();
         u.stack_store.clear();
         for v in &paused.vars {
             let iter = u.vars_store.append(None);
-            u.vars_store
-                .set(&iter, &[(0, &v.scope), (1, &v.name), (2, &v.value)]);
+            u.vars_store.set(&iter, &[(0, &v.scope), (1, &v.name), (2, &v.value)]);
         }
         for f in &paused.stack {
             let loc = format!("{}:{}", f.file, f.line);
@@ -1260,365 +1346,61 @@ fn fill_debug_views(ui: &Rc<RefCell<Ui>>, paused: &expressa::runtime::DebugPause
         }
     }
     refresh_watch_values(ui, &paused.vars);
-    mark_debug_line(ui, paused.line);
 }
 
-fn clear_debug_views(ui: &Rc<RefCell<Ui>>) {
-    let u = ui.borrow();
-    u.vars_store.clear();
-    u.stack_store.clear();
-    let (start, end) = u.buffer.bounds();
-    u.buffer.remove_tag(&u.debug_tag, &start, &end);
-}
-
-fn append_output(ui: &Rc<RefCell<Ui>>, text: &str) {
-    append_output_tagged(ui, text, false);
-}
-
-fn append_stderr(ui: &Rc<RefCell<Ui>>, text: &str) {
-    append_output_tagged(ui, text, true);
-}
-
-fn append_output_tagged(ui: &Rc<RefCell<Ui>>, text: &str, stderr: bool) {
-    let mut u = ui.borrow_mut();
-    let buf = u.output.buffer();
-    if !stderr && (u.screen.row.is_some() || has_screen_code(text)) {
-        write_screen(&buf, &mut u.screen, text);
-        return;
+fn clear_debug_views(ui: &UiRc) {
+    {
+        let u = ui.borrow();
+        u.vars_store.clear();
+        u.stack_store.clear();
     }
-    let extra = if stderr { Some(&u.err_tag) } else { None };
-    insert_ansi_text(&buf, text, extra);
-    trim_output(&buf);
-}
-
-/// Lines kept in the output pane. A program that never ends keeps only the
-/// tail instead of growing the buffer without limit.
-const MAX_OUTPUT_LINES: i32 = 5000;
-
-/// Drops the oldest lines past [`MAX_OUTPUT_LINES`]; returns how many.
-fn trim_output(buf: &gtk::TextBuffer) -> i32 {
-    let extra = buf.line_count() - MAX_OUTPUT_LINES;
-    if extra <= 0 {
-        return 0;
+    for d in all_docs(ui) {
+        d.clear_debug_line();
     }
-    let mut start = buf.start_iter();
-    if let Some(mut end) = buf.iter_at_line(extra) {
-        buf.delete(&mut start, &mut end);
+}
+
+/// Show where the debugger stopped, opening that file if needed.
+fn show_pause(ui: &UiRc, p: &expressa::runtime::DebugPaused) {
+    for d in all_docs(ui) {
+        d.clear_debug_line();
     }
-    extra
-}
-
-/// Cursor of the output pane after `cls()` / `casa()`. `row: None` means
-/// plain appending (no screen codes seen in this run).
-#[derive(Default)]
-struct Screen {
-    row: Option<i32>,
-    /// Text of the current line not yet ended by `\n` (may hold SGR codes).
-    partial: String,
-}
-
-/// Terminal-like writing: cursor home goes back to the first line and each
-/// new line overwrites the old one, so an animation keeps showing the
-/// previous frame while the program computes the next (no blank flicker).
-/// Erase-display clears the pane. Granularity is whole lines.
-fn write_screen(buf: &gtk::TextBuffer, screen: &mut Screen, text: &str) {
-    let mut row = screen.row.unwrap_or_else(|| (buf.line_count() - 1).max(0));
-    let mut rest = text;
-    while let Some(c) = rest.chars().next() {
-        if rest.starts_with(ANSI_ERASE_DISPLAY) {
-            buf.set_text("");
-            row = 0;
-            screen.partial.clear();
-            rest = &rest[ANSI_ERASE_DISPLAY.len()..];
-        } else if rest.starts_with(ANSI_CURSOR_HOME) {
-            row = 0;
-            screen.partial.clear();
-            rest = &rest[ANSI_CURSOR_HOME.len()..];
-        } else if c == '\n' {
-            replace_line(buf, row, &screen.partial);
-            screen.partial.clear();
-            row += 1;
-            if row >= buf.line_count() {
-                let mut end = buf.end_iter();
-                buf.insert(&mut end, "\n");
-            }
-            row -= trim_output(buf);
-            rest = &rest[1..];
-        } else {
-            screen.partial.push(c);
-            rest = &rest[c.len_utf8()..];
+    match doc_by_name(ui, &p.file).or_else(|| open_path(ui, &p.file)) {
+        Some(doc) => {
+            switch_to(ui, &doc);
+            doc.show_debug_line(p.line, p.error.is_some());
         }
-    }
-    if !screen.partial.is_empty() {
-        replace_line(buf, row, &screen.partial);
-    }
-    screen.row = Some(row);
-}
-
-fn replace_line(buf: &gtk::TextBuffer, row: i32, content: &str) {
-    while row >= buf.line_count() {
-        let mut end = buf.end_iter();
-        buf.insert(&mut end, "\n");
-    }
-    let Some(mut start) = buf.iter_at_line(row) else {
-        return;
-    };
-    let mut end = start.clone();
-    if !end.ends_line() {
-        end.forward_to_line_end();
-    }
-    let offset = start.offset();
-    buf.delete(&mut start, &mut end);
-    insert_ansi_at(buf, offset, content, None);
-}
-
-const ANSI_ERASE_DISPLAY: &str = "\x1b[2J";
-const ANSI_CURSOR_HOME: &str = "\x1b[H";
-
-const ANSI_FG: &[(&str, &str)] = &[
-    ("ansi-fg-preto", "#212121"),
-    ("ansi-fg-vermelho", "#c62828"),
-    ("ansi-fg-verde", "#2e7d32"),
-    ("ansi-fg-amarelo", "#f9a825"),
-    ("ansi-fg-azul", "#1565c0"),
-    ("ansi-fg-magenta", "#6a1b9a"),
-    ("ansi-fg-ciano", "#00838f"),
-    ("ansi-fg-branco", "#424242"),
-];
-const ANSI_BG: &[(&str, &str)] = &[
-    ("ansi-bg-preto", "#212121"),
-    ("ansi-bg-vermelho", "#ef9a9a"),
-    ("ansi-bg-verde", "#a5d6a7"),
-    ("ansi-bg-amarelo", "#fff59d"),
-    ("ansi-bg-azul", "#90caf9"),
-    ("ansi-bg-magenta", "#ce93d8"),
-    ("ansi-bg-ciano", "#80deea"),
-    ("ansi-bg-branco", "#eeeeee"),
-];
-
-fn add_ansi_tags(table: gtk::TextTagTable) {
-    for (name, color) in ANSI_FG {
-        let tag = TextTag::new(Some(name));
-        tag.set_foreground(Some(color));
-        table.add(&tag);
-    }
-    for (name, color) in ANSI_BG {
-        let tag = TextTag::new(Some(name));
-        tag.set_background(Some(color));
-        table.add(&tag);
-    }
-    let bold = TextTag::new(Some("ansi-negrito"));
-    bold.set_weight(700);
-    table.add(&bold);
-}
-
-fn has_screen_code(text: &str) -> bool {
-    text.contains(ANSI_ERASE_DISPLAY) || text.contains(ANSI_CURSOR_HOME)
-}
-
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-struct AnsiStyle {
-    fg: Option<u8>,
-    bg: Option<u8>,
-    bold: bool,
-}
-
-fn ansi_fg_tag(code: u8) -> Option<&'static str> {
-    Some(match code {
-        30 => "ansi-fg-preto",
-        31 => "ansi-fg-vermelho",
-        32 => "ansi-fg-verde",
-        33 => "ansi-fg-amarelo",
-        34 => "ansi-fg-azul",
-        35 => "ansi-fg-magenta",
-        36 => "ansi-fg-ciano",
-        37 => "ansi-fg-branco",
-        _ => return None,
-    })
-}
-
-fn ansi_bg_tag(code: u8) -> Option<&'static str> {
-    Some(match code {
-        40 => "ansi-bg-preto",
-        41 => "ansi-bg-vermelho",
-        42 => "ansi-bg-verde",
-        43 => "ansi-bg-amarelo",
-        44 => "ansi-bg-azul",
-        45 => "ansi-bg-magenta",
-        46 => "ansi-bg-ciano",
-        47 => "ansi-bg-branco",
-        _ => return None,
-    })
-}
-
-fn apply_sgr(style: &mut AnsiStyle, params: &str) {
-    if params.is_empty() {
-        *style = AnsiStyle::default();
-        return;
-    }
-    for p in params.split(';') {
-        match p.parse::<u8>().unwrap_or(0) {
-            0 => *style = AnsiStyle::default(),
-            1 => style.bold = true,
-            22 => style.bold = false,
-            39 => style.fg = None,
-            49 => style.bg = None,
-            n @ 30..=37 => style.fg = Some(n),
-            n @ 40..=47 => style.bg = Some(n),
-            _ => {}
-        }
+        None => set_status(ui, &format!("pausado em {}:{} (arquivo fora do projeto)", p.file, p.line)),
     }
 }
 
-/// Visible spans after stripping CSI. SGR updates style; other CSI is skipped.
-fn ansi_spans(text: &str) -> Vec<(String, AnsiStyle)> {
-    let mut out = Vec::new();
-    let mut style = AnsiStyle::default();
-    let mut chunk = String::new();
-    let mut pos = 0;
-    let flush = |chunk: &mut String, style: AnsiStyle, out: &mut Vec<(String, AnsiStyle)>| {
-        if !chunk.is_empty() {
-            out.push((std::mem::take(chunk), style));
-        }
-    };
-    while pos < text.len() {
-        let rest = &text[pos..];
-        if rest.as_bytes().first() == Some(&0x1b) {
-            if let Some((len, final_byte, params)) = parse_csi(rest) {
-                flush(&mut chunk, style, &mut out);
-                if final_byte == b'm' {
-                    apply_sgr(&mut style, params);
-                }
-                pos += len;
-                continue;
-            }
-        }
-        let ch = rest.chars().next().unwrap();
-        chunk.push(ch);
-        pos += ch.len_utf8();
-    }
-    flush(&mut chunk, style, &mut out);
-    out
-}
-
-/// `\x1b[` + params + final byte (0x40..=0x7E). `params` is the inner string.
-fn parse_csi(text: &str) -> Option<(usize, u8, &str)> {
-    let bytes = text.as_bytes();
-    if bytes.len() < 2 || bytes[0] != 0x1b || bytes[1] != b'[' {
-        return None;
-    }
-    let mut i = 2;
-    while i < bytes.len() && (0x30..=0x3f).contains(&bytes[i]) {
-        i += 1;
-    }
-    while i < bytes.len() && (0x20..=0x2f).contains(&bytes[i]) {
-        i += 1;
-    }
-    if i >= bytes.len() || !(0x40..=0x7e).contains(&bytes[i]) {
-        return None;
-    }
-    let params = std::str::from_utf8(&bytes[2..i]).ok()?;
-    Some((i + 1, bytes[i], params))
-}
-
-fn insert_ansi_text(buf: &gtk::TextBuffer, text: &str, extra: Option<&TextTag>) {
-    insert_ansi_at(buf, buf.end_iter().offset(), text, extra);
-}
-
-/// Insert `text` at char `offset`, turning SGR codes into tags.
-fn insert_ansi_at(buf: &gtk::TextBuffer, mut offset: i32, text: &str, extra: Option<&TextTag>) {
-    let table = buf.tag_table();
-    for (chunk, style) in ansi_spans(text) {
-        let mut at = buf.iter_at_offset(offset);
-        buf.insert(&mut at, &chunk);
-        let a = buf.iter_at_offset(offset);
-        offset += chunk.chars().count() as i32;
-        let b = buf.iter_at_offset(offset);
-        if let Some(tag) = extra {
-            buf.apply_tag(tag, &a, &b);
-        }
-        if let Some(name) = style.fg.and_then(ansi_fg_tag) {
-            if let Some(tag) = table.lookup(name) {
-                buf.apply_tag(&tag, &a, &b);
-            }
-        }
-        if let Some(name) = style.bg.and_then(ansi_bg_tag) {
-            if let Some(tag) = table.lookup(name) {
-                buf.apply_tag(&tag, &a, &b);
-            }
-        }
-        if style.bold {
-            if let Some(tag) = table.lookup("ansi-negrito") {
-                buf.apply_tag(&tag, &a, &b);
-            }
-        }
-    }
-}
-
-fn append_error_link(ui: &Rc<RefCell<Ui>>, text: &str) {
-    let u = ui.borrow();
-    let buf = u.output.buffer();
-    let mut start = buf.end_iter();
-    let start_off = start.offset();
-    buf.insert(&mut start, text);
-    let a = buf.iter_at_offset(start_off);
-    let b = buf.end_iter();
-    buf.apply_tag(&u.error_link_tag, &a, &b);
-}
-
-fn jump_from_output_click(ui: &Rc<RefCell<Ui>>, x: f64, y: f64) {
-    let u = ui.borrow();
-    let (bx, by) = u
-        .output
-        .window_to_buffer_coords(gtk::TextWindowType::Text, x as i32, y as i32);
-    let Some(iter) = u.output.iter_at_location(bx, by) else {
-        return;
-    };
-    let line_idx = iter.line();
-    let a = u.output.buffer().iter_at_line(line_idx).unwrap_or(iter);
-    let mut b = a.clone();
-    if !b.forward_to_line_end() {
-        b = u.output.buffer().end_iter();
-    }
-    let line = u.output.buffer().text(&a, &b, false);
-    drop(u);
-    if let Some(n) = parse_error_line(&line) {
-        ir_para_linha(ui, n);
-    }
-}
-
-fn parse_error_line(line: &str) -> Option<u32> {
-    // "erro: … em arquivo.lep:12" or "… em /path/x.lep:8"
-    let em = line.rfind(" em ")?;
-    let loc = line[em + 4..].trim();
-    let colon = loc.rfind(':')?;
-    loc[colon + 1..].trim().parse().ok()
-}
+// ── Running ────────────────────────────────────────────────────────────────
 
 /// Events handled per 16 ms tick, so a program that prints without end
 /// cannot freeze the window. The rest wait in the (bounded) channel.
 const EVENTS_PER_TICK: usize = 200;
 
-fn rodar(ui: &Rc<RefCell<Ui>>, debug: bool) {
-    if ui.borrow().debug_cmd.is_some() {
+fn rodar(ui: &UiRc, debug: bool) {
+    if ui.borrow().run.is_some() {
         set_status(ui, "já tem um programa rodando — aperte Parar primeiro");
         return;
     }
-    let (student, name, src, bps, args) = {
+    let Some(doc) = current_doc(ui) else { return };
+    let name = doc.name();
+    let docs = all_docs(ui);
+    let (project, args) = {
         let u = ui.borrow();
-        (
-            student(&u),
-            filename(&u),
-            source_text(&u),
-            u.breakpoints.iter().copied().collect::<Vec<_>>(),
-            parse_run_args(&u.args_entry.text()),
-        )
+        (u.project.clone(), parse_run_args(&u.args_entry.text()))
     };
-    // Fresh copy of the project; the editor text replaces the file on disk
-    // so `importe` of sibling files and the program itself match the screen.
+    // Fresh copy of the project with the text of every open tab, so the
+    // program and its `importe`s run what is on screen (saved or not).
     let ws = {
         let u = ui.borrow();
-        Workspace::download(&u.rpc, &student).and_then(|ws| ws.write(&name, &src).map(|()| ws))
+        Workspace::download(&u.rpc, &project).and_then(|mut ws| {
+            for d in &docs {
+                ws.write_editor_text(&d.name(), &d.text())?;
+            }
+            Ok(ws)
+        })
     };
     let ws = match ws {
         Ok(ws) => ws,
@@ -1627,67 +1409,73 @@ fn rodar(ui: &Rc<RefCell<Ui>>, debug: bool) {
             return;
         }
     };
-    set_output(ui, "");
+    let bps: Vec<(String, u32)> = docs
+        .iter()
+        .flat_map(|d| {
+            let n = d.name();
+            d.breakpoints.borrow().iter().map(move |&l| (n.clone(), l)).collect::<Vec<_>>()
+        })
+        .collect();
+    let console = Rc::clone(&ui.borrow().console);
+    console.clear();
     clear_debug_views(ui);
-    set_status(
-        ui,
-        &format!("{} {name}…", if debug { "depurando" } else { "rodando" }),
-    );
+    if let Some(d) = doc.diag.borrow().as_ref() {
+        set_status(ui, &format!("atenção: erro de sintaxe na linha {} — rodando mesmo assim", d.line));
+    } else {
+        set_status(ui, &format!("{} {name}…", if debug { "depurando" } else { "rodando" }));
+    }
 
-    let run = exec::spawn(&ws, &name, src, debug, bps, args);
-    ui.borrow_mut().debug_cmd = Some(run.debug_cmd.clone());
+    let run = exec::spawn(&ws, &name, doc.text(), debug, bps, args);
+    ui.borrow_mut().run = Some(Run {
+        debug_cmd: run.debug_cmd.clone(),
+        ws_dir: ws.dir.clone(),
+    });
     set_debug_buttons(ui, false, true);
 
     let ui_ev = Rc::clone(ui);
     glib::timeout_add_local(std::time::Duration::from_millis(16), move || {
         for _ in 0..EVENTS_PER_TICK {
             match run.events.try_recv() {
-                Ok(ExecEvent::Stdout(s)) => append_output(&ui_ev, &s),
-                Ok(ExecEvent::Stderr(s)) => append_stderr(&ui_ev, &s),
+                Ok(ExecEvent::Stdout(s)) => console.stdout(&s),
+                Ok(ExecEvent::Stderr(s)) => console.stderr(&s),
                 Ok(ExecEvent::Paused(p)) => {
                     fill_debug_views(&ui_ev, &p);
                     set_debug_buttons(&ui_ev, true, true);
-                    set_status(
-                        &ui_ev,
-                        &format!("pausado {}:{}  {}", p.file, p.line, p.source_line.trim()),
-                    );
+                    show_pause(&ui_ev, &p);
+                    match &p.error {
+                        Some(e) => set_status(
+                            &ui_ev,
+                            &format!("erro em {}:{}: {e} — veja as variáveis; Continuar encerra", p.file, p.line),
+                        ),
+                        None => set_status(&ui_ev, &format!("pausado {}:{}  {}", p.file, p.line, p.source_line.trim())),
+                    }
                 }
                 Ok(ExecEvent::Leia(prompt)) => {
-                    let pergunta = if prompt.trim().is_empty() {
-                        "Digite um texto:".to_string()
-                    } else {
-                        prompt
-                    };
-                    let window = ui_ev.borrow().window.clone();
-                    let line = perguntar_linha(&window, &pergunta).unwrap_or_default();
-                    let _ = run.lines.send(line);
+                    console.begin_input(&prompt, run.lines.clone());
+                    set_status(&ui_ev, "o programa espera uma resposta: digite na saída e aperte Enter");
                 }
                 Ok(ExecEvent::Finished(f)) => {
-                    ui_ev.borrow_mut().debug_cmd = None;
+                    console.cancel_input();
+                    ui_ev.borrow_mut().run = None;
                     set_debug_buttons(&ui_ev, false, false);
                     clear_debug_views(&ui_ev);
-                    // Files the program wrote (salve_arquivo, …) and the
-                    // source that ran go back to the server.
+                    // Files the program wrote (salve_arquivo, …) go back to
+                    // the server.
                     let sent = {
                         let u = ui_ev.borrow();
-                        ws.upload_changes(&u.rpc, &student)
+                        ws.upload_changes(&u.rpc, &project)
                     };
                     if matches!(sent, Ok(n) if n > 0) {
-                        conectar(&ui_ev);
+                        refresh_tree(&ui_ev);
                     }
                     if f.ok {
                         set_status(&ui_ev, &format!("ok — {name}"));
                     } else {
-                        append_error_link(
-                            &ui_ev,
-                            &format!(
-                                "erro: {} em {}:{}\n",
-                                f.error_message, f.error_file, f.error_line
-                            ),
-                        );
-                        set_status(&ui_ev, "erro ao rodar");
+                        console.error_link(&format!("erro: {} em {}:{}\n", f.error_message, f.error_file, f.error_line));
+                        set_status(&ui_ev, "erro ao rodar (clique no erro para ir à linha)");
                         if f.error_line > 0 {
-                            ir_para_linha(&ui_ev, f.error_line);
+                            let file = if f.error_file.is_empty() { name.clone() } else { f.error_file.clone() };
+                            goto_file_line(&ui_ev, &file, f.error_line);
                         }
                     }
                     if let Err(e) = sent {
@@ -1697,7 +1485,8 @@ fn rodar(ui: &Rc<RefCell<Ui>>, debug: bool) {
                 }
                 Err(std::sync::mpsc::TryRecvError::Empty) => break,
                 Err(std::sync::mpsc::TryRecvError::Disconnected) => {
-                    ui_ev.borrow_mut().debug_cmd = None;
+                    console.cancel_input();
+                    ui_ev.borrow_mut().run = None;
                     set_debug_buttons(&ui_ev, false, false);
                     return glib::ControlFlow::Break;
                 }
@@ -1707,46 +1496,65 @@ fn rodar(ui: &Rc<RefCell<Ui>>, debug: bool) {
     });
 }
 
-fn ir_para_linha(ui: &Rc<RefCell<Ui>>, line: u32) {
-    let u = ui.borrow();
-    let line = line.saturating_sub(1) as i32;
-    let iter = u.buffer.iter_at_line(line).unwrap_or_else(|| {
-        let (s, _) = u.buffer.bounds();
-        s
-    });
-    u.buffer.place_cursor(&iter);
-    u.editor
-        .scroll_to_iter(&mut iter.clone(), 0.2, false, 0.0, 0.0);
+// ── Project and file tree ──────────────────────────────────────────────────
+
+/// Load the project named in the entry. Another project replaces the tabs
+/// (asking about unsaved changes first).
+fn conectar(ui: &UiRc) {
+    let wanted = {
+        let s = ui.borrow().student.text().trim().to_string();
+        if s.is_empty() { "local".to_string() } else { s }
+    };
+    let same = ui.borrow().project == wanted;
+    if same || ui.borrow().docs.is_empty() {
+        ui.borrow_mut().project = wanted;
+        refresh_tree(ui);
+        return;
+    }
+    let ui_c = Rc::clone(ui);
+    let switch = move || {
+        for d in all_docs(&ui_c) {
+            // Already saved or discarded: close without asking again.
+            d.mark_saved();
+            remove_tab(&ui_c, &d);
+        }
+        ui_c.borrow_mut().project = wanted.clone();
+        ui_c.borrow().file_cache.borrow_mut().clear();
+        refresh_tree(&ui_c);
+        refresh_title(&ui_c);
+    };
+    let dirty = dirty_docs(ui);
+    if dirty.is_empty() {
+        switch();
+    } else {
+        confirm_unsaved(ui, dirty, switch);
+    }
 }
 
-fn conectar(ui: &Rc<RefCell<Ui>>) {
+fn refresh_tree(ui: &UiRc) {
     let (entries, projeto, err) = {
         let u = ui.borrow();
-        let projeto = student(&u);
+        let projeto = u.project.clone();
         match u.rpc.list_tree(&projeto) {
             Ok(p) => (p, projeto, None),
             Err(e) => (Vec::new(), projeto, Some(e)),
         }
     };
+    {
+        let mut u = ui.borrow_mut();
+        u.project_files = entries.iter().filter(|e| !e.is_dir).map(|e| e.path.clone()).collect();
+        u.file_cache.borrow_mut().clear();
+    }
     preencher_arvore(ui, &projeto, &entries);
     ui.borrow().tree.expand_all();
     match err {
         Some(e) => set_status(ui, &format!("conectar: {e}")),
-        None => set_status(
-            ui,
-            &format!("projeto `{projeto}` — {} itens", entries.len()),
-        ),
+        None => set_status(ui, &format!("projeto `{projeto}` — {} itens", entries.len())),
     }
 }
 
 #[allow(deprecated)]
-fn preencher_arvore(
-    ui: &Rc<RefCell<Ui>>,
-    projeto: &str,
-    entries: &[expressa_aula_proto::TreeEntry],
-) {
-    use std::collections::HashMap;
-
+fn preencher_arvore(ui: &UiRc, projeto: &str, entries: &[expressa_aula_proto::TreeEntry]) {
     let store = ui.borrow().store.clone();
     store.clear();
     let root = store.append(None);
@@ -1764,17 +1572,8 @@ fn preencher_arvore(
         let Some(parent) = dirs.get(&parent_key) else {
             continue;
         };
-        let name = entry
-            .path
-            .rsplit('/')
-            .next()
-            .unwrap_or(&entry.path)
-            .to_string();
-        let label = if entry.is_dir {
-            format!("{name}/")
-        } else {
-            name
-        };
+        let name = entry.path.rsplit('/').next().unwrap_or(&entry.path).to_string();
+        let label = if entry.is_dir { format!("{name}/") } else { name };
         let iter = store.append(Some(parent));
         store.set(&iter, &[(0, &label), (1, &entry.path), (2, &entry.is_dir)]);
         if entry.is_dir {
@@ -1783,7 +1582,8 @@ fn preencher_arvore(
     }
 }
 
-fn abrir_no(ui: &Rc<RefCell<Ui>>, path: &gtk::TreePath) {
+#[allow(deprecated)]
+fn abrir_no(ui: &UiRc, path: &gtk::TreePath) {
     let (rel, is_dir) = {
         let u = ui.borrow();
         let model = u.store.upcast_ref::<gtk::TreeModel>();
@@ -1803,122 +1603,7 @@ fn abrir_no(ui: &Rc<RefCell<Ui>>, path: &gtk::TreePath) {
         }
         return;
     }
-    let result = {
-        let u = ui.borrow();
-        u.rpc.read_file(&student(&u), &rel)
-    };
-    match result {
-        Ok(src) => {
-            ui.borrow().filename.set_text(&rel);
-            ui.borrow_mut().breakpoints.clear();
-            set_source(ui, &src);
-            paint_breakpoints(ui);
-            set_status(ui, &format!("aberto {rel}"));
-        }
-        Err(e) => set_status(ui, &format!("abrir: {e}")),
-    }
-}
-
-fn show_search(ui: &Rc<RefCell<Ui>>) {
-    let u = ui.borrow();
-    u.search_revealer.set_reveal_child(true);
-    u.search_entry.grab_focus();
-}
-
-fn hide_search(ui: &Rc<RefCell<Ui>>) {
-    ui.borrow().search_revealer.set_reveal_child(false);
-    ui.borrow().editor.grab_focus();
-}
-
-fn search_apply(ui: &Rc<RefCell<Ui>>) {
-    let u = ui.borrow();
-    let q = u.search_entry.text();
-    if q.is_empty() {
-        u.search_settings.set_search_text(None::<&str>);
-    } else {
-        u.search_settings.set_search_text(Some(q.as_str()));
-    }
-}
-
-fn search_next(ui: &Rc<RefCell<Ui>>) {
-    search_apply(ui);
-    let u = ui.borrow();
-    let insert = u.buffer.iter_at_mark(&u.buffer.get_insert());
-    let from = if let Some((_, end)) = u.buffer.selection_bounds() {
-        end
-    } else {
-        insert
-    };
-    if let Some((a, b, _)) = u.search_ctx.forward(&from) {
-        u.buffer.select_range(&a, &b);
-        u.editor
-            .scroll_to_iter(&mut a.clone(), 0.2, false, 0.0, 0.0);
-    } else {
-        drop(u);
-        set_status(ui, "não encontrado");
-    }
-}
-
-fn search_prev(ui: &Rc<RefCell<Ui>>) {
-    search_apply(ui);
-    let u = ui.borrow();
-    let insert = u.buffer.iter_at_mark(&u.buffer.get_insert());
-    if let Some((a, b, _)) = u.search_ctx.backward(&insert) {
-        u.buffer.select_range(&a, &b);
-        u.editor
-            .scroll_to_iter(&mut a.clone(), 0.2, false, 0.0, 0.0);
-    } else {
-        drop(u);
-        set_status(ui, "não encontrado");
-    }
-}
-
-fn search_replace_one(ui: &Rc<RefCell<Ui>>) {
-    search_apply(ui);
-    let u = ui.borrow();
-    let repl = u.replace_entry.text().to_string();
-    if let Some((mut a, mut b)) = u.buffer.selection_bounds() {
-        if u.search_ctx.replace(&mut a, &mut b, &repl).is_ok() {
-            drop(u);
-            search_next(ui);
-            return;
-        }
-    }
-    drop(u);
-    search_next(ui);
-}
-
-fn search_replace_all(ui: &Rc<RefCell<Ui>>) {
-    search_apply(ui);
-    let u = ui.borrow();
-    let repl = u.replace_entry.text().to_string();
-    match u.search_ctx.replace_all(&repl) {
-        Ok(()) => set_status(ui, "substituições feitas"),
-        Err(e) => set_status(ui, &format!("substituir: {e}")),
-    }
-}
-
-fn highlight_matching(ui: &Rc<RefCell<Ui>>) {
-    let Ok(u) = ui.try_borrow() else {
-        return;
-    };
-    let (s, e) = u.buffer.bounds();
-    u.buffer.remove_tag(&u.match_tag, &s, &e);
-    let Some((a, b)) = indent::matching_block(&u.buffer) else {
-        return;
-    };
-    let tag = u.match_tag.clone();
-    let buf = u.buffer.clone();
-    drop(u);
-    for line in [a, b] {
-        if let Some(start) = buf.iter_at_line(line) {
-            let mut end = start.clone();
-            if !end.forward_to_line_end() {
-                end = buf.end_iter();
-            }
-            buf.apply_tag(&tag, &start, &end);
-        }
-    }
+    open_path(ui, &rel);
 }
 
 fn join_path(dir: &str, name: &str) -> String {
@@ -1939,7 +1624,8 @@ fn parent_dir(path: &str, is_dir: bool) -> String {
     }
 }
 
-fn selected_tree_entry(ui: &Rc<RefCell<Ui>>) -> (String, bool) {
+#[allow(deprecated)]
+fn selected_tree_entry(ui: &UiRc) -> (String, bool) {
     let u = ui.borrow();
     let sel = u.tree.selection();
     if let Some((_, iter)) = sel.selected() {
@@ -1951,7 +1637,8 @@ fn selected_tree_entry(ui: &Rc<RefCell<Ui>>) -> (String, bool) {
     (String::new(), true)
 }
 
-fn tree_popup(ui: &Rc<RefCell<Ui>>, x: f64, y: f64) {
+#[allow(deprecated)]
+fn tree_popup(ui: &UiRc, x: f64, y: f64) {
     let tree = ui.borrow().tree.clone();
     if let Some((Some(path), _, _, _)) = tree.path_at_pos(x as i32, y as i32) {
         tree.selection().select_path(&path);
@@ -1962,6 +1649,13 @@ fn tree_popup(ui: &Rc<RefCell<Ui>>, x: f64, y: f64) {
     pop.set_parent(&tree);
     pop.set_has_arrow(false);
     pop.set_pointing_to(Some(&gtk::gdk::Rectangle::new(x as i32, y as i32, 1, 1)));
+    {
+        let pop_c = pop.clone();
+        pop.connect_closed(move |_| {
+            let p = pop_c.clone();
+            glib::idle_add_local_once(move || p.unparent());
+        });
+    }
     let box_ = GtkBox::new(Orientation::Vertical, 0);
     let add_item = |box_: &GtkBox, label: &str, action: Box<dyn FnOnce() + 'static>| {
         let btn = Button::with_label(label);
@@ -1976,33 +1670,30 @@ fn tree_popup(ui: &Rc<RefCell<Ui>>, x: f64, y: f64) {
         });
         box_.append(&btn);
     };
-    let ui_a = Rc::clone(ui);
     let dir = parent_dir(&rel, is_dir);
     add_item(
         &box_,
         "Novo arquivo",
         Box::new({
-            let ui = Rc::clone(&ui_a);
+            let ui = Rc::clone(ui);
             let dir = dir.clone();
             let window = window.clone();
             move || {
                 if let Some(name) = perguntar_linha(&window, "Nome do arquivo:") {
-                    let name = if name.ends_with(".lep") {
-                        name
-                    } else if name.contains('.') {
-                        name
-                    } else {
-                        format!("{name}.lep")
-                    };
+                    let name = name.trim().to_string();
+                    if name.is_empty() {
+                        return;
+                    }
+                    let name = if name.contains('.') { name } else { format!("{name}.lep") };
                     let path = join_path(&dir, &name);
-                    let stu = student(&ui.borrow());
-                    match ui
-                        .borrow()
-                        .rpc
-                        .write_file(&stu, &path, "escreva(\"Olá\")\n")
-                    {
+                    let result = {
+                        let u = ui.borrow();
+                        u.rpc.write_file(&u.project, &path, "escreva(\"Olá\")\n")
+                    };
+                    match result {
                         Ok(()) => {
-                            conectar(&ui);
+                            refresh_tree(&ui);
+                            open_path(&ui, &path);
                             set_status(&ui, &format!("criado {path}"));
                         }
                         Err(e) => set_status(&ui, &format!("criar: {e}")),
@@ -2015,19 +1706,22 @@ fn tree_popup(ui: &Rc<RefCell<Ui>>, x: f64, y: f64) {
         &box_,
         "Nova pasta",
         Box::new({
-            let ui = Rc::clone(&ui_a);
+            let ui = Rc::clone(ui);
             let dir = dir.clone();
             let window = window.clone();
             move || {
                 if let Some(name) = perguntar_linha(&window, "Nome da pasta:") {
-                    if name.is_empty() {
+                    if name.trim().is_empty() {
                         return;
                     }
-                    let path = join_path(&dir, &name);
-                    let stu = student(&ui.borrow());
-                    match ui.borrow().rpc.mkdir(&stu, &path) {
+                    let path = join_path(&dir, name.trim());
+                    let result = {
+                        let u = ui.borrow();
+                        u.rpc.mkdir(&u.project, &path)
+                    };
+                    match result {
                         Ok(()) => {
-                            conectar(&ui);
+                            refresh_tree(&ui);
                             set_status(&ui, &format!("pasta {path}"));
                         }
                         Err(e) => set_status(&ui, &format!("pasta: {e}")),
@@ -2041,23 +1735,33 @@ fn tree_popup(ui: &Rc<RefCell<Ui>>, x: f64, y: f64) {
             &box_,
             "Renomear",
             Box::new({
-                let ui = Rc::clone(&ui_a);
+                let ui = Rc::clone(ui);
                 let rel = rel.clone();
                 let window = window.clone();
                 move || {
                     let base = rel.rsplit('/').next().unwrap_or(&rel).to_string();
                     if let Some(name) = perguntar_linha(&window, &format!("Renomear `{base}`:")) {
-                        if name.is_empty() {
+                        if name.trim().is_empty() {
                             return;
                         }
-                        let to = join_path(&parent_dir(&rel, false), &name);
-                        let stu = student(&ui.borrow());
-                        match ui.borrow().rpc.rename(&stu, &rel, &to) {
+                        let to = join_path(&parent_dir(&rel, false), name.trim());
+                        let result = {
+                            let u = ui.borrow();
+                            u.rpc.rename(&u.project, &rel, &to)
+                        };
+                        match result {
                             Ok(()) => {
-                                if ui.borrow().filename.text() == rel.as_str() {
-                                    ui.borrow().filename.set_text(&to);
+                                // Open tabs follow the rename (files and folders).
+                                for d in all_docs(&ui) {
+                                    let n = d.name();
+                                    if n == rel {
+                                        d.set_path(to.clone());
+                                    } else if let Some(rest) = n.strip_prefix(&format!("{rel}/")) {
+                                        d.set_path(format!("{to}/{rest}"));
+                                    }
                                 }
-                                conectar(&ui);
+                                refresh_tree(&ui);
+                                refresh_title(&ui);
                                 set_status(&ui, &format!("{rel} → {to}"));
                             }
                             Err(e) => set_status(&ui, &format!("renomear: {e}")),
@@ -2070,7 +1774,7 @@ fn tree_popup(ui: &Rc<RefCell<Ui>>, x: f64, y: f64) {
             &box_,
             "Apagar",
             Box::new({
-                let ui = Rc::clone(&ui_a);
+                let ui = Rc::clone(ui);
                 let rel = rel.clone();
                 let window = window.clone();
                 move || {
@@ -2078,10 +1782,20 @@ fn tree_popup(ui: &Rc<RefCell<Ui>>, x: f64, y: f64) {
                         let ui = Rc::clone(&ui);
                         let rel = rel.clone();
                         move || {
-                            let stu = student(&ui.borrow());
-                            match ui.borrow().rpc.delete_file(&stu, &rel) {
+                            let result = {
+                                let u = ui.borrow();
+                                u.rpc.delete_file(&u.project, &rel)
+                            };
+                            match result {
                                 Ok(()) => {
-                                    conectar(&ui);
+                                    for d in all_docs(&ui) {
+                                        let n = d.name();
+                                        if n == rel || n.starts_with(&format!("{rel}/")) {
+                                            d.mark_saved();
+                                            remove_tab(&ui, &d);
+                                        }
+                                    }
+                                    refresh_tree(&ui);
                                     set_status(&ui, &format!("apagado {rel}"));
                                 }
                                 Err(e) => set_status(&ui, &format!("apagar: {e}")),
@@ -2089,13 +1803,12 @@ fn tree_popup(ui: &Rc<RefCell<Ui>>, x: f64, y: f64) {
                         }
                     };
                     let then = RefCell::new(Some(then));
-                    #[allow(deprecated)]
                     let dlg = gtk::MessageDialog::builder()
                         .transient_for(&window)
                         .modal(true)
                         .message_type(gtk::MessageType::Warning)
                         .buttons(gtk::ButtonsType::None)
-                        .text(&format!("Apagar `{rel}`?"))
+                        .text(format!("Apagar `{rel}`?"))
                         .build();
                     dlg.add_button("Cancelar", gtk::ResponseType::Cancel);
                     dlg.add_button("Apagar", gtk::ResponseType::Accept);
@@ -2116,152 +1829,109 @@ fn tree_popup(ui: &Rc<RefCell<Ui>>, x: f64, y: f64) {
     pop.popup();
 }
 
-fn open_import_at(ui: &Rc<RefCell<Ui>>, x: f64, y: f64) {
-    let line_txt = {
-        let u = ui.borrow();
-        let (_, by) =
-            u.editor
-                .window_to_buffer_coords(gtk::TextWindowType::Text, x as i32, y as i32);
-        let Some(iter) = u.editor.iter_at_location(0, by) else {
-            return;
-        };
-        let line = iter.line();
-        let Some(a) = u.buffer.iter_at_line(line) else {
-            return;
-        };
-        let mut b = a.clone();
-        if !b.forward_to_line_end() {
-            b = u.buffer.end_iter();
-        }
-        u.buffer.text(&a, &b, false).to_string()
-    };
-    let Some(mod_name) = parse_importe(&line_txt) else {
-        return;
-    };
-    let current = filename(&ui.borrow());
-    let mut candidates = Vec::new();
-    let with_lep = if mod_name.ends_with(".lep") {
-        mod_name.clone()
-    } else {
-        format!("{mod_name}.lep")
-    };
-    if let Some(slash) = current.rfind('/') {
-        candidates.push(format!("{}/{}", &current[..slash], with_lep));
+// ── Search (current tab) ───────────────────────────────────────────────────
+
+fn show_search(ui: &UiRc) {
+    let u = ui.borrow();
+    u.search_revealer.set_reveal_child(true);
+    u.search_entry.grab_focus();
+}
+
+fn hide_search(ui: &UiRc) {
+    ui.borrow().search_revealer.set_reveal_child(false);
+    if let Some(d) = current_doc(ui) {
+        d.view.grab_focus();
     }
-    candidates.push(format!("lib/{with_lep}"));
-    candidates.push(with_lep);
-    let stu = student(&ui.borrow());
-    for rel in candidates {
-        if let Ok(src) = ui.borrow().rpc.read_file(&stu, &rel) {
-            confirm_discard(ui, {
-                let ui = Rc::clone(ui);
-                let rel = rel.clone();
-                let src = src.clone();
-                move || {
-                    ui.borrow().filename.set_text(&rel);
-                    ui.borrow_mut().breakpoints.clear();
-                    set_source(&ui, &src);
-                    paint_breakpoints(&ui);
-                    set_status(&ui, &format!("aberto {rel}"));
+}
+
+fn search_apply(ui: &UiRc) {
+    let u = ui.borrow();
+    let q = u.search_entry.text();
+    if q.is_empty() {
+        u.search_settings.set_search_text(None::<&str>);
+    } else {
+        u.search_settings.set_search_text(Some(q.as_str()));
+    }
+}
+
+fn search_next(ui: &UiRc) {
+    search_apply(ui);
+    let Some(d) = current_doc(ui) else { return };
+    let from = match d.buffer.selection_bounds() {
+        Some((_, end)) => end,
+        None => d.cursor(),
+    };
+    if let Some((a, b, _)) = d.search.forward(&from) {
+        d.buffer.select_range(&a, &b);
+        d.view.scroll_to_iter(&mut a.clone(), 0.2, false, 0.0, 0.0);
+    } else {
+        set_status(ui, "não encontrado");
+    }
+}
+
+fn search_prev(ui: &UiRc) {
+    search_apply(ui);
+    let Some(d) = current_doc(ui) else { return };
+    if let Some((a, b, _)) = d.search.backward(&d.cursor()) {
+        d.buffer.select_range(&a, &b);
+        d.view.scroll_to_iter(&mut a.clone(), 0.2, false, 0.0, 0.0);
+    } else {
+        set_status(ui, "não encontrado");
+    }
+}
+
+fn search_replace_one(ui: &UiRc) {
+    search_apply(ui);
+    let Some(d) = current_doc(ui) else { return };
+    let repl = ui.borrow().replace_entry.text().to_string();
+    if let Some((mut a, mut b)) = d.buffer.selection_bounds() {
+        let _ = d.search.replace(&mut a, &mut b, &repl);
+    }
+    search_next(ui);
+}
+
+fn search_replace_all(ui: &UiRc) {
+    search_apply(ui);
+    let Some(d) = current_doc(ui) else { return };
+    let repl = ui.borrow().replace_entry.text().to_string();
+    match d.search.replace_all(&repl) {
+        Ok(()) => set_status(ui, "substituições feitas"),
+        Err(e) => set_status(ui, &format!("substituir: {e}")),
+    }
+}
+
+/// GTK may only be used from the thread that initialized it, but tests run
+/// on many threads: every GTK test runs its body on one shared thread.
+#[cfg(test)]
+mod gtk_test {
+    use std::panic::{AssertUnwindSafe, catch_unwind, resume_unwind};
+    use std::sync::mpsc::{Sender, channel};
+    use std::sync::{Mutex, OnceLock};
+
+    type Job = (Box<dyn FnOnce() + Send>, Sender<std::thread::Result<()>>);
+
+    /// Runs `f` on the GTK thread; skips (returns) when there is no display.
+    pub fn run(f: impl FnOnce() + Send + 'static) {
+        static JOBS: OnceLock<Option<Mutex<Sender<Job>>>> = OnceLock::new();
+        let jobs = JOBS.get_or_init(|| {
+            let (tx, rx) = channel::<Job>();
+            let (ready_tx, ready_rx) = channel();
+            std::thread::spawn(move || {
+                let ok = gtk::init().is_ok();
+                let _ = ready_tx.send(ok);
+                if ok {
+                    for (job, done) in rx {
+                        let _ = done.send(catch_unwind(AssertUnwindSafe(job)));
+                    }
                 }
             });
-            return;
+            ready_rx.recv().unwrap_or(false).then(|| Mutex::new(tx))
+        });
+        let Some(jobs) = jobs else { return };
+        let (done_tx, done_rx) = channel();
+        jobs.lock().unwrap().send((Box::new(f), done_tx)).unwrap();
+        if let Err(panic) = done_rx.recv().unwrap() {
+            resume_unwind(panic);
         }
-    }
-    set_status(ui, &format!("importe: não achei `{mod_name}`"));
-}
-
-fn parse_importe(line: &str) -> Option<String> {
-    let i = line.find("importe")?;
-    let rest = line[i + "importe".len()..].trim_start();
-    let rest = rest.strip_prefix('"')?;
-    let end = rest.find('"')?;
-    Some(rest[..end].to_string())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::{ansi_spans, leia_call_count, leia_prompts, write_screen, AnsiStyle, Screen};
-    use gtk::prelude::*;
-
-    #[test]
-    fn leia_count_ignores_leia_arquivo() {
-        assert_eq!(
-            leia_call_count("x = leia()\nlinhas = leia_arquivo(\"a\")"),
-            1
-        );
-        assert_eq!(leia_call_count("leia(\"n\")\nleia()"), 2);
-        assert_eq!(leia_call_count("escreva(1)"), 0);
-        assert_eq!(leia_call_count("aleia()"), 0);
-    }
-
-    #[test]
-    fn leia_prompt_from_string_literal() {
-        assert_eq!(
-            leia_prompts(r#"nome = leia("Seu nome:")"#),
-            vec![Some("Seu nome:".into())]
-        );
-        assert_eq!(leia_prompts("x = leia()"), vec![None]);
-        assert_eq!(
-            leia_prompts("leia(\"a\")\nleia()"),
-            vec![Some("a".into()), None]
-        );
-    }
-
-    fn screen_text(chunks: &[&str]) -> Option<String> {
-        if !gtk::is_initialized() && gtk::init().is_err() {
-            return None; // no display
-        }
-        let buf = gtk::TextBuffer::new(None);
-        let mut screen = Screen::default();
-        for c in chunks {
-            write_screen(&buf, &mut screen, c);
-        }
-        let (s, e) = buf.bounds();
-        Some(buf.text(&s, &e, false).to_string())
-    }
-
-    // One test: GTK objects must stay on the thread that initialized GTK.
-    #[test]
-    fn write_screen_like_a_terminal() {
-        let Some(t) = screen_text(&["velho\n", "\x1b[2J\x1b[Hnovo\n"]) else {
-            return;
-        };
-        assert_eq!(t, "novo\n", "cls clears then appends");
-        // casa(): old frame stays until each line is overwritten.
-        let t = screen_text(&["q1 a\nq1 b\n", "\x1b[H", "q2 a\n"]).unwrap();
-        assert_eq!(t, "q2 a\nq1 b\n");
-        let t = screen_text(&["q1 a\nq1 b\n", "\x1b[H", "q2 a\n", "q2 b\n"]).unwrap();
-        assert_eq!(t, "q2 a\nq2 b\n");
-        // Writes split across chunks, and SGR codes become tags, not text.
-        let t = screen_text(&["\x1b[H", "\x1b[32m*", "\x1b[0m!\n"]).unwrap();
-        assert_eq!(t, "*!\n");
-        // After cls, plain lines keep appending.
-        let t = screen_text(&["\x1b[2J\x1b[H", "a\n", "b\n"]).unwrap();
-        assert_eq!(t, "a\nb\n");
-    }
-
-    #[test]
-    fn ansi_spans_splits_color_and_reset() {
-        let spans = ansi_spans("\x1b[32mHP\x1b[0m!");
-        assert_eq!(spans.len(), 2);
-        assert_eq!(spans[0].0, "HP");
-        assert_eq!(spans[0].1, AnsiStyle { fg: Some(32), bg: None, bold: false });
-        assert_eq!(spans[1].0, "!");
-        assert_eq!(spans[1].1, AnsiStyle::default());
-    }
-
-    #[test]
-    fn ansi_spans_frente_e_fundo() {
-        let spans = ansi_spans("\x1b[37;41mGO\x1b[0m");
-        assert_eq!(spans[0].0, "GO");
-        assert_eq!(
-            spans[0].1,
-            AnsiStyle {
-                fg: Some(37),
-                bg: Some(41),
-                bold: false
-            }
-        );
     }
 }

@@ -35,6 +35,9 @@ pub struct Closure {
     pub body: Block,
     pub env: Rc<RefCell<Env>>,
     pub span: Span,
+    /// File that defined the function and its text (errors, debugger).
+    pub file: String,
+    pub source: Rc<str>,
 }
 
 impl Value {

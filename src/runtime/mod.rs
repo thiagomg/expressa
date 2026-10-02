@@ -20,6 +20,7 @@ pub use eval::{
     run_with_hook, run_with_leia_host,
 };
 pub use leia::{CLEAR_SCREEN, CURSOR_HOME, LEIA_MARKER, LeiaHost};
+pub use nativas::{BUILTIN_DOCS, BuiltinDoc, NATIVAS, Nativa, lookup_builtin_doc};
 pub use repl::run_repl;
 pub use value::{NumeroLocale, Value, default_numero_locale};
 
