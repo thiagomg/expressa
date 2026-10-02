@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<style-scheme id="expressa-aula-dark" _name="Expressa Aula (escuro)" version="1.0">
+  <author>Expressa</author>
+  <_description>Cores escuras para o editor da aula (projetor, sala escura)</_description>
+  <style name="text"                       background="#1e1e24" foreground="#e4e2ea"/>
+  <style name="current-line"               background="#2a2a32"/>
+  <style name="line-numbers"               background="#1e1e24" foreground="#7d7a86"/>
+  <style name="selection"                  background="#3d4f74" foreground="#ffffff"/>
+  <style name="cursor"                     foreground="#f2f0f6"/>
+  <style name="bracket-match"              foreground="#7ee08a" bold="true"/>
+  <style name="search-match"               background="#6b5a1e" foreground="#ffffff"/>
+  <style name="def:comment"                foreground="#c495c1" italic="true"/>
+  <style name="def:string"                 foreground="#f2b85c"/>
+  <style name="def:special-char"           foreground="#ff7b86"/>
+  <style name="def:keyword"                foreground="#7ee08a" bold="true"/>
+  <style name="def:boolean"                foreground="#d59ccc"/>
+  <style name="def:decimal"                foreground="#62c3ea"/>
+  <style name="def:number"                 foreground="#62c3ea"/>
+  <style name="def:function"               foreground="#e19be0" bold="true"/>
+</style-scheme>

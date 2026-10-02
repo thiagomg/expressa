@@ -54,7 +54,8 @@ pub(crate) struct Vm<'a> {
     pub(crate) err: &'a mut dyn Write,
     pub(crate) input: &'a mut dyn LineInput,
     pub(crate) file: String,
-    pub(crate) source: String,
+    /// Shared: debugger snapshots and closures keep it without copying.
+    pub(crate) source: Rc<str>,
     pub(crate) base_dir: PathBuf,
     hook: Box<dyn DebugHook>,
     pub(crate) stack: Vec<CallFrame>,
@@ -68,6 +69,11 @@ pub(crate) struct Vm<'a> {
     pub(crate) leia_host: Option<&'a mut dyn LeiaHost>,
     pub(crate) numero_locale: NumeroLocale,
     pub(crate) rng: Rng,
+    /// Depth of `se_falhar` attempts being evaluated: errors there are
+    /// handled, so the debugger must not stop on them.
+    protected: u32,
+    /// The debugger already saw the runtime error now unwinding.
+    error_reported: bool,
 }
 
 fn script_args_value(args: &[String]) -> Value {
@@ -336,7 +342,7 @@ impl<'a> Vm<'a> {
             err,
             input,
             file: file.to_string(),
-            source: source.to_string(),
+            source: Rc::from(source),
             base_dir: base_dir_of(file),
             hook,
             stack: Vec::new(),
@@ -349,6 +355,8 @@ impl<'a> Vm<'a> {
             leia_host,
             numero_locale: default_numero_locale(),
             rng: Rng::new(),
+            protected: 0,
+            error_reported: false,
         }
     }
 
@@ -415,7 +423,7 @@ impl<'a> Vm<'a> {
 
     pub(crate) fn set_source(&mut self, file: &str, source: &str) {
         self.file = file.to_string();
-        self.source = source.to_string();
+        self.source = Rc::from(source);
         self.base_dir = base_dir_of(file);
     }
 
@@ -476,11 +484,11 @@ impl<'a> Vm<'a> {
             self.loading.insert(key.clone());
 
             let saved_file = self.file.clone();
-            let saved_source = std::mem::take(&mut self.source);
+            let saved_source = std::mem::replace(&mut self.source, Rc::from(""));
             let saved_base = self.base_dir.clone();
 
             self.file = path.display().to_string();
-            self.source = source;
+            self.source = Rc::from(source);
             self.base_dir = base_dir_of(&self.file);
 
             let module_env = Env::child(&self.builtins, FrameKind::Module);
@@ -550,6 +558,31 @@ impl<'a> Vm<'a> {
 
     fn eval_stmt(&mut self, stmt: &Stmt, env: &Rc<RefCell<Env>>) -> Result<Value, EvalError> {
         self.pause(stmt.span(), env)?;
+        let result = self.eval_stmt_inner(stmt, env);
+        if let Err(EvalError::Runtime(e)) = &result {
+            // The innermost statement sees the error first, with its
+            // variables still in scope: let the debugger show them.
+            if self.protected == 0 && !self.error_reported {
+                self.error_reported = true;
+                let file = self.file.clone();
+                let source = Rc::clone(&self.source);
+                let stack = self.stack.clone();
+                self.hook.on_error(
+                    &DebugCtx {
+                        file: &file,
+                        source: &source,
+                        span: e.span,
+                        env,
+                        stack: &stack,
+                    },
+                    &e.message,
+                );
+            }
+        }
+        result
+    }
+
+    fn eval_stmt_inner(&mut self, stmt: &Stmt, env: &Rc<RefCell<Env>>) -> Result<Value, EvalError> {
         match stmt {
             Stmt::Expr { expr, .. } => self.eval_expr(expr, env),
             Stmt::Assign { target, value, .. } => {
@@ -776,6 +809,8 @@ impl<'a> Vm<'a> {
                     body: body.clone(),
                     env: Rc::clone(env),
                     span: *span,
+                    file: self.file.clone(),
+                    source: Rc::clone(&self.source),
                 })))
             }
             Expr::Ident { name, span } => Env::get(env, name)
@@ -915,7 +950,12 @@ impl<'a> Vm<'a> {
             }
             Expr::SeFalhar {
                 attempt, fallback, ..
-            } => match self.eval_expr(attempt, env) {
+            } => match {
+                self.protected += 1;
+                let r = self.eval_expr(attempt, env);
+                self.protected -= 1;
+                r
+            } {
                 Ok(v) => Ok(v),
                 Err(EvalError::Quit(code)) => Err(EvalError::Quit(code)),
                 Err(EvalError::Return { value, span }) => Err(EvalError::Return { value, span }),
@@ -1139,7 +1179,14 @@ impl<'a> Vm<'a> {
                     file: self.file.clone(),
                     span,
                 });
+                // Errors and the debugger name the file that defined the
+                // function (an imported module). Relative paths still
+                // resolve from the running program's folder.
+                let saved_file = std::mem::replace(&mut self.file, closure.file.clone());
+                let saved_source = std::mem::replace(&mut self.source, Rc::clone(&closure.source));
                 let result = self.eval_stmts(&closure.body.stmts, &call_env);
+                self.file = saved_file;
+                self.source = saved_source;
                 self.stack.pop();
                 match result {
                     Ok(v) => Ok(v),
@@ -1515,7 +1562,7 @@ impl<'a> Vm<'a> {
     fn pause(&mut self, span: Span, env: &Rc<RefCell<Env>>) -> Result<(), EvalError> {
         self.check_deadline(span)?;
         let file = self.file.clone();
-        let source = self.source.clone();
+        let source = Rc::clone(&self.source);
         let stack = self.stack.clone();
         match self.hook.before_stmt(&DebugCtx {
             file: &file,
@@ -2577,6 +2624,100 @@ leia_arquivo("../secret.txt")
         let err = run_to_string_with(src, file.to_str().unwrap(), "", Some(dir.clone()), None)
             .expect_err("should block escape");
         assert!(err.message.contains("fora da pasta"), "{err}");
+    }
+
+    /// Runs `src` under a ChannelDebugger, answering every pause with
+    /// `continuar`; returns the pauses seen and the result.
+    fn debug_pauses(src: &str) -> (Vec<super::super::debug::DebugPaused>, Result<i32, RuntimeError>) {
+        use super::super::debug::ChannelDebugger;
+        let (pause_tx, pause_rx) = std::sync::mpsc::channel();
+        let (cmd_tx, cmd_rx) = std::sync::mpsc::channel::<String>();
+        let src = src.to_string();
+        let runner = std::thread::spawn(move || {
+            let mut input = io::Cursor::new("");
+            let mut out = Vec::new();
+            let mut err = Vec::new();
+            run_with(
+                &src,
+                "t.lep",
+                Box::new(ChannelDebugger::new(pause_tx, cmd_rx)),
+                &mut input,
+                &mut out,
+                &mut err,
+                None,
+                None,
+                None,
+                &[],
+            )
+        });
+        let mut pauses = Vec::new();
+        while let Ok(p) = pause_rx.recv() {
+            pauses.push(p);
+            let _ = cmd_tx.send("continuar".into());
+        }
+        (pauses, runner.join().unwrap())
+    }
+
+    #[test]
+    fn debugger_pauses_on_runtime_error_with_locals() {
+        let (pauses, result) = debug_pauses("f = funcao(x) {\n    y = x * 2\n    y / 0\n}\nf(3)\n");
+        assert!(result.is_err());
+        // First the pause on start, then the error.
+        assert_eq!(pauses.len(), 2, "{pauses:?}");
+        let p = &pauses[1];
+        assert!(p.error.as_deref().unwrap_or("").contains("zero"), "{p:?}");
+        assert_eq!(p.line, 3);
+        let var = |n: &str| p.vars.iter().find(|v| v.name == n).map(|v| v.value.clone());
+        assert_eq!(var("x").as_deref(), Some("3"));
+        assert_eq!(var("y").as_deref(), Some("6"));
+        assert_eq!(p.stack[0].name, "f", "innermost frame first: {:?}", p.stack);
+    }
+
+    #[test]
+    fn errors_and_pauses_in_imported_functions_name_their_file() {
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let dir = std::env::temp_dir().join(format!("expressa-mod-file-{nanos}"));
+        std::fs::create_dir_all(dir.join("lib")).unwrap();
+        std::fs::write(dir.join("lib/m.lep"), "divide = funcao(a, b) {\n    q = a / b\n    q\n}\n").unwrap();
+        let main = dir.join("main.lep");
+        let src = "importe \"lib/m\"\nescreva(divide(1, 0))\n";
+        let err = run_to_string(src, main.to_str().unwrap()).unwrap_err();
+        assert!(err.file.ends_with("lib/m.lep"), "{err}");
+        assert_eq!(err.span.line, 2);
+        // The call site stays in the caller's file.
+        assert!(err.stack.last().unwrap().file.ends_with("main.lep"), "{:?}", err.stack);
+
+        // The debugger stops in the module, showing the module's line.
+        use super::super::debug::ChannelDebugger;
+        let (pause_tx, pause_rx) = std::sync::mpsc::channel();
+        let (cmd_tx, cmd_rx) = std::sync::mpsc::channel::<String>();
+        let main_s = main.to_str().unwrap().to_string();
+        let runner = std::thread::spawn(move || {
+            let mut input = io::Cursor::new("");
+            let (mut out, mut errb) = (Vec::new(), Vec::new());
+            run_with(src, &main_s, Box::new(ChannelDebugger::new(pause_tx, cmd_rx)), &mut input, &mut out, &mut errb, None, None, None, &[])
+        });
+        let mut last = None;
+        while let Ok(p) = pause_rx.recv() {
+            let _ = cmd_tx.send("continuar".into());
+            last = Some(p);
+        }
+        let _ = runner.join();
+        let p = last.unwrap();
+        assert!(p.error.is_some());
+        assert!(p.file.ends_with("lib/m.lep"), "{p:?}");
+        assert_eq!(p.source_line.trim(), "q = a / b");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn debugger_ignores_errors_handled_by_se_falhar() {
+        let (pauses, result) = debug_pauses("x = 1 / 0 se_falhar 7\nescreva(x)\n");
+        assert_eq!(result.unwrap(), 0);
+        assert!(pauses.iter().all(|p| p.error.is_none()), "{pauses:?}");
     }
 
     #[test]

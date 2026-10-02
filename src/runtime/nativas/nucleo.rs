@@ -436,7 +436,7 @@ impl Vm<'_> {
             span,
         });
         let prev_file = std::mem::replace(&mut self.file, "<avaliar>".into());
-        let prev_source = std::mem::replace(&mut self.source, src);
+        let prev_source = std::mem::replace(&mut self.source, std::rc::Rc::from(src));
         let result = self.eval_items_value(&program.items, env);
         self.source = prev_source;
         self.file = prev_file;

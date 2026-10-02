@@ -155,14 +155,14 @@ impl Vm<'_> {
     }
 }
 
-pub(crate) struct BuiltinDoc {
+pub struct BuiltinDoc {
     pub name: &'static str,
     pub sig: &'static str,
     pub summary: &'static str,
     pub example: &'static str,
 }
 
-pub(crate) const BUILTIN_DOCS: &[BuiltinDoc] = &[
+pub const BUILTIN_DOCS: &[BuiltinDoc] = &[
     BuiltinDoc {
         name: "escreva",
         sig: "escreva(valor, ...)",
@@ -479,7 +479,7 @@ fn strip_diacritic(c: char) -> char {
     }
 }
 
-pub(crate) fn lookup_builtin_doc(name: &str) -> Option<&'static BuiltinDoc> {
+pub fn lookup_builtin_doc(name: &str) -> Option<&'static BuiltinDoc> {
     let name = match name {
         "é_terminal" => "eh_terminal",
         "limpe_tela" => "cls",
