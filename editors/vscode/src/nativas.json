@@ -262,6 +262,18 @@
       "doc": "Troca **todas** as ocorrências de `antigo` por `novo`.\n\n**Erros:** algum argumento não é texto.\n\n```expressa\nsubstitua(\"Maria Silva\", \"Maria\", \"Ana\")\n// \"Ana Silva\"\n\nsubstitua(\"aaa\", \"a\", \"b\")\n// \"bbb\"\n```"
     },
     {
+      "name": "procurar",
+      "aliases": [],
+      "module": null,
+      "kind": "funcao",
+      "signatures": [
+        "procurar(texto, trecho) -> numero",
+        "procurar(lista, item) -> numero"
+      ],
+      "summary": "Índice da primeira ocorrência (0 se não achar)",
+      "doc": "Devolve o índice (começando em 1) da **primeira** ocorrência. Se não achar, devolve `0`.\n\nNo texto, `trecho` é um pedaço (um ou mais caracteres Unicode). Na lista, compara o item com `==`.\n\n**Erros:** primeiro argumento não é texto nem lista; em texto, o segundo não é texto; trecho vazio (`\"\"`).\n\n```expressa\nprocurar(\"onde\", \"n\")     // 2\n\"onde\".procurar(\"a\")      // 0\nprocurar(\"banana\", \"na\")  // 3\nprocurar([10, 20, 30], 20)  // 2\n```"
+    },
+    {
       "name": "separe",
       "aliases": [],
       "module": null,

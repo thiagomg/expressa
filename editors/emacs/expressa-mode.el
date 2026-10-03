@@ -27,7 +27,7 @@
     "mapa" "conjunto" "matriz"
     "transposta" "det" "identidade" "zeros" "uns" "cheia" "nlinhas" "ncolunas"
     "tamanho" "primeiro" "ultimo"
-    "maiuscula" "minuscula" "sem_acento" "remova" "substitua" "separe" "junte" "limpe"
+    "maiuscula" "minuscula" "sem_acento" "remova" "substitua" "procurar" "separe" "junte" "limpe"
     "leia_arquivo" "salve_arquivo" "adicione_arquivo"
     "leia_csv" "salve_csv"))
 

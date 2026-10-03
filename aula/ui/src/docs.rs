@@ -9,7 +9,10 @@ use gtk::glib;
 use gtk::prelude::*;
 use gtk::{Box as GtkBox, Button, Label, Orientation, ScrolledWindow, TextTag};
 use sourceview5::prelude::*;
-use sourceview5::{Buffer as SourceBuffer, LanguageManager, MarkAttributes, SearchContext, SearchSettings, StyleScheme, View as SourceView};
+use sourceview5::{
+    Buffer as SourceBuffer, LanguageManager, MarkAttributes, SearchContext, SearchSettings,
+    StyleScheme, View as SourceView,
+};
 
 /// A syntax error found while typing.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -40,11 +43,19 @@ pub fn diagnose(text: &str) -> Option<Diag> {
             start = (end - 1).max(0);
         }
     }
-    let line = text[..text.char_indices().nth(start as usize).map_or(text.len(), |(i, _)| i)]
+    let line = text[..text
+        .char_indices()
+        .nth(start as usize)
+        .map_or(text.len(), |(i, _)| i)]
         .matches('\n')
         .count() as u32
         + 1;
-    Some(Diag { line, message: err.message, start, end })
+    Some(Diag {
+        line,
+        message: err.message,
+        start,
+        end,
+    })
 }
 
 pub struct Doc {
@@ -118,7 +129,11 @@ impl Doc {
         let err = MarkAttributes::new();
         err.set_icon_name("dialog-error-symbolic");
         view.set_mark_attributes("erro", &err, 20);
-        let page = ScrolledWindow::builder().vexpand(true).hexpand(true).child(&view).build();
+        let page = ScrolledWindow::builder()
+            .vexpand(true)
+            .hexpand(true)
+            .child(&view)
+            .build();
 
         let label = Label::new(None);
         let close_button = Button::from_icon_name("window-close-symbolic");
@@ -191,7 +206,10 @@ impl Doc {
 
     /// Project-relative path, or the untitled name (used to run it).
     pub fn name(&self) -> String {
-        self.path.borrow().clone().unwrap_or_else(|| self.untitled.clone())
+        self.path
+            .borrow()
+            .clone()
+            .unwrap_or_else(|| self.untitled.clone())
     }
 
     pub fn is_untitled(&self) -> bool {
@@ -210,7 +228,11 @@ impl Doc {
     pub fn refresh_label(&self) {
         let name = self.name();
         let base = name.rsplit('/').next().unwrap_or(&name).to_string();
-        self.label.set_text(&if self.is_dirty() { format!("● {base}") } else { base });
+        self.label.set_text(&if self.is_dirty() {
+            format!("● {base}")
+        } else {
+            base
+        });
         self.tab.set_tooltip_text(Some(&name));
     }
 
@@ -234,7 +256,8 @@ impl Doc {
             .iter_at_line(line.saturating_sub(1) as i32)
             .unwrap_or_else(|| self.buffer.start_iter());
         self.buffer.place_cursor(&it);
-        self.view.scroll_to_iter(&mut it.clone(), 0.2, false, 0.0, 0.0);
+        self.view
+            .scroll_to_iter(&mut it.clone(), 0.2, false, 0.0, 0.0);
     }
 
     // ── Breakpoints ────────────────────────────────────────────────────────
@@ -276,10 +299,15 @@ impl Doc {
         if !b.forward_line() {
             b = self.buffer.end_iter();
         }
-        let tag = if error { &self.error_tag } else { &self.debug_tag };
+        let tag = if error {
+            &self.error_tag
+        } else {
+            &self.debug_tag
+        };
         self.buffer.apply_tag(tag, &a, &b);
         self.buffer.place_cursor(&a);
-        self.view.scroll_to_iter(&mut a.clone(), 0.2, false, 0.0, 0.0);
+        self.view
+            .scroll_to_iter(&mut a.clone(), 0.2, false, 0.0, 0.0);
     }
 
     pub fn clear_debug_line(&self) {
@@ -295,7 +323,10 @@ impl Doc {
         self.buffer.remove_tag(&self.match_tag, &s, &e);
         let text = self.buffer.text(&s, &e, true).to_string();
         let cursor = self.cursor().offset() as usize;
-        let byte = text.char_indices().nth(cursor).map_or(text.len(), |(i, _)| i);
+        let byte = text
+            .char_indices()
+            .nth(cursor)
+            .map_or(text.len(), |(i, _)| i);
         let Some((open, close)) = crate::indent::block_pair(&text, byte) else {
             return;
         };
@@ -312,12 +343,15 @@ impl Doc {
             id.remove();
         }
         let weak = Rc::downgrade(self);
-        let id = glib::timeout_add_local_once(std::time::Duration::from_millis(DIAG_DELAY_MS), move || {
-            if let Some(d) = weak.upgrade() {
-                d.diag_timer.borrow_mut().take();
-                d.check_now();
-            }
-        });
+        let id = glib::timeout_add_local_once(
+            std::time::Duration::from_millis(DIAG_DELAY_MS),
+            move || {
+                if let Some(d) = weak.upgrade() {
+                    d.diag_timer.borrow_mut().take();
+                    d.check_now();
+                }
+            },
+        );
         *self.diag_timer.borrow_mut() = Some(id);
         // The block highlight follows edits too (the cursor may not move).
         self.highlight_block();
@@ -369,7 +403,8 @@ impl Doc {
 
 /// Round dot for the breakpoint gutter.
 pub fn dot_pixbuf((r, g, b): (u8, u8, u8)) -> gtk::gdk_pixbuf::Pixbuf {
-    let pb = gtk::gdk_pixbuf::Pixbuf::new(gtk::gdk_pixbuf::Colorspace::Rgb, true, 8, 12, 12).expect("pixbuf");
+    let pb = gtk::gdk_pixbuf::Pixbuf::new(gtk::gdk_pixbuf::Colorspace::Rgb, true, 8, 12, 12)
+        .expect("pixbuf");
     pb.fill(0);
     for y in 0..12u32 {
         for x in 0..12u32 {
@@ -397,6 +432,12 @@ mod tests {
         let d = diagnose("ação = \"olá\"\nx = = 2\n").unwrap();
         assert_eq!(d.line, 2, "{d:?}");
         let src: Vec<char> = "ação = \"olá\"\nx = = 2\n".chars().collect();
-        assert!(src[d.start as usize..d.end as usize].iter().collect::<String>().contains('='), "{d:?}");
+        assert!(
+            src[d.start as usize..d.end as usize]
+                .iter()
+                .collect::<String>()
+                .contains('='),
+            "{d:?}"
+        );
     }
 }

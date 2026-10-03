@@ -305,7 +305,11 @@ fn block_tokens(text: &str) -> Vec<(bool, usize, usize)> {
         let rest = &code[i..];
         let word = |w: &str| rest.starts_with(w) && word_at(&code, i, w);
         if word("inicio") || word("início") {
-            let len = if rest.starts_with("inicio") { 6 } else { "início".len() };
+            let len = if rest.starts_with("inicio") {
+                6
+            } else {
+                "início".len()
+            };
             out.push((true, i, i + len));
             i += len;
         } else if word("fim") {
@@ -350,9 +354,10 @@ pub fn block_pair(text: &str, cursor: usize) -> Option<((usize, usize), (usize, 
         .copied()
         .find(|&i| tokens[i].1 <= cursor && cursor <= tokens[i].2)
         .or_else(|| {
-            on_line.first().copied().filter(|&i| {
-                !tokens[i].0 && text[line_start..tokens[i].1].trim().is_empty()
-            })
+            on_line
+                .first()
+                .copied()
+                .filter(|&i| !tokens[i].0 && text[line_start..tokens[i].1].trim().is_empty())
         })
         .or_else(|| {
             on_line
@@ -362,7 +367,11 @@ pub fn block_pair(text: &str, cursor: usize) -> Option<((usize, usize), (usize, 
                 .find(|&i| tokens[i].0 && tokens[pair[i].unwrap()].1 > line_end)
         })?;
     let other = pair[chosen]?;
-    let (o, c) = if tokens[chosen].0 { (chosen, other) } else { (other, chosen) };
+    let (o, c) = if tokens[chosen].0 {
+        (chosen, other)
+    } else {
+        (other, chosen)
+    };
     Some(((tokens[o].1, tokens[o].2), (tokens[c].1, tokens[c].2)))
 }
 
@@ -415,15 +424,24 @@ mod tests {
         let brace_open = at("{", 0);
         let brace_close = at("}\n", 0);
         // Cursor anywhere on `se a {` line: the block continues below.
-        assert_eq!(block_pair(src, 0), Some(((brace_open, brace_open + 1), (brace_close, brace_close + 1))));
+        assert_eq!(
+            block_pair(src, 0),
+            Some(((brace_open, brace_open + 1), (brace_close, brace_close + 1)))
+        );
         // On the closing line.
         assert_eq!(block_pair(src, brace_close), block_pair(src, 0));
         // `{` in a comment and `}` in a string are not delimiters.
         assert_eq!(block_pair(src, at("x //", 0)), None);
         let inicio = at("inicio", 0);
         let fim = at("fim", 0);
-        assert_eq!(block_pair(src, inicio + 2), Some(((inicio, inicio + 6), (fim, fim + 3))));
-        assert_eq!(block_pair(src, fim + 3), Some(((inicio, inicio + 6), (fim, fim + 3))));
+        assert_eq!(
+            block_pair(src, inicio + 2),
+            Some(((inicio, inicio + 6), (fim, fim + 3)))
+        );
+        assert_eq!(
+            block_pair(src, fim + 3),
+            Some(((inicio, inicio + 6), (fim, fim + 3)))
+        );
         // `funcao(x) { x }` on one line: the token under the cursor.
         let one = "f = funcao(x) { x }";
         assert_eq!(block_pair(one, 14), Some(((14, 15), (18, 19))));
@@ -468,10 +486,7 @@ mod tests {
 
     #[test]
     fn close_then_open_on_same_line() {
-        assert_eq!(
-            want_indent(&["se a {", "    x", "} se b {"], "y"),
-            4
-        );
+        assert_eq!(want_indent(&["se a {", "    x", "} se b {"], "y"), 4);
     }
 }
 
@@ -517,7 +532,11 @@ mod buffer_tests {
         type_text(&b, "}");
         assert_eq!(text(&b), "se a {\n    x\n}");
         b.undo();
-        assert_eq!(text(&b), "se a {\n    x\n    ", "undo removes `}}` and its reindent together");
+        assert_eq!(
+            text(&b),
+            "se a {\n    x\n    ",
+            "undo removes `}}` and its reindent together"
+        );
         b.undo();
         assert_eq!(text(&b), "se a {\n    x");
         // Redo is not typing: it must not indent again.
@@ -550,7 +569,7 @@ mod buffer_tests {
             let Some(b) = buf("se a {\nx = 1\n}\n") else {
                 return;
             };
-    
+
             // Tab without selection auto-indents; cursor in the indentation
             // moves to the first char.
             cursor(&b, 1, 0);
@@ -563,17 +582,17 @@ mod buffer_tests {
             tab(&b);
             assert_eq!(text(&b), "se a {\n    x = 1\n}\n");
             assert_eq!(b.iter_at_mark(&b.get_insert()).line_offset(), 9);
-    
+
             // Shift+Tab without selection unindents the current line.
             backtab(&b);
             assert_eq!(text(&b), "se a {\nx = 1\n}\n");
             assert_eq!(b.iter_at_mark(&b.get_insert()).line_offset(), 5);
-    
+
             // Selection inside one line: Tab auto-indents instead of shifting.
             select(&b, 1, 1, 1, 3);
             tab(&b);
             assert_eq!(text(&b), "se a {\n    x = 1\n}\n");
-    
+
             // Full lines selected (ending at column 0 of the next line): shift.
             select(&b, 0, 0, 2, 0);
             tab(&b);
@@ -585,13 +604,19 @@ mod buffer_tests {
             backtab(&b);
             assert_eq!(text(&b), "se a {\nx = 1\n}\n");
             let (s, e) = b.selection_bounds().unwrap();
-            assert_eq!((s.line(), s.line_offset(), e.line(), e.line_offset()), (0, 0, 2, 0));
-    
+            assert_eq!(
+                (s.line(), s.line_offset(), e.line(), e.line_offset()),
+                (0, 0, 2, 0)
+            );
+
             // Ctrl+Alt+\ reindents the region, skipping blank lines.
             b.set_text("se a {\n      x\n\nse b {\ny\n  }\n}\n");
             select(&b, 0, 0, 7, 0);
             indent_region_or_line(&b);
-            assert_eq!(text(&b), "se a {\n    x\n\n    se b {\n        y\n    }\n}\n");
+            assert_eq!(
+                text(&b),
+                "se a {\n    x\n\n    se b {\n        y\n    }\n}\n"
+            );
         });
     }
 }

@@ -23,7 +23,9 @@ impl Default for Prefs {
 }
 
 fn path() -> PathBuf {
-    gtk::glib::user_config_dir().join("expressa-aula").join("prefs")
+    gtk::glib::user_config_dir()
+        .join("expressa-aula")
+        .join("prefs")
 }
 
 impl Prefs {
@@ -115,7 +117,13 @@ mod tests {
     #[test]
     fn parse_and_print() {
         let p = Prefs::parse("fonte=18\ntema=escuro\n");
-        assert_eq!(p, Prefs { font_size: 18, dark: true });
+        assert_eq!(
+            p,
+            Prefs {
+                font_size: 18,
+                dark: true
+            }
+        );
         assert_eq!(Prefs::parse(&p.to_text()), p);
         assert_eq!(Prefs::parse("fonte=999\nlixo\n").font_size, MAX_FONT);
         assert_eq!(Prefs::parse(""), Prefs::default());

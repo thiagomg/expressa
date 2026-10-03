@@ -328,6 +328,7 @@ maiuscula(nome)
 sem_acento("olá")          // "ola"
 minuscula(nome)
 nome contem "Silva"
+procurar(nome, "Silva")    // índice 1…n; 0 se não achar
 substitua(nome, "Maria", "Ana")
 separe("a,b,c", ",")
 junte(["a", "b"], " - ")

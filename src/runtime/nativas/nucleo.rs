@@ -350,6 +350,38 @@ impl Vm<'_> {
         let to = self.expect_texto(&args[2], span)?;
         Ok(Value::Texto(s.replace(&from, &to)))
     }
+    pub(crate) fn bi_procurar(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
+        self.expect_arity(args, 2, span)?;
+        match &args[0] {
+            Value::Texto(s) => {
+                let needle = self.expect_texto(&args[1], span)?;
+                if needle.is_empty() {
+                    return Err(self.err("procurar espera um trecho não vazio", span));
+                }
+                let pos = match s.find(&needle) {
+                    Some(byte_i) => s[..byte_i].chars().count() as f64 + 1.0,
+                    None => 0.0,
+                };
+                Ok(Value::Numero(pos))
+            }
+            Value::Lista(xs) => {
+                let pos = xs
+                    .borrow()
+                    .iter()
+                    .position(|x| x == &args[1])
+                    .map(|i| (i + 1) as f64)
+                    .unwrap_or(0.0);
+                Ok(Value::Numero(pos))
+            }
+            other => Err(self.err(
+                format!(
+                    "procurar espera texto ou lista, encontrado {}",
+                    other.type_name()
+                ),
+                span,
+            )),
+        }
+    }
     pub(crate) fn bi_separe(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
         self.expect_arity(args, 2, span)?;
         let s = self.expect_texto(&args[0], span)?;

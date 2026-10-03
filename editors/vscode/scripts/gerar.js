@@ -65,7 +65,7 @@ function readKeywords() {
 function readNativas() {
   const src = fs.readFileSync(NATIVAS_RS, 'utf8');
   const out = [];
-  const re = /Nativa\s*\{\s*names:\s*&\[([^\]]*)\],\s*module:\s*(None|Some\("([^"]+)"\))\s*\}/g;
+  const re = /Nativa\s*\{\s*names:\s*&\[([^\]]*)\],\s*module:\s*(None|Some\("([^"]+)"\))\s*,?\s*\}/g;
   for (const m of src.matchAll(re)) {
     const names = [...m[1].matchAll(/"([^"]+)"/g)].map((x) => x[1]);
     out.push({ name: names[0], aliases: names.slice(1), module: m[3] || null });

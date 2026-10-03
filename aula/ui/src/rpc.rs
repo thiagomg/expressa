@@ -1,7 +1,7 @@
 use expressa_aula_proto::turma_client::TurmaClient;
 use expressa_aula_proto::{
-    DeleteFileRequest, ListFilesRequest, MkdirRequest, ReadFileRequest, RenameRequest,
-    TreeEntry, WriteFileRequest,
+    DeleteFileRequest, ListFilesRequest, MkdirRequest, ReadFileRequest, RenameRequest, TreeEntry,
+    WriteFileRequest,
 };
 use std::process::Child;
 use std::sync::Mutex;

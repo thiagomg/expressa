@@ -153,6 +153,8 @@ t[1]  t[1..5]
 t[2] = "x"                     // um caractere; reatribui t
 tamanho(t)  maiuscula(t)  minuscula(t)  limpe(t)  sem_acento(t)
 substitua(t, "Maria", "Ana")
+procurar("onde", "n")          // 2;  0 se não achar
+procurar([10, 20, 30], 20)     // 2
 separe("a,b,c", ",")           // ["a", "b", "c"]
 junte(["a", "b"], " - ")
 formate("{:<8} {:>5}", "Ana", 10)  // colunas: < esquerda  > direita  ^ centro
@@ -266,7 +268,7 @@ Núcleo (sempre no escopo):
 | `numero` `número` `formato` `avaliar` | número / executar texto como código |
 | `mapa` `conjunto` | construtores |
 | `tamanho` `primeiro` `ultimo` | coleção |
-| `maiuscula` `minuscula` `sem_acento` `remova` `substitua` `separe` `junte` `limpe` `formate` | texto / lista / mapa / conjunto |
+| `maiuscula` `minuscula` `sem_acento` `remova` `substitua` `procurar` `separe` `junte` `limpe` `formate` | texto / lista / mapa / conjunto |
 
 Módulos (`importe "…"`):
 

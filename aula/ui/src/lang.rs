@@ -11,9 +11,35 @@ use expressa::runtime::{NATIVAS, lookup_builtin_doc};
 
 /// Reserved words (`src/lexer/tokens.rs`, checked by a test).
 pub const KEYWORDS: &[&str] = &[
-    "se", "senao", "senão", "ou", "e", "nao", "não", "inicio", "início", "fim", "funcao",
-    "função", "para", "de", "ate", "até", "em", "repita", "enquanto", "vezes", "importe",
-    "contem", "contém", "verdadeiro", "falso", "se_falhar", "retorne", "pare", "continue",
+    "se",
+    "senao",
+    "senão",
+    "ou",
+    "e",
+    "nao",
+    "não",
+    "inicio",
+    "início",
+    "fim",
+    "funcao",
+    "função",
+    "para",
+    "de",
+    "ate",
+    "até",
+    "em",
+    "repita",
+    "enquanto",
+    "vezes",
+    "importe",
+    "contem",
+    "contém",
+    "verdadeiro",
+    "falso",
+    "se_falhar",
+    "retorne",
+    "pare",
+    "continue",
     "continua",
 ];
 
@@ -41,7 +67,12 @@ pub fn natives() -> &'static [Native] {
                     aliases: n.names[1..].to_vec(),
                     module: n.module,
                     signatures: doc
-                        .map(|d| d.sig.split("  ou  ").map(|s| s.trim().to_string()).collect())
+                        .map(|d| {
+                            d.sig
+                                .split("  ou  ")
+                                .map(|s| s.trim().to_string())
+                                .collect()
+                        })
                         .unwrap_or_else(|| vec![format!("{}(...)", n.names[0])]),
                     summary: doc.map(|d| d.summary).unwrap_or(""),
                     example: doc.map(|d| d.example).unwrap_or(""),
@@ -115,7 +146,9 @@ pub fn blank_comments_and_strings(text: &str) -> String {
             blank(&mut out, &text[i..end]);
             i = end;
         } else if text[i..].starts_with("/*") {
-            let end = text[i + 2..].find("*/").map_or(text.len(), |j| i + 2 + j + 2);
+            let end = text[i + 2..]
+                .find("*/")
+                .map_or(text.len(), |j| i + 2 + j + 2);
             blank(&mut out, &text[i..end]);
             i = end;
         } else if b[i] == b'"' {
@@ -401,12 +434,21 @@ pub enum Completion {
     /// In a comment or string: nothing.
     Nothing,
     /// Inside `importe "…`.
-    Import { prefix: String },
+    Import {
+        prefix: String,
+    },
     /// After `alias::`.
-    Module { alias: String, prefix: String },
+    Module {
+        alias: String,
+        prefix: String,
+    },
     /// After `x.` (UFCS call).
-    Method { prefix: String },
-    Name { prefix: String },
+    Method {
+        prefix: String,
+    },
+    Name {
+        prefix: String,
+    },
 }
 
 /// What to complete at the cursor; `before` is the text up to it.
@@ -430,10 +472,7 @@ pub fn completion_context(before: &str) -> Completion {
     }
     let code = blank_comments_and_strings(line);
     // Typing a number (`3`, `1_000`): nothing to complete.
-    let run = code.len()
-        - code
-            .trim_end_matches(is_ident_char)
-            .len();
+    let run = code.len() - code.trim_end_matches(is_ident_char).len();
     if code[code.len() - run..].starts_with(|c: char| c.is_ascii_digit()) {
         return Completion::Nothing;
     }
@@ -599,7 +638,10 @@ mod tests {
     #[test]
     fn keywords_match_the_lexer() {
         for k in KEYWORDS {
-            assert!(expressa::lexer::tokens::keyword(k).is_some(), "{k} is not a keyword");
+            assert!(
+                expressa::lexer::tokens::keyword(k).is_some(),
+                "{k} is not a keyword"
+            );
         }
         // And nothing common is missing.
         for k in ["se", "senão", "até", "função", "se_falhar", "contém"] {
@@ -649,8 +691,16 @@ mod tests {
         assert_eq!(
             parse_imports(src),
             vec![
-                Import { alias: None, spec: "tela".into(), line: 1 },
-                Import { alias: Some("m".into()), spec: "lib/ajuda".into(), line: 2 },
+                Import {
+                    alias: None,
+                    spec: "tela".into(),
+                    line: 1
+                },
+                Import {
+                    alias: Some("m".into()),
+                    spec: "lib/ajuda".into(),
+                    line: 2
+                },
             ]
         );
         assert_eq!(import_insert_line(src), 3);
@@ -659,9 +709,18 @@ mod tests {
         assert_eq!(native_module("matriz"), Some("matriz"));
         assert_eq!(native_module("./matriz"), None);
         assert_eq!(native_module("matematica"), None);
-        assert_eq!(resolve_import("lib/ajuda", "main.lep").as_deref(), Some("lib/ajuda.lep"));
-        assert_eq!(resolve_import("./b", "lib/a.lep").as_deref(), Some("lib/b.lep"));
-        assert_eq!(resolve_import("../c.lep", "lib/a.lep").as_deref(), Some("c.lep"));
+        assert_eq!(
+            resolve_import("lib/ajuda", "main.lep").as_deref(),
+            Some("lib/ajuda.lep")
+        );
+        assert_eq!(
+            resolve_import("./b", "lib/a.lep").as_deref(),
+            Some("lib/b.lep")
+        );
+        assert_eq!(
+            resolve_import("../c.lep", "lib/a.lep").as_deref(),
+            Some("c.lep")
+        );
         assert_eq!(resolve_import("../../x", "a.lep"), None);
     }
 
@@ -670,8 +729,23 @@ mod tests {
         let src = "soma = funcao(a, b) {\n    total = a + b\n}\nx = 1\nx == 2\npara i de 1 ate 3 {}\nm = importe \"mat\"\n// comentado = 2\nvelocidade_média = função() { 3 }\ns = \"y = 1\"\npara item em lista {}\n";
         let defs = parse_definitions(src);
         let names: Vec<&str> = defs.iter().map(|d| d.name.as_str()).collect();
-        assert_eq!(names, ["soma", "total", "x", "i", "m", "velocidade_média", "s", "item"]);
-        assert_eq!(defs[0].kind, DefKind::Function(vec!["a".into(), "b".into()]));
+        assert_eq!(
+            names,
+            [
+                "soma",
+                "total",
+                "x",
+                "i",
+                "m",
+                "velocidade_média",
+                "s",
+                "item"
+            ]
+        );
+        assert_eq!(
+            defs[0].kind,
+            DefKind::Function(vec!["a".into(), "b".into()])
+        );
         assert!(defs[0].top_level && !defs[1].top_level);
         assert_eq!(defs[4].kind, DefKind::Module);
         assert_eq!(defs[5].kind, DefKind::Function(vec![]));
@@ -682,12 +756,39 @@ mod tests {
     fn completion() {
         let c = completion_context;
         let name = |p: &str| Completion::Name { prefix: p.into() };
-        assert_eq!(c("importe \"ma"), Completion::Import { prefix: "ma".into() });
-        assert_eq!(c("importe \"lib/"), Completion::Import { prefix: "lib/".into() });
+        assert_eq!(
+            c("importe \"ma"),
+            Completion::Import {
+                prefix: "ma".into()
+            }
+        );
+        assert_eq!(
+            c("importe \"lib/"),
+            Completion::Import {
+                prefix: "lib/".into()
+            }
+        );
         assert_eq!(c("x = \"texto"), Completion::Nothing);
-        assert_eq!(c("x = m::ra"), Completion::Module { alias: "m".into(), prefix: "ra".into() });
-        assert_eq!(c("m::"), Completion::Module { alias: "m".into(), prefix: "".into() });
-        assert_eq!(c("lista.ta"), Completion::Method { prefix: "ta".into() });
+        assert_eq!(
+            c("x = m::ra"),
+            Completion::Module {
+                alias: "m".into(),
+                prefix: "ra".into()
+            }
+        );
+        assert_eq!(
+            c("m::"),
+            Completion::Module {
+                alias: "m".into(),
+                prefix: "".into()
+            }
+        );
+        assert_eq!(
+            c("lista.ta"),
+            Completion::Method {
+                prefix: "ta".into()
+            }
+        );
         assert_eq!(c("\"oi\"."), Completion::Method { prefix: "".into() });
         assert_eq!(c("f(x)."), Completion::Method { prefix: "".into() });
         assert_eq!(c("y = 3."), name(""));
@@ -709,23 +810,46 @@ mod tests {
             method,
             active,
         };
-        assert_eq!(call_context("escreva(1, pinte(\"a\", "), Some(call("pinte", None, false, 1)));
-        assert_eq!(call_context("x.pinte(:verde, "), Some(call("pinte", None, true, 1)));
-        assert_eq!(call_context("m::raiz("), Some(call("raiz", Some("m"), false, 0)));
+        assert_eq!(
+            call_context("escreva(1, pinte(\"a\", "),
+            Some(call("pinte", None, false, 1))
+        );
+        assert_eq!(
+            call_context("x.pinte(:verde, "),
+            Some(call("pinte", None, true, 1))
+        );
+        assert_eq!(
+            call_context("m::raiz("),
+            Some(call("raiz", Some("m"), false, 0))
+        );
         assert_eq!(call_context("f([1, 2], "), Some(call("f", None, false, 1)));
-        assert_eq!(call_context("escreva(\"a,b\", "), Some(call("escreva", None, false, 1)));
+        assert_eq!(
+            call_context("escreva(\"a,b\", "),
+            Some(call("escreva", None, false, 1))
+        );
         assert_eq!(call_context("escreva(1)\n"), None);
-        assert_eq!(call_context("soma(1,\n    2"), Some(call("soma", None, false, 1)));
+        assert_eq!(
+            call_context("soma(1,\n    2"),
+            Some(call("soma", None, false, 1))
+        );
         assert_eq!(call_context("se (a"), None);
     }
 
     #[test]
     fn words_and_signatures() {
-        assert_eq!(signature_params("pinte(texto, frente, fundo) -> texto"), ["texto", "frente", "fundo"]);
+        assert_eq!(
+            signature_params("pinte(texto, frente, fundo) -> texto"),
+            ["texto", "frente", "fundo"]
+        );
         assert!(signature_params("cls()").is_empty());
         assert_eq!(
             word_at("x = m::raiz(4)", 9),
-            Some(Word { alias: Some("m".into()), name: "raiz".into(), start: 7, end: 11 })
+            Some(Word {
+                alias: Some("m".into()),
+                name: "raiz".into(),
+                start: 7,
+                end: 11
+            })
         );
         let w = word_at("espaço = 1", 3).unwrap();
         assert_eq!((w.name.as_str(), w.start, w.end), ("espaço", 0, 7));

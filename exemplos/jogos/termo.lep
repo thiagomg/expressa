@@ -1,0 +1,108 @@
+importe "tela"
+
+remove_letra = função(palavra, posição) {
+    se posição == 1 {
+        palavra[2..]
+    } ou se posição == palavra.tamanho() {
+        palavra[1..(posição-1)]
+    } senão {
+        palavra[1..(posição-1)] + palavra[(posição+1)..]
+    }
+}
+
+compara_palavra = funcao(palavra, tentativa) {
+    // É necessário iterar duas vezes, uma para as verdes e outra para as outras
+    // t = como_lista(tentativa)
+    // p = como_lista(palavra)
+    t = tentativa
+    p = palavra
+    res = como_lista(tentativa)
+
+    // Vamos iterar e verificar as verdes
+    para i de 1 até t.tamanho() {
+        se t[i] == p[i] {
+            res[i] = t[i] -> :verde
+            p[i] = " "
+            t[i] = " "
+        }
+    }
+
+    // Agora vamos comparar amarelo e erros
+    para i de 1 até t.tamanho() {
+        se p contém t[i] {
+            se t[i] == " " {
+                continue
+            } 
+            res[i] = t[i] -> :amarelo
+            idx = p.procurar(t[i])
+            p[idx] = " "
+            t[i] = " "
+        } senão {
+            res[i] = t[i] -> :normal
+        }
+    }
+
+    res
+}
+
+desenha_tentativa = função(palavra, ts) {
+    cls()
+    escreva("ts.tamanho(): " + ts.tamanho())
+    escreva(" +---+---+---+---+---+".negrito())
+
+    tamanho_palavra = 5
+    
+    para l de 1 até ts.tamanho() {
+        res = compara_palavra(palavra, ts[l])
+
+        linha = " "
+        para i de 1 até tamanho_palavra {
+            linha += "|".negrito()
+
+            tok = res[i]
+            letra = ""
+            se tok:valor == :verde {
+                letra = (" " + tok:chave + " ").pinte(:preto, :verde).negrito()
+            } ou se tok:valor == :amarelo {
+                letra = (" " + tok:chave + " ").pinte(:preto, :amarelo).negrito()
+            } senão {
+                letra = " " + tok:chave + " "   
+            }
+            linha += letra
+        }
+        linha += "|".negrito()
+        escreva(linha)
+        escreva(" +---+---+---+---+---+".negrito())
+    }
+}
+
+como_lista = função(s) {
+    t = []
+    para i de 1 até s.tamanho() {
+        t += [s[i]]
+    }
+    t
+}
+
+procurar = funcao(txt, q) {
+    para i de 1 até txt.tamanho() {
+        se txt[i] == q {
+            retorne i
+        }
+    }
+    0
+}
+
+
+inicial = funcao() {
+    tentativas = []
+    tentativas += ["OPCAO"]
+    tentativas += ["CERTA"]
+    tentativas += ["EEOOE"]
+    tentativas += ["     "]
+    tentativas += ["     "]
+
+    desenha_tentativa("TERMO", tentativas)    
+}
+
+inicial()

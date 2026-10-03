@@ -55,13 +55,24 @@ pub fn toggle_comment(buffer: &SourceBuffer) {
     let had_selection = buffer.has_selection();
     let lines: Vec<(i32, String)> = (first..=last).map(|l| (l, line_text(buffer, l))).collect();
     let code: Vec<&(i32, String)> = lines.iter().filter(|(_, t)| !t.trim().is_empty()).collect();
-    let targets: Vec<&(i32, String)> = if code.is_empty() { lines.iter().collect() } else { code };
-    let uncomment = !targets.is_empty() && targets.iter().all(|(_, t)| t.trim_start().starts_with("//"));
+    let targets: Vec<&(i32, String)> = if code.is_empty() {
+        lines.iter().collect()
+    } else {
+        code
+    };
+    let uncomment = !targets.is_empty()
+        && targets
+            .iter()
+            .all(|(_, t)| t.trim_start().starts_with("//"));
     buffer.begin_user_action();
     if uncomment {
         for (l, t) in &targets {
             let col = leading_ws(t) as i32;
-            let drop = if t.trim_start().starts_with("// ") { 3 } else { 2 };
+            let drop = if t.trim_start().starts_with("// ") {
+                3
+            } else {
+                2
+            };
             if let (Some(mut a), Some(mut b)) = (
                 buffer.iter_at_line_offset(*l, col),
                 buffer.iter_at_line_offset(*l, col + drop),
@@ -70,7 +81,11 @@ pub fn toggle_comment(buffer: &SourceBuffer) {
             }
         }
     } else {
-        let col = targets.iter().map(|(_, t)| leading_ws(t)).min().unwrap_or(0) as i32;
+        let col = targets
+            .iter()
+            .map(|(_, t)| leading_ws(t))
+            .min()
+            .unwrap_or(0) as i32;
         for (l, _) in &targets {
             if let Some(mut at) = buffer.iter_at_line_offset(*l, col) {
                 buffer.insert(&mut at, "// ");
@@ -111,14 +126,22 @@ pub fn move_lines(buffer: &SourceBuffer, up: bool) {
     let (first, last) = target_lines(buffer);
     let n = buffer.line_count();
     // The empty line after a final newline is not a line to move past.
-    let real_last = if line_text(buffer, n - 1).is_empty() && n > 1 { n - 2 } else { n - 1 };
+    let real_last = if line_text(buffer, n - 1).is_empty() && n > 1 {
+        n - 2
+    } else {
+        n - 1
+    };
     if (up && first == 0) || (!up && last >= real_last) {
         return;
     }
     let had_selection = buffer.has_selection();
     let cursor = buffer.iter_at_mark(&buffer.get_insert());
     let (cur_line, cur_col) = (cursor.line(), cursor.line_offset());
-    let (lo, hi) = if up { (first - 1, last) } else { (first, last + 1) };
+    let (lo, hi) = if up {
+        (first - 1, last)
+    } else {
+        (first, last + 1)
+    };
     let mut lines: Vec<String> = (lo..=hi).map(|l| line_text(buffer, l)).collect();
     if up {
         lines.rotate_left(1);
@@ -186,7 +209,7 @@ mod tests {
             let Some(b) = buf("se a {\n    x = 1\n\n    y = 2\n}\n") else {
                 return;
             };
-    
+
             // Comment a block at its common indentation, skipping the blank line.
             select(&b, 1, 0, 4, 0);
             toggle_comment(&b);
@@ -199,7 +222,7 @@ mod tests {
             assert_eq!(text(&b), "se a {\n    // x = 1\n\n    // y = 2\n}\n");
             b.undo();
             assert_eq!(text(&b), "se a {\n    x = 1\n\n    y = 2\n}\n");
-    
+
             // Cursor line only; `//x` (no space) also uncomments.
             b.set_text("a\n//b\n");
             put(&b, 0, 1);
@@ -208,7 +231,7 @@ mod tests {
             put(&b, 1, 0);
             toggle_comment(&b);
             assert_eq!(text(&b), "// a\nb\n");
-    
+
             // Duplicate the cursor line; the cursor goes to the copy.
             b.set_text("um\ndois\n");
             put(&b, 0, 1);
@@ -222,7 +245,7 @@ mod tests {
             select(&b, 0, 0, 1, 1);
             duplicate_lines(&b);
             assert_eq!(text(&b), "a\nb\na\nb");
-    
+
             // Move down and up, keeping the column.
             b.set_text("1\n22\n3\n");
             put(&b, 1, 1);
