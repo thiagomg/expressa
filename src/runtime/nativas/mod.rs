@@ -13,7 +13,10 @@ mod arquivo;
 mod mat;
 mod matriz;
 mod nucleo;
+mod referencia;
 mod tela;
+
+pub use referencia::{BuiltinDoc, builtin_docs, lookup_alvo, lookup_builtin_doc, lookup_ficha};
 
 pub struct Nativa {
     pub names: &'static [&'static str],
@@ -63,6 +66,10 @@ pub const NATIVAS: &[Nativa] = &[
     },
     Nativa {
         names: &["catalogo", "catálogo"],
+        module: None,
+    },
+    Nativa {
+        names: &["ajuda"],
         module: None,
     },
     Nativa {
@@ -279,6 +286,7 @@ impl Vm<'_> {
             "formate" => self.bi_formate(args, span),
             "avaliar" => self.bi_avaliar(args, span, env),
             "catalogo" | "catálogo" => self.bi_catalogo(args, span, env),
+            "ajuda" => self.bi_ajuda(args, span),
             "tamanho" => self.bi_tamanho(args, span),
             "primeiro" => self.bi_primeiro(args, span),
             "ultimo" => self.bi_ultimo(args, span),
@@ -302,304 +310,6 @@ impl Vm<'_> {
         }
     }
 }
-
-pub struct BuiltinDoc {
-    pub name: &'static str,
-    pub sig: &'static str,
-    pub summary: &'static str,
-    pub example: &'static str,
-}
-
-pub const BUILTIN_DOCS: &[BuiltinDoc] = &[
-    BuiltinDoc {
-        name: "escreva",
-        sig: "escreva(valor, ...)",
-        summary: "Imprime os argumentos separados por espaço e quebra a linha.",
-        example: r#"escreva("Olá", 10)"#,
-    },
-    BuiltinDoc {
-        name: "escreva_erro",
-        sig: "escreva_erro(valor, ...)",
-        summary: "Como escreva, mas na saída de erro (stderr). Não vai para arquivos com >.",
-        example: r#"escreva_erro("nome vazio")"#,
-    },
-    BuiltinDoc {
-        name: "sair",
-        sig: "sair()  ou  sair(codigo)",
-        summary: "Encerra o programa. Sem argumento, código 0; sair(1) indica falha.",
-        example: r#"se nome == "" { sair(1) }"#,
-    },
-    BuiltinDoc {
-        name: "cls",
-        sig: "cls()",
-        summary: "Limpa a tela do terminal. Também limpe_tela().",
-        example: r#"cls()"#,
-    },
-    BuiltinDoc {
-        name: "casa",
-        sig: "casa()",
-        summary: "Cursor no canto, sem apagar. Use no lugar de cls() em animações.",
-        example: r#"casa()"#,
-    },
-    BuiltinDoc {
-        name: "durma",
-        sig: "durma(segundos)",
-        summary: "Espera o número de segundos (aceita fração: durma(0.5)).",
-        example: r#"durma(1)"#,
-    },
-    BuiltinDoc {
-        name: "leia",
-        sig: "leia()  ou  leia(prompt)",
-        summary: "Lê uma linha do teclado (sem o Enter). Prompt opcional.",
-        example: r#"nome = leia("Seu nome:")"#,
-    },
-    BuiltinDoc {
-        name: "leia_linhas",
-        sig: "leia_linhas() -> lista",
-        summary: "Lê todas as linhas da entrada padrão (pipe/arquivo) até o fim.",
-        example: r#"para linha em leia_linhas() { escreva(linha) }"#,
-    },
-    BuiltinDoc {
-        name: "eh_terminal",
-        sig: "eh_terminal() -> bool",
-        summary: "Verdadeiro se a entrada é o teclado (não um pipe). Também é_terminal().",
-        example: r#"se eh_terminal() { nome = leia("Nome: ") }"#,
-    },
-    BuiltinDoc {
-        name: "pinte",
-        sig: "pinte(texto, frente)  ou  pinte(texto, frente, fundo) -> texto",
-        summary: "Devolve o texto com cor ANSI (letra e fundo opcional) e reset no fim. Cores: normal, preto, vermelho, verde, amarelo, azul, magenta, ciano, branco.",
-        example: r#""HP".pinte(:verde)"#,
-    },
-    BuiltinDoc {
-        name: "fundo",
-        sig: "fundo(texto, cor) -> texto",
-        summary: "Devolve o texto com cor de fundo ANSI e reset no fim.",
-        example: r#""    ".fundo(:vermelho)"#,
-    },
-    BuiltinDoc {
-        name: "negrito",
-        sig: "negrito(texto) -> texto",
-        summary: "Devolve o texto em negrito (ANSI) e reset no fim.",
-        example: r#""GAME OVER".negrito()"#,
-    },
-    BuiltinDoc {
-        name: "numero",
-        sig: "numero(texto|numero) -> numero",
-        summary: "Transforma texto em número (aceita 3.14 ou 3,14). Também número().",
-        example: r#"idade = numero(leia("Idade: ")) se_falhar 0"#,
-    },
-    BuiltinDoc {
-        name: "formato",
-        sig: r#"formato("pt")  ou  formato("en")"#,
-        summary: "Escolhe o padrão de texto de números: pt-BR (1.000,5) ou en-US (1,000.5).",
-        example: r#"formato("en")"#,
-    },
-    BuiltinDoc {
-        name: "formate",
-        sig: r#"formate("modelo", valores…) -> texto"#,
-        summary: "Monta um texto: {} valor, {:<n} esquerda, {:>n} direita, {:^n} centro.",
-        example: r#"formate("{:<8} {:>5}", "Ana", 10)"#,
-    },
-    BuiltinDoc {
-        name: "avaliar",
-        sig: "avaliar(texto) -> valor",
-        summary: "Executa o texto como código Expressa no escopo atual e devolve o último valor.",
-        example: r#"avaliar("2 + 3 * 4")    // 14"#,
-    },
-    BuiltinDoc {
-        name: "catalogo",
-        sig: "catalogo()  ou  catalogo(alvo) -> lista",
-        summary: "Escopo atual, ou o que tem num mapa, módulo ou função (nome, args, tipo, modulo).",
-        example: r#"catalogo(c)    // chaves de um mapa, com args se for funcao"#,
-    },
-    BuiltinDoc {
-        name: "transposta",
-        sig: "transposta(matriz) -> matriz",
-        summary: "Troca linhas por colunas.",
-        example: "transposta(A)",
-    },
-    BuiltinDoc {
-        name: "det",
-        sig: "det(matriz) -> numero",
-        summary: "Determinante (1×1, 2×2 ou 3×3).",
-        example: "det(A)",
-    },
-    BuiltinDoc {
-        name: "identidade",
-        sig: "identidade(n) -> matriz",
-        summary: "Matriz identidade n×n.",
-        example: "identidade(3)",
-    },
-    BuiltinDoc {
-        name: "zeros",
-        sig: "zeros(n)  ou  zeros(linhas, colunas) -> matriz",
-        summary: "Matriz só de zeros. Um argumento: n×n.",
-        example: "zeros(2, 3)",
-    },
-    BuiltinDoc {
-        name: "uns",
-        sig: "uns(n)  ou  uns(linhas, colunas) -> matriz",
-        summary: "Matriz só de uns. Um argumento: n×n.",
-        example: "uns(2, 3)",
-    },
-    BuiltinDoc {
-        name: "cheia",
-        sig: "cheia(linhas, colunas, valor) -> matriz",
-        summary: "Matriz retangular preenchida com o mesmo número.",
-        example: "cheia(2, 3, 7)",
-    },
-    BuiltinDoc {
-        name: "nlinhas",
-        sig: "nlinhas(matriz) -> numero",
-        summary: "Quantidade de linhas da matriz.",
-        example: "nlinhas(A)    // 2",
-    },
-    BuiltinDoc {
-        name: "ncolunas",
-        sig: "ncolunas(matriz) -> numero",
-        summary: "Quantidade de colunas da matriz.",
-        example: "ncolunas(A)    // 3",
-    },
-    BuiltinDoc {
-        name: "raiz",
-        sig: "raiz(numero) -> numero",
-        summary: "Raiz quadrada. Erro se o número for negativo (use se_falhar).",
-        example: "raiz(9)    // 3",
-    },
-    BuiltinDoc {
-        name: "aleatorio",
-        sig: "aleatorio(min, max) -> numero",
-        summary: "Inteiro ao acaso entre min e max (inclusive). Também aleatório().",
-        example: "aleatorio(1, 6)    // dado",
-    },
-    BuiltinDoc {
-        name: "semente",
-        sig: "semente(n)",
-        summary: "Fixa a sequência de aleatorio() (útil para repetir um teste).",
-        example: "semente(1)",
-    },
-    BuiltinDoc {
-        name: "tamanho",
-        sig: "tamanho(texto|lista|mapa|conjunto|matriz) -> numero",
-        summary: "Quantidade de caracteres, itens, pares ou linhas.",
-        example: r#"tamanho("olá")    // 3"#,
-    },
-    BuiltinDoc {
-        name: "primeiro",
-        sig: "primeiro(lista) -> valor",
-        summary: "Primeiro elemento da lista (índice 1). Erro se vazia.",
-        example: "primeiro([10, 20])    // 10",
-    },
-    BuiltinDoc {
-        name: "ultimo",
-        sig: "ultimo(lista) -> valor",
-        summary: "Último elemento da lista. Erro se vazia.",
-        example: "ultimo([10, 20])    // 20",
-    },
-    BuiltinDoc {
-        name: "maiuscula",
-        sig: "maiuscula(texto) -> texto",
-        summary: "Copia o texto em letras maiúsculas.",
-        example: r#"maiuscula("olá")    // "OLÁ""#,
-    },
-    BuiltinDoc {
-        name: "minuscula",
-        sig: "minuscula(texto) -> texto",
-        summary: "Copia o texto em letras minúsculas.",
-        example: r#"minuscula("Olá")    // "olá""#,
-    },
-    BuiltinDoc {
-        name: "sem_acento",
-        sig: "sem_acento(texto) -> texto",
-        summary: "Tira acentos e cedilha: ã/á→a, é→e, ç→c. Não muda maiúscula.",
-        example: r#"sem_acento("São Paulo")    // "Sao Paulo""#,
-    },
-    BuiltinDoc {
-        name: "remova",
-        sig: "remova(lista|texto, i)  ou  remova(..., inicio, fim)  ou  remova(mapa, chave)",
-        summary: "Devolve uma cópia sem o índice/faixa (1…n) ou sem a chave do mapa.",
-        example: r#"xs = xs.remova(2)    // sem o 2º item"#,
-    },
-    BuiltinDoc {
-        name: "substitua",
-        sig: "substitua(texto, antigo, novo) -> texto",
-        summary: "Troca todas as ocorrências de antigo por novo.",
-        example: r#"substitua("aa", "a", "b")    // "bb""#,
-    },
-    BuiltinDoc {
-        name: "procurar",
-        sig: "procurar(texto|lista, trecho) -> numero",
-        summary: "Índice (1…n) da primeira ocorrência; 0 se não achar.",
-        example: r#"procurar("onde", "n")    // 2"#,
-    },
-    BuiltinDoc {
-        name: "separe",
-        sig: "separe(texto, separador) -> lista",
-        summary: "Parte o texto. Separador \"\" gera um item por caractere.",
-        example: r#"separe("a,b", ",")    // ["a", "b"]"#,
-    },
-    BuiltinDoc {
-        name: "junte",
-        sig: "junte(lista, separador) -> texto",
-        summary: "Junta os itens da lista com o separador no meio.",
-        example: r#"junte(["a", "b"], "-")    // "a-b""#,
-    },
-    BuiltinDoc {
-        name: "limpe",
-        sig: "limpe(texto) -> texto",
-        summary: "Remove espaços do começo e do fim.",
-        example: r#"limpe("  x  ")    // "x""#,
-    },
-    BuiltinDoc {
-        name: "leia_arquivo",
-        sig: "leia_arquivo(caminho) -> lista",
-        summary: "Lê o arquivo; cada linha vira um texto (sem \\n).",
-        example: r#"leia_arquivo("dados.txt") se_falhar []"#,
-    },
-    BuiltinDoc {
-        name: "salve_arquivo",
-        sig: "salve_arquivo(caminho, linhas)",
-        summary: "Grava a lista de textos, substituindo o arquivo.",
-        example: r#"salve_arquivo("saida.txt", ["a", "b"])"#,
-    },
-    BuiltinDoc {
-        name: "adicione_arquivo",
-        sig: "adicione_arquivo(caminho, linhas)",
-        summary: "Acrescenta linhas no fim do arquivo (cria se não existir).",
-        example: r#"adicione_arquivo("saida.txt", ["c"])"#,
-    },
-    BuiltinDoc {
-        name: "leia_csv",
-        sig: "leia_csv(caminho) -> lista",
-        summary: "Lê CSV simples (vírgula, sem aspas). Lista de listas de textos.",
-        example: r#"leia_csv("notas.csv")"#,
-    },
-    BuiltinDoc {
-        name: "salve_csv",
-        sig: "salve_csv(caminho, dados)",
-        summary: "Grava uma lista de listas como CSV.",
-        example: r#"salve_csv("saida.csv", [["Ana", 25]])"#,
-    },
-    BuiltinDoc {
-        name: "mapa",
-        sig: "mapa()  ou  mapa(pares) -> mapa",
-        summary: "Monta um mapa a partir de uma lista de pares `chave -> valor`.",
-        example: r#"mapa([:nome -> "Ana", :idade -> 25])"#,
-    },
-    BuiltinDoc {
-        name: "conjunto",
-        sig: "conjunto()  ou  conjunto(xs) -> conjunto",
-        summary: "Monta um conjunto a partir de uma lista (valores únicos).",
-        example: r#"conjunto([:ana, :bia])"#,
-    },
-    BuiltinDoc {
-        name: "matriz",
-        sig: "matriz(linhas) -> matriz",
-        summary: "Monta uma matriz a partir de uma lista de listas de números.",
-        example: r#"matriz([[1, 2], [3, 4]])"#,
-    },
-];
 
 /// Portuguese diacritics → base letter. Combining marks (NFD) are dropped.
 pub(super) fn sem_acento(s: &str) -> String {
@@ -639,15 +349,6 @@ fn strip_diacritic(c: char) -> char {
     }
 }
 
-pub fn lookup_builtin_doc(name: &str) -> Option<&'static BuiltinDoc> {
-    let canon = NATIVAS
-        .iter()
-        .find(|n| n.names.iter().any(|nm| *nm == name))
-        .map(|n| n.names[0])
-        .unwrap_or(name);
-    BUILTIN_DOCS.iter().find(|d| d.name == canon)
-}
-
 pub(crate) fn builtin_modulo(name: &str) -> &'static str {
     NATIVAS
         .iter()
@@ -657,13 +358,15 @@ pub(crate) fn builtin_modulo(name: &str) -> &'static str {
 }
 
 pub(crate) fn builtin_args(name: &str) -> String {
-    let Some(doc) = lookup_builtin_doc(name) else {
-        return String::new();
-    };
-    match (doc.sig.find('('), doc.sig.find(')')) {
-        (Some(a), Some(z)) if z > a => doc.sig[a + 1..z].to_string(),
-        _ => String::new(),
-    }
+    lookup_builtin_doc(name)
+        .map(|d| d.args_text())
+        .unwrap_or_default()
+}
+
+pub(crate) fn builtin_doc_summary(name: &str) -> String {
+    lookup_builtin_doc(name)
+        .map(|d| d.summary.clone())
+        .unwrap_or_default()
 }
 
 pub(super) fn value_as_texto(v: &Value, loc: NumeroLocale) -> String {
@@ -707,7 +410,7 @@ mod tests {
     use std::path::{Path, PathBuf};
     use std::time::{SystemTime, UNIX_EPOCH};
 
-    use super::{BUILTIN_DOCS, NATIVAS, lookup_builtin_doc};
+    use super::{NATIVAS, builtin_docs, lookup_builtin_doc};
     use crate::runtime::run_to_string;
 
     const PRELUDE: &str =
@@ -770,20 +473,23 @@ mod tests {
         assert!(names.contains(&"conjunto"));
         assert!(names.contains(&"matriz"));
         assert_eq!(
-            lookup_builtin_doc("é_terminal").map(|d| d.name),
+            lookup_builtin_doc("é_terminal").map(|d| d.name.as_str()),
             Some("eh_terminal")
         );
         assert_eq!(
-            lookup_builtin_doc("limpe_tela").map(|d| d.name),
+            lookup_builtin_doc("limpe_tela").map(|d| d.name.as_str()),
             Some("cls")
         );
         assert_eq!(
-            lookup_builtin_doc("aleatório").map(|d| d.name),
+            lookup_builtin_doc("aleatório").map(|d| d.name.as_str()),
             Some("aleatorio")
         );
-        assert_eq!(lookup_builtin_doc("número").map(|d| d.name), Some("numero"));
         assert_eq!(
-            lookup_builtin_doc("catálogo").map(|d| d.name),
+            lookup_builtin_doc("número").map(|d| d.name.as_str()),
+            Some("numero")
+        );
+        assert_eq!(
+            lookup_builtin_doc("catálogo").map(|d| d.name.as_str()),
             Some("catalogo")
         );
         for name in &names {
@@ -801,7 +507,7 @@ mod tests {
                 );
             }
         }
-        let _ = BUILTIN_DOCS.len();
+        let _ = builtin_docs().len();
     }
 
     #[test]
@@ -1285,6 +991,24 @@ para f em catalogo(inc) {
         );
         assert!(run_err("catalogo(1)").contains("módulo, mapa, função"));
         assert!(run_err("catalogo(1, 2)").contains("0 ou 1"));
+    }
+
+    #[test]
+    fn ajuda_returns_ficha() {
+        let out = run(r#"escreva(ajuda("escreva"))"#);
+        assert!(out.contains("escreva("), "{out}");
+        assert!(out.contains("Imprime"), "{out}");
+        let out = run(r#"escreva(ajuda("matriz::zeros"))"#);
+        assert!(out.contains("zeros"), "{out}");
+        assert!(out.contains("importe \"matriz\""), "{out}");
+        let out = run(r#"
+/// dobra o valor
+dobro = funcao(x) { x * 2 }
+escreva(ajuda(dobro))
+"#);
+        assert!(out.contains("funcao(x)"), "{out}");
+        assert!(out.contains("dobra o valor"), "{out}");
+        assert!(run_err(r#"ajuda("nao_existe")"#).contains("ficha"));
     }
 
     #[test]

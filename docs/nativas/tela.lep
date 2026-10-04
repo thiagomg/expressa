@@ -1,0 +1,45 @@
+/// Limpa a tela do terminal. Também limpe_tela().
+///
+/// Coloca o cursor no canto superior esquerdo. Sem argumentos.
+/// No REPL, a linha cls (sem parênteses) também limpa a tela.
+/// Na Aula, limpa o painel de saída.
+/// Em uma animação, cls() a cada quadro pisca: use casa() no laço.
+///
+/// Exemplo: cls()
+cls = funcao() { 0 }
+
+/// Cursor no canto, sem apagar. Use no lugar de cls() em animações.
+///
+/// O próximo escreva desenha por cima. Sem argumentos.
+/// Na Aula, o painel de saída trata casa() como um novo quadro.
+///
+/// Exemplo: casa()
+casa = funcao() { 0 }
+
+/// Verdadeiro se a entrada é o teclado (não um pipe). Também é_terminal().
+///
+/// Falso se veio de um pipe, de um arquivo ou da Aula. Sem argumentos.
+///
+/// Exemplo: se eh_terminal() { nome = leia("Nome: ") }
+eh_terminal = funcao() { 0 }
+
+/// Devolve o texto com cor ANSI (letra e fundo opcional) e reset no fim.
+///
+/// Cores: normal, preto, vermelho, verde, amarelo, azul, magenta, ciano, branco.
+/// :verde é o texto "verde". normal é a cor padrão do terminal naquele slot.
+///
+/// Exemplo: "HP".pinte(:verde)
+pinte = funcao(texto, frente) { 0 }
+pinte = funcao(texto, frente, fundo) { 0 }
+
+/// Devolve o texto com cor de fundo ANSI e reset no fim.
+///
+/// Letra no padrão do terminal.
+///
+/// Exemplo: "    ".fundo(:vermelho)
+fundo = funcao(texto, cor) { 0 }
+
+/// Devolve o texto em negrito (ANSI) e reset no fim.
+///
+/// Exemplo: "GAME OVER".negrito()
+negrito = funcao(texto) { 0 }

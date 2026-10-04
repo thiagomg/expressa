@@ -248,7 +248,11 @@ impl<'src> Scanner<'src> {
                 }
             }
             '/' => {
-                // comments handled in skip_trivia; bare '/' is division
+                // `///` (not `////`) is a doc comment; `//` is skipped in
+                // skip_non_code. Bare `/` is division.
+                if self.skip_peek(1) == Some('/') && self.skip_peek(2) == Some('/') {
+                    return self.scan_doc_comment(line, col, start);
+                }
                 self.remove();
                 token!(TokenKind::Slash)
             }
@@ -320,6 +324,10 @@ impl<'src> Scanner<'src> {
                     self.remove();
                 }
                 Some('/') if self.skip_peek(1) == Some('/') => {
+                    // `///text` is a DocComment token. `////` is a normal comment.
+                    if self.skip_peek(2) == Some('/') && self.skip_peek(3) != Some('/') {
+                        return Ok(());
+                    }
                     self.remove(); // /
                     self.remove(); // /
                     while let Some(c) = self.peek() {
@@ -363,6 +371,34 @@ impl<'src> Scanner<'src> {
             }
         }
         Ok(())
+    }
+
+    /// `///` already at the current position. One optional space after the
+    /// slashes is stripped (Rust-style).
+    fn scan_doc_comment(&mut self, line: u32, col: u32, start: usize) -> Result<Token, LexError> {
+        self.remove(); // /
+        self.remove(); // /
+        self.remove(); // /
+        if self.peek() == Some(' ') {
+            self.remove();
+        }
+        let text_start = self.pos;
+        while let Some(c) = self.peek() {
+            if c == '\n' {
+                break;
+            }
+            self.remove();
+        }
+        let text = self.source[text_start..self.pos].to_string();
+        Ok(Token {
+            kind: TokenKind::DocComment(text),
+            span: Span {
+                line,
+                col,
+                start,
+                end: self.pos,
+            },
+        })
     }
 
     /// Scan a string literal starting at the current `"`.
@@ -1028,6 +1064,32 @@ pare continue";
                 TokenKind::Ident("y".into()),
                 TokenKind::Eof,
             ]
+        );
+    }
+
+    #[test]
+    fn doc_comment_is_a_token() {
+        assert_eq!(
+            kinds("/// imprime\nescreva = funcao() {}"),
+            vec![
+                TokenKind::DocComment("imprime".into()),
+                TokenKind::Ident("escreva".into()),
+                TokenKind::Eq,
+                TokenKind::Funcao,
+                TokenKind::LParen,
+                TokenKind::RParen,
+                TokenKind::LBrace,
+                TokenKind::RBrace,
+                TokenKind::Eof,
+            ]
+        );
+    }
+
+    #[test]
+    fn four_slashes_is_a_normal_comment() {
+        assert_eq!(
+            kinds("//// não é doc\nx"),
+            vec![TokenKind::Ident("x".into()), TokenKind::Eof]
         );
     }
 

@@ -12,6 +12,9 @@ pub enum Stmt {
         target: AssignTarget,
         value: Expr,
         span: Span,
+        /// `///` immediately above this assignment (functions also copy it
+        /// onto `Expr::Function.doc`).
+        doc: Option<String>,
     },
 
     /// `repita n vezes inicio ... fim`

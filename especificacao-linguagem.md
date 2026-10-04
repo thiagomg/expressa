@@ -57,9 +57,16 @@ fim
   comentário
   de várias linhas
 */
+
+/// documentação da definição seguinte
+soma = funcao(a, b) { a + b }
 ```
 
+`///` nas linhas imediatamente acima de uma definição (`nome = …` ou `importe`) vira a ficha daquele nome (`ajuda(soma)`). `////` é um comentário comum.
+
 A **primeira linha** do arquivo pode ser um shebang Unix (`#!…`). A Expressa ignora essa linha. `#` **não** é comentário em qualquer outro lugar.
+
+As funções nativas estão documentadas em `docs/nativas/*.lep` (mesmo formato `///`). `ajuda("escreva")` e `ajuda("matriz::zeros")` devolvem essa ficha.
 
 ```text
 #!/usr/bin/env expressa

@@ -22,6 +22,10 @@ pub enum TokenKind {
     /// Non-keyword identifier.
     Ident(String),
 
+    /// `///` documentation on the line immediately above a definition.
+    /// `////` is a normal `//` comment, not this.
+    DocComment(String),
+
     // ── Keywords (Portuguese) ─────────────────────────────────────
     Se,         // se
     Senao,      // senao

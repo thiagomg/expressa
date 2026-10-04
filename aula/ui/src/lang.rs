@@ -2,7 +2,7 @@
 //! the cursor, the call around it. Works on plain text (often incomplete
 //! while typing), so it does not use the parser. Offsets are byte offsets.
 //!
-//! Native functions come from the interpreter (`NATIVAS`, `BUILTIN_DOCS`),
+//! Native functions come from the interpreter (`NATIVAS`, `lookup_builtin_doc`),
 //! so the help always matches what `expressa` accepts.
 
 use std::sync::OnceLock;
@@ -49,8 +49,8 @@ pub struct Native {
     /// `None` = always in scope; else needs `importe "module"`.
     pub module: Option<&'static str>,
     pub signatures: Vec<String>,
-    pub summary: &'static str,
-    pub example: &'static str,
+    pub summary: String,
+    pub example: String,
     /// A value (`argumentos`), not a function.
     pub is_value: bool,
 }
@@ -68,28 +68,34 @@ pub fn natives() -> &'static [Native] {
                     module: n.module,
                     signatures: doc
                         .map(|d| {
-                            d.sig
-                                .split("  ou  ")
-                                .map(|s| s.trim().to_string())
-                                .collect()
+                            if d.signatures.is_empty() {
+                                d.sig
+                                    .split("  ou  ")
+                                    .map(|s| s.trim().to_string())
+                                    .filter(|s| !s.is_empty())
+                                    .collect()
+                            } else {
+                                d.signatures.clone()
+                            }
                         })
                         .unwrap_or_else(|| vec![format!("{}(...)", n.names[0])]),
-                    summary: doc.map(|d| d.summary).unwrap_or(""),
-                    example: doc.map(|d| d.example).unwrap_or(""),
+                    summary: doc.map(|d| d.summary.clone()).unwrap_or_default(),
+                    example: doc.map(|d| d.example.clone()).unwrap_or_default(),
                     is_value: false,
                 }
             })
             .collect();
-        // Not a function: the interpreter defines it in every program.
-        out.push(Native {
-            name: "argumentos",
-            aliases: Vec::new(),
-            module: None,
-            signatures: Vec::new(),
-            summary: "Lista dos valores após o .lep na linha de comando (argumentos[1], …).",
-            example: "escreva(argumentos[1])",
-            is_value: true,
-        });
+        if let Some(doc) = lookup_builtin_doc("argumentos") {
+            out.push(Native {
+                name: "argumentos",
+                aliases: Vec::new(),
+                module: None,
+                signatures: Vec::new(),
+                summary: doc.summary.clone(),
+                example: doc.example.clone(),
+                is_value: true,
+            });
+        }
         out
     })
 }
@@ -346,6 +352,8 @@ pub struct Def {
     pub line: usize,
     /// Defined at column 0 (visible to files that import this one).
     pub top_level: bool,
+    /// `///` lines immediately above the definition.
+    pub doc: String,
 }
 
 impl Def {
@@ -361,13 +369,22 @@ impl Def {
 /// The first definition of a name wins.
 pub fn parse_definitions(text: &str) -> Vec<Def> {
     let code = blank_comments_and_strings(text);
+    let orig: Vec<&str> = text.split('\n').collect();
     let mut out: Vec<Def> = Vec::new();
+    let mut pending_doc: Vec<String> = Vec::new();
     let mut add = |def: Def| {
         if !KEYWORDS.contains(&def.name.as_str()) && !out.iter().any(|d| d.name == def.name) {
             out.push(def);
         }
     };
     for (line_no, line) in code.split('\n').enumerate() {
+        let raw = orig.get(line_no).copied().unwrap_or("");
+        let raw_trim = raw.trim_start();
+        if raw_trim.starts_with("///") && !raw_trim.starts_with("////") {
+            let body = raw_trim.trim_start_matches('/').trim_start();
+            pending_doc.push(body.to_string());
+            continue;
+        }
         let indent = line.len() - line.trim_start().len();
         let body = line.trim_start();
         // name = …  (but not ==)
@@ -400,7 +417,12 @@ pub fn parse_definitions(text: &str) -> Vec<Def> {
                 kind,
                 line: line_no,
                 top_level: indent == 0,
+                doc: pending_doc.join("\n"),
             });
+            pending_doc.clear();
+        } else if !raw_trim.is_empty() && !raw_trim.starts_with("//") && !raw_trim.starts_with("/*")
+        {
+            pending_doc.clear();
         }
         // para x de / para x em
         let mut rest = line;
@@ -422,6 +444,7 @@ pub fn parse_definitions(text: &str) -> Vec<Def> {
                     kind: DefKind::Value,
                     line: line_no,
                     top_level: false,
+                    doc: String::new(),
                 });
             }
         }
@@ -814,6 +837,9 @@ mod tests {
         );
         assert!(defs[0].top_level && !defs[1].top_level);
         assert_eq!(defs[4].kind, DefKind::Module);
+        let documented = parse_definitions("/// dobra\ndobro = funcao(x) { x * 2 }\n");
+        assert_eq!(documented[0].name, "dobro");
+        assert_eq!(documented[0].doc, "dobra");
         assert_eq!(defs[5].kind, DefKind::Function(vec![]));
         assert_eq!(defs[0].signature(), "soma(a, b)");
     }

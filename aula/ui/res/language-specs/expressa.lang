@@ -9,6 +9,7 @@
   </metadata>
   <styles>
     <style id="comment" _name="Comment" map-to="def:comment"/>
+    <style id="doc-comment" _name="Documentation" map-to="def:comment"/>
     <style id="string" _name="String" map-to="def:string"/>
     <style id="escape" _name="Escape" map-to="def:special-char"/>
     <style id="keyword" _name="Keyword" map-to="def:keyword"/>
@@ -19,6 +20,9 @@
   <definitions>
     <context id="shebang" style-ref="comment" end-at-line-end="true">
       <start>^#!</start>
+    </context>
+    <context id="doc-comment" style-ref="doc-comment" end-at-line-end="true">
+      <start>///([^/]|$)</start>
     </context>
     <context id="line-comment" style-ref="comment" end-at-line-end="true">
       <start>//</start>
@@ -98,6 +102,7 @@
       <keyword>formate</keyword>
       <keyword>avaliar</keyword>
       <keyword>catalogo</keyword>
+      <keyword>ajuda</keyword>
       <keyword>catálogo</keyword>
       <keyword>mapa</keyword>
       <keyword>conjunto</keyword>
@@ -135,6 +140,7 @@
     <context id="expressa" class="no-spell-check">
       <include>
         <context ref="shebang"/>
+        <context ref="doc-comment"/>
         <context ref="line-comment"/>
         <context ref="block-comment"/>
         <context ref="string"/>

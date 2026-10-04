@@ -22,4 +22,5 @@ pub struct Import {
     pub alias: Option<String>,
     pub path: String, // string literal contents, e.g. "lib/math"
     pub span: Span,
+    pub doc: Option<String>,
 }

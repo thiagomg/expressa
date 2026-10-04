@@ -38,6 +38,8 @@ pub struct Closure {
     /// File that defined the function and its text (errors, debugger).
     pub file: String,
     pub source: Rc<str>,
+    /// `///` attached to the definition, if any.
+    pub doc: Option<String>,
 }
 
 impl Closure {

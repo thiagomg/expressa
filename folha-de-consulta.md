@@ -1,7 +1,7 @@
 # Expressa — folha de consulta
 
 Arquivos `.lep`. Palavras em português. Índices começam em **1**.  
-Detalhes: `especificacao-linguagem.md`, `funcoes-nativas.md`.
+Detalhes: `especificacao-linguagem.md`. Nativas: `docs/nativas/*.lep`.
 
 ```text
 expressa                      REPL
@@ -125,6 +125,7 @@ avaliar("2 + 3 * 4")           // 14  (usa x, funções… do escopo atual)
 escreva(avaliar(leia("> ")) se_falhar "conta inválida")
 catalogo()                     // nativas, funcao do programa, módulos
 catalogo(c)  catalogo("matriz")  // mapa, módulo ou função
+ajuda("escreva")  ajuda("matriz::zeros")
                                // no REPL: ls   ls matriz   ls c
 
 busca = funcao(xs, alvo) {
@@ -268,7 +269,7 @@ Núcleo (sempre no escopo):
 | `escreva` `escreva_erro` `sair` `durma` | imprimir / encerrar / esperar |
 | `leia` `leia_linhas` | teclado / pipe |
 | `argumentos` | lista (não é função) |
-| `numero` `número` `formato` `avaliar` `catalogo` | número / executar texto / listar funções |
+| `numero` `número` `formato` `avaliar` `catalogo` `ajuda` | número / executar texto / listar / ficha |
 | `mapa` `conjunto` | construtores |
 | `tamanho` `primeiro` `ultimo` | coleção |
 | `maiuscula` `minuscula` `sem_acento` `remova` `substitua` `procurar` `separe` `junte` `limpe` `formate` | texto / lista / mapa / conjunto |
@@ -301,7 +302,7 @@ Abre `.lep` em `expressa-mode` (palavras-chave, nativas, comentários, strings).
 
 ```text
 expressa                  // ↑ ↓ histórico
-ajuda    ajuda funcoes    ajuda linguagem    ajuda escreva
+ajuda    ajuda funcoes    ajuda linguagem    ajuda escreva    ajuda matriz::zeros
 cls                       // comando do REPL: limpa a tela
 sair
 ```

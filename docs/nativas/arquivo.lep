@@ -1,0 +1,33 @@
+/// Lê o arquivo; cada linha vira um texto (sem quebra de linha).
+///
+/// Arquivo vazio devolve []. Caminhos relativos partem da pasta do .lep.
+/// Falhas de leitura são erros de execução (se_falhar).
+///
+/// Exemplo: leia_arquivo("dados.txt") se_falhar []
+leia_arquivo = funcao(caminho) { 0 }
+
+/// Grava a lista de textos, substituindo o arquivo.
+///
+/// Cada item vira uma linha, com quebra no final. Cria a pasta se faltar.
+///
+/// Exemplo: salve_arquivo("saida.txt", ["a", "b"])
+salve_arquivo = funcao(caminho, linhas) { 0 }
+
+/// Acrescenta linhas no fim do arquivo (cria se não existir).
+///
+/// Exemplo: adicione_arquivo("saida.txt", ["c"])
+adicione_arquivo = funcao(caminho, linhas) { 0 }
+
+/// Lê CSV simples (vírgula, sem aspas). Lista de listas de textos.
+///
+/// Cada célula é sempre um texto, mesmo quando parece um número.
+///
+/// Exemplo: leia_csv("notas.csv")
+leia_csv = funcao(caminho) { 0 }
+
+/// Grava uma lista de listas como CSV.
+///
+/// Substitui o arquivo. Células viram texto e são unidas por vírgula.
+///
+/// Exemplo: salve_csv("saida.csv", [["Ana", 25]])
+salve_csv = funcao(caminho, dados) { 0 }

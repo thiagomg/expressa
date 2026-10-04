@@ -739,7 +739,12 @@ impl<'a> Vm<'a> {
                 })?;
                 Ok(Value::Par(key, Box::new(v)))
             }
-            Expr::Function { params, body, span } => {
+            Expr::Function {
+                params,
+                body,
+                span,
+                doc,
+            } => {
                 check_unique_params(params)
                     .map_err(|name| self.err(format!("parâmetro duplicado `{name}`"), *span))?;
                 Ok(Value::Funcao(Rc::new(Closure {
@@ -749,6 +754,7 @@ impl<'a> Vm<'a> {
                     span: *span,
                     file: self.file.clone(),
                     source: Rc::clone(&self.source),
+                    doc: doc.clone(),
                 })))
             }
             Expr::Ident { name, span } => Env::get(env, name)

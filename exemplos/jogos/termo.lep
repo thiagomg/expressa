@@ -84,15 +84,14 @@ como_lista = função(s) {
     t
 }
 
-procurar = funcao(txt, q) {
-    para i de 1 até txt.tamanho() {
-        se txt[i] == q {
-            retorne i
-        }
-    }
-    0
-}
-
+// procurar = funcao(txt, q) {
+//     para i de 1 até txt.tamanho() {
+//         se txt[i] == q {
+//             retorne i
+//         }
+//     }
+//     0
+// }
 
 inicial = funcao() {
     tentativas = []

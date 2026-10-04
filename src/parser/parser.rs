@@ -110,8 +110,9 @@ impl Parser {
     }
 
     fn parse_item(&mut self) -> Result<Item, ParseError> {
+        let docs = self.take_docs()?;
         if matches!(self.peek_kind(), TokenKind::Importe) {
-            return Ok(Item::Import(self.parse_import(None)?));
+            return Ok(Item::Import(self.parse_import(None, docs)?));
         }
 
         // `nome = importe "path"`
@@ -125,13 +126,49 @@ impl Parser {
                 unreachable!();
             };
             self.remove(); // =
-            return Ok(Item::Import(self.parse_import(Some(name))?));
+            return Ok(Item::Import(self.parse_import(Some(name), docs)?));
         }
 
-        Ok(Item::Stmt(self.parse_stmt()?))
+        Ok(Item::Stmt(self.parse_stmt_with_docs(docs)?))
     }
 
-    fn parse_import(&mut self, alias: Option<String>) -> Result<Import, ParseError> {
+    /// Consecutive `///` lines. Error if they are not followed by a definition.
+    fn take_docs(&mut self) -> Result<Option<String>, ParseError> {
+        let mut lines = Vec::new();
+        let mut span: Option<Span> = None;
+        while let TokenKind::DocComment(text) = self.peek_kind() {
+            lines.push(text.clone());
+            let tok = self.remove();
+            span = Some(match span {
+                Some(s) => s.join(tok.span),
+                None => tok.span,
+            });
+        }
+        if lines.is_empty() {
+            return Ok(None);
+        }
+        if !self.is_definition_start() {
+            return Err(self.err_at("documentação só vale antes de uma definição", span.unwrap()));
+        }
+        Ok(Some(join_doc_lines(&lines)))
+    }
+
+    fn is_definition_start(&self) -> bool {
+        match self.peek_kind() {
+            TokenKind::Importe => true,
+            TokenKind::Ident(_) => matches!(
+                self.tokens.get(self.pos + 1).map(|t| &t.kind),
+                Some(TokenKind::Eq)
+            ),
+            _ => false,
+        }
+    }
+
+    fn parse_import(
+        &mut self,
+        alias: Option<String>,
+        doc: Option<String>,
+    ) -> Result<Import, ParseError> {
         let start = self
             .expect_kind(|k| matches!(k, TokenKind::Importe), "esperado 'importe'")?
             .span;
@@ -141,6 +178,7 @@ impl Parser {
                 alias,
                 path,
                 span: start.join(path_tok.span),
+                doc,
             }),
             _ => Err(self.err_at("esperado caminho string após 'importe'", path_tok.span)),
         }
@@ -149,7 +187,12 @@ impl Parser {
     // ── statements ───────────────────────────────────────────────
 
     fn parse_stmt(&mut self) -> Result<Stmt, ParseError> {
-        match self.peek_kind() {
+        let docs = self.take_docs()?;
+        self.parse_stmt_with_docs(docs)
+    }
+
+    fn parse_stmt_with_docs(&mut self, docs: Option<String>) -> Result<Stmt, ParseError> {
+        let stmt = match self.peek_kind() {
             TokenKind::Repita => self.parse_repita(),
             TokenKind::Enquanto => self.parse_enquanto(),
             TokenKind::Para => self.parse_para(),
@@ -172,7 +215,8 @@ impl Parser {
                     }
                 }
             }
-        }
+        };
+        attach_doc(stmt?, docs)
     }
 
     fn finish_assign(&mut self, lhs: Expr, compound: Option<BinaryOp>) -> Result<Stmt, ParseError> {
@@ -201,6 +245,7 @@ impl Parser {
             target,
             value,
             span,
+            doc: None,
         })
     }
 
@@ -794,7 +839,40 @@ impl Parser {
             params,
             span: start.join(body.span),
             body,
+            doc: None,
         })
+    }
+}
+
+fn join_doc_lines(lines: &[String]) -> String {
+    lines.join("\n").trim_end().to_string()
+}
+
+fn attach_doc(stmt: Stmt, doc: Option<String>) -> Result<Stmt, ParseError> {
+    let Some(doc) = doc else {
+        return Ok(stmt);
+    };
+    match stmt {
+        Stmt::Assign {
+            target,
+            mut value,
+            span,
+            ..
+        } => {
+            if let Expr::Function { doc: slot, .. } = &mut value {
+                *slot = Some(doc.clone());
+            }
+            Ok(Stmt::Assign {
+                target,
+                value,
+                span,
+                doc: Some(doc),
+            })
+        }
+        other => Err(ParseError {
+            message: "documentação só vale antes de uma definição".into(),
+            span: other.span(),
+        }),
     }
 }
 
@@ -1348,6 +1426,41 @@ fim
             }
             other => panic!("{other:?}"),
         }
+    }
+
+    #[test]
+    fn doc_comment_attaches_to_function() {
+        let src = r#"
+/// soma dois números
+///
+/// Exemplo: soma(1, 2)
+soma = funcao(a, b) { a + b }
+"#;
+        let p = parse_ok(src);
+        match &p.items[0] {
+            Item::Stmt(Stmt::Assign { doc, value, .. }) => {
+                assert_eq!(
+                    doc.as_deref(),
+                    Some("soma dois números\n\nExemplo: soma(1, 2)")
+                );
+                match value {
+                    Expr::Function {
+                        doc: fdoc, params, ..
+                    } => {
+                        assert_eq!(fdoc.as_deref(), doc.as_deref());
+                        assert_eq!(params.len(), 2);
+                    }
+                    other => panic!("{other:?}"),
+                }
+            }
+            other => panic!("{other:?}"),
+        }
+    }
+
+    #[test]
+    fn stray_doc_comment_is_error() {
+        let err = parse("/// solto\nescreva(1)").unwrap_err();
+        assert!(err.message.contains("documentação"));
     }
 
     #[test]

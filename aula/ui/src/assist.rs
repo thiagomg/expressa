@@ -433,6 +433,18 @@ fn prefix_of(ctx: &Completion) -> &str {
     }
 }
 
+/// GtkSourceView only pops the list when `is_trigger` is true. Identifier
+/// letters must count: otherwise typing `esc` never opens completion.
+pub fn triggers_completion(before: &str, c: char) -> bool {
+    match lang::completion_context(before) {
+        Completion::Nothing => false,
+        Completion::Import { .. } => c == '"' || c == '/' || lang::is_ident_char(c),
+        Completion::Module { .. } => c == ':' || lang::is_ident_char(c),
+        Completion::Method { .. } => c == '.' || lang::is_ident_char(c),
+        Completion::Name { .. } => lang::is_ident_char(c) || c == '.',
+    }
+}
+
 /// Prefix the GtkSourceView `refilter` must use: the Expressa token at the
 /// cursor (`lib/a` after `importe "`, not the Gtk word `a` after `/`).
 fn prefix_before_cursor(buffer: &impl IsA<gtk::TextBuffer>) -> String {
@@ -488,7 +500,12 @@ pub fn help_markup(help: &Help, path: &str, text: &str, line: &str, col: usize) 
                     DefKind::Function(p) => format!("{} = funcao({})", def.name, p.join(", ")),
                     _ => def.name.clone(),
                 };
-                format!("<tt><b>{}</b></tt>\n{}", esc(&shown), esc(&where_))
+                let extra = if def.doc.is_empty() {
+                    String::new()
+                } else {
+                    format!("\n{}", esc(&def.doc))
+                };
+                format!("<tt><b>{}</b></tt>\n{}{}", esc(&shown), esc(&where_), extra)
             }
         },
     )
@@ -637,15 +654,10 @@ mod imp {
         }
 
         fn is_trigger(&self, iter: &gtk::TextIter, c: char) -> bool {
-            let mut start = iter.clone();
-            start.set_line_offset(0);
-            let line = start.text(iter).to_string();
-            match c {
-                '.' => true,
-                ':' => line.ends_with("::"),
-                '"' | '/' => line.contains("importe"),
-                _ => false,
-            }
+            let buffer = iter.buffer();
+            let start = buffer.start_iter();
+            let before = start.text(iter).to_string();
+            super::triggers_completion(&before, c)
         }
 
         fn populate_future(
@@ -930,6 +942,8 @@ pub fn attach(
     completion.set_remember_info_visibility(true);
     // First item preselected: Enter takes it (like VS Code).
     completion.set_select_on_show(true);
+    // Default page-size is 5; show more names before the list scrolls.
+    completion.set_page_size(12);
 
     let hover = view.hover();
     let info: HoverInfo = glib::Object::new();
@@ -1195,6 +1209,18 @@ mod tests {
 
         let (_, it) = items(&h, "main.lep", text, r#"importe "lib/a"#);
         assert!(labels(&it).contains(&"lib/ajuda"));
+    }
+
+    #[test]
+    fn letters_trigger_name_completion() {
+        assert!(triggers_completion("esc", 'c'));
+        assert!(triggers_completion("escreva", 'a'));
+        assert!(triggers_completion("xs.", '.'));
+        assert!(triggers_completion("m::", ':'));
+        assert!(triggers_completion(r#"importe "te"#, 'e'));
+        assert!(!triggers_completion("x = 3", '3'));
+        assert!(!triggers_completion("x // esc", 'c'));
+        assert!(!triggers_completion("x = \"te", 'e'));
     }
 
     #[test]

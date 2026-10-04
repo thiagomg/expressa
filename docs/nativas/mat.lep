@@ -1,0 +1,20 @@
+/// Raiz quadrada. Erro se o número for negativo (use se_falhar).
+///
+/// raiz(9) vale 3, raiz(0) vale 0.
+///
+/// Exemplo: raiz(9)
+raiz = funcao(numero) { 0 }
+
+/// Inteiro ao acaso entre min e max (inclusive). Também aleatório().
+///
+/// Sem semente(), cada execução do programa gera uma sequência diferente.
+///
+/// Exemplo: aleatorio(1, 6)
+aleatorio = funcao(min, max) { 0 }
+
+/// Fixa a sequência de aleatorio() (útil para repetir um teste).
+///
+/// O mesmo n produz a mesma sequência. Devolve nada.
+///
+/// Exemplo: semente(1)
+semente = funcao(n) { 0 }

@@ -4,7 +4,7 @@
 //
 //   src/lexer/tokens.rs           keyword()   -> keywords
 //   src/runtime/nativas/mod.rs    NATIVAS     -> native names, aliases, modules
-//   funcoes-nativas.md            ### `name`  -> signatures and docs
+//   docs/nativas/*.lep            /// + funcao -> signatures and docs
 //
 // Writes src/nativas.json and the keyword/builtin patterns of
 // syntaxes/expressa.tmLanguage.json.
@@ -21,7 +21,7 @@ const EXT = path.resolve(__dirname, '..');
 const REPO = path.resolve(EXT, '..', '..');
 const TOKENS_RS = path.join(REPO, 'src/lexer/tokens.rs');
 const NATIVAS_RS = path.join(REPO, 'src/runtime/nativas/mod.rs');
-const DOCS_MD = path.join(REPO, 'funcoes-nativas.md');
+const DOCS_DIR = path.join(REPO, 'docs/nativas');
 const OUT_JSON = path.join(EXT, 'src/nativas.json');
 const GRAMMAR = path.join(EXT, 'syntaxes/expressa.tmLanguage.json');
 
@@ -74,39 +74,52 @@ function readNativas() {
   return out;
 }
 
-// Sections `### \`name\`` up to the next heading, plus the index summaries.
+// `///` lines then `nome = funcao(...)` or `nome = []` in docs/nativas/*.lep.
 function readDocs() {
-  const md = fs.readFileSync(DOCS_MD, 'utf8');
-  const summaries = {};
-  for (const m of md.matchAll(/^\|\s*\[`([^`]+)`\]\([^)]*\)\s*\|\s*(.+?)\s*\|\s*$/gm)) {
-    summaries[m[1]] = m[2];
-  }
+  const files = ['nucleo.lep', 'tela.lep', 'mat.lep', 'matriz.lep', 'arquivo.lep'];
   const sections = {};
-  const parts = md.split(/^(?=#{2,3} )/m);
-  for (const part of parts) {
-    const h = part.match(/^### `([^`]+)`\s*\n/);
-    if (!h) continue;
-    let body = part.slice(h[0].length).replace(/\n---\s*$/, '').trim();
-    // The module line is shown separately in the editor.
-    body = body.replace(/^Módulo `[^`]+`: `importe "[^"]+"`\.\s*\n+/, '');
-    const sig = body.match(/```text\n([\s\S]*?)```/);
-    const signatures = sig
-      ? sig[1].split('\n').map((s) => s.trim()).filter((s) => s && !s.startsWith('//'))
-      : [];
-    // Not every function is in the index table; fall back to the first
-    // sentence of the description.
-    const firstText = body
-      .replace(/```[\s\S]*?```/g, '')
-      .split('\n')
-      .map((l) => l.trim())
-      .find((l) => l && !l.startsWith('|') && !l.startsWith('**'));
-    const fallback = firstText ? firstText.replace(/\.\s.*$/, '.').replace(/\.$/, '') : '';
-    sections[h[1]] = {
-      signatures,
-      summary: summaries[h[1]] || fallback,
-      // The signature block is kept apart in `signatures`.
-      doc: (sig ? body.replace(sig[0], '') : body).trim().replace(/```text\n/g, '```expressa\n'),
-    };
+  for (const f of files) {
+    const src = fs.readFileSync(path.join(DOCS_DIR, f), 'utf8');
+    let docLines = [];
+    for (const line of src.split('\n')) {
+      if (line.startsWith('///')) {
+        const body = line.slice(3).startsWith(' ') ? line.slice(4) : line.slice(3);
+        docLines.push(body);
+        continue;
+      }
+      const fn = line.match(/^([A-Za-zÀ-ÿ_][A-Za-zÀ-ÿ0-9_]*)\s*=\s*funcao\s*\(([^)]*)\)/);
+      const val = line.match(/^([A-Za-zÀ-ÿ_][A-Za-zÀ-ÿ0-9_]*)\s*=\s*\[\s*\]/);
+      const name = fn ? fn[1] : val ? val[1] : null;
+      if (!name) {
+        if (line.trim() !== '') docLines = [];
+        continue;
+      }
+      const sig = fn ? `${name}(${fn[2].replace(/\s+/g, ' ').trim()})` : '';
+      let body = docLines.join('\n').trim();
+      docLines = [];
+      const fromDoc = [];
+      const prefix = `${name}(`;
+      const lines = body.split('\n');
+      let i = 0;
+      while (i < lines.length && lines[i].trim().startsWith(prefix)) {
+        fromDoc.push(lines[i].trim());
+        i++;
+      }
+      if (i < lines.length && lines[i].trim() === '') i++;
+      if (fromDoc.length) body = lines.slice(i).join('\n').trim();
+      const first = body.split(/\n\s*\n/)[0].replace(/\n/g, ' ').trim();
+      if (!sections[name]) {
+        sections[name] = {
+          signatures: fromDoc.length ? fromDoc : [],
+          summary: first,
+          doc: body,
+        };
+      }
+      if (!fromDoc.length && sig && !sections[name].signatures.includes(sig)) {
+        sections[name].signatures.push(sig);
+      }
+      if (body && !sections[name].doc) sections[name].doc = body;
+    }
   }
   return sections;
 }
@@ -118,7 +131,7 @@ function build() {
   const warnings = [];
   const items = nativas.map((n) => {
     const d = docs[n.name];
-    if (!d) warnings.push(`sem documentação em funcoes-nativas.md: ${n.name}`);
+    if (!d) warnings.push(`sem documentação em docs/nativas: ${n.name}`);
     else if (d.signatures.length === 0) warnings.push(`sem assinatura (bloco text): ${n.name}`);
     return {
       name: n.name,

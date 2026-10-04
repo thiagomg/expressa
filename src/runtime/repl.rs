@@ -329,20 +329,18 @@ fn print_help(topic: Option<&str>) {
             match key.as_str() {
                 "funcoes" | "funcao" | "nativas" | "builtins" => print_help_funcoes(),
                 "linguagem" | "sintaxe" => print_help_linguagem(),
-                "argumentos" => println!(
-                    "  argumentos              lista dos valores após o .lep\n  \
-                     argumentos[1]           primeiro (índices começam em 1)\n  \
-                     exemplo: expressa grep.lep Thiago"
-                ),
-                name => match super::nativas::lookup_builtin_doc(name) {
-                    Some(doc) => print_help_builtin(doc),
-                    None => {
+                name => {
+                    if let Some(text) = super::nativas::lookup_ficha(t)
+                        .or_else(|| super::nativas::lookup_ficha(name))
+                    {
+                        println!("{text}");
+                    } else {
                         println!(
                             "Não conheço o tópico `{t}`.\n  \
                              Tente: ajuda, ajuda funcoes, ajuda linguagem, ajuda escreva"
                         );
                     }
-                },
+                }
             }
         }
     }
@@ -483,19 +481,6 @@ fn print_docs_for(module: Option<&str>) {
             println!("  {:<22} {}", doc.sig, doc.summary);
         }
     }
-}
-
-fn print_help_builtin(doc: &super::nativas::BuiltinDoc) {
-    let modulo = super::nativas::NATIVAS
-        .iter()
-        .find(|n| n.names[0] == doc.name)
-        .and_then(|n| n.module)
-        .map(|m| format!("\n  módulo: importe \"{m}\""))
-        .unwrap_or_default();
-    println!(
-        "  {}\n  {}{}\n  exemplo: {}",
-        doc.sig, doc.summary, modulo, doc.example
-    );
 }
 
 fn print_help_linguagem() {

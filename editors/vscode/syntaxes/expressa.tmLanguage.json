@@ -69,6 +69,16 @@
     "comentarios": {
       "patterns": [
         {
+          "name": "comment.block.documentation.expressa",
+          "begin": "///(?![/])",
+          "beginCaptures": {
+            "0": {
+              "name": "punctuation.definition.comment.expressa"
+            }
+          },
+          "end": "$"
+        },
+        {
           "name": "comment.line.double-slash.expressa",
           "begin": "//",
           "beginCaptures": {
@@ -181,7 +191,7 @@
     },
     "nativas": {
       "name": "support.function.builtin.expressa",
-      "match": "(?<![\\p{L}\\p{N}_])(?:adicione_arquivo|salve_arquivo|escreva_erro|leia_arquivo|eh_terminal|leia_linhas|é_terminal|identidade|limpe_tela|sem_acento|transposta|aleatorio|aleatório|maiuscula|minuscula|salve_csv|substitua|catalogo|catálogo|conjunto|leia_csv|ncolunas|primeiro|procurar|avaliar|escreva|formate|formato|negrito|nlinhas|semente|tamanho|matriz|numero|número|remova|separe|ultimo|cheia|durma|fundo|junte|limpe|pinte|zeros|casa|leia|mapa|raiz|sair|cls|det|uns)(?![\\p{L}\\p{N}_])"
+      "match": "(?<![\\p{L}\\p{N}_])(?:adicione_arquivo|salve_arquivo|escreva_erro|leia_arquivo|eh_terminal|leia_linhas|é_terminal|identidade|limpe_tela|sem_acento|transposta|aleatorio|aleatório|maiuscula|minuscula|salve_csv|substitua|catalogo|catálogo|conjunto|leia_csv|ncolunas|primeiro|procurar|avaliar|escreva|formate|formato|negrito|nlinhas|semente|tamanho|matriz|numero|número|remova|separe|ultimo|ajuda|cheia|durma|fundo|junte|limpe|pinte|zeros|casa|leia|mapa|raiz|sair|cls|det|uns)(?![\\p{L}\\p{N}_])"
     },
     "valores-nativos": {
       "name": "variable.language.expressa",

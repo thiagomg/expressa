@@ -33,6 +33,8 @@ pub enum Expr {
         params: Vec<Param>,
         body: Block,
         span: Span,
+        /// `///` lines immediately above `nome = funcao(...)`.
+        doc: Option<String>,
     },
 
     // ── Names & access ─────────────────────────────────────────

@@ -4,7 +4,7 @@ Suporte à linguagem [Expressa](https://github.com/thiagomg/expressa) (arquivos 
 
 - **Cores** para palavras-chave (`se`, `para`, `repita`, `inicio`/`fim`…), funções nativas, textos, números, `:chaves`, `modulo::nome` e comentários.
 - **Autocompletar**
-  - funções nativas com a assinatura e a documentação de `funcoes-nativas.md`;
+  - funções nativas com a assinatura e a documentação de `docs/nativas/*.lep`;
   - funções de módulo (`pinte`, `zeros`, `leia_arquivo`…) acrescentam o `importe "tela"` que faltar;
   - nomes definidos no arquivo e nos `.lep` importados;
   - `m::` lista o módulo importado como `m = importe "…"`;
@@ -29,7 +29,7 @@ code --install-extension expressa-0.1.0.vsix
 
 ## Manter em dia com a linguagem
 
-As palavras-chave vêm de `src/lexer/tokens.rs`, as funções nativas de `src/runtime/nativas/mod.rs` e a documentação de `funcoes-nativas.md`. Depois de mudar a linguagem:
+As palavras-chave vêm de `src/lexer/tokens.rs`, as funções nativas de `src/runtime/nativas/mod.rs` e a documentação de `docs/nativas/*.lep`. Depois de mudar a linguagem:
 
 ```sh
 node scripts/gerar.js           # atualiza src/nativas.json e a gramática

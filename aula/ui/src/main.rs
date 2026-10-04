@@ -1,3 +1,4 @@
+mod ajuda;
 mod assist;
 mod console;
 mod docs;
@@ -86,6 +87,7 @@ struct Ui {
     help: Option<Rc<Help>>,
     /// Unsaved changes were handled: the window may close now.
     closing: bool,
+    ajuda_win: RefCell<Option<gtk::Window>>,
 }
 
 type UiRc = Rc<RefCell<Ui>>;
@@ -251,6 +253,7 @@ fn build_ui(app: &Application) {
         font_css,
         help: None,
         closing: false,
+        ajuda_win: RefCell::new(None),
     }));
     let help = make_help(&ui);
     ui.borrow_mut().help = Some(help);
@@ -300,6 +303,9 @@ fn build_ui(app: &Application) {
     btn_panel.set_tooltip_text(Some("Mostrar ou ocultar o depurador (F8)"));
     toolbar.append(&btn_files);
     toolbar.append(&btn_panel);
+    let btn_ajuda = Button::with_label("Ajuda");
+    btn_ajuda.set_tooltip_text(Some("Funções nativas (núcleo e módulos)"));
+    toolbar.append(&btn_ajuda);
 
     let args_row = GtkBox::new(Orientation::Horizontal, 8);
     args_row.set_margin_start(8);
@@ -449,6 +455,24 @@ fn build_ui(app: &Application) {
     {
         let pane = debug_panel.clone();
         btn_panel.connect_toggled(move |b| pane.set_visible(b.is_active()));
+    }
+    {
+        let ui_a = Rc::clone(&ui);
+        btn_ajuda.connect_clicked(move |_| {
+            let u = ui_a.borrow();
+            if let Some(w) = u.ajuda_win.borrow().as_ref() {
+                w.present();
+                return;
+            }
+            let w = ajuda::open(&u.window);
+            w.connect_destroy({
+                let ui_a = Rc::clone(&ui_a);
+                move |_| {
+                    *ui_a.borrow().ajuda_win.borrow_mut() = None;
+                }
+            });
+            *u.ajuda_win.borrow_mut() = Some(w);
+        });
     }
     {
         // Click on `erro: … em arquivo:linha`; clicks while reading keep the
@@ -673,11 +697,17 @@ fn install_css() {
             background-color: alpha(currentColor, 0.12);
         }
         label.aula-catalogo { font-family: monospace; }
+        label.aula-ajuda-grupo { font-weight: bold; opacity: 0.7; padding-top: 6px; }
         paned.aula-paned > separator:hover {
             background-color: alpha(currentColor, 0.28);
         }
         popover.aula-signature > contents {
             padding: 4px 8px;
+        }
+        /* GtkSourceView default is 150px; that clips name, params and nativa. */
+        popover.completion,
+        GtkSourceAssistant.completion {
+            min-width: 32em;
         }
         ",
     );

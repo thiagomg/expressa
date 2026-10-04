@@ -9,7 +9,9 @@ use super::super::env::Env;
 use super::super::error::{CallFrame, EvalError};
 use super::super::eval::Vm;
 use super::super::value::{MapKey, NumeroLocale, Value, conjunto_insert};
-use super::{builtin_args, builtin_modulo, sem_acento, value_as_texto};
+use super::{
+    builtin_args, builtin_doc_summary, builtin_modulo, lookup_ficha, sem_acento, value_as_texto,
+};
 
 impl Vm<'_> {
     pub(crate) fn bi_escreva(&mut self, args: &[Value], _span: Span) -> Result<Value, EvalError> {
@@ -531,7 +533,7 @@ impl Vm<'_> {
                 .get(&m)
                 .map(|e| module_member_names(&e.borrow()))
                 .unwrap_or_default();
-            rows.push((m.clone(), catalog_row(&m, "modulo", &membros, &m)));
+            rows.push((m.clone(), catalog_row(&m, "modulo", &membros, &m, "")));
             names.insert(m);
         }
         rows.sort_by(|a, b| a.0.cmp(&b.0));
@@ -571,6 +573,38 @@ impl Vm<'_> {
             )),
         }
     }
+
+    pub(crate) fn bi_ajuda(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
+        let [v] = args else {
+            return Err(self.err(
+                format!("ajuda() espera 1 argumento, recebeu {}", args.len()),
+                span,
+            ));
+        };
+        match v {
+            Value::Texto(s) => lookup_ficha(s)
+                .map(Value::Texto)
+                .ok_or_else(|| self.err(format!("não há ficha para `{s}`"), span)),
+            Value::Builtin(canon) => lookup_ficha(canon)
+                .map(Value::Texto)
+                .ok_or_else(|| self.err(format!("não há ficha para `{canon}`"), span)),
+            Value::Funcao(c) => {
+                let sig = format!("funcao({})", c.args_text());
+                let body = match &c.doc {
+                    Some(d) if !d.is_empty() => format!("{sig}\n\n{d}"),
+                    _ => sig,
+                };
+                Ok(Value::Texto(body))
+            }
+            other => Err(self.err(
+                format!(
+                    "ajuda espera um texto, função ou nativa, encontrado {}",
+                    other.type_name()
+                ),
+                span,
+            )),
+        }
+    }
 }
 
 fn catalog_entry(name: &str, value: &Value) -> Option<Value> {
@@ -584,14 +618,28 @@ fn catalog_entry(name: &str, value: &Value) -> Option<Value> {
 
 fn catalog_value_row(name: &str, value: &Value) -> Value {
     match value {
-        Value::Builtin(canon) => {
-            catalog_row(name, "nativa", &builtin_args(canon), builtin_modulo(canon))
-        }
-        Value::Funcao(c) => catalog_row(name, "funcao", &c.args_text(), ""),
-        Value::Modulo(env) => {
-            catalog_row(name, "modulo", &module_member_names(&env.borrow()), name)
-        }
-        other => catalog_row(name, other.type_name(), "", ""),
+        Value::Builtin(canon) => catalog_row(
+            name,
+            "nativa",
+            &builtin_args(canon),
+            builtin_modulo(canon),
+            &builtin_doc_summary(canon),
+        ),
+        Value::Funcao(c) => catalog_row(
+            name,
+            "funcao",
+            &c.args_text(),
+            "",
+            c.doc.as_deref().map(first_paragraph).unwrap_or(""),
+        ),
+        Value::Modulo(env) => catalog_row(
+            name,
+            "modulo",
+            &module_member_names(&env.borrow()),
+            name,
+            "",
+        ),
+        other => catalog_row(name, other.type_name(), "", "", ""),
     }
 }
 
@@ -599,10 +647,20 @@ fn catalog_frame(env: &Env, modulo: &str) -> Value {
     let mut rows = Vec::new();
     for (name, value) in env.bindings_sorted() {
         match &value {
-            Value::Builtin(canon) => {
-                rows.push(catalog_row(&name, "nativa", &builtin_args(canon), modulo))
-            }
-            Value::Funcao(c) => rows.push(catalog_row(&name, "funcao", &c.args_text(), modulo)),
+            Value::Builtin(canon) => rows.push(catalog_row(
+                &name,
+                "nativa",
+                &builtin_args(canon),
+                modulo,
+                &builtin_doc_summary(canon),
+            )),
+            Value::Funcao(c) => rows.push(catalog_row(
+                &name,
+                "funcao",
+                &c.args_text(),
+                modulo,
+                c.doc.as_deref().map(first_paragraph).unwrap_or(""),
+            )),
             Value::Modulo(_) => {
                 if let Some(e) = catalog_entry(&name, &value) {
                     rows.push(e);
@@ -623,13 +681,18 @@ fn mapkey_nome(k: &MapKey) -> String {
     }
 }
 
-fn catalog_row(nome: &str, tipo: &str, args: &str, modulo: &str) -> Value {
+fn catalog_row(nome: &str, tipo: &str, args: &str, modulo: &str, doc: &str) -> Value {
     Value::mapa(vec![
         (MapKey::Texto("nome".into()), Value::Texto(nome.into())),
         (MapKey::Texto("tipo".into()), Value::Texto(tipo.into())),
         (MapKey::Texto("args".into()), Value::Texto(args.into())),
         (MapKey::Texto("modulo".into()), Value::Texto(modulo.into())),
+        (MapKey::Texto("doc".into()), Value::Texto(doc.into())),
     ])
+}
+
+fn first_paragraph(doc: &str) -> &str {
+    doc.split("\n\n").next().unwrap_or(doc).trim()
 }
 
 fn module_member_names(env: &Env) -> String {

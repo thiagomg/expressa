@@ -1,0 +1,53 @@
+/// Monta uma matriz a partir de uma lista de listas de números.
+///
+/// Todas as linhas precisam ter o mesmo comprimento. Índices em 1: A[1, 2].
+/// A[1] é a linha como lista.
+///
+/// Exemplo: matriz([[1, 2], [3, 4]])
+matriz = funcao(linhas) { 0 }
+
+/// Troca linhas por colunas.
+///
+/// Exemplo: transposta(A)
+transposta = funcao(matriz) { 0 }
+
+/// Determinante (1×1, 2×2 ou 3×3).
+///
+/// Exemplo: det(A)
+det = funcao(matriz) { 0 }
+
+/// Matriz identidade n×n.
+///
+/// Exemplo: identidade(3)
+identidade = funcao(n) { 0 }
+
+/// Matriz só de zeros. Um argumento: n×n.
+///
+/// Dois argumentos: linhas × colunas. Inteiro >= 1.
+///
+/// Exemplo: zeros(2, 3)
+zeros = funcao(n) { 0 }
+zeros = funcao(linhas, colunas) { 0 }
+
+/// Matriz só de uns. Um argumento: n×n.
+///
+/// Como zeros, mas preenchida com 1.
+///
+/// Exemplo: uns(2, 3)
+uns = funcao(n) { 0 }
+uns = funcao(linhas, colunas) { 0 }
+
+/// Matriz retangular preenchida com o mesmo número.
+///
+/// Exemplo: cheia(2, 3, 7)
+cheia = funcao(linhas, colunas, valor) { 0 }
+
+/// Quantidade de linhas da matriz.
+///
+/// Exemplo: nlinhas(A)
+nlinhas = funcao(matriz) { 0 }
+
+/// Quantidade de colunas da matriz.
+///
+/// Exemplo: ncolunas(A)
+ncolunas = funcao(matriz) { 0 }
