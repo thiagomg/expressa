@@ -458,21 +458,7 @@ fn build_ui(app: &Application) {
     }
     {
         let ui_a = Rc::clone(&ui);
-        btn_ajuda.connect_clicked(move |_| {
-            let u = ui_a.borrow();
-            if let Some(w) = u.ajuda_win.borrow().as_ref() {
-                w.present();
-                return;
-            }
-            let w = ajuda::open(&u.window);
-            w.connect_destroy({
-                let ui_a = Rc::clone(&ui_a);
-                move |_| {
-                    *ui_a.borrow().ajuda_win.borrow_mut() = None;
-                }
-            });
-            *u.ajuda_win.borrow_mut() = Some(w);
-        });
+        btn_ajuda.connect_clicked(move |_| open_ajuda(&ui_a));
     }
     {
         // Click on `erro: … em arquivo:linha`; clicks while reading keep the
@@ -651,6 +637,22 @@ fn build_ui(app: &Application) {
             }
         });
     }
+}
+
+fn open_ajuda(ui: &UiRc) {
+    let u = ui.borrow();
+    if let Some(w) = u.ajuda_win.borrow().as_ref() {
+        w.present();
+        return;
+    }
+    let w = ajuda::open(&u.window);
+    w.connect_destroy({
+        let ui = Rc::clone(ui);
+        move |_| {
+            *ui.borrow().ajuda_win.borrow_mut() = None;
+        }
+    });
+    *u.ajuda_win.borrow_mut() = Some(w);
 }
 
 fn connect(button: &impl IsA<Button>, ui: &UiRc, f: impl Fn(&UiRc) + 'static) {
@@ -974,7 +976,9 @@ fn attach_editor_input(ui: &UiRc, doc: &Rc<Doc>, vh: &Rc<ViewHelp>) {
                 return;
             };
             let help = ui_h.borrow().help.clone().expect("help");
-            assist::show_info(&doc.view, &vh, &help);
+            if !assist::show_info(&doc.view, &vh, &help) {
+                open_ajuda(&ui_h);
+            }
         });
     }
     {
@@ -988,11 +992,12 @@ fn attach_editor_input(ui: &UiRc, doc: &Rc<Doc>, vh: &Rc<ViewHelp>) {
     }
     {
         let vh = Rc::downgrade(vh);
+        let weak = Rc::downgrade(doc);
         add_shortcut_if(&keys, "Escape", move || {
-            if let Some(vh) = vh.upgrade() {
-                vh.hide_signature();
-            }
-            false
+            let (Some(vh), Some(doc)) = (vh.upgrade(), weak.upgrade()) else {
+                return false;
+            };
+            vh.dismiss(&doc.view)
         });
     }
     view.add_controller(keys);

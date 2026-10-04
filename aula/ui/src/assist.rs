@@ -903,8 +903,21 @@ impl ViewHelp {
         self.info.unparent();
     }
 
-    pub fn hide_signature(&self) {
+    /// Escape: hide signature/F1 popovers and drop the GtkSourceCompletion
+    /// context. The list widget hides itself on Escape without cancelling;
+    /// a leftover context then never shows the list again.
+    pub fn dismiss(&self, view: &SourceView) -> bool {
+        let completion = view.completion();
+        let had = self.completion_open.get()
+            || self.signature.is_visible()
+            || self.info.is_visible();
         self.signature.popdown();
+        self.info.popdown();
+        completion.hide();
+        completion.block_interactive();
+        completion.unblock_interactive();
+        self.completion_open.set(false);
+        had
     }
 }
 
@@ -1087,7 +1100,8 @@ pub fn attach(
     vh
 }
 
-/// F1: help for the name at the cursor, or the `catalogo()` listing.
+/// F1 on a name: ficha popup. Returns false when the cursor is not on a
+/// name so the caller can open the Ajuda window.
 pub fn show_info(view: &SourceView, vh: &ViewHelp, help: &Help) -> bool {
     let buffer = view.buffer();
     let Some(sb) = buffer.downcast_ref::<SourceBuffer>() else {
@@ -1105,15 +1119,12 @@ pub fn show_info(view: &SourceView, vh: &ViewHelp, help: &Help) -> bool {
     }
     let line = ls.text(&le).to_string();
     let col = ls.text(&cursor).len();
-    if let Some(m) = help_markup(help, &path, &text, &line, col) {
-        vh.info_label.set_wrap(true);
-        vh.info_label.remove_css_class("aula-catalogo");
-        vh.info_label.set_markup(&m);
-    } else {
-        vh.info_label.set_wrap(false);
-        vh.info_label.add_css_class("aula-catalogo");
-        vh.info_label.set_text(&lang::catalogo_texto(&text));
-    }
+    let Some(m) = help_markup(help, &path, &text, &line, col) else {
+        return false;
+    };
+    vh.info_label.set_wrap(true);
+    vh.info_label.remove_css_class("aula-catalogo");
+    vh.info_label.set_markup(&m);
     let dest = vh.info.parent().unwrap_or_else(|| view.clone().upcast());
     let r = cursor_rect(view, &dest);
     let (_, width, _, _) = vh.info.measure(gtk::Orientation::Horizontal, -1);
@@ -1262,6 +1273,8 @@ mod tests {
             "{m}"
         );
         assert_eq!(help_markup(&h, "main.lep", text, "se x {", 1), None);
+        assert_eq!(help_markup(&h, "main.lep", text, "    ", 2), None);
+        assert_eq!(help_markup(&h, "main.lep", text, "", 0), None);
     }
 
     #[test]
