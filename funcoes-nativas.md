@@ -38,6 +38,7 @@ Caminhos de arquivo **relativos** são resolvidos a partir da pasta do `.lep` em
 | [`numero`](#numero) | Transforma texto em número (`número` também) |
 | [`formate`](#formate) | Monta texto com alinhamento (`{:<n}` `{:>n}` `{:^n}`) |
 | [`avaliar`](#avaliar) | Executa um texto como código Expressa |
+| [`catalogo`](#catalogo) | Funções e módulos visíveis (`catálogo` também) |
 | [`mapa`](#mapa) | Constrói um mapa a partir de uma lista de pares |
 | [`conjunto`](#conjunto) | Constrói um conjunto a partir de uma lista |
 | [`tamanho`](#tamanho) | Quantidade de itens ou caracteres |
@@ -399,6 +400,32 @@ escreva(avaliar(conta) se_falhar "conta inválida")
 UFCS: `"2 + 2".avaliar()`.
 
 **Erros:** o argumento não é texto; o texto está vazio; erro de sintaxe ou de execução no código avaliado. Tudo isso pode ir em `se_falhar`.
+
+### `catalogo`
+
+```text
+catalogo() -> lista
+catalogo(alvo) -> lista
+```
+
+Sem argumento, devolve o que está **visível agora**: nativas do núcleo, nomes importados, `funcao` do programa e módulos. Com argumento, inspeciona **um valor**:
+
+- mapa: uma linha por chave (`:tipo` `funcao` se o valor for função, com `:args`)
+- módulo (`m = importe "tela"`): as funções de dentro
+- texto `"matriz"`: o módulo nativo, mesmo sem `importe`
+- uma `funcao`: só essa, com `:args`
+
+Cada item tem `:nome`, `:tipo` (`nativa`, `funcao`, `modulo`, `texto`…), `:args` e `:modulo`. `catálogo()` é o mesmo.
+
+No REPL: `ls` formata o catálogo; `ls matriz` e `ls c` inspecionam; `catalogo` (sem parênteses) mostra a lista de mapas.
+
+```text
+c = mapa([:nome -> "Thiago", :mais -> funcao(x) { x + 1 }])
+catalogo(c)            // mais é funcao, args "x"
+catalogo("matriz")     // zeros, transposta, …
+```
+
+**Erros:** mais de um argumento; alvo que não é mapa, módulo, função nem nome de módulo nativo.
 
 ---
 

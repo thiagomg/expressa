@@ -62,7 +62,7 @@ pub(crate) struct Vm<'a> {
     builtins: Rc<RefCell<Env>>,
     loading: HashSet<PathBuf>,
     modules: HashMap<PathBuf, Rc<RefCell<Env>>>,
-    native_modules: HashMap<String, Rc<RefCell<Env>>>,
+    pub(crate) native_modules: HashMap<String, Rc<RefCell<Env>>>,
     /// If set, file I/O and `importe` must stay under this directory.
     workspace_root: Option<PathBuf>,
     deadline: Option<Instant>,

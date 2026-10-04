@@ -62,6 +62,10 @@ pub const NATIVAS: &[Nativa] = &[
         module: None,
     },
     Nativa {
+        names: &["catalogo", "catálogo"],
+        module: None,
+    },
+    Nativa {
         names: &["tamanho"],
         module: None,
     },
@@ -274,6 +278,7 @@ impl Vm<'_> {
             "formato" => self.bi_formato(args, span),
             "formate" => self.bi_formate(args, span),
             "avaliar" => self.bi_avaliar(args, span, env),
+            "catalogo" | "catálogo" => self.bi_catalogo(args, span, env),
             "tamanho" => self.bi_tamanho(args, span),
             "primeiro" => self.bi_primeiro(args, span),
             "ultimo" => self.bi_ultimo(args, span),
@@ -401,6 +406,12 @@ pub const BUILTIN_DOCS: &[BuiltinDoc] = &[
         sig: "avaliar(texto) -> valor",
         summary: "Executa o texto como código Expressa no escopo atual e devolve o último valor.",
         example: r#"avaliar("2 + 3 * 4")    // 14"#,
+    },
+    BuiltinDoc {
+        name: "catalogo",
+        sig: "catalogo()  ou  catalogo(alvo) -> lista",
+        summary: "Escopo atual, ou o que tem num mapa, módulo ou função (nome, args, tipo, modulo).",
+        example: r#"catalogo(c)    // chaves de um mapa, com args se for funcao"#,
     },
     BuiltinDoc {
         name: "transposta",
@@ -629,14 +640,30 @@ fn strip_diacritic(c: char) -> char {
 }
 
 pub fn lookup_builtin_doc(name: &str) -> Option<&'static BuiltinDoc> {
-    let name = match name {
-        "é_terminal" => "eh_terminal",
-        "limpe_tela" => "cls",
-        "aleatório" => "aleatorio",
-        "número" => "numero",
-        other => other,
+    let canon = NATIVAS
+        .iter()
+        .find(|n| n.names.iter().any(|nm| *nm == name))
+        .map(|n| n.names[0])
+        .unwrap_or(name);
+    BUILTIN_DOCS.iter().find(|d| d.name == canon)
+}
+
+pub(crate) fn builtin_modulo(name: &str) -> &'static str {
+    NATIVAS
+        .iter()
+        .find(|n| n.names.iter().any(|nm| *nm == name))
+        .and_then(|n| n.module)
+        .unwrap_or("")
+}
+
+pub(crate) fn builtin_args(name: &str) -> String {
+    let Some(doc) = lookup_builtin_doc(name) else {
+        return String::new();
     };
-    BUILTIN_DOCS.iter().find(|d| d.name == name)
+    match (doc.sig.find('('), doc.sig.find(')')) {
+        (Some(a), Some(z)) if z > a => doc.sig[a + 1..z].to_string(),
+        _ => String::new(),
+    }
 }
 
 pub(super) fn value_as_texto(v: &Value, loc: NumeroLocale) -> String {
@@ -737,6 +764,8 @@ mod tests {
         assert!(names.contains(&"sem_acento"));
         assert!(names.contains(&"remova"));
         assert!(names.contains(&"procurar"));
+        assert!(names.contains(&"catalogo"));
+        assert!(names.contains(&"catálogo"));
         assert!(names.contains(&"mapa"));
         assert!(names.contains(&"conjunto"));
         assert!(names.contains(&"matriz"));
@@ -753,6 +782,10 @@ mod tests {
             Some("aleatorio")
         );
         assert_eq!(lookup_builtin_doc("número").map(|d| d.name), Some("numero"));
+        assert_eq!(
+            lookup_builtin_doc("catálogo").map(|d| d.name),
+            Some("catalogo")
+        );
         for name in &names {
             assert!(
                 lookup_builtin_doc(name).is_some(),
@@ -1159,6 +1192,99 @@ escreva(A.ncolunas())
         assert!(run_err(r#"procurar("onde", "")"#).contains("não vazio"));
         assert!(run_err("procurar(10, 1)").contains("texto ou lista"));
         assert!(run_err(r#"procurar("onde", 1)"#).contains("esperado texto"));
+    }
+
+    #[test]
+    fn catalogo_lists_natives_user_functions_and_modules() {
+        assert_eq!(
+            run(r#"
+achou = 0
+para f em catalogo() {
+    se f:nome == "escreva" e f:tipo == "nativa" {
+        achou = 1
+    }
+}
+escreva(achou)
+"#),
+            "1\n"
+        );
+        assert_eq!(
+            run(r#"
+soma = funcao(a, b) { a + b }
+para f em catalogo() {
+    se f:nome == "soma" {
+        escreva(f:tipo)
+        escreva(f:args)
+    }
+}
+"#),
+            "funcao\na, b\n"
+        );
+        assert_eq!(
+            run(r#"
+para f em catalogo() {
+    se f:nome == "raiz" {
+        escreva(f:modulo)
+        escreva(f:args)
+    }
+}
+"#),
+            "mat\nnumero\n"
+        );
+        assert_eq!(
+            run(r#"
+tela = importe "tela"
+para f em catalogo() {
+    se f:nome == "tela" {
+        escreva(f:tipo)
+    }
+}
+"#),
+            "modulo\n"
+        );
+        assert_eq!(
+            run(r#"escreva(tamanho(catálogo()))"#),
+            run(r#"escreva(tamanho(catalogo()))"#)
+        );
+        assert_eq!(
+            run(r#"
+c = mapa([
+    :nome -> "Thiago",
+    :mais -> funcao(x) { x + 1 }
+])
+para f em catalogo(c) {
+    se f:nome == "mais" {
+        escreva(f:tipo)
+        escreva(f:args)
+    }
+}
+escreva(c)
+"#),
+            "funcao\nx\nmapa{\"nome\": \"Thiago\", \"mais\": <funcao(x)>}\n"
+        );
+        assert_eq!(
+            run(r#"
+para f em catalogo("matriz") {
+    se f:nome == "zeros" {
+        escreva(f:modulo)
+        escreva(f:tipo)
+    }
+}
+"#),
+            "matriz\nnativa\n"
+        );
+        assert_eq!(
+            run(r#"
+inc = funcao(x) { x + 1 }
+para f em catalogo(inc) {
+    escreva(f:args)
+    escreva(f:tipo)
+}
+"#),
+            "x\nfuncao\n"
+        );
+        assert!(run_err("catalogo(1)").contains("módulo, mapa, função"));
+        assert!(run_err("catalogo(1, 2)").contains("0 ou 1"));
     }
 
     #[test]

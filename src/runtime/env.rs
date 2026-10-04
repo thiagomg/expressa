@@ -84,7 +84,7 @@
 //! [`Env::assign`] is what `nome = valor` in source code does.
 
 use std::cell::RefCell;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
 use super::value::Value;
@@ -183,6 +183,26 @@ impl Env {
         items.sort_by(|a, b| a.0.cmp(&b.0));
         items
     }
+
+    /// Names visible from `env`, inner frame first (shadows outer).
+    pub fn visible_bindings(env: &Rc<RefCell<Self>>) -> Vec<(String, Value)> {
+        let mut seen = HashSet::new();
+        let mut out = Vec::new();
+        let mut current = Some(Rc::clone(env));
+        while let Some(cell) = current {
+            let e = cell.borrow();
+            let parent = e.parent.clone();
+            for (k, v) in e.bindings_sorted() {
+                if seen.insert(k.clone()) {
+                    out.push((k, v));
+                }
+            }
+            drop(e);
+            current = parent;
+        }
+        out.sort_by(|a, b| a.0.cmp(&b.0));
+        out
+    }
 }
 
 #[cfg(test)]
@@ -270,5 +290,22 @@ mod tests {
             .map(|(k, _)| k)
             .collect();
         assert_eq!(names, ["a", "b"]);
+    }
+
+    #[test]
+    fn visible_bindings_inner_shadows_outer() {
+        let outer = Env::new(FrameKind::Module, None);
+        outer.borrow_mut().define("x", num(1.0));
+        outer.borrow_mut().define("y", num(2.0));
+        let inner = Env::child(&outer, FrameKind::Block);
+        inner.borrow_mut().define("x", num(9.0));
+        let got: Vec<_> = Env::visible_bindings(&inner)
+            .into_iter()
+            .map(|(k, v)| match v {
+                Value::Numero(n) => (k, n),
+                _ => panic!("expected number"),
+            })
+            .collect();
+        assert_eq!(got, [("x".into(), 9.0), ("y".into(), 2.0)]);
     }
 }

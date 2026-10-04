@@ -375,6 +375,8 @@ cat nomes.txt | expressa grep.lep Thiago
 
 `avaliar(texto)` executa o texto como código Expressa no escopo atual e devolve o último valor. `avaliar("2 + 3 * 4")` vale `14`. Erros de sintaxe ou de execução (por exemplo divisão por zero) são capturáveis com `se_falhar`.
 
+`catalogo()` (também `catálogo()`) devolve uma lista de mapas com as funções e módulos visíveis: `:nome`, `:tipo` (`nativa`, `funcao`, `modulo`), `:args`, `:modulo`. `catalogo(alvo)` inspeciona um mapa, um módulo, uma função ou o nome de um módulo nativo (`catalogo("matriz")`). No REPL, `ls` formata o catálogo; `ls matriz` e `ls c` inspecionam o alvo. Uma `funcao` impressa mostra os parâmetros: `<funcao(x)>`.
+
 `escreva` vai para a saída padrão (stdout). `escreva_erro` vai para a saída de erro (stderr).  
 Com `importe "tela"`: `cls()` (também `limpe_tela()`) limpa a tela; `casa()` manda o cursor ao canto sem apagar — use no lugar de `cls()` em animações para não piscar.  
 `pinte(texto, frente)` e `pinte(texto, frente, fundo)` devolvem o texto com cor ANSI e reset no fim. `fundo(texto, cor)` pinta só o papel; `negrito(texto)` deixa em negrito. Cores: `normal`, `preto`, `vermelho`, `verde`, `amarelo`, `azul`, `magenta`, `ciano`, `branco`.  

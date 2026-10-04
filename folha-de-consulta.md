@@ -123,6 +123,9 @@ escreva(soma(10, 5))           // 15
 
 avaliar("2 + 3 * 4")           // 14  (usa x, funções… do escopo atual)
 escreva(avaliar(leia("> ")) se_falhar "conta inválida")
+catalogo()                     // nativas, funcao do programa, módulos
+catalogo(c)  catalogo("matriz")  // mapa, módulo ou função
+                               // no REPL: ls   ls matriz   ls c
 
 busca = funcao(xs, alvo) {
     para x em xs {
@@ -265,7 +268,7 @@ Núcleo (sempre no escopo):
 | `escreva` `escreva_erro` `sair` `durma` | imprimir / encerrar / esperar |
 | `leia` `leia_linhas` | teclado / pipe |
 | `argumentos` | lista (não é função) |
-| `numero` `número` `formato` `avaliar` | número / executar texto como código |
+| `numero` `número` `formato` `avaliar` `catalogo` | número / executar texto / listar funções |
 | `mapa` `conjunto` | construtores |
 | `tamanho` `primeiro` `ultimo` | coleção |
 | `maiuscula` `minuscula` `sem_acento` `remova` `substitua` `procurar` `separe` `junte` `limpe` `formate` | texto / lista / mapa / conjunto |

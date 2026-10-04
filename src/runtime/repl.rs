@@ -13,7 +13,7 @@ use super::env::{Env, FrameKind};
 use super::error::{EvalError, RuntimeError};
 use super::eval::{LineInput, Vm};
 use super::leia::CLEAR_SCREEN;
-use super::value::Value;
+use super::value::{MapKey, Value};
 
 pub struct ReplSession<'a> {
     vm: Vm<'a>,
@@ -217,6 +217,15 @@ fn apply_line(session: &mut ReplSession<'_>, buf: &mut String, line: &str) -> Li
                 let _ = io::stdout().flush();
                 return LineResult::Ran(trimmed.to_string());
             }
+            Some(ReplCommand::Catalogo { pretty, alvo }) => {
+                let src = catalogo_src(alvo);
+                match session.eval(&src) {
+                    Ok(v) if pretty => print_catalogo(&v),
+                    Ok(v) => println!("{}", v.repl_format(session.vm.numero_locale)),
+                    Err(e) => eprintln!("{e}"),
+                }
+                return LineResult::Ran(trimmed.to_string());
+            }
             Some(ReplCommand::Vazio) => return LineResult::Continue,
             None => {}
         }
@@ -242,6 +251,7 @@ enum ReplCommand<'a> {
     Sair,
     Ajuda(Option<&'a str>),
     Cls,
+    Catalogo { pretty: bool, alvo: Option<&'a str> },
     Vazio,
 }
 
@@ -257,8 +267,43 @@ fn parse_repl_command(line: &str) -> Option<ReplCommand<'_>> {
         "sair" | "exit" | "quit" => Some(ReplCommand::Sair),
         "ajuda" | "help" => Some(ReplCommand::Ajuda(rest)),
         "cls" | "limpe_tela" | "clear" if rest.is_none() => Some(ReplCommand::Cls),
+        "ls" => Some(ReplCommand::Catalogo {
+            pretty: true,
+            alvo: rest_of(line, cmd),
+        }),
+        "catalogo" => Some(ReplCommand::Catalogo {
+            pretty: false,
+            alvo: rest_of(line, cmd),
+        }),
         _ => None,
     }
+}
+
+fn rest_of<'a>(line: &'a str, cmd: &str) -> Option<&'a str> {
+    let rest = line.get(cmd.len()..)?.trim();
+    if rest.is_empty() { None } else { Some(rest) }
+}
+
+fn catalogo_src(alvo: Option<&str>) -> String {
+    match alvo {
+        None => "catalogo()".into(),
+        Some(a) if is_native_module_ident(a) => format!("catalogo(\"{a}\")"),
+        Some(a) => format!("catalogo({a})"),
+    }
+}
+
+fn is_native_module_ident(s: &str) -> bool {
+    let mut cs = s.chars();
+    let Some(first) = cs.next() else {
+        return false;
+    };
+    if !(first.is_alphabetic() || first == '_') {
+        return false;
+    }
+    if !cs.all(|c| c.is_alphanumeric() || c == '_') {
+        return false;
+    }
+    super::nativas::NATIVAS.iter().any(|n| n.module == Some(s))
 }
 
 fn normalize_topic(s: &str) -> String {
@@ -312,6 +357,8 @@ fn print_help_geral() {
          ajuda funcoes          lista as funções nativas\n  \
          ajuda linguagem        se, para, funcao, se_falhar…\n  \
          ajuda escreva          detalhe de uma função\n  \
+         ls / ls matriz         catálogo formatado (escopo ou módulo)\n  \
+         catalogo / catalogo c  a lista de mapas (valor)\n  \
          formato(\"pt\") / en     padrão de números em texto\n  \
          sair                   encerra o REPL (também Ctrl+D)\n  \
          sair() / sair(1)       nativa: encerra o processo\n  \
@@ -319,6 +366,96 @@ fn print_help_geral() {
          importe \"tela\"         cls() / casa() / eh_terminal()\n  \
          ↑ ↓                    comandos anteriores"
     );
+}
+
+fn mapa_campo(v: &Value, key: &str) -> String {
+    let Value::Mapa(xs) = v else {
+        return String::new();
+    };
+    for (k, val) in xs.borrow().iter() {
+        if let MapKey::Texto(t) = k {
+            if t == key {
+                if let Value::Texto(s) = val {
+                    return s.clone();
+                }
+            }
+        }
+    }
+    String::new()
+}
+
+fn print_catalogo(v: &Value) {
+    let Value::Lista(xs) = v else {
+        println!("{v}");
+        return;
+    };
+    let mut nucleo = Vec::new();
+    let mut funcoes = Vec::new();
+    let mut por_modulo: Vec<(String, String, String)> = Vec::new();
+    let mut modulos = Vec::new();
+    let mut outros = Vec::new();
+    for item in xs.borrow().iter() {
+        let nome = mapa_campo(item, "nome");
+        let tipo = mapa_campo(item, "tipo");
+        let args = mapa_campo(item, "args");
+        let modulo = mapa_campo(item, "modulo");
+        let sig = if args.is_empty() {
+            nome.clone()
+        } else if tipo == "modulo" {
+            nome.clone()
+        } else {
+            format!("{nome}({args})")
+        };
+        match tipo.as_str() {
+            "funcao" => funcoes.push(sig),
+            "modulo" => modulos.push((sig, args)),
+            "nativa" if modulo.is_empty() => nucleo.push(sig),
+            "nativa" => por_modulo.push((modulo, sig, String::new())),
+            _ => outros.push((sig, tipo)),
+        }
+    }
+    if !nucleo.is_empty() {
+        println!("Núcleo");
+        for s in &nucleo {
+            println!("  {s}");
+        }
+    }
+    if !funcoes.is_empty() {
+        println!("\nFunções");
+        for s in &funcoes {
+            println!("  {s}");
+        }
+    }
+    let mut seen_mod = std::collections::BTreeSet::new();
+    for (m, _, _) in &por_modulo {
+        seen_mod.insert(m.clone());
+    }
+    for m in seen_mod {
+        println!("\nimporte \"{m}\"");
+        for (mod_name, sig, _) in &por_modulo {
+            if *mod_name == m {
+                println!("  {sig}");
+            }
+        }
+    }
+    if !modulos.is_empty() {
+        println!("\nMódulos");
+        for (nome, membros) in &modulos {
+            if membros.is_empty() {
+                println!("  {nome}");
+            } else {
+                println!("  {nome}    {membros}");
+            }
+        }
+    }
+    if !outros.is_empty() {
+        if !nucleo.is_empty() || !funcoes.is_empty() || !por_modulo.is_empty() {
+            println!();
+        }
+        for (sig, tipo) in &outros {
+            println!("  {sig}    {tipo}");
+        }
+    }
 }
 
 fn print_help_funcoes() {
@@ -455,6 +592,34 @@ mod tests {
         assert!(matches!(
             parse_repl_command("ajuda raiz"),
             Some(ReplCommand::Ajuda(Some("raiz")))
+        ));
+        assert!(matches!(
+            parse_repl_command("ls"),
+            Some(ReplCommand::Catalogo {
+                pretty: true,
+                alvo: None
+            })
+        ));
+        assert!(matches!(
+            parse_repl_command("catálogo"),
+            Some(ReplCommand::Catalogo {
+                pretty: false,
+                alvo: None
+            })
+        ));
+        assert!(matches!(
+            parse_repl_command("ls matriz"),
+            Some(ReplCommand::Catalogo {
+                pretty: true,
+                alvo: Some("matriz")
+            })
+        ));
+        assert!(matches!(
+            parse_repl_command("ls c:mais"),
+            Some(ReplCommand::Catalogo {
+                pretty: true,
+                alvo: Some("c:mais")
+            })
         ));
         assert_eq!(normalize_topic("funções"), "funcoes");
         assert!(super::super::nativas::lookup_builtin_doc("escreva").is_some());

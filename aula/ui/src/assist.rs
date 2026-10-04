@@ -957,8 +957,15 @@ pub fn attach(
     signature.add_css_class("aula-signature");
 
     let info_label = help_label("");
+    let info_scroll = gtk::ScrolledWindow::new();
+    info_scroll.set_policy(gtk::PolicyType::Automatic, gtk::PolicyType::Automatic);
+    info_scroll.set_min_content_width(280);
+    info_scroll.set_max_content_width(560);
+    info_scroll.set_min_content_height(80);
+    info_scroll.set_max_content_height(420);
+    info_scroll.set_child(Some(&info_label));
     let info_pop = gtk::Popover::new();
-    info_pop.set_child(Some(&info_label));
+    info_pop.set_child(Some(&info_scroll));
     info_pop.set_can_focus(false);
     info_pop.set_cascade_popdown(false);
     info_pop.set_position(gtk::PositionType::Bottom);
@@ -1066,7 +1073,7 @@ pub fn attach(
     vh
 }
 
-/// F1: help for the name at the cursor, in a popover.
+/// F1: help for the name at the cursor, or the `catalogo()` listing.
 pub fn show_info(view: &SourceView, vh: &ViewHelp, help: &Help) -> bool {
     let buffer = view.buffer();
     let Some(sb) = buffer.downcast_ref::<SourceBuffer>() else {
@@ -1084,10 +1091,15 @@ pub fn show_info(view: &SourceView, vh: &ViewHelp, help: &Help) -> bool {
     }
     let line = ls.text(&le).to_string();
     let col = ls.text(&cursor).len();
-    let Some(m) = help_markup(help, &path, &text, &line, col) else {
-        return false;
-    };
-    vh.info_label.set_markup(&m);
+    if let Some(m) = help_markup(help, &path, &text, &line, col) {
+        vh.info_label.set_wrap(true);
+        vh.info_label.remove_css_class("aula-catalogo");
+        vh.info_label.set_markup(&m);
+    } else {
+        vh.info_label.set_wrap(false);
+        vh.info_label.add_css_class("aula-catalogo");
+        vh.info_label.set_text(&lang::catalogo_texto(&text));
+    }
     let dest = vh.info.parent().unwrap_or_else(|| view.clone().upcast());
     let r = cursor_rect(view, &dest);
     let (_, width, _, _) = vh.info.measure(gtk::Orientation::Horizontal, -1);

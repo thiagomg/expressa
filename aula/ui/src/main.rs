@@ -672,6 +672,7 @@ fn install_css() {
             margin: 0;
             background-color: alpha(currentColor, 0.12);
         }
+        label.aula-catalogo { font-family: monospace; }
         paned.aula-paned > separator:hover {
             background-color: alpha(currentColor, 0.28);
         }
@@ -943,9 +944,7 @@ fn attach_editor_input(ui: &UiRc, doc: &Rc<Doc>, vh: &Rc<ViewHelp>) {
                 return;
             };
             let help = ui_h.borrow().help.clone().expect("help");
-            if !assist::show_info(&doc.view, &vh, &help) {
-                set_status(&ui_h, "F1: coloque o cursor no nome de uma função");
-            }
+            assist::show_info(&doc.view, &vh, &help);
         });
     }
     {

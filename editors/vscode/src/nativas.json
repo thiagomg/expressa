@@ -169,6 +169,20 @@
       "doc": "Executa `texto` como código Expressa **no escopo atual** e devolve o valor da última expressão. Serve para calculadora (`leia` + `avaliar`) e para fórmulas em jogos.\n\nVê as variáveis e funções já definidas; uma atribuição no texto altera o escopo de quem chamou (mesma regra de sempre: função não escreve nomes de fora).\n\n```expressa\nescreva(avaliar(\"2 + 3 * 4\"))     // 14\nx = 10\nescreva(avaliar(\"x + 1\"))         // 11\nconta = leia(\"conta: \")\nescreva(avaliar(conta) se_falhar \"conta inválida\")\n```\n\nUFCS: `\"2 + 2\".avaliar()`.\n\n**Erros:** o argumento não é texto; o texto está vazio; erro de sintaxe ou de execução no código avaliado. Tudo isso pode ir em `se_falhar`."
     },
     {
+      "name": "catalogo",
+      "aliases": [
+        "catálogo"
+      ],
+      "module": null,
+      "kind": "funcao",
+      "signatures": [
+        "catalogo() -> lista",
+        "catalogo(alvo) -> lista"
+      ],
+      "summary": "Funções e módulos visíveis (`catálogo` também)",
+      "doc": "Sem argumento, devolve o que está **visível agora**: nativas do núcleo, nomes importados, `funcao` do programa e módulos. Com argumento, inspeciona **um valor**:\n\n- mapa: uma linha por chave (`:tipo` `funcao` se o valor for função, com `:args`)\n- módulo (`m = importe \"tela\"`): as funções de dentro\n- texto `\"matriz\"`: o módulo nativo, mesmo sem `importe`\n- uma `funcao`: só essa, com `:args`\n\nCada item tem `:nome`, `:tipo` (`nativa`, `funcao`, `modulo`, `texto`…), `:args` e `:modulo`. `catálogo()` é o mesmo.\n\nNo REPL: `ls` formata o catálogo; `ls matriz` e `ls c` inspecionam; `catalogo` (sem parênteses) mostra a lista de mapas.\n\n```expressa\nc = mapa([:nome -> \"Thiago\", :mais -> funcao(x) { x + 1 }])\ncatalogo(c)            // mais é funcao, args \"x\"\ncatalogo(\"matriz\")     // zeros, transposta, …\n```\n\n**Erros:** mais de um argumento; alvo que não é mapa, módulo, função nem nome de módulo nativo."
+    },
+    {
       "name": "tamanho",
       "aliases": [],
       "module": null,

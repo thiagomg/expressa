@@ -40,6 +40,16 @@ pub struct Closure {
     pub source: Rc<str>,
 }
 
+impl Closure {
+    pub fn args_text(&self) -> String {
+        self.params
+            .iter()
+            .map(|p| p.name.as_str())
+            .collect::<Vec<_>>()
+            .join(", ")
+    }
+}
+
 impl Value {
     pub fn lista(items: Vec<Value>) -> Self {
         Value::Lista(Rc::new(RefCell::new(items)))
@@ -209,7 +219,7 @@ impl fmt::Display for Value {
                 write!(f, "}}")
             }
             Value::Matriz(m) => write!(f, "{}", format_matriz(&m.borrow(), NumeroLocale::PtBr)),
-            Value::Funcao(_) => write!(f, "<funcao>"),
+            Value::Funcao(c) => write!(f, "<funcao({})>", c.args_text()),
             Value::Builtin(name) => write!(f, "<funcao {name}>"),
             Value::Modulo(_) => write!(f, "<modulo>"),
         }
