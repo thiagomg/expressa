@@ -18,3 +18,107 @@ aleatorio = funcao(min, max) { 0 }
 ///
 /// Exemplo: semente(1)
 semente = funcao(n) { 0 }
+
+/// π. Valor, não função: use pi, não pi().
+///
+/// 180 graus são pi radianos. Converta com graus() e radianos().
+///
+/// Exemplo: area = pi * r * r
+pi = 3.141592653589793
+
+/// Seno de x em radianos. Também sen().
+///
+/// Para graus: seno(radianos(30)).
+///
+/// Exemplo: seno(0)
+seno = funcao(x) { 0 }
+
+/// Cosseno de x em radianos. Também cos().
+///
+/// Exemplo: cosseno(0)
+cosseno = funcao(x) { 0 }
+
+/// Tangente de x em radianos. Também tan().
+///
+/// Erro se o resultado não for um número finito (use se_falhar).
+///
+/// Exemplo: tangente(0)
+tangente = funcao(x) { 0 }
+
+/// Ângulo em radianos cujo seno é x. x entre -1 e 1.
+///
+/// Exemplo: arcoseno(0)
+arcoseno = funcao(x) { 0 }
+
+/// Ângulo em radianos cujo cosseno é x. x entre -1 e 1.
+///
+/// Exemplo: arcocosseno(1)
+arcocosseno = funcao(x) { 0 }
+
+/// Ângulo em radianos cuja tangente é x.
+///
+/// Exemplo: arcotangente(0)
+arcotangente = funcao(x) { 0 }
+
+/// Ângulo em radianos do vetor (x, y), no estilo atan2(y, x).
+///
+/// Exemplo: arcotangente2(1, 1)
+arcotangente2 = funcao(y, x) { 0 }
+
+/// Converte graus em radianos.
+///
+/// Exemplo: seno(radianos(90))
+radianos = funcao(graus) { 0 }
+
+/// Converte radianos em graus.
+///
+/// Exemplo: graus(pi)
+graus = funcao(radianos) { 0 }
+
+/// e elevado a x. exp(1) é a constante de Euler (e é palavra-chave).
+///
+/// Erro se o resultado estourar (use se_falhar).
+///
+/// Exemplo: exp(0)
+exp = funcao(x) { 0 }
+
+/// Logaritmo natural (base e). x > 0.
+///
+/// Para base 10 use log10. Erro se x não for positivo (use se_falhar).
+///
+/// Exemplo: log(1)
+log = funcao(x) { 0 }
+
+/// Logaritmo decimal (base 10). x > 0.
+///
+/// Exemplo: log10(1000)
+log10 = funcao(x) { 0 }
+
+/// base elevado a exp (expoente pode ser fração).
+///
+/// 0^0 vale 1. Erro se o resultado não for um número finito (base negativa
+/// com expoente não inteiro, divisão por zero, …).
+///
+/// Exemplo: potencia(2, 3)
+potencia = funcao(base, exp) { 0 }
+
+/// Maior inteiro que não passa de x (chão).
+///
+/// piso(3.7) vale 3; piso(-1.2) vale -2.
+///
+/// Exemplo: piso(3.7)
+piso = funcao(numero) { 0 }
+
+/// Menor inteiro que não fica abaixo de x (teto).
+///
+/// teto(3.1) vale 4; teto(-1.2) vale -1.
+///
+/// Exemplo: teto(3.1)
+teto = funcao(numero) { 0 }
+
+/// Inteiro mais próximo. Empate (n,5) afasta de zero.
+///
+/// arredonde(1.4) vale 1; arredonde(1.5) vale 2; arredonde(-1.5) vale -2.
+///
+/// Exemplo: arredonde(1.5)
+arredonde = funcao(numero) { 0 }

@@ -76,9 +76,15 @@ function readNativas() {
 
 // `///` lines then `nome = funcao(...)` or `nome = []` in docs/nativas/*.lep.
 function readDocs() {
-  const files = ['nucleo.lep', 'tela.lep', 'mat.lep', 'matriz.lep', 'arquivo.lep'];
+  const files = {
+    'nucleo.lep': null,
+    'tela.lep': 'tela',
+    'mat.lep': 'mat',
+    'matriz.lep': 'matriz',
+    'arquivo.lep': 'arquivo',
+  };
   const sections = {};
-  for (const f of files) {
+  for (const [f, module] of Object.entries(files)) {
     const src = fs.readFileSync(path.join(DOCS_DIR, f), 'utf8');
     let docLines = [];
     for (const line of src.split('\n')) {
@@ -88,7 +94,7 @@ function readDocs() {
         continue;
       }
       const fn = line.match(/^([A-Za-zÀ-ÿ_][A-Za-zÀ-ÿ0-9_]*)\s*=\s*funcao\s*\(([^)]*)\)/);
-      const val = line.match(/^([A-Za-zÀ-ÿ_][A-Za-zÀ-ÿ0-9_]*)\s*=\s*\[\s*\]/);
+      const val = line.match(/^([A-Za-zÀ-ÿ_][A-Za-zÀ-ÿ0-9_]*)\s*=\s*(?:\[\s*\]|[0-9][0-9_.]*)/);
       const name = fn ? fn[1] : val ? val[1] : null;
       if (!name) {
         if (line.trim() !== '') docLines = [];
@@ -113,6 +119,7 @@ function readDocs() {
           signatures: fromDoc.length ? fromDoc : [],
           summary: first,
           doc: body,
+          module,
         };
       }
       if (!fromDoc.length && sig && !sections[name].signatures.includes(sig)) {
@@ -147,7 +154,15 @@ function build() {
   const known = new Set(nativas.flatMap((n) => [n.name, ...n.aliases]));
   for (const [name, d] of Object.entries(docs)) {
     if (known.has(name)) continue;
-    items.push({ name, aliases: [], module: null, kind: 'valor', signatures: [], summary: d.summary, doc: d.doc });
+    items.push({
+      name,
+      aliases: [],
+      module: d.module || null,
+      kind: 'valor',
+      signatures: [],
+      summary: d.summary,
+      doc: d.doc,
+    });
   }
   const modules = [...new Set(nativas.map((n) => n.module).filter(Boolean))].sort();
   return { data: { keywords, modules, nativas: items }, warnings };

@@ -111,6 +111,26 @@
       <keyword>aleatorio</keyword>
       <keyword>aleatório</keyword>
       <keyword>semente</keyword>
+      <keyword>pi</keyword>
+      <keyword>seno</keyword>
+      <keyword>sen</keyword>
+      <keyword>cosseno</keyword>
+      <keyword>cos</keyword>
+      <keyword>tangente</keyword>
+      <keyword>tan</keyword>
+      <keyword>arcoseno</keyword>
+      <keyword>arcocosseno</keyword>
+      <keyword>arcotangente</keyword>
+      <keyword>arcotangente2</keyword>
+      <keyword>radianos</keyword>
+      <keyword>graus</keyword>
+      <keyword>exp</keyword>
+      <keyword>log</keyword>
+      <keyword>log10</keyword>
+      <keyword>potencia</keyword>
+      <keyword>piso</keyword>
+      <keyword>teto</keyword>
+      <keyword>arredonde</keyword>
       <keyword>transposta</keyword>
       <keyword>det</keyword>
       <keyword>identidade</keyword>

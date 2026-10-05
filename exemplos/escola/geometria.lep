@@ -1,7 +1,7 @@
 // Áreas e volumes do ensino médio.
-// Altere as medidas e rode: cargo run -- examples/geometria.lep
+// Altere as medidas e rode: cargo run -- exemplos/escola/geometria.lep
 
-pi = 3.1415926535
+importe "mat"
 
 area_retangulo = funcao(base, altura)
 inicio

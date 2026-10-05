@@ -224,6 +224,12 @@ importe "mat"
 aleatorio(1, 6)                // inteiro inclusive; também aleatório()
 semente(1)                     // mesma sequência de aleatorio
 raiz(9)                        // 3
+pi                             // valor (não pi())
+seno(radianos(30))             // também sen, cosseno/cos, tangente/tan
+graus(pi)                      // 180
+log10(1000)                    // 3; log é o natural
+potencia(2, 3)                 // 8
+piso(3.7)  teto(3.1)  arredonde(1.5)
 ```
 
 Literais no código sempre com ponto: `3.14`.
@@ -279,7 +285,7 @@ Módulos (`importe "…"`):
 | | |
 |---|---|
 | `tela` | `cls` `casa` `eh_terminal` `pinte` `fundo` `negrito` |
-| `mat` | `raiz` `aleatorio` `semente` |
+| `mat` | `pi` `raiz` `aleatorio` `semente` `seno` `cosseno` `tangente` `arcoseno` `arcocosseno` `arcotangente` `arcotangente2` `radianos` `graus` `exp` `log` `log10` `potencia` `piso` `teto` `arredonde` |
 | `matriz` | `matriz` `transposta` `det` `identidade` `zeros` `uns` `cheia` `nlinhas` `ncolunas` |
 | `arquivo` | `leia_arquivo` `salve_arquivo` `adicione_arquivo` `leia_csv` `salve_csv` |
 

@@ -165,6 +165,70 @@ pub const NATIVAS: &[Nativa] = &[
         module: Some("mat"),
     },
     Nativa {
+        names: &["seno", "sen"],
+        module: Some("mat"),
+    },
+    Nativa {
+        names: &["cosseno", "cos"],
+        module: Some("mat"),
+    },
+    Nativa {
+        names: &["tangente", "tan"],
+        module: Some("mat"),
+    },
+    Nativa {
+        names: &["arcoseno"],
+        module: Some("mat"),
+    },
+    Nativa {
+        names: &["arcocosseno"],
+        module: Some("mat"),
+    },
+    Nativa {
+        names: &["arcotangente"],
+        module: Some("mat"),
+    },
+    Nativa {
+        names: &["arcotangente2"],
+        module: Some("mat"),
+    },
+    Nativa {
+        names: &["radianos"],
+        module: Some("mat"),
+    },
+    Nativa {
+        names: &["graus"],
+        module: Some("mat"),
+    },
+    Nativa {
+        names: &["exp"],
+        module: Some("mat"),
+    },
+    Nativa {
+        names: &["log"],
+        module: Some("mat"),
+    },
+    Nativa {
+        names: &["log10"],
+        module: Some("mat"),
+    },
+    Nativa {
+        names: &["potencia"],
+        module: Some("mat"),
+    },
+    Nativa {
+        names: &["piso"],
+        module: Some("mat"),
+    },
+    Nativa {
+        names: &["teto"],
+        module: Some("mat"),
+    },
+    Nativa {
+        names: &["arredonde"],
+        module: Some("mat"),
+    },
+    Nativa {
         names: &["matriz"],
         module: Some("matriz"),
     },
@@ -245,6 +309,10 @@ pub fn make_native_modules() -> HashMap<String, Rc<RefCell<Env>>> {
             env.borrow_mut().define(*name, Value::Builtin(canon));
         }
     }
+    if let Some(mat) = map.get("mat") {
+        mat.borrow_mut()
+            .define("pi", Value::Numero(std::f64::consts::PI));
+    }
     map
 }
 
@@ -272,6 +340,22 @@ impl Vm<'_> {
             "raiz" => self.bi_raiz(args, span),
             "aleatorio" | "aleatório" => self.bi_aleatorio(args, span),
             "semente" => self.bi_semente(args, span),
+            "seno" | "sen" => self.bi_seno(args, span),
+            "cosseno" | "cos" => self.bi_cosseno(args, span),
+            "tangente" | "tan" => self.bi_tangente(args, span),
+            "arcoseno" => self.bi_arcoseno(args, span),
+            "arcocosseno" => self.bi_arcocosseno(args, span),
+            "arcotangente" => self.bi_arcotangente(args, span),
+            "arcotangente2" => self.bi_arcotangente2(args, span),
+            "radianos" => self.bi_radianos(args, span),
+            "graus" => self.bi_graus(args, span),
+            "exp" => self.bi_exp(args, span),
+            "log" => self.bi_log(args, span),
+            "log10" => self.bi_log10(args, span),
+            "potencia" => self.bi_potencia(args, span),
+            "piso" => self.bi_piso(args, span),
+            "teto" => self.bi_teto(args, span),
+            "arredonde" => self.bi_arredonde(args, span),
             "matriz" => self.bi_matriz(args, span),
             "transposta" => self.bi_transposta(args, span),
             "det" => self.bi_det(args, span),
@@ -599,6 +683,54 @@ fim
         assert_eq!(run(r#"escreva(raiz(-1) se_falhar 0)"#), "0\n");
         assert!(run_err("raiz(-4)").contains("raiz de número negativo"));
         assert!(run_err(r#"raiz("9")"#).contains("esperado numero"));
+    }
+
+    #[test]
+    fn mat_trig_log_e_constantes() {
+        assert_eq!(run("escreva(seno(0))"), "0\n");
+        assert_eq!(run("escreva(sen(0))"), "0\n");
+        assert_eq!(run("escreva(cosseno(0))"), "1\n");
+        assert_eq!(run("escreva(cos(0))"), "1\n");
+        assert_eq!(run("escreva(tangente(0))"), "0\n");
+        assert_eq!(run("escreva(tan(0))"), "0\n");
+        assert_eq!(run("escreva(arcoseno(0))"), "0\n");
+        assert_eq!(run("escreva(arcocosseno(1))"), "0\n");
+        assert_eq!(run("escreva(arcotangente(0))"), "0\n");
+        assert_eq!(run("escreva(arcotangente2(0, 1))"), "0\n");
+        assert_eq!(run("escreva(exp(0))"), "1\n");
+        assert_eq!(run("escreva(log(1))"), "0\n");
+        assert_eq!(run("escreva(log10(1000))"), "3\n");
+        assert_eq!(run("escreva(potencia(2, 3))"), "8\n");
+        assert_eq!(run("escreva(potencia(9, 0.5))"), "3\n");
+        assert_eq!(run("escreva(piso(3.7))"), "3\n");
+        assert_eq!(run("escreva(piso(-1.2))"), "-2\n");
+        assert_eq!(run("escreva(teto(3.1))"), "4\n");
+        assert_eq!(run("escreva(teto(-1.2))"), "-1\n");
+        assert_eq!(run("escreva(arredonde(1.4))"), "1\n");
+        assert_eq!(run("escreva(arredonde(1.5))"), "2\n");
+        assert_eq!(run("escreva(arredonde(-1.5))"), "-2\n");
+        assert_eq!(run("escreva(arredonde(graus(pi)))"), "180\n");
+        assert_eq!(run("escreva(pi > 3 e pi < 4)"), "verdadeiro\n");
+        assert_eq!(
+            run("escreva(seno(radianos(90)) > 0.999 e seno(radianos(90)) < 1.001)"),
+            "verdadeiro\n"
+        );
+        assert_eq!(run(r#"escreva(0.seno())"#), "0\n");
+        assert_eq!(
+            run(r#"escreva(90.radianos().seno() > 0.999)"#),
+            "verdadeiro\n"
+        );
+        assert_eq!(
+            run(r#"m = importe "mat"
+escreva(m::cosseno(0))"#),
+            "1\n"
+        );
+        assert_eq!(run("escreva(arcoseno(2) se_falhar 0)"), "0\n");
+        assert!(run_err("arcoseno(2)").contains("entre -1 e 1"));
+        assert!(run_err("log(0)").contains("positivo"));
+        assert!(run_err("log10(-1)").contains("positivo"));
+        assert!(run_err("potencia(-1, 0.5)").contains("indefinida"));
+        assert!(run_err("pi()").contains("chamar"));
     }
 
     #[test]
@@ -978,6 +1110,16 @@ para f em catalogo("matriz") {
 }
 "#),
             "matriz\nnativa\n"
+        );
+        assert_eq!(
+            run(r#"
+para f em catalogo("mat") {
+    se f:nome == "pi" {
+        escreva(f:tipo)
+    }
+}
+"#),
+            "numero\n"
         );
         assert_eq!(
             run(r#"

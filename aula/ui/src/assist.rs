@@ -908,9 +908,8 @@ impl ViewHelp {
     /// a leftover context then never shows the list again.
     pub fn dismiss(&self, view: &SourceView) -> bool {
         let completion = view.completion();
-        let had = self.completion_open.get()
-            || self.signature.is_visible()
-            || self.info.is_visible();
+        let had =
+            self.completion_open.get() || self.signature.is_visible() || self.info.is_visible();
         self.signature.popdown();
         self.info.popdown();
         completion.hide();
@@ -1191,7 +1190,14 @@ mod tests {
         assert_eq!(cls.cursor, 5, "no parameters: cursor after ()");
 
         let (_, it) = items(&h, "main.lep", text, "x = m::");
-        assert_eq!(labels(&it), ["raiz", "aleatorio", "aleatório", "semente"]);
+        let l = labels(&it);
+        assert!(
+            l.contains(&"raiz")
+                && l.contains(&"semente")
+                && l.contains(&"seno")
+                && l.contains(&"pi"),
+            "{l:?}"
+        );
         let (_, it) = items(&h, "main.lep", text, "lista.");
         let l = labels(&it);
         assert!(

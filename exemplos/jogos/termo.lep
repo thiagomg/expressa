@@ -45,6 +45,18 @@ compara_palavra = funcao(palavra, tentativa) {
     res
 }
 
+/// Adiciona as tentativas faltando, em branco
+completa_tentativas = funcao(ts, total, num_letras) {
+    faltando = total - ts.tamanho()
+    se faltando <= 0 {
+        retorne ts
+    }
+
+    para i de 1 até faltando {
+
+    }
+}
+
 desenha_tentativa = função(palavra, ts) {
     cls()
     escreva("ts.tamanho(): " + ts.tamanho())

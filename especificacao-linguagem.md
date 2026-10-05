@@ -83,6 +83,7 @@ As funções nativas estão documentadas em `docs/nativas/*.lep` (mesmo formato 
 **Par:** `chave -> valor` produz um valor do tipo `par`. Não encadeia: `a -> b -> c` é erro.  
 **Raiz quadrada:** `importe "mat"` e então `raiz(n)` — erro se `n < 0` (tratável com `se_falhar`)  
 **Ao acaso:** no mesmo módulo, `aleatorio(min, max)` (também `aleatório`) inteiro inclusive; `semente(n)` fixa a sequência.  
+**Trigonometria e análise:** no mesmo módulo, ângulos em **radianos**. `seno`/`sen`, `cosseno`/`cos`, `tangente`/`tan`; inversas `arcoseno`, `arcocosseno`, `arcotangente`, `arcotangente2(y, x)`. `radianos(g)` e `graus(r)` convertem. `pi` é um valor (não `pi()`). Também `exp`, `log` (natural), `log10`, `potencia`, `piso`, `teto`, `arredonde`. Domínio inválido (por exemplo `log(0)`, `arcoseno(2)`) é erro capturável com `se_falhar`. `e` é palavra-chave; use `exp(1)`.  
 **Texto ↔ número:** `numero(t)` (também `número`) lê o padrão atual; `formato("pt")` / `formato("en")` escolhe pt-BR (`1.000,5`) ou en-US (`1,000.5`). Padrão pt-BR. Literais no código usam `.`.  
 **Acesso:** `mat::soma` (módulo), `pessoa:nome` (chave de mapa), `p:chave` / `p:valor` (par), `xs.tamanho()` (= `tamanho(xs)`).
 

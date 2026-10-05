@@ -472,14 +472,16 @@ fn print_help_funcoes() {
 }
 
 fn print_docs_for(module: Option<&str>) {
-    for n in super::nativas::NATIVAS {
-        if n.module != module {
+    for doc in super::nativas::builtin_docs() {
+        if doc.module.as_deref() != module {
             continue;
         }
-        let canon = n.names[0];
-        if let Some(doc) = super::nativas::lookup_builtin_doc(canon) {
-            println!("  {:<22} {}", doc.sig, doc.summary);
-        }
+        let label = if doc.signatures.is_empty() {
+            doc.name.as_str()
+        } else {
+            doc.sig.as_str()
+        };
+        println!("  {label:<22} {}", doc.summary);
     }
 }
 
@@ -502,6 +504,7 @@ fn print_help_linguagem() {
          conjunto([:ana, 1])             únicos; s += :bia; s.remova(:ana)\n  \
          importe \"matriz\"              matriz([[1, 2], [3, 4]])\n  \
          importe \"arquivo\" / \"tela\" / \"mat\"\n  \
+         seno(radianos(30))              módulo mat; pi é valor\n  \
          avaliar(\"2 + 3 * 4\")          executa o texto no escopo atual\n  \
          \"HP\".pinte(:verde)            cor no terminal (módulo tela)\n  \
          lista[1]  t[2] = \"x\"  texto[1..3]  t[2..]   fatia corta no fim; t[2] fora ainda é erro\n  \

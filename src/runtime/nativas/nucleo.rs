@@ -609,7 +609,7 @@ impl Vm<'_> {
 
 fn catalog_entry(name: &str, value: &Value) -> Option<Value> {
     match value {
-        Value::Builtin(_) | Value::Funcao(_) | Value::Modulo(_) => {
+        Value::Builtin(_) | Value::Funcao(_) | Value::Modulo(_) | Value::Numero(_) => {
             Some(catalog_value_row(name, value))
         }
         _ => None,
@@ -666,6 +666,7 @@ fn catalog_frame(env: &Env, modulo: &str) -> Value {
                     rows.push(e);
                 }
             }
+            Value::Numero(_) => rows.push(catalog_value_row(&name, &value)),
             _ => {}
         }
     }
@@ -698,7 +699,7 @@ fn first_paragraph(doc: &str) -> &str {
 fn module_member_names(env: &Env) -> String {
     env.bindings_sorted()
         .into_iter()
-        .filter(|(_, v)| matches!(v, Value::Builtin(_) | Value::Funcao(_)))
+        .filter(|(_, v)| matches!(v, Value::Builtin(_) | Value::Funcao(_) | Value::Numero(_)))
         .map(|(k, _)| k)
         .collect::<Vec<_>>()
         .join(", ")

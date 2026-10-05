@@ -461,6 +461,188 @@
       "doc": "Fixa a sequência de aleatorio() (útil para repetir um teste).\n\nO mesmo n produz a mesma sequência. Devolve nada.\n\nExemplo: semente(1)"
     },
     {
+      "name": "seno",
+      "aliases": [
+        "sen"
+      ],
+      "module": "mat",
+      "kind": "funcao",
+      "signatures": [
+        "seno(x)"
+      ],
+      "summary": "Seno de x em radianos. Também sen().",
+      "doc": "Seno de x em radianos. Também sen().\n\nPara graus: seno(radianos(30)).\n\nExemplo: seno(0)"
+    },
+    {
+      "name": "cosseno",
+      "aliases": [
+        "cos"
+      ],
+      "module": "mat",
+      "kind": "funcao",
+      "signatures": [
+        "cosseno(x)"
+      ],
+      "summary": "Cosseno de x em radianos. Também cos().",
+      "doc": "Cosseno de x em radianos. Também cos().\n\nExemplo: cosseno(0)"
+    },
+    {
+      "name": "tangente",
+      "aliases": [
+        "tan"
+      ],
+      "module": "mat",
+      "kind": "funcao",
+      "signatures": [
+        "tangente(x)"
+      ],
+      "summary": "Tangente de x em radianos. Também tan().",
+      "doc": "Tangente de x em radianos. Também tan().\n\nErro se o resultado não for um número finito (use se_falhar).\n\nExemplo: tangente(0)"
+    },
+    {
+      "name": "arcoseno",
+      "aliases": [],
+      "module": "mat",
+      "kind": "funcao",
+      "signatures": [
+        "arcoseno(x)"
+      ],
+      "summary": "Ângulo em radianos cujo seno é x. x entre -1 e 1.",
+      "doc": "Ângulo em radianos cujo seno é x. x entre -1 e 1.\n\nExemplo: arcoseno(0)"
+    },
+    {
+      "name": "arcocosseno",
+      "aliases": [],
+      "module": "mat",
+      "kind": "funcao",
+      "signatures": [
+        "arcocosseno(x)"
+      ],
+      "summary": "Ângulo em radianos cujo cosseno é x. x entre -1 e 1.",
+      "doc": "Ângulo em radianos cujo cosseno é x. x entre -1 e 1.\n\nExemplo: arcocosseno(1)"
+    },
+    {
+      "name": "arcotangente",
+      "aliases": [],
+      "module": "mat",
+      "kind": "funcao",
+      "signatures": [
+        "arcotangente(x)"
+      ],
+      "summary": "Ângulo em radianos cuja tangente é x.",
+      "doc": "Ângulo em radianos cuja tangente é x.\n\nExemplo: arcotangente(0)"
+    },
+    {
+      "name": "arcotangente2",
+      "aliases": [],
+      "module": "mat",
+      "kind": "funcao",
+      "signatures": [
+        "arcotangente2(y, x)"
+      ],
+      "summary": "Ângulo em radianos do vetor (x, y), no estilo atan2(y, x).",
+      "doc": "Ângulo em radianos do vetor (x, y), no estilo atan2(y, x).\n\nExemplo: arcotangente2(1, 1)"
+    },
+    {
+      "name": "radianos",
+      "aliases": [],
+      "module": "mat",
+      "kind": "funcao",
+      "signatures": [
+        "radianos(graus)"
+      ],
+      "summary": "Converte graus em radianos.",
+      "doc": "Converte graus em radianos.\n\nExemplo: seno(radianos(90))"
+    },
+    {
+      "name": "graus",
+      "aliases": [],
+      "module": "mat",
+      "kind": "funcao",
+      "signatures": [
+        "graus(radianos)"
+      ],
+      "summary": "Converte radianos em graus.",
+      "doc": "Converte radianos em graus.\n\nExemplo: graus(pi)"
+    },
+    {
+      "name": "exp",
+      "aliases": [],
+      "module": "mat",
+      "kind": "funcao",
+      "signatures": [
+        "exp(x)"
+      ],
+      "summary": "e elevado a x. exp(1) é a constante de Euler (e é palavra-chave).",
+      "doc": "e elevado a x. exp(1) é a constante de Euler (e é palavra-chave).\n\nErro se o resultado estourar (use se_falhar).\n\nExemplo: exp(0)"
+    },
+    {
+      "name": "log",
+      "aliases": [],
+      "module": "mat",
+      "kind": "funcao",
+      "signatures": [
+        "log(x)"
+      ],
+      "summary": "Logaritmo natural (base e). x > 0.",
+      "doc": "Logaritmo natural (base e). x > 0.\n\nPara base 10 use log10. Erro se x não for positivo (use se_falhar).\n\nExemplo: log(1)"
+    },
+    {
+      "name": "log10",
+      "aliases": [],
+      "module": "mat",
+      "kind": "funcao",
+      "signatures": [
+        "log10(x)"
+      ],
+      "summary": "Logaritmo decimal (base 10). x > 0.",
+      "doc": "Logaritmo decimal (base 10). x > 0.\n\nExemplo: log10(1000)"
+    },
+    {
+      "name": "potencia",
+      "aliases": [],
+      "module": "mat",
+      "kind": "funcao",
+      "signatures": [
+        "potencia(base, exp)"
+      ],
+      "summary": "base elevado a exp (expoente pode ser fração).",
+      "doc": "base elevado a exp (expoente pode ser fração).\n\n0^0 vale 1. Erro se o resultado não for um número finito (base negativa\ncom expoente não inteiro, divisão por zero, …).\n\nExemplo: potencia(2, 3)"
+    },
+    {
+      "name": "piso",
+      "aliases": [],
+      "module": "mat",
+      "kind": "funcao",
+      "signatures": [
+        "piso(numero)"
+      ],
+      "summary": "Maior inteiro que não passa de x (chão).",
+      "doc": "Maior inteiro que não passa de x (chão).\n\npiso(3.7) vale 3; piso(-1.2) vale -2.\n\nExemplo: piso(3.7)"
+    },
+    {
+      "name": "teto",
+      "aliases": [],
+      "module": "mat",
+      "kind": "funcao",
+      "signatures": [
+        "teto(numero)"
+      ],
+      "summary": "Menor inteiro que não fica abaixo de x (teto).",
+      "doc": "Menor inteiro que não fica abaixo de x (teto).\n\nteto(3.1) vale 4; teto(-1.2) vale -1.\n\nExemplo: teto(3.1)"
+    },
+    {
+      "name": "arredonde",
+      "aliases": [],
+      "module": "mat",
+      "kind": "funcao",
+      "signatures": [
+        "arredonde(numero)"
+      ],
+      "summary": "Inteiro mais próximo. Empate (n,5) afasta de zero.",
+      "doc": "Inteiro mais próximo. Empate (n,5) afasta de zero.\n\narredonde(1.4) vale 1; arredonde(1.5) vale 2; arredonde(-1.5) vale -2.\n\nExemplo: arredonde(1.5)"
+    },
+    {
       "name": "matriz",
       "aliases": [],
       "module": "matriz",
@@ -624,6 +806,15 @@
       "signatures": [],
       "summary": "Lista dos valores após o .lep na linha de comando (argumentos[1], …).",
       "doc": "Lista dos valores após o .lep na linha de comando (argumentos[1], …).\n\nNão é uma função: é uma lista já definida em todo programa.\nNo REPL a lista é []. Não dá para fazer argumentos = ….\n\nExemplo: escreva(argumentos[1])"
+    },
+    {
+      "name": "pi",
+      "aliases": [],
+      "module": "mat",
+      "kind": "valor",
+      "signatures": [],
+      "summary": "π. Valor, não função: use pi, não pi().",
+      "doc": "π. Valor, não função: use pi, não pi().\n\n180 graus são pi radianos. Converta com graus() e radianos().\n\nExemplo: area = pi * r * r"
     }
   ]
 }

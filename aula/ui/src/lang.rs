@@ -7,7 +7,7 @@
 
 use std::sync::OnceLock;
 
-use expressa::runtime::{NATIVAS, lookup_builtin_doc};
+use expressa::runtime::{NATIVAS, builtin_docs, lookup_builtin_doc};
 
 /// Reserved words (`src/lexer/tokens.rs`, checked by a test).
 pub const KEYWORDS: &[&str] = &[
@@ -85,14 +85,17 @@ pub fn natives() -> &'static [Native] {
                 }
             })
             .collect();
-        if let Some(doc) = lookup_builtin_doc("argumentos") {
+        for d in builtin_docs() {
+            if !d.is_value || out.iter().any(|n| n.name == d.name) {
+                continue;
+            }
             out.push(Native {
-                name: "argumentos",
+                name: d.name.as_str(),
                 aliases: Vec::new(),
-                module: None,
+                module: d.module.as_deref(),
                 signatures: Vec::new(),
-                summary: doc.summary.clone(),
-                example: doc.example.clone(),
+                summary: d.summary.clone(),
+                example: d.example.clone(),
                 is_value: true,
             });
         }
@@ -732,6 +735,9 @@ mod tests {
         assert_eq!(pinte.signatures.len(), 2);
         assert_eq!(native("é_terminal").unwrap().name, "eh_terminal");
         assert!(native("argumentos").unwrap().is_value);
+        assert!(native("pi").unwrap().is_value);
+        assert_eq!(native("pi").unwrap().module, Some("mat"));
+        assert_eq!(native("sen").unwrap().name, "seno");
         assert!(native("escreva").unwrap().module.is_none());
         assert_eq!(modules(), ["arquivo", "mat", "matriz", "tela"]);
         for n in natives() {
