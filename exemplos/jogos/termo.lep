@@ -52,17 +52,26 @@ completa_tentativas = funcao(ts, total, num_letras) {
         retorne ts
     }
 
-    para i de 1 até faltando {
-
+    l = ""
+    para i de 1 até num_letras {
+        l += " "
     }
+    para i de 1 até faltando {
+        ts += [l]
+    }
+    ts
 }
 
 desenha_tentativa = função(palavra, ts) {
     cls()
-    escreva("ts.tamanho(): " + ts.tamanho())
-    escreva(" +---+---+---+---+---+".negrito())
+    borda = " +"
+    para i de 1 até palavra.tamanho() {
+        borda += "---+"
+    }
+    borda = borda.negrito()
+    escreva(borda)
 
-    tamanho_palavra = 5
+    tamanho_palavra = palavra.tamanho()
     
     para l de 1 até ts.tamanho() {
         res = compara_palavra(palavra, ts[l])
@@ -84,7 +93,7 @@ desenha_tentativa = função(palavra, ts) {
         }
         linha += "|".negrito()
         escreva(linha)
-        escreva(" +---+---+---+---+---+".negrito())
+        escreva(borda)
     }
 }
 
@@ -96,24 +105,53 @@ como_lista = função(s) {
     t
 }
 
-// procurar = funcao(txt, q) {
-//     para i de 1 até txt.tamanho() {
-//         se txt[i] == q {
-//             retorne i
-//         }
-//     }
-//     0
-// }
-
-inicial = funcao() {
-    tentativas = []
-    tentativas += ["OPCAO"]
-    tentativas += ["CERTA"]
-    tentativas += ["EEOOE"]
-    tentativas += ["     "]
-    tentativas += ["     "]
-
-    desenha_tentativa("TERMO", tentativas)    
+nova_palavra = função(tamanho_palavra) {
+    chute = leia("Palavra: ")
+    enquanto chute.tamanho() != tamanho_palavra e chute.tamanho() > 0 {
+        escreva("A palavra precisa ter " + tamanho_palavra + " letras")
+        escreva("ou deixa em branco para sair do jogo")
+        chute = leia("Palavra: ")
+    }
+    chute.maiuscula()
 }
 
-inicial()
+inicial = funcao(palavra_secreta) {
+    palavra_secreta = palavra_secreta.maiuscula()
+    numero_tentativas = palavra_secreta.tamanho() + 1
+    tentativas = []
+    acertou = falso
+    
+    tentativas_comp = completa_tentativas(tentativas, numero_tentativas, palavra_secreta.tamanho())
+    desenha_tentativa(palavra_secreta, tentativas_comp)
+
+    enquanto tentativas.tamanho() < numero_tentativas {    
+        chute = nova_palavra(palavra_secreta.tamanho())
+        se chute.tamanho() == 0 {
+            escreva("Obrigado por jogar. Tchau!")
+            sair(0)
+        }
+        tentativas += [chute]
+    
+        tentativas_comp = completa_tentativas(tentativas, numero_tentativas, palavra_secreta.tamanho())
+        desenha_tentativa(palavra_secreta, tentativas_comp)
+        
+        se chute == palavra_secreta {
+            acertou = verdadeiro
+            pare
+        }
+    }
+    
+    escreva()
+    se acertou {
+        escreva("Parabéns, você " + "acertou".pinte(:verde).negrito())
+    } senão {
+        escreva("Que pena, você perdeu. A palavra era " + palavra_secreta.pinte(:vermelho))
+    }
+    escreva()
+}
+
+inicial("thiago")
+
+// TODO: faltando - letras usadas
+//       Se tentar usar uma letra já usada, não deixar
+// TODO: faltando - dicionario
