@@ -39,13 +39,17 @@ fn entries() -> Vec<EntryRef> {
 }
 
 /// New window listing builtins; selecting a name shows its ficha.
+/// Sibling of the editor (same GtkApplication), not a transient dialog:
+/// the user can keep it open and type in the IDE.
 pub fn open(parent: &impl IsA<gtk::Window>) -> Window {
     let win = Window::builder()
-        .transient_for(parent)
         .title("Ajuda — funções nativas")
         .default_width(860)
         .default_height(540)
         .build();
+    if let Some(app) = parent.application() {
+        win.set_application(Some(&app));
+    }
 
     let search = Entry::builder()
         .placeholder_text("filtrar (escreva, matriz::zeros, …)")
