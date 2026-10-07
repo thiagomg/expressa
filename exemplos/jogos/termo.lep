@@ -10,42 +10,64 @@ remove_letra = função(palavra, posição) {
     }
 }
 
-compara_palavra = funcao(palavra, tentativa) {
+/// Procura um texto dentro de outro texto, mas sem levar em conta acentos
+/// Ex: Ação == Acao para esta função
+procura_sem_acento = função(palavra, letra) {
+    sem_acento(palavra).procurar(sem_acento(letra))
+}
+
+/// Transforma um texto em uma lista de caracteres
+como_lista = função(s) {
+    t = []
+    para i de 1 até s.tamanho() {
+        t += [s[i]]
+    }
+    t
+}
+
+/// Marca cada tentativa com verde, amarelo e normal
+compara_palavra = função(palavra, tentativa) {
     // É necessário iterar duas vezes, uma para as verdes e outra para as outras
-    // t = como_lista(tentativa)
-    // p = como_lista(palavra)
     t = tentativa
     p = palavra
     res = como_lista(tentativa)
+    // Troca cada caractere por um par caractere -> :normal
+    para i de 1 até res.tamanho() {
+        res[i] = res[i] -> :normal
+    }
 
-    // Vamos iterar e verificar as verdes
+    // Primeiro vamos encontrar as letas que estão no lugar certo
+    // e remover elas da palavra e da tentativa. Assim se outra aparecer
+    // em outra posição e somente uma letra estiver na palavra, ela
+    // aparecerá em preto, não amarelo
     para i de 1 até t.tamanho() {
-        se t[i] == p[i] {
+        // C e Ç são a mesma tecla; á/ã/â valem como A (sem_acento).
+        se sem_acento(t[i]) == sem_acento(p[i]) {
             res[i] = t[i] -> :verde
             p[i] = " "
             t[i] = " "
         }
     }
 
-    // Agora vamos comparar amarelo e erros
+    // Agora vamos marcar os amarelos. Como os verdes já foram retirados
+    // não vamos olhar duas vezes a mesma letra
     para i de 1 até t.tamanho() {
-        se p contém t[i] {
-            se t[i] == " " {
-                continue
-            } 
+        se t[i] == " " {
+            continue
+        }
+        idx = procura_sem_acento(p, t[i])
+        se idx >= 1 {
             res[i] = t[i] -> :amarelo
-            idx = p.procurar(t[i])
             p[idx] = " "
             t[i] = " "
-        } senão {
-            res[i] = t[i] -> :normal
         }
     }
 
     res
 }
 
-/// Adiciona as tentativas faltando, em branco
+/// Cria uma lista com todas as tentativas possíveis
+/// adicionando tentativas em branco. Usado para desenhar a tabela
 completa_tentativas = funcao(ts, total, num_letras) {
     faltando = total - ts.tamanho()
     se faltando <= 0 {
@@ -62,17 +84,77 @@ completa_tentativas = funcao(ts, total, num_letras) {
     ts
 }
 
-desenha_tentativa = função(palavra, ts) {
-    cls()
+atualiza_teclado = função(cores_teclado, res) {
+    para i de 1 até res.tamanho() {
+        tok = res[i]
+        letra = sem_acento(tok:chave)
+        se letra == " " {
+            continue
+        }
+        novo = tok:valor
+        se nao (cores_teclado contem letra) ou novo == :verde {
+            cores_teclado[letra] = novo
+        } ou se cores_teclado[letra] != :verde e novo == :amarelo {
+            cores_teclado[letra] = :amarelo
+        }
+    }
+}
+
+/// Desenha o teclado ao lado das tentativas
+desenha_teclado = função(linha, coluna, cores_teclado) {
+    // Pinta a letra de acordo com a cor marcada para o teclado
+    pinta_letra = função(letra, cores_teclado) {
+        chave = sem_acento(letra)
+        se nao (cores_teclado contem chave) {
+            retorne letra
+        }
+
+        cor = cores_teclado[chave]
+        letra = letra
+        se cor == :verde {
+            letra.pinte(:preto, :verde).negrito()
+        } ou se cor == :amarelo {
+            letra.pinte(:preto, :amarelo).negrito()
+        } senão {
+            letra.pinte(:preto, :branco)
+        }
+    }
+
+    // Desenha uma linha do teclado
+    linha_teclado = função(letras, recuo, cores_teclado) {
+        s = recuo
+        para i de 1 até letras.tamanho() {
+            se i > 1 {
+                s += " "
+            }
+            s += pinta_letra(letras[i], cores_teclado)
+        }
+        s
+    }
+
+    teclas = ["QWERTYUIOP", "ASDFGHJKLÇ", "ZXCVBNM"]
+    // Esses recuos servem para deixar o teclado alinhado
+    recuos = ["", "", "   "]
+    // Ao inves de começar na coluna da esqueda, começa na
+    // linha e coluna definidas no bloco
+    b = bloco(linha, coluna)
+    para i de 1 até teclas.tamanho() {
+        b.escreva_em(linha_teclado(teclas[i], recuos[i], cores_teclado))
+    }
+}
+
+/// Desenha o quadro de tentativas
+desenha_tentativa = função(palavra, ts, cores_teclado) {
     borda = " +"
     para i de 1 até palavra.tamanho() {
         borda += "---+"
     }
+    largura = borda.tamanho()
     borda = borda.negrito()
-    escreva(borda)
 
     tamanho_palavra = palavra.tamanho()
-    
+    tela = borda + nova_linha
+
     para l de 1 até ts.tamanho() {
         res = compara_palavra(palavra, ts[l])
 
@@ -82,29 +164,42 @@ desenha_tentativa = função(palavra, ts) {
 
             tok = res[i]
             letra = ""
+            // coloca as cores de acordo com o resultado de compara_palavra
             se tok:valor == :verde {
                 letra = (" " + tok:chave + " ").pinte(:preto, :verde).negrito()
             } ou se tok:valor == :amarelo {
                 letra = (" " + tok:chave + " ").pinte(:preto, :amarelo).negrito()
             } senão {
-                letra = " " + tok:chave + " "   
+                letra = " " + tok:chave + " "
             }
             linha += letra
         }
         linha += "|".negrito()
-        escreva(linha)
-        escreva(borda)
+        tela += linha + nova_linha
+        tela += borda + nova_linha
     }
+
+    // Apaga tudo e desenha tela
+    quadro(tela)
+
+    // Calcula posição do teclado
+    altura = 1 + 2 * ts.tamanho()
+    coluna_tec = largura + 3
+    linha_tec = 2
+    se colunas() < coluna_tec + 20 {
+        linha_tec = altura + 2
+        coluna_tec = 2
+    }
+    desenha_teclado(linha_tec, coluna_tec, cores_teclado)
+
+    linha_prompt = altura + 2
+    se linha_tec + 3 > linha_prompt {
+        linha_prompt = linha_tec + 3
+    }
+    bloco(linha_prompt, 1).escreva_em("")
 }
 
-como_lista = função(s) {
-    t = []
-    para i de 1 até s.tamanho() {
-        t += [s[i]]
-    }
-    t
-}
-
+/// Lê uma nova palavra do usuário
 nova_palavra = função(tamanho_palavra) {
     chute = leia("Palavra: ")
     enquanto chute.tamanho() != tamanho_palavra e chute.tamanho() > 0 {
@@ -119,28 +214,30 @@ inicial = funcao(palavra_secreta) {
     palavra_secreta = palavra_secreta.maiuscula()
     numero_tentativas = palavra_secreta.tamanho() + 1
     tentativas = []
+    cores_teclado = mapa()  // letra -> :verde, :amarelo ou :normal (já tentada e ausente)
     acertou = falso
-    
-    tentativas_comp = completa_tentativas(tentativas, numero_tentativas, palavra_secreta.tamanho())
-    desenha_tentativa(palavra_secreta, tentativas_comp)
 
-    enquanto tentativas.tamanho() < numero_tentativas {    
+    tentativas_comp = completa_tentativas(tentativas, numero_tentativas, palavra_secreta.tamanho())
+    desenha_tentativa(palavra_secreta, tentativas_comp, cores_teclado)
+
+    enquanto tentativas.tamanho() < numero_tentativas {
         chute = nova_palavra(palavra_secreta.tamanho())
         se chute.tamanho() == 0 {
             escreva("Obrigado por jogar. Tchau!")
             sair(0)
         }
         tentativas += [chute]
-    
+        atualiza_teclado(cores_teclado, compara_palavra(palavra_secreta, chute))
+
         tentativas_comp = completa_tentativas(tentativas, numero_tentativas, palavra_secreta.tamanho())
-        desenha_tentativa(palavra_secreta, tentativas_comp)
-        
-        se chute == palavra_secreta {
+        desenha_tentativa(palavra_secreta, tentativas_comp, cores_teclado)
+
+        se sem_acento(chute) == sem_acento(palavra_secreta) {
             acertou = verdadeiro
             pare
         }
     }
-    
+
     escreva()
     se acertou {
         escreva("Parabéns, você " + "acertou".pinte(:verde).negrito())
@@ -150,8 +247,4 @@ inicial = funcao(palavra_secreta) {
     escreva()
 }
 
-inicial("thiago")
-
-// TODO: faltando - letras usadas
-//       Se tentar usar uma letra já usada, não deixar
-// TODO: faltando - dicionario
+inicial("carroça")

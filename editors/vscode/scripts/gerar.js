@@ -74,7 +74,7 @@ function readNativas() {
   return out;
 }
 
-// `///` lines then `nome = funcao(...)` or `nome = []` in docs/nativas/*.lep.
+// `///` lines then `nome = funcao(...)` or `nome = []` / number / `"texto"` in docs/nativas/*.lep.
 function readDocs() {
   const files = {
     'nucleo.lep': null,
@@ -94,7 +94,7 @@ function readDocs() {
         continue;
       }
       const fn = line.match(/^([A-Za-zÀ-ÿ_][A-Za-zÀ-ÿ0-9_]*)\s*=\s*funcao\s*\(([^)]*)\)/);
-      const val = line.match(/^([A-Za-zÀ-ÿ_][A-Za-zÀ-ÿ0-9_]*)\s*=\s*(?:\[\s*\]|[0-9][0-9_.]*)/);
+      const val = line.match(/^([A-Za-zÀ-ÿ_][A-Za-zÀ-ÿ0-9_]*)\s*=\s*(?:\[\s*\]|[0-9][0-9_.]*|"[^"]*")/);
       const name = fn ? fn[1] : val ? val[1] : null;
       if (!name) {
         if (line.trim() !== '') docLines = [];

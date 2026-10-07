@@ -43,3 +43,49 @@ fundo = funcao(texto, cor) { 0 }
 ///
 /// Exemplo: "GAME OVER".negrito()
 negrito = funcao(texto) { 0 }
+
+/// Largura da tela em caracteres.
+///
+/// No terminal, o tamanho atual. Sem TTY (pipe, testes, Aula sem painel), 80.
+///
+/// Exemplo: se colunas() >= 48 { ... }
+colunas = funcao() { 0 }
+
+/// Altura da tela em caracteres.
+///
+/// No terminal, o tamanho atual. Sem TTY, 24.
+///
+/// Exemplo: linhas()
+linhas = funcao() { 0 }
+
+/// Redesenha a tela: cursor no canto, escreve o texto, apaga o que sobrar.
+///
+/// Em cada linha apaga o resto à direita; no fim apaga o que estava embaixo.
+/// Use no lugar de cls()/casa() + vários escreva em um jogo. O texto já vem
+/// com nova_linha (ou "\\n"). Devolve nada.
+///
+/// Exemplo: quadro(tela)
+quadro = funcao(texto) { 0 }
+
+/// Quebra de linha do sistema. Valor, não função: use nova_linha, não nova_linha().
+///
+/// "\\n" no Unix e na Aula; "\\r\\n" no Windows. Monte o texto de quadro com ela.
+///
+/// Exemplo: tela += linha + nova_linha
+nova_linha = "\n"
+
+/// Cursor de um bloco: mapa {:linha, :coluna}, 1-based.
+///
+/// Não desenha. Passe o mapa a escreva_em. A coluna fica fixa; cada
+/// escreva_em anda uma linha.
+///
+/// Exemplo: b = bloco(1, 28)
+bloco = funcao(linha, coluna) { 0 }
+
+/// Escreve uma linha no bloco, na coluna dele, e devolve o mesmo mapa.
+///
+/// UFCS: b.escreva_em("Q W E").escreva_em(" A S D"). Sem "\\n" no texto.
+/// O que estava à esquerda na mesma linha permanece.
+///
+/// Exemplo: b.escreva_em("Q W E R T")
+escreva_em = funcao(bloco, texto) { 0 }

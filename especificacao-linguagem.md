@@ -387,6 +387,7 @@ cat nomes.txt | expressa grep.lep Thiago
 
 `escreva` vai para a saída padrão (stdout). `escreva_erro` vai para a saída de erro (stderr).  
 Com `importe "tela"`: `cls()` (também `limpe_tela()`) limpa a tela; `casa()` manda o cursor ao canto sem apagar — use no lugar de `cls()` em animações para não piscar.  
+`colunas()` e `linhas()` são o tamanho da tela em caracteres (80×24 se não houver TTY). `nova_linha` é o texto `"\n"` no Unix e `"\r\n"` no Windows (valor, não função). `quadro(texto)` volta ao canto, escreve o texto, apaga o resto de cada linha e o que sobrar embaixo; as quebras viram `nova_linha` na saída. `bloco(linha, coluna)` devolve o mapa `{:linha, :coluna}` (1-based); `escreva_em(bloco, texto)` (UFCS `b.escreva_em("…")`) escreve uma linha nessa coluna, anda `:linha` e devolve o mesmo mapa. Sem `"\n"` no texto.  
 `pinte(texto, frente)` e `pinte(texto, frente, fundo)` devolvem o texto com cor ANSI e reset no fim. `fundo(texto, cor)` pinta só o papel; `negrito(texto)` deixa em negrito. Cores: `normal`, `preto`, `vermelho`, `verde`, `amarelo`, `azul`, `magenta`, `ciano`, `branco`.  
 `durma(segundos)` espera; `durma(0.5)` é meio segundo.
 

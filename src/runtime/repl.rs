@@ -361,7 +361,7 @@ fn print_help_geral() {
          sair                   encerra o REPL (também Ctrl+D)\n  \
          sair() / sair(1)       nativa: encerra o processo\n  \
          cls                    comando do REPL: limpa a tela\n  \
-         importe \"tela\"         cls() / casa() / eh_terminal()\n  \
+         importe \"tela\"         cls() / casa() / quadro() / nova_linha\n  \
          ↑ ↓                    comandos anteriores"
     );
 }

@@ -208,6 +208,11 @@ busca = argumentos[1]          // depois do .lep; REPL → []
 importe "tela"
 cls()                          // limpa a tela  (também limpe_tela())
 casa()                         // cursor no canto, sem apagar (animações)
+quadro(tela)                   // casa + texto; apaga resto da linha e embaixo
+nova_linha                     // "\n" no Unix, "\r\n" no Windows
+colunas()  linhas()            // tamanho em caracteres (80×24 sem TTY)
+b = bloco(1, 28)               // mapa {:linha, :coluna}
+b.escreva_em("Q W E R T")      // uma linha na coluna; devolve b
 eh_terminal()                  // teclado?  também é_terminal()
 "HP".pinte(:verde)             // letra; :branco, :vermelho = letra e fundo
 "    ".fundo(:azul)            // só o papel
@@ -284,7 +289,7 @@ Módulos (`importe "…"`):
 
 | | |
 |---|---|
-| `tela` | `cls` `casa` `eh_terminal` `pinte` `fundo` `negrito` |
+| `tela` | `cls` `casa` `eh_terminal` `pinte` `fundo` `negrito` `colunas` `linhas` `quadro` `bloco` `escreva_em` `nova_linha` |
 | `mat` | `pi` `raiz` `aleatorio` `semente` `seno` `cosseno` `tangente` `arcoseno` `arcocosseno` `arcotangente` `arcotangente2` `radianos` `graus` `exp` `log` `log10` `potencia` `piso` `teto` `arredonde` |
 | `matriz` | `matriz` `transposta` `det` `identidade` `zeros` `uns` `cheia` `nlinhas` `ncolunas` |
 | `arquivo` | `leia_arquivo` `salve_arquivo` `adicione_arquivo` `leia_csv` `salve_csv` |

@@ -737,6 +737,8 @@ mod tests {
         assert!(native("argumentos").unwrap().is_value);
         assert!(native("pi").unwrap().is_value);
         assert_eq!(native("pi").unwrap().module, Some("mat"));
+        assert!(native("nova_linha").unwrap().is_value);
+        assert_eq!(native("nova_linha").unwrap().module, Some("tela"));
         assert_eq!(native("sen").unwrap().name, "seno");
         assert!(native("escreva").unwrap().module.is_none());
         assert_eq!(modules(), ["arquivo", "mat", "matriz", "tela"]);

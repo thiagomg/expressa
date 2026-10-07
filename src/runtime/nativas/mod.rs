@@ -153,6 +153,26 @@ pub const NATIVAS: &[Nativa] = &[
         module: Some("tela"),
     },
     Nativa {
+        names: &["colunas"],
+        module: Some("tela"),
+    },
+    Nativa {
+        names: &["linhas"],
+        module: Some("tela"),
+    },
+    Nativa {
+        names: &["quadro"],
+        module: Some("tela"),
+    },
+    Nativa {
+        names: &["bloco"],
+        module: Some("tela"),
+    },
+    Nativa {
+        names: &["escreva_em"],
+        module: Some("tela"),
+    },
+    Nativa {
         names: &["raiz"],
         module: Some("mat"),
     },
@@ -313,6 +333,10 @@ pub fn make_native_modules() -> HashMap<String, Rc<RefCell<Env>>> {
         mat.borrow_mut()
             .define("pi", Value::Numero(std::f64::consts::PI));
     }
+    if let Some(tela) = map.get("tela") {
+        tela.borrow_mut()
+            .define("nova_linha", Value::Texto(tela::NOVA_LINHA.into()));
+    }
     map
 }
 
@@ -337,6 +361,11 @@ impl Vm<'_> {
             "pinte" => self.bi_pinte(args, span),
             "fundo" => self.bi_fundo(args, span),
             "negrito" => self.bi_negrito(args, span),
+            "colunas" => self.bi_colunas(args, span),
+            "linhas" => self.bi_linhas(args, span),
+            "quadro" => self.bi_quadro(args, span),
+            "bloco" => self.bi_bloco(args, span),
+            "escreva_em" => self.bi_escreva_em(args, span),
             "raiz" => self.bi_raiz(args, span),
             "aleatorio" | "aleatório" => self.bi_aleatorio(args, span),
             "semente" => self.bi_semente(args, span),
@@ -884,6 +913,45 @@ escreva("b")
     }
 
     #[test]
+    fn tela_quadro_bloco_escreva_em() {
+        assert_eq!(run("escreva(colunas() >= 1)"), "verdadeiro\n");
+        assert_eq!(run("escreva(linhas() >= 1)"), "verdadeiro\n");
+        let nl = super::tela::NOVA_LINHA;
+        assert_eq!(run(r#"quadro("oi")"#), "\x1b[Hoi\x1b[K\x1b[J");
+        assert_eq!(
+            run(r#"quadro("a\nb")"#),
+            format!("\x1b[Ha\x1b[K{nl}b\x1b[K\x1b[J")
+        );
+        assert_eq!(
+            run(r#"quadro("a\r\nb")"#),
+            format!("\x1b[Ha\x1b[K{nl}b\x1b[K\x1b[J")
+        );
+        assert_eq!(run(r#"escreva(nova_linha contem "\n")"#), "verdadeiro\n");
+        assert!(run_err("nova_linha()").contains("chamar"));
+        assert_eq!(
+            run(r#"
+b = bloco(1, 8)
+escreva(b:linha)
+escreva(b:coluna)
+b.escreva_em("X")
+escreva(b:linha)
+"#),
+            "1\n8\n\x1b[1;8HX\x1b[K2\n"
+        );
+        assert_eq!(
+            run(r#"
+b = bloco(2, 3)
+b.escreva_em("A").escreva_em("B")
+escreva(b:linha)
+"#),
+            "\x1b[2;3HA\x1b[K\x1b[3;3HB\x1b[K4\n"
+        );
+        assert!(run_err("bloco(0, 1)").contains(">= 1"));
+        assert!(run_err(r#"escreva_em(1, "a")"#).contains("mapa"));
+        assert!(run_err(r#"bloco(1, 1).escreva_em("a\nb")"#).contains("uma linha"));
+    }
+
+    #[test]
     fn durma_zero_and_errors() {
         assert_eq!(run("durma(0)"), "");
         assert!(run_err("durma(-1)").contains(">= 0"));
@@ -1120,6 +1188,16 @@ para f em catalogo("mat") {
 }
 "#),
             "numero\n"
+        );
+        assert_eq!(
+            run(r#"
+para f em catalogo("tela") {
+    se f:nome == "nova_linha" {
+        escreva(f:tipo)
+    }
+}
+"#),
+            "texto\n"
         );
         assert_eq!(
             run(r#"

@@ -426,6 +426,61 @@
       "doc": "Devolve o texto em negrito (ANSI) e reset no fim.\n\nExemplo: \"GAME OVER\".negrito()"
     },
     {
+      "name": "colunas",
+      "aliases": [],
+      "module": "tela",
+      "kind": "funcao",
+      "signatures": [
+        "colunas()"
+      ],
+      "summary": "Largura da tela em caracteres.",
+      "doc": "Largura da tela em caracteres.\n\nNo terminal, o tamanho atual. Sem TTY (pipe, testes, Aula sem painel), 80.\n\nExemplo: se colunas() >= 48 { ... }"
+    },
+    {
+      "name": "linhas",
+      "aliases": [],
+      "module": "tela",
+      "kind": "funcao",
+      "signatures": [
+        "linhas()"
+      ],
+      "summary": "Altura da tela em caracteres.",
+      "doc": "Altura da tela em caracteres.\n\nNo terminal, o tamanho atual. Sem TTY, 24.\n\nExemplo: linhas()"
+    },
+    {
+      "name": "quadro",
+      "aliases": [],
+      "module": "tela",
+      "kind": "funcao",
+      "signatures": [
+        "quadro(texto)"
+      ],
+      "summary": "Redesenha a tela: cursor no canto, escreve o texto, apaga o que sobrar.",
+      "doc": "Redesenha a tela: cursor no canto, escreve o texto, apaga o que sobrar.\n\nEm cada linha apaga o resto à direita; no fim apaga o que estava embaixo.\nUse no lugar de cls()/casa() + vários escreva em um jogo. O texto já vem\ncom nova_linha (ou \"\\\\n\"). Devolve nada.\n\nExemplo: quadro(tela)"
+    },
+    {
+      "name": "bloco",
+      "aliases": [],
+      "module": "tela",
+      "kind": "funcao",
+      "signatures": [
+        "bloco(linha, coluna)"
+      ],
+      "summary": "Cursor de um bloco: mapa {:linha, :coluna}, 1-based.",
+      "doc": "Cursor de um bloco: mapa {:linha, :coluna}, 1-based.\n\nNão desenha. Passe o mapa a escreva_em. A coluna fica fixa; cada\nescreva_em anda uma linha.\n\nExemplo: b = bloco(1, 28)"
+    },
+    {
+      "name": "escreva_em",
+      "aliases": [],
+      "module": "tela",
+      "kind": "funcao",
+      "signatures": [
+        "escreva_em(bloco, texto)"
+      ],
+      "summary": "Escreve uma linha no bloco, na coluna dele, e devolve o mesmo mapa.",
+      "doc": "Escreve uma linha no bloco, na coluna dele, e devolve o mesmo mapa.\n\nUFCS: b.escreva_em(\"Q W E\").escreva_em(\" A S D\"). Sem \"\\\\n\" no texto.\nO que estava à esquerda na mesma linha permanece.\n\nExemplo: b.escreva_em(\"Q W E R T\")"
+    },
+    {
       "name": "raiz",
       "aliases": [],
       "module": "mat",
@@ -806,6 +861,15 @@
       "signatures": [],
       "summary": "Lista dos valores após o .lep na linha de comando (argumentos[1], …).",
       "doc": "Lista dos valores após o .lep na linha de comando (argumentos[1], …).\n\nNão é uma função: é uma lista já definida em todo programa.\nNo REPL a lista é []. Não dá para fazer argumentos = ….\n\nExemplo: escreva(argumentos[1])"
+    },
+    {
+      "name": "nova_linha",
+      "aliases": [],
+      "module": "tela",
+      "kind": "valor",
+      "signatures": [],
+      "summary": "Quebra de linha do sistema. Valor, não função: use nova_linha, não nova_linha().",
+      "doc": "Quebra de linha do sistema. Valor, não função: use nova_linha, não nova_linha().\n\n\"\\\\n\" no Unix e na Aula; \"\\\\r\\\\n\" no Windows. Monte o texto de quadro com ela.\n\nExemplo: tela += linha + nova_linha"
     },
     {
       "name": "pi",

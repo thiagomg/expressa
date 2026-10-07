@@ -191,11 +191,11 @@
     },
     "nativas": {
       "name": "support.function.builtin.expressa",
-      "match": "(?<![\\p{L}\\p{N}_])(?:adicione_arquivo|arcotangente2|salve_arquivo|arcotangente|escreva_erro|leia_arquivo|arcocosseno|eh_terminal|leia_linhas|é_terminal|identidade|limpe_tela|sem_acento|transposta|aleatorio|aleatório|arredonde|maiuscula|minuscula|salve_csv|substitua|arcoseno|catalogo|catálogo|conjunto|leia_csv|ncolunas|potencia|primeiro|procurar|radianos|tangente|avaliar|cosseno|escreva|formate|formato|negrito|nlinhas|semente|tamanho|matriz|numero|número|remova|separe|ultimo|ajuda|cheia|durma|fundo|graus|junte|limpe|log10|pinte|zeros|casa|leia|mapa|piso|raiz|sair|seno|teto|cls|cos|det|exp|log|sen|tan|uns)(?![\\p{L}\\p{N}_])"
+      "match": "(?<![\\p{L}\\p{N}_])(?:adicione_arquivo|arcotangente2|salve_arquivo|arcotangente|escreva_erro|leia_arquivo|arcocosseno|eh_terminal|leia_linhas|é_terminal|escreva_em|identidade|limpe_tela|sem_acento|transposta|aleatorio|aleatório|arredonde|maiuscula|minuscula|salve_csv|substitua|arcoseno|catalogo|catálogo|conjunto|leia_csv|ncolunas|potencia|primeiro|procurar|radianos|tangente|avaliar|colunas|cosseno|escreva|formate|formato|negrito|nlinhas|semente|tamanho|linhas|matriz|numero|número|quadro|remova|separe|ultimo|ajuda|bloco|cheia|durma|fundo|graus|junte|limpe|log10|pinte|zeros|casa|leia|mapa|piso|raiz|sair|seno|teto|cls|cos|det|exp|log|sen|tan|uns)(?![\\p{L}\\p{N}_])"
     },
     "valores-nativos": {
       "name": "variable.language.expressa",
-      "match": "(?<![\\p{L}\\p{N}_])(?:argumentos|pi)(?![\\p{L}\\p{N}_])"
+      "match": "(?<![\\p{L}\\p{N}_])(?:argumentos|nova_linha|pi)(?![\\p{L}\\p{N}_])"
     },
     "chamada": {
       "match": "([\\p{L}_][\\p{L}\\p{N}_]*)\\s*(?=\\()",

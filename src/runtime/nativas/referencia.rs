@@ -145,6 +145,7 @@ fn extract(source: &str, module: Option<&str>) -> Result<Vec<BuiltinDoc>, String
             }
             Expr::List { elements, .. } if elements.is_empty() => (true, None),
             Expr::Number { .. } => (true, None),
+            Expr::String { .. } => (true, None),
             _ => continue,
         };
         if let Some(existing) = parts.iter_mut().find(|p| p.name == name) {
@@ -258,6 +259,8 @@ mod tests {
         assert!(lookup_alvo("argumentos").is_some());
         let pi = lookup_ficha("mat::pi").expect("pi");
         assert!(pi.contains("importe \"mat\""), "{pi}");
+        let nl = lookup_ficha("tela::nova_linha").expect("nova_linha");
+        assert!(nl.contains("importe \"tela\""), "{nl}");
         assert!(lookup_alvo("sen").is_some());
     }
 

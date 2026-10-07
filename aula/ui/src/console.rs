@@ -216,40 +216,70 @@ fn trim_output(buf: &gtk::TextBuffer) -> i32 {
     extra
 }
 
-/// Cursor of the output pane after `cls()` / `casa()`. `row: None` means
-/// plain appending (no screen codes seen in this run).
+/// Cursor of the output pane after `cls()` / `casa()` / `quadro` / `escreva_em`.
+/// `row: None` means plain appending (no screen codes seen in this run).
 #[derive(Default)]
 struct Screen {
     row: Option<i32>,
-    /// Text of the current line not yet ended by `\n` (may hold SGR codes).
+    /// 0-based visible column where the next character lands.
+    col: i32,
+    /// Column where `partial` started (0 = replace the whole line on flush).
+    start_col: i32,
+    /// Text of the current run not yet committed (may hold SGR codes).
     partial: String,
 }
 
 /// Terminal-like writing: cursor home goes back to the first line and each
-/// new line overwrites the old one, so an animation keeps showing the
-/// previous frame while the program computes the next (no blank flicker).
-/// Erase-display clears the pane. Granularity is whole lines.
+/// new line overwrites the old one. `escreva_em` uses CUP (`\x1b[n;mH`) to
+/// overlay from a column. `\x1b[J` erases from the cursor down (`quadro`).
 fn write_screen(buf: &gtk::TextBuffer, screen: &mut Screen, text: &str) {
     let mut row = screen.row.unwrap_or_else(|| (buf.line_count() - 1).max(0));
+    let mut col = screen.col;
+    let mut start_col = screen.start_col;
     let mut rest = text;
     while let Some(c) = rest.chars().next() {
-        if rest.starts_with(ANSI_ERASE_DISPLAY) {
-            buf.set_text("");
-            row = 0;
-            screen.partial.clear();
-            rest = &rest[ANSI_ERASE_DISPLAY.len()..];
-        } else if rest.starts_with(ANSI_CURSOR_HOME) {
-            row = 0;
-            screen.partial.clear();
-            rest = &rest[ANSI_CURSOR_HOME.len()..];
-        } else if c == '\n' {
-            replace_line(buf, row, &screen.partial);
-            screen.partial.clear();
-            row += 1;
-            if row >= buf.line_count() {
-                let mut end = buf.end_iter();
-                buf.insert(&mut end, "\n");
+        if let Some((len, final_byte, params)) = parse_csi(rest) {
+            let csi = &rest[..len];
+            rest = &rest[len..];
+            match final_byte {
+                b'J' => {
+                    flush_partial(buf, &mut row, &mut col, &mut start_col, screen);
+                    if params == "2" {
+                        buf.set_text("");
+                        row = 0;
+                        col = 0;
+                        start_col = 0;
+                    } else {
+                        erase_down(buf, row, col);
+                    }
+                }
+                b'K' => {
+                    flush_partial(buf, &mut row, &mut col, &mut start_col, screen);
+                    erase_line_from(buf, row, col);
+                }
+                b'H' | b'f' => {
+                    flush_partial(buf, &mut row, &mut col, &mut start_col, screen);
+                    let (r, c) = parse_cup(params);
+                    row = r - 1;
+                    col = c - 1;
+                    start_col = col;
+                    ensure_line(buf, row);
+                }
+                _ => {
+                    // SGR stays in `partial` so insert_ansi can apply it.
+                    screen.partial.push_str(csi);
+                }
             }
+            continue;
+        }
+        if c == '\r' {
+            rest = &rest[1..];
+        } else if c == '\n' {
+            flush_partial(buf, &mut row, &mut col, &mut start_col, screen);
+            row += 1;
+            col = 0;
+            start_col = 0;
+            ensure_line(buf, row);
             row -= trim_output(buf);
             rest = &rest[1..];
         } else {
@@ -257,31 +287,133 @@ fn write_screen(buf: &gtk::TextBuffer, screen: &mut Screen, text: &str) {
             rest = &rest[c.len_utf8()..];
         }
     }
-    if !screen.partial.is_empty() {
-        replace_line(buf, row, &screen.partial);
-    }
+    flush_partial(buf, &mut row, &mut col, &mut start_col, screen);
     screen.row = Some(row);
+    screen.col = col;
+    screen.start_col = start_col;
 }
 
-fn replace_line(buf: &gtk::TextBuffer, row: i32, content: &str) {
+fn flush_partial(
+    buf: &gtk::TextBuffer,
+    row: &mut i32,
+    col: &mut i32,
+    start_col: &mut i32,
+    screen: &mut Screen,
+) {
+    if screen.partial.is_empty() {
+        return;
+    }
+    let content = std::mem::take(&mut screen.partial);
+    let vis = visible_len(&content) as i32;
+    if *start_col == 0 {
+        replace_line(buf, *row, &content);
+    } else {
+        overlay_line(buf, *row, *start_col, &content);
+    }
+    *col = *start_col + vis;
+    *start_col = *col;
+}
+
+fn visible_len(text: &str) -> usize {
+    ansi_spans(text)
+        .iter()
+        .map(|(s, _)| s.chars().count())
+        .sum()
+}
+
+fn parse_cup(params: &str) -> (i32, i32) {
+    let mut row = 1i32;
+    let mut col = 1i32;
+    let mut parts = params.split(';');
+    if let Some(p) = parts.next() {
+        if !p.is_empty() {
+            row = p.parse().unwrap_or(1);
+        }
+    }
+    if let Some(p) = parts.next() {
+        if !p.is_empty() {
+            col = p.parse().unwrap_or(1);
+        }
+    }
+    (row.max(1), col.max(1))
+}
+
+fn ensure_line(buf: &gtk::TextBuffer, row: i32) {
     while row >= buf.line_count() {
         let mut end = buf.end_iter();
         buf.insert(&mut end, "\n");
     }
-    let Some(mut start) = buf.iter_at_line(row) else {
-        return;
-    };
+}
+
+fn line_range(buf: &gtk::TextBuffer, row: i32) -> Option<(i32, i32)> {
+    let start = buf.iter_at_line(row)?;
     let mut end = start.clone();
     if !end.ends_line() {
         end.forward_to_line_end();
     }
-    let offset = start.offset();
-    buf.delete(&mut start, &mut end);
-    insert_ansi_at(buf, offset, content, None);
+    Some((start.offset(), end.offset()))
 }
 
-const ANSI_ERASE_DISPLAY: &str = "\x1b[2J";
-const ANSI_CURSOR_HOME: &str = "\x1b[H";
+fn replace_line(buf: &gtk::TextBuffer, row: i32, content: &str) {
+    ensure_line(buf, row);
+    let Some((off, end_off)) = line_range(buf, row) else {
+        return;
+    };
+    let mut start = buf.iter_at_offset(off);
+    let mut end = buf.iter_at_offset(end_off);
+    buf.delete(&mut start, &mut end);
+    insert_ansi_at(buf, off, content, None);
+}
+
+fn overlay_line(buf: &gtk::TextBuffer, row: i32, col: i32, content: &str) {
+    ensure_line(buf, row);
+    let Some((line_start, line_end)) = line_range(buf, row) else {
+        return;
+    };
+    let line_len = line_end - line_start;
+    if col > line_len {
+        let mut at = buf.iter_at_offset(line_start + line_len);
+        buf.insert(&mut at, &" ".repeat((col - line_len) as usize));
+    }
+    let Some((line_start, line_end)) = line_range(buf, row) else {
+        return;
+    };
+    let vis = visible_len(content) as i32;
+    let at = line_start + col;
+    let del = vis.min((line_end - at).max(0));
+    if del > 0 {
+        let mut a = buf.iter_at_offset(at);
+        let mut b = buf.iter_at_offset(at + del);
+        buf.delete(&mut a, &mut b);
+    }
+    insert_ansi_at(buf, at, content, None);
+}
+
+fn erase_line_from(buf: &gtk::TextBuffer, row: i32, col: i32) {
+    let Some((line_start, line_end)) = line_range(buf, row) else {
+        return;
+    };
+    let at = line_start + col.min(line_end - line_start);
+    if at < line_end {
+        let mut a = buf.iter_at_offset(at);
+        let mut b = buf.iter_at_offset(line_end);
+        buf.delete(&mut a, &mut b);
+    }
+}
+
+fn erase_down(buf: &gtk::TextBuffer, row: i32, col: i32) {
+    // After a trailing `\n`, the cursor is at column 0 of the next line.
+    // Erasing from there must drop that empty line too, or a shorter
+    // `quadro` leaves a blank row where the old frame used to continue.
+    let from = if col <= 0 { row } else { row + 1 };
+    if col > 0 {
+        erase_line_from(buf, row, col);
+    }
+    if let Some(mut start) = buf.iter_at_line(from) {
+        let mut end = buf.end_iter();
+        buf.delete(&mut start, &mut end);
+    }
+}
 
 const ANSI_FG: &[(&str, &str)] = &[
     ("ansi-fg-preto", "#212121"),
@@ -321,7 +453,19 @@ fn add_ansi_tags(table: gtk::TextTagTable) {
 }
 
 fn has_screen_code(text: &str) -> bool {
-    text.contains(ANSI_ERASE_DISPLAY) || text.contains(ANSI_CURSOR_HOME)
+    let mut pos = 0;
+    while pos < text.len() {
+        let rest = &text[pos..];
+        if let Some((len, final_byte, _)) = parse_csi(rest) {
+            if matches!(final_byte, b'H' | b'f' | b'J' | b'K') {
+                return true;
+            }
+            pos += len;
+            continue;
+        }
+        pos += rest.chars().next().unwrap().len_utf8();
+    }
+    false
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -512,6 +656,18 @@ mod tests {
             // After cls, plain lines keep appending.
             let t = screen_text(&["\x1b[2J\x1b[H", "a\n", "b\n"]).unwrap();
             assert_eq!(t, "a\nb\n");
+            // quadro: home + shorter frame + erase down drops leftover lines.
+            let t =
+                screen_text(&["q1 a\nq1 b\nq1 c\n", "\x1b[H", "q2 a\nq2 b\n", "\x1b[J"]).unwrap();
+            assert_eq!(t, "q2 a\nq2 b\n");
+            // EL at end of a short line drops leftover to the right (old cargo output).
+            let t = screen_text(&["cargo leftover here\n", "\x1b[Hok\x1b[K\n\x1b[J"]).unwrap();
+            assert_eq!(t, "ok\n");
+            let t = screen_text(&["\x1b[Ha\x1b[K\r\nb\x1b[K\r\n\x1b[J"]).unwrap();
+            assert_eq!(t, "a\nb\n");
+            // escreva_em: CUP + overlay from a column, EL clears the tail.
+            let t = screen_text(&["AAAAAA\n", "\x1b[1;4HXY\x1b[K"]).unwrap();
+            assert_eq!(t, "AAAXY\n");
         });
     }
 
