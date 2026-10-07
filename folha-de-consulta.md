@@ -7,6 +7,8 @@ Detalhes: `especificacao-linguagem.md`. Nativas: `docs/nativas/*.lep`.
 expressa                      REPL
 expressa prog.lep [args…]
 expressa debug prog.lep
+expressa --numeros en         texto 1,000.5
+expressa --aritmetica float   IEEE-754
 cat dados.txt | expressa prog.lep Thiago
 ```
 
@@ -21,7 +23,7 @@ chmod +x prog.lep && ./prog.lep
 
 | Tipo | Exemplos |
 |------|----------|
-| `numero` | `10` `3.14` `-8` (no código, decimal com `.`) |
+| `numero` | `10` `3.14` `-8` (no código, ponto; valor decimal exato) |
 | `texto` | `"olá"` |
 | `bool` | `verdadeiro` `falso` |
 | lista | `[1, 2, 3]` |
@@ -221,9 +223,11 @@ eh_terminal()                  // teclado?  também é_terminal()
 ```
 
 ```text
-formato("pt")                  // 1.000,5   (padrão)
+formato("pt")                  // 1.000,5   (padrão de texto)
 formato("en")                  // 1,000.5
-numero("3,14")                 // segue o formato atual; também número()
+formato("decimal")             // 0.1+0.2 = 0.3 (padrão)
+formato("float")               // IEEE-754, como Python
+numero("3,14")                 // segue o formato de texto; também número()
 
 importe "mat"
 aleatorio(1, 6)                // inteiro inclusive; também aleatório()

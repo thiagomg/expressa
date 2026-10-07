@@ -26,6 +26,19 @@ fn try_main() -> Result<(), Box<dyn std::error::Error>> {
         unsafe { std::env::set_var("EXPRESSA_NUMEROS", &name) };
         args.drain(i..=i + 1);
     }
+    if let Some(i) = args.iter().position(|a| a == "--aritmetica") {
+        if i + 1 >= args.len() {
+            eprintln!("Uso: expressa --aritmetica decimal|float");
+            return Ok(());
+        }
+        let name = args[i + 1].clone();
+        if expressa::runtime::NumeroAritmetica::from_name(&name).is_none() {
+            eprintln!("padrão desconhecido `{name}` (use decimal ou float)");
+            process::exit(1);
+        }
+        unsafe { std::env::set_var("EXPRESSA_ARITMETICA", &name) };
+        args.drain(i..=i + 1);
+    }
     if args.is_empty() {
         run_repl()?;
         return Ok(());
@@ -38,7 +51,8 @@ fn try_main() -> Result<(), Box<dyn std::error::Error>> {
              expressa debug <arquivo.lep> [args…]\n  \
              expressa --ast <arquivo.lep>\n  \
              expressa --marcador-leia <arquivo.lep> [args…]\n  \
-             expressa --numeros pt|en [arquivo.lep] [args…]"
+             expressa --numeros pt|en [arquivo.lep] [args…]\n  \
+             expressa --aritmetica decimal|float [arquivo.lep] [args…]"
         );
         return Ok(());
     }

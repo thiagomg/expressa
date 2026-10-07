@@ -210,7 +210,7 @@ mod tests {
     use super::*;
 
     fn num(n: f64) -> Value {
-        Value::Numero(n)
+        Value::Numero(n.into())
     }
 
     #[test]
@@ -306,6 +306,12 @@ mod tests {
                 _ => panic!("expected number"),
             })
             .collect();
-        assert_eq!(got, [("x".into(), 9.0), ("y".into(), 2.0)]);
+        assert_eq!(
+            got,
+            [
+                ("x".into(), 9.0.into()),
+                ("y".into(), 2.0.into())
+            ]
+        );
     }
 }

@@ -229,7 +229,7 @@ mod tests {
         Value::Texto(s.into())
     }
     fn n(x: f64) -> Value {
-        Value::Numero(x)
+        Value::Numero(x.into())
     }
 
     fn f(template: &str, args: &[Value]) -> String {

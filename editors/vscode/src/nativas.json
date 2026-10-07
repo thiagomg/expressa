@@ -144,8 +144,8 @@
       "signatures": [
         "formato(padrao)"
       ],
-      "summary": "Escolhe o padrão de texto de números: pt-BR (1.000,5) ou en-US (1,000.5).",
-      "doc": "Escolhe o padrão de texto de números: pt-BR (1.000,5) ou en-US (1,000.5).\n\nTambém: \"pt-br\", \"en-us\", \"br\", \"eua\".\nNa linha de comando: expressa --numeros en arquivo.lep.\nLiterais no código continuam com ponto: media = 7.3.\n\nExemplo: formato(\"en\")"
+      "summary": "Escolhe o texto dos números (pt/en) ou a aritmética (decimal/float).",
+      "doc": "Escolhe o texto dos números (pt/en) ou a aritmética (decimal/float).\n\nTexto: \"pt\" (1.000,5, padrão) ou \"en\" (1,000.5). Também \"pt-br\", \"en-us\",\n\"br\", \"eua\". Linha de comando: expressa --numeros en arquivo.lep.\nLiterais no código continuam com ponto: media = 7.3.\n\nAritmética: \"decimal\" (padrão; 0.1+0.2 é 0.3) ou \"float\" (IEEE-754, como\nPython). Independente do pt/en. Também \"exato\", \"flutuante\".\nLinha de comando: expressa --aritmetica float arquivo.lep.\n\nExemplo: formato(\"en\")"
     },
     {
       "name": "formate",

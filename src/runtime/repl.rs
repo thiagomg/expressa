@@ -357,7 +357,8 @@ fn print_help_geral() {
          ajuda escreva          detalhe de uma função\n  \
          ls / ls matriz         catálogo formatado (escopo ou módulo)\n  \
          catalogo / catalogo c  a lista de mapas (valor)\n  \
-         formato(\"pt\") / en     padrão de números em texto\n  \
+         formato(\"pt\") / en     texto dos números (1.000,5 / 1,000.5)\n  \
+         formato(\"decimal\") / float  aritmética (padrão decimal)\n  \
          sair                   encerra o REPL (também Ctrl+D)\n  \
          sair() / sair(1)       nativa: encerra o processo\n  \
          cls                    comando do REPL: limpa a tela\n  \

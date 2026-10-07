@@ -17,8 +17,9 @@ use super::error::{CallFrame, EvalError, RuntimeError};
 use super::leia::LeiaHost;
 use super::nativas;
 use super::rng::Rng;
+use super::numero::{Numero, NumeroAritmetica, default_numero_aritmetica, parse_numero};
 use super::value::{
-    Closure, MapKey, NumeroLocale, Value, default_numero_locale, format_numero, parse_numero,
+    Closure, MapKey, NumeroLocale, Value, default_numero_locale, format_numero,
 };
 
 /// Source of lines for `leia()`. Implemented for any [`BufRead`] (tests)
@@ -68,6 +69,7 @@ pub(crate) struct Vm<'a> {
     deadline: Option<Instant>,
     pub(crate) leia_host: Option<&'a mut dyn LeiaHost>,
     pub(crate) numero_locale: NumeroLocale,
+    pub(crate) numero_aritmetica: NumeroAritmetica,
     pub(crate) rng: Rng,
     /// Depth of `se_falhar` attempts being evaluated: errors there are
     /// handled, so the debugger must not stop on them.
@@ -354,6 +356,7 @@ impl<'a> Vm<'a> {
             deadline: time_limit.map(|d| Instant::now() + d),
             leia_host,
             numero_locale: default_numero_locale(),
+            numero_aritmetica: default_numero_aritmetica(),
             rng: Rng::new(),
             protected: 0,
             error_reported: false,
@@ -620,7 +623,7 @@ impl<'a> Vm<'a> {
                 while i <= end {
                     loop_env
                         .borrow_mut()
-                        .define(var.clone(), Value::Numero(i as f64));
+                        .define(var.clone(), Value::Numero(Numero::from_i64(i)));
                     if self.eval_loop_body(&body.stmts, &loop_env)? {
                         break;
                     }
@@ -863,7 +866,7 @@ impl<'a> Vm<'a> {
                                 .collect();
                             Ok(Value::matriz(rows))
                         }
-                        _ => Ok(Value::Numero(-self.expect_numero(&v, *span)?)),
+                        _ => Ok(Value::Numero(self.expect_numero(&v, *span)?.neg())),
                     },
                     UnaryOp::Not => Ok(Value::Bool(!self.expect_bool(&v, *span)?)),
                 }
@@ -952,7 +955,10 @@ impl<'a> Vm<'a> {
     ) -> Result<Value, EvalError> {
         match op {
             BinaryOp::Add => match (l, r) {
-                (Value::Numero(a), Value::Numero(b)) => Ok(Value::Numero(a + b)),
+                (Value::Numero(a), Value::Numero(b)) => Ok(Value::Numero(
+                    a.add(*b, self.numero_aritmetica)
+                        .map_err(|m| self.err(m, span))?,
+                )),
                 (Value::Lista(a), Value::Lista(b)) => {
                     let mut out = a.borrow().clone();
                     out.extend(b.borrow().clone());
@@ -997,34 +1003,32 @@ impl<'a> Vm<'a> {
             BinaryOp::Sub => match (l, r) {
                 (Value::Matriz(_), Value::Matriz(_)) => self.matriz_add(l, r, span, -1.0),
                 _ => Ok(Value::Numero(
-                    self.expect_numero(l, span)? - self.expect_numero(r, span)?,
+                    self.expect_numero(l, span)?
+                        .sub(self.expect_numero(r, span)?, self.numero_aritmetica)
+                        .map_err(|m| self.err(m, span))?,
                 )),
             },
             BinaryOp::Mul => match (l, r) {
                 (Value::Matriz(_), Value::Matriz(_)) => self.matriz_mul(l, r, span),
                 (Value::Matriz(_), Value::Numero(k)) | (Value::Numero(k), Value::Matriz(_)) => {
-                    self.matriz_scale(l, r, *k, span)
+                    self.matriz_scale(l, r, k.to_f64(), span)
                 }
                 _ => Ok(Value::Numero(
-                    self.expect_numero(l, span)? * self.expect_numero(r, span)?,
+                    self.expect_numero(l, span)?
+                        .mul(self.expect_numero(r, span)?, self.numero_aritmetica)
+                        .map_err(|m| self.err(m, span))?,
                 )),
             },
-            BinaryOp::Div => {
-                let a = self.expect_numero(l, span)?;
-                let b = self.expect_numero(r, span)?;
-                if b == 0.0 {
-                    return Err(self.err("divisão por zero", span));
-                }
-                Ok(Value::Numero(a / b))
-            }
-            BinaryOp::Rem => {
-                let a = self.expect_numero(l, span)?;
-                let b = self.expect_numero(r, span)?;
-                if b == 0.0 {
-                    return Err(self.err("resto de divisão por zero", span));
-                }
-                Ok(Value::Numero(a % b))
-            }
+            BinaryOp::Div => Ok(Value::Numero(
+                self.expect_numero(l, span)?
+                    .div(self.expect_numero(r, span)?, self.numero_aritmetica)
+                    .map_err(|m| self.err(m, span))?,
+            )),
+            BinaryOp::Rem => Ok(Value::Numero(
+                self.expect_numero(l, span)?
+                    .rem(self.expect_numero(r, span)?, self.numero_aritmetica)
+                    .map_err(|m| self.err(m, span))?,
+            )),
             BinaryOp::Eq => Ok(Value::Bool(l == r)),
             BinaryOp::Ne => Ok(Value::Bool(l != r)),
             BinaryOp::Lt | BinaryOp::Le | BinaryOp::Gt | BinaryOp::Ge => {
@@ -1181,7 +1185,11 @@ impl<'a> Vm<'a> {
             Value::Matriz(m) => {
                 let rows = m.borrow();
                 let i = self.to_index(index, rows.len(), span)?;
-                let row: Vec<Value> = rows[i].iter().copied().map(Value::Numero).collect();
+                let row: Vec<Value> = rows[i]
+                    .iter()
+                    .copied()
+                    .map(|x| Value::Numero(x.into()))
+                    .collect();
                 Ok(Value::lista(row))
             }
             other => Err(self.err(
@@ -1210,7 +1218,7 @@ impl<'a> Vm<'a> {
         let rows = m.borrow();
         let i = self.to_index(row, rows.len(), span)?;
         let j = self.to_index(col, rows[i].len(), span)?;
-        Ok(Value::Numero(rows[i][j]))
+        Ok(Value::Numero(Numero::from(rows[i][j])))
     }
 
     fn assign_index2(
@@ -1230,7 +1238,7 @@ impl<'a> Vm<'a> {
                 span,
             ));
         };
-        let n = self.expect_numero(&value, span)?;
+        let n = self.expect_f64(&value, span)?;
         let mut rows = m.borrow_mut();
         let i = self.to_index(row, rows.len(), span)?;
         let j = self.to_index(col, rows[i].len(), span)?;
@@ -1250,7 +1258,7 @@ impl<'a> Vm<'a> {
             let cells = self.expect_lista(row, span)?;
             let mut nums = Vec::new();
             for item in cells.borrow().iter() {
-                nums.push(self.expect_numero(item, span)?);
+                nums.push(self.expect_f64(item, span)?);
             }
             if nums.is_empty() {
                 return Err(self.err("linha de matriz não pode ser vazia", span));
@@ -1737,7 +1745,7 @@ impl<'a> Vm<'a> {
         }
     }
 
-    pub(crate) fn expect_numero(&self, v: &Value, span: Span) -> Result<f64, EvalError> {
+    pub(crate) fn expect_numero(&self, v: &Value, span: Span) -> Result<Numero, EvalError> {
         match v {
             Value::Numero(n) => Ok(*n),
             _ => Err(self.err(
@@ -1747,18 +1755,18 @@ impl<'a> Vm<'a> {
         }
     }
 
+    pub(crate) fn expect_f64(&self, v: &Value, span: Span) -> Result<f64, EvalError> {
+        Ok(self.expect_numero(v, span)?.to_f64())
+    }
+
     pub(crate) fn expect_int(&self, v: &Value, span: Span) -> Result<i64, EvalError> {
         let n = self.expect_numero(v, span)?;
-        if !n.is_finite() || n.fract() != 0.0 {
-            return Err(self.err(
+        n.to_i64().ok_or_else(|| {
+            self.err(
                 format!("esperado número inteiro, encontrado {}", format_numero(n)),
                 span,
-            ));
-        }
-        if n > i64::MAX as f64 || n < i64::MIN as f64 {
-            return Err(self.err("número inteiro fora do intervalo", span));
-        }
-        Ok(n as i64)
+            )
+        })
     }
 
     pub(crate) fn expect_bool(&self, v: &Value, span: Span) -> Result<bool, EvalError> {
@@ -2800,7 +2808,7 @@ boom()
     fn helpers_used_by_eval() {
         assert_eq!(base_dir_of("exemplos/media.lep").as_os_str(), "exemplos");
         assert_eq!(base_dir_of("media.lep").as_os_str(), ".");
-        assert_eq!(Value::Numero(3.0).format_with(NumeroLocale::PtBr), "3");
+        assert_eq!(Value::Numero(3.0.into()).format_with(NumeroLocale::PtBr), "3");
         assert_eq!(
             Value::Texto("a".into()).format_with(NumeroLocale::PtBr),
             "a"

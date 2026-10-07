@@ -20,7 +20,7 @@ Todo bloco (`inicio`/`fim` ou `{`/`}`) é uma expressão e retorna o valor da ú
 
 | Tipo     | Exemplos                          |
 |----------|-----------------------------------|
-| `numero` | `10`, `3.14`, `-8`, `0`           |
+| `numero` | `10`, `3.14`, `-8`, `0` (decimal; `formato("float")` liga IEEE-754) |
 | `texto`  | `"olá"`, `"123"`                  |
 | `bool`   | `verdadeiro`, `falso`             |
 
@@ -85,6 +85,7 @@ As funções nativas estão documentadas em `docs/nativas/*.lep` (mesmo formato 
 **Ao acaso:** no mesmo módulo, `aleatorio(min, max)` (também `aleatório`) inteiro inclusive; `semente(n)` fixa a sequência.  
 **Trigonometria e análise:** no mesmo módulo, ângulos em **radianos**. `seno`/`sen`, `cosseno`/`cos`, `tangente`/`tan`; inversas `arcoseno`, `arcocosseno`, `arcotangente`, `arcotangente2(y, x)`. `radianos(g)` e `graus(r)` convertem. `pi` é um valor (não `pi()`). Também `exp`, `log` (natural), `log10`, `potencia`, `piso`, `teto`, `arredonde`. Domínio inválido (por exemplo `log(0)`, `arcoseno(2)`) é erro capturável com `se_falhar`. `e` é palavra-chave; use `exp(1)`.  
 **Texto ↔ número:** `numero(t)` (também `número`) lê o padrão atual; `formato("pt")` / `formato("en")` escolhe pt-BR (`1.000,5`) ou en-US (`1,000.5`). Padrão pt-BR. Literais no código usam `.`.  
+**Aritmética:** padrão decimal (`formato("decimal")`). `formato("float")` liga IEEE-754 só nas operações; o padrão de texto (`pt`/`en`) continua independente. Variável de ambiente `EXPRESSA_ARITMETICA`; CLI `--aritmetica decimal|float`.  
 **Acesso:** `mat::soma` (módulo), `pessoa:nome` (chave de mapa), `p:chave` / `p:valor` (par), `xs.tamanho()` (= `tamanho(xs)`).
 
 ```text

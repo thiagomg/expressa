@@ -88,19 +88,19 @@ impl Vm<'_> {
         self.expect_arity(args, 3, span)?;
         let h = self.expect_dim(&args[0], span, "cheia")?;
         let w = self.expect_dim(&args[1], span, "cheia")?;
-        let v = self.expect_numero(&args[2], span)?;
+        let v = self.expect_f64(&args[2], span)?;
         Ok(Value::matriz(vec![vec![v; w]; h]))
     }
     pub(crate) fn bi_nlinhas(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
         self.expect_arity(args, 1, span)?;
         let m = self.expect_matriz(&args[0], span)?;
-        Ok(Value::Numero(m.borrow().len() as f64))
+        Ok(Value::Numero((m.borrow().len() as i64).into()))
     }
     pub(crate) fn bi_ncolunas(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
         self.expect_arity(args, 1, span)?;
         let m = self.expect_matriz(&args[0], span)?;
         let n = m.borrow().first().map(|r| r.len()).unwrap_or(0);
-        Ok(Value::Numero(n as f64))
+        Ok(Value::Numero((n as i64).into()))
     }
     pub(crate) fn bi_det(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
         self.expect_arity(args, 1, span)?;
@@ -122,7 +122,7 @@ impl Vm<'_> {
                 return Err(self.err("det() só para matrizes 1×1, 2×2 ou 3×3", span));
             }
         };
-        Ok(Value::Numero(d))
+        Ok(Value::Numero(d.into()))
     }
     pub(crate) fn bi_matriz(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
         self.expect_arity(args, 1, span)?;
