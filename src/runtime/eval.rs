@@ -1916,8 +1916,8 @@ mod tests {
 
     #[test]
     fn media_example() {
-        let src = include_str!("../../exemplos/media.lep");
-        let out = run_to_string(src, "media.lep").unwrap();
+        let src = include_str!("../../exemplos/linguagem/media.lep");
+        let out = run_to_string(src, "exemplos/linguagem/media.lep").unwrap();
         assert_eq!(out, "Média: 7,3\nResultado: Aprovado\n");
     }
 
@@ -1925,56 +1925,56 @@ mod tests {
     fn example_programs_run() {
         let examples = [
             (
-                "exemplos/tabuada.lep",
-                include_str!("../../exemplos/tabuada.lep"),
+                "exemplos/linguagem/tabuada.lep",
+                include_str!("../../exemplos/linguagem/tabuada.lep"),
             ),
             (
-                "exemplos/fatorial.lep",
-                include_str!("../../exemplos/fatorial.lep"),
+                "exemplos/linguagem/fatorial.lep",
+                include_str!("../../exemplos/linguagem/fatorial.lep"),
             ),
             (
-                "exemplos/filtra.lep",
-                include_str!("../../exemplos/filtra.lep"),
+                "exemplos/linguagem/filtra.lep",
+                include_str!("../../exemplos/linguagem/filtra.lep"),
             ),
             (
-                "exemplos/receita.lep",
-                include_str!("../../exemplos/receita.lep"),
+                "exemplos/linguagem/closures.lep",
+                include_str!("../../exemplos/linguagem/closures.lep"),
             ),
             (
-                "exemplos/poema.lep",
-                include_str!("../../exemplos/poema.lep"),
+                "exemplos/linguagem/usa_matematica.lep",
+                include_str!("../../exemplos/linguagem/usa_matematica.lep"),
             ),
             (
-                "exemplos/turma.lep",
-                include_str!("../../exemplos/turma.lep"),
+                "exemplos/texto/poema.lep",
+                include_str!("../../exemplos/texto/poema.lep"),
             ),
             (
-                "exemplos/palindromo.lep",
-                include_str!("../../exemplos/palindromo.lep"),
+                "exemplos/texto/palindromo.lep",
+                include_str!("../../exemplos/texto/palindromo.lep"),
             ),
             (
-                "exemplos/ascii.lep",
-                include_str!("../../exemplos/ascii.lep"),
+                "exemplos/texto/ascii.lep",
+                include_str!("../../exemplos/texto/ascii.lep"),
             ),
             (
-                "exemplos/caixa.lep",
-                include_str!("../../exemplos/caixa.lep"),
+                "exemplos/programas/receita.lep",
+                include_str!("../../exemplos/programas/receita.lep"),
             ),
             (
-                "exemplos/diario.lep",
-                include_str!("../../exemplos/diario.lep"),
+                "exemplos/programas/turma.lep",
+                include_str!("../../exemplos/programas/turma.lep"),
             ),
             (
-                "exemplos/contatos.lep",
-                include_str!("../../exemplos/contatos.lep"),
+                "exemplos/programas/caixa.lep",
+                include_str!("../../exemplos/programas/caixa.lep"),
             ),
             (
-                "exemplos/usa_matematica.lep",
-                include_str!("../../exemplos/usa_matematica.lep"),
+                "exemplos/programas/diario.lep",
+                include_str!("../../exemplos/programas/diario.lep"),
             ),
             (
-                "exemplos/closures.lep",
-                include_str!("../../exemplos/closures.lep"),
+                "exemplos/programas/contatos.lep",
+                include_str!("../../exemplos/programas/contatos.lep"),
             ),
             (
                 "exemplos/escola/bhaskara.lep",
@@ -2024,8 +2024,8 @@ mod tests {
 
     #[test]
     fn erros_example_does_not_crash() {
-        let src = include_str!("../../exemplos/erros.lep");
-        let out = run_to_string(src, "erros.lep").unwrap();
+        let src = include_str!("../../exemplos/linguagem/erros.lep");
+        let out = run_to_string(src, "exemplos/linguagem/erros.lep").unwrap();
         assert_eq!(out, "");
     }
 
@@ -2806,7 +2806,10 @@ boom()
 
     #[test]
     fn helpers_used_by_eval() {
-        assert_eq!(base_dir_of("exemplos/media.lep").as_os_str(), "exemplos");
+        assert_eq!(
+            base_dir_of("exemplos/linguagem/media.lep").as_os_str(),
+            "exemplos/linguagem"
+        );
         assert_eq!(base_dir_of("media.lep").as_os_str(), ".");
         assert_eq!(Value::Numero(3.0.into()).format_with(NumeroLocale::PtBr), "3");
         assert_eq!(
