@@ -78,11 +78,15 @@ argumentos = []
 numero = funcao(texto) { 0 }
 numero = funcao(numero) { 0 }
 
-/// Escolhe o padrão de texto de números: pt-BR (1.000,5) ou en-US (1,000.5).
+/// Escolhe o texto dos números (pt/en) ou a aritmética (decimal/float).
 ///
-/// Também: "pt-br", "en-us", "br", "eua".
-/// Na linha de comando: expressa --numeros en arquivo.lep.
+/// Texto: "pt" (1.000,5, padrão) ou "en" (1,000.5). Também "pt-br", "en-us",
+/// "br", "eua". Linha de comando: expressa --numeros en arquivo.lep.
 /// Literais no código continuam com ponto: media = 7.3.
+///
+/// Aritmética: "decimal" (padrão; 0.1+0.2 é 0.3) ou "float" (IEEE-754, como
+/// Python). Independente do pt/en. Também "exato", "flutuante".
+/// Linha de comando: expressa --aritmetica float arquivo.lep.
 ///
 /// Exemplo: formato("en")
 formato = funcao(padrao) { 0 }

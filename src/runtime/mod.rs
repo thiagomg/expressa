@@ -5,6 +5,7 @@ mod eval;
 mod formate;
 mod leia;
 mod nativas;
+mod numero;
 mod repl;
 mod rng;
 mod value;
@@ -24,6 +25,7 @@ pub use nativas::{
     BuiltinDoc, NATIVAS, Nativa, builtin_docs, lookup_alvo, lookup_builtin_doc, lookup_ficha,
 };
 pub use repl::run_repl;
+pub use numero::{Numero, NumeroAritmetica, default_numero_aritmetica};
 pub use value::{NumeroLocale, Value, default_numero_locale};
 
 #[cfg(test)]

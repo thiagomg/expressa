@@ -7,11 +7,11 @@ use super::super::value::Value;
 impl Vm<'_> {
     pub(crate) fn bi_raiz(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
         self.expect_arity(args, 1, span)?;
-        let n = self.expect_numero(&args[0], span)?;
+        let n = self.expect_f64(&args[0], span)?;
         if n < 0.0 {
             return Err(self.err("raiz de número negativo", span));
         }
-        Ok(Value::Numero(n.sqrt()))
+        Ok(Value::Numero(n.sqrt().into()))
     }
     pub(crate) fn bi_aleatorio(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
         self.expect_arity(args, 2, span)?;
@@ -20,7 +20,7 @@ impl Vm<'_> {
         if min > max {
             return Err(self.err("aleatorio() espera min <= max", span));
         }
-        Ok(Value::Numero(self.rng.inclusive(min, max) as f64))
+        Ok(Value::Numero(self.rng.inclusive(min, max).into()))
     }
     pub(crate) fn bi_semente(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
         self.expect_arity(args, 1, span)?;
@@ -73,8 +73,8 @@ impl Vm<'_> {
         span: Span,
     ) -> Result<Value, EvalError> {
         self.expect_arity(args, 2, span)?;
-        let y = self.expect_numero(&args[0], span)?;
-        let x = self.expect_numero(&args[1], span)?;
+        let y = self.expect_f64(&args[0], span)?;
+        let x = self.expect_f64(&args[1], span)?;
         self.mat_finite(y.atan2(x), span, "arcotangente2 indefinida")
     }
     pub(crate) fn bi_radianos(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
@@ -116,8 +116,8 @@ impl Vm<'_> {
     }
     pub(crate) fn bi_potencia(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
         self.expect_arity(args, 2, span)?;
-        let base = self.expect_numero(&args[0], span)?;
-        let exp = self.expect_numero(&args[1], span)?;
+        let base = self.expect_f64(&args[0], span)?;
+        let exp = self.expect_f64(&args[1], span)?;
         self.mat_finite(base.powf(exp), span, "potencia indefinida")
     }
     pub(crate) fn bi_piso(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
@@ -138,7 +138,7 @@ impl Vm<'_> {
         err: &str,
     ) -> Result<Value, EvalError> {
         self.expect_arity(args, 1, span)?;
-        let n = self.expect_numero(&args[0], span)?;
+        let n = self.expect_f64(&args[0], span)?;
         self.mat_finite(f(n), span, err)
     }
 
@@ -151,7 +151,7 @@ impl Vm<'_> {
         err: &str,
     ) -> Result<Value, EvalError> {
         self.expect_arity(args, 1, span)?;
-        let n = self.expect_numero(&args[0], span)?;
+        let n = self.expect_f64(&args[0], span)?;
         if !n.is_finite() || !ok(n) {
             return Err(self.err(err, span));
         }
@@ -160,7 +160,7 @@ impl Vm<'_> {
 
     fn mat_finite(&self, n: f64, span: Span, err: &str) -> Result<Value, EvalError> {
         if n.is_finite() {
-            Ok(Value::Numero(n))
+            Ok(Value::Numero(n.into()))
         } else {
             Err(self.err(err, span))
         }

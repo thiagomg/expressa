@@ -25,6 +25,7 @@ edition.workspace = true
 
 [dependencies]
 rustyline = "15"
+rust_decimal = "1"
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"

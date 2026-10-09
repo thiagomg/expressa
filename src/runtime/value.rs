@@ -6,11 +6,14 @@ use crate::lexer::Span;
 use crate::parser::{Block, Param};
 
 use super::env::Env;
+use super::numero::Numero;
+
+pub use super::numero::parse_numero;
 
 #[derive(Clone)]
 pub enum Value {
     Nada,
-    Numero(f64),
+    Numero(Numero),
     Texto(String),
     Bool(bool),
     Lista(Rc<RefCell<Vec<Value>>>),
@@ -262,7 +265,7 @@ impl NumeroLocale {
         }
     }
 
-    pub fn parse_texto(self, raw: &str) -> Option<f64> {
+    pub fn parse_texto(self, raw: &str) -> Option<Numero> {
         let s = raw.trim();
         if s.is_empty() {
             return None;
@@ -274,7 +277,7 @@ impl NumeroLocale {
         }
     }
 
-    pub fn format(self, n: f64) -> String {
+    pub fn format(self, n: Numero) -> String {
         format_numero_locale(n, self)
     }
 }
@@ -287,39 +290,24 @@ pub fn default_numero_locale() -> NumeroLocale {
 }
 
 /// Programming-form (source-like): `3.14`, no thousands. Used in CSV and errors.
-pub fn format_numero(n: f64) -> String {
+pub fn format_numero(n: Numero) -> String {
     format_numero_locale(n, None)
 }
 
-fn format_numero_locale(n: f64, loc: impl Into<Option<NumeroLocale>>) -> String {
-    if n.is_nan() {
-        return "nan".to_string();
-    }
-    if n.is_infinite() {
-        return if n.is_sign_positive() {
-            "inf".to_string()
-        } else {
-            "-inf".to_string()
-        };
-    }
+fn format_numero_locale(n: Numero, loc: impl Into<Option<NumeroLocale>>) -> String {
     let loc = loc.into();
-    let neg = n < 0.0;
-    let abs = n.abs();
-    let integer = abs.fract() == 0.0 && abs < 1e15;
-    let raw = if integer {
-        format!("{}", abs as i64)
-    } else {
-        format!("{abs}")
-    };
-    let (int_part, frac) = match raw.split_once('.') {
-        Some((i, f)) => (i.to_string(), Some(f)),
-        None => (raw, None),
+    let raw = n.to_plain_string();
+    let neg = raw.starts_with('-');
+    let abs = raw.strip_prefix('-').unwrap_or(&raw);
+    let (int_part, frac) = match abs.split_once('.') {
+        Some((i, f)) => (i.to_string(), Some(f.to_string())),
+        None => (abs.to_string(), None),
     };
     let (thou, dec) = match loc {
         Some(NumeroLocale::PtBr) => ('.', ','),
         Some(NumeroLocale::EnUs) => (',', '.'),
         None => {
-            let body = match frac {
+            let body = match &frac {
                 Some(f) => format!("{int_part}.{f}"),
                 None => int_part,
             };
@@ -327,7 +315,7 @@ fn format_numero_locale(n: f64, loc: impl Into<Option<NumeroLocale>>) -> String 
         }
     };
     let grouped = group_thousands(&int_part, thou);
-    let body = match frac {
+    let body = match &frac {
         Some(f) => format!("{grouped}{dec}{f}"),
         None => grouped,
     };
@@ -340,7 +328,7 @@ fn format_matriz(rows: &[Vec<f64>], loc: NumeroLocale) -> String {
     }
     let cells: Vec<Vec<String>> = rows
         .iter()
-        .map(|r| r.iter().map(|n| loc.format(*n)).collect())
+        .map(|r| r.iter().map(|n| loc.format(Numero::from(*n))).collect())
         .collect();
     let cols = cells[0].len();
     let mut widths = vec![0; cols];
@@ -374,7 +362,7 @@ fn group_thousands(digits: &str, sep: char) -> String {
     out.chars().rev().collect()
 }
 
-fn parse_pt_br(s: &str) -> Option<f64> {
+fn parse_pt_br(s: &str) -> Option<Numero> {
     let comma = s.chars().filter(|c| *c == ',').count();
     if comma > 1 {
         return None;
@@ -398,7 +386,7 @@ fn parse_pt_br(s: &str) -> Option<f64> {
     }
 }
 
-fn parse_en_us(s: &str) -> Option<f64> {
+fn parse_en_us(s: &str) -> Option<Numero> {
     let dots = s.chars().filter(|c| *c == '.').count();
     if dots > 1 {
         return None;
@@ -459,19 +447,12 @@ fn escape_texto(s: &str) -> String {
     s.replace('\\', "\\\\").replace('"', "\\\"")
 }
 
-pub fn parse_numero(raw: &str) -> Option<f64> {
-    let cleaned: String = raw.chars().filter(|c| *c != '_').collect();
-    cleaned.parse().ok()
-}
-
 impl MapKey {
     pub fn from_value(v: &Value) -> Option<Self> {
         match v {
             Value::Texto(s) => Some(MapKey::Texto(s.clone())),
             Value::Bool(b) => Some(MapKey::Bool(*b)),
-            Value::Numero(n) if n.is_finite() && n.fract() == 0.0 => {
-                Some(MapKey::Numero(*n as i64))
-            }
+            Value::Numero(n) => n.to_i64().map(MapKey::Numero),
             _ => None,
         }
     }
@@ -479,7 +460,7 @@ impl MapKey {
     pub fn to_value(&self) -> Value {
         match self {
             MapKey::Texto(s) => Value::Texto(s.clone()),
-            MapKey::Numero(n) => Value::Numero(*n as f64),
+            MapKey::Numero(n) => Value::Numero(Numero::from_i64(*n)),
             MapKey::Bool(b) => Value::Bool(*b),
         }
     }
@@ -498,12 +479,12 @@ mod tests {
     #[test]
     fn type_names_are_portuguese() {
         assert_eq!(Value::Nada.type_name(), "nada");
-        assert_eq!(Value::Numero(1.0).type_name(), "numero");
+        assert_eq!(Value::Numero(1.0.into()).type_name(), "numero");
         assert_eq!(Value::Texto("x".into()).type_name(), "texto");
         assert_eq!(Value::Bool(true).type_name(), "bool");
         assert_eq!(Value::lista(vec![]).type_name(), "lista");
         assert_eq!(
-            Value::Par(MapKey::Texto("n".into()), Box::new(Value::Numero(1.0))).type_name(),
+            Value::Par(MapKey::Texto("n".into()), Box::new(Value::Numero(1.0.into()))).type_name(),
             "par"
         );
         assert_eq!(Value::mapa(vec![]).type_name(), "mapa");
@@ -514,21 +495,21 @@ mod tests {
     #[test]
     fn display_matches_what_escreva_prints() {
         assert_eq!(Value::Nada.to_string(), "nada");
-        assert_eq!(Value::Numero(10.0).to_string(), "10");
-        assert_eq!(Value::Numero(7.5).to_string(), "7.5");
+        assert_eq!(Value::Numero(10.0.into()).to_string(), "10");
+        assert_eq!(Value::Numero(7.5.into()).to_string(), "7.5");
         assert_eq!(Value::Bool(true).to_string(), "verdadeiro");
         assert_eq!(Value::Bool(false).to_string(), "falso");
         assert_eq!(Value::Texto("oi".into()).to_string(), "oi");
         assert_eq!(
-            Value::lista(vec![Value::Numero(1.0), Value::Texto("a".into())]).to_string(),
+            Value::lista(vec![Value::Numero(1.0.into()), Value::Texto("a".into())]).to_string(),
             "[1, \"a\"]"
         );
         assert_eq!(
-            Value::Par(MapKey::Texto("n".into()), Box::new(Value::Numero(1.0))).to_string(),
+            Value::Par(MapKey::Texto("n".into()), Box::new(Value::Numero(1.0.into()))).to_string(),
             "\"n\" -> 1"
         );
         assert_eq!(
-            Value::mapa(vec![(MapKey::Texto("n".into()), Value::Numero(1.0))]).to_string(),
+            Value::mapa(vec![(MapKey::Texto("n".into()), Value::Numero(1.0.into()))]).to_string(),
             "mapa{\"n\": 1}"
         );
         assert_eq!(Value::Builtin("leia").to_string(), "<funcao leia>");
@@ -536,58 +517,57 @@ mod tests {
 
     #[test]
     fn format_numero_drops_trailing_point_on_integers() {
-        assert_eq!(format_numero(0.0), "0");
-        assert_eq!(format_numero(-3.0), "-3");
-        assert_eq!(format_numero(1.25), "1.25");
-        assert_eq!(format_numero(f64::NAN), "nan");
-        assert_eq!(format_numero(f64::INFINITY), "inf");
+        assert_eq!(format_numero(0.into()), "0");
+        assert_eq!(format_numero((-3).into()), "-3");
+        assert_eq!(format_numero(parse_numero("1.25").unwrap()), "1.25");
     }
 
     #[test]
     fn pt_br_and_en_us_string_conversion() {
         let pt = NumeroLocale::PtBr;
         let en = NumeroLocale::EnUs;
-        assert_eq!(pt.parse_texto("3,14"), Some(3.14));
-        assert_eq!(pt.parse_texto("1.000"), Some(1000.0));
-        assert_eq!(pt.parse_texto("1.000,5"), Some(1000.5));
-        assert_eq!(pt.parse_texto("3.14"), Some(3.14));
-        assert_eq!(en.parse_texto("1,000.5"), Some(1000.5));
-        assert_eq!(en.parse_texto("1,000"), Some(1000.0));
-        assert_eq!(en.parse_texto("3.14"), Some(3.14));
-        assert_eq!(pt.format(1000.0), "1.000");
-        assert_eq!(pt.format(7.3), "7,3");
-        assert_eq!(en.format(1000.0), "1,000");
-        assert_eq!(en.format(7.3), "7.3");
+        let n = |s: &str| parse_numero(s);
+        assert_eq!(pt.parse_texto("3,14"), n("3.14"));
+        assert_eq!(pt.parse_texto("1.000"), n("1000"));
+        assert_eq!(pt.parse_texto("1.000,5"), n("1000.5"));
+        assert_eq!(pt.parse_texto("3.14"), n("3.14"));
+        assert_eq!(en.parse_texto("1,000.5"), n("1000.5"));
+        assert_eq!(en.parse_texto("1,000"), n("1000"));
+        assert_eq!(en.parse_texto("3.14"), n("3.14"));
+        assert_eq!(pt.format(n("1000").unwrap()), "1.000");
+        assert_eq!(pt.format(n("7.3").unwrap()), "7,3");
+        assert_eq!(en.format(n("1000").unwrap()), "1,000");
+        assert_eq!(en.format(n("7.3").unwrap()), "7.3");
         assert_eq!(NumeroLocale::from_name("pt-br"), Some(pt));
         assert_eq!(NumeroLocale::from_name("en"), Some(en));
     }
 
     #[test]
     fn parse_numero_accepts_underscores() {
-        assert_eq!(parse_numero("10"), Some(10.0));
-        assert_eq!(parse_numero("1_000"), Some(1000.0));
-        assert_eq!(parse_numero("3.14"), Some(3.14));
+        assert_eq!(parse_numero("10"), "10".parse().ok());
+        assert_eq!(parse_numero("1_000"), "1000".parse().ok());
+        assert_eq!(parse_numero("3.14"), "3.14".parse().ok());
         assert_eq!(parse_numero("abc"), None);
     }
 
     #[test]
     fn equality_is_by_content_for_lists_and_identity_for_functions() {
-        let a = Value::lista(vec![Value::Numero(1.0)]);
-        let b = Value::lista(vec![Value::Numero(1.0)]);
+        let a = Value::lista(vec![Value::Numero(1.0.into())]);
+        let b = Value::lista(vec![Value::Numero(1.0.into())]);
         assert_eq!(a, b);
 
-        assert_eq!(Value::Numero(1.0), Value::Numero(1.0));
-        assert_ne!(Value::Numero(1.0), Value::Texto("1".into()));
+        assert_eq!(Value::Numero(1.0.into()), Value::Numero(1.0.into()));
+        assert_ne!(Value::Numero(1.0.into()), Value::Texto("1".into()));
         assert_eq!(Value::Builtin("escreva"), Value::Builtin("escreva"));
         assert_ne!(Value::Builtin("escreva"), Value::Builtin("leia"));
     }
 
     #[test]
     fn list_clone_shares_storage() {
-        let a = Value::lista(vec![Value::Numero(1.0)]);
+        let a = Value::lista(vec![Value::Numero(1.0.into())]);
         let b = a.clone();
         if let Value::Lista(xs) = &a {
-            xs.borrow_mut()[0] = Value::Numero(9.0);
+            xs.borrow_mut()[0] = Value::Numero(9.0.into());
         }
         assert_eq!(a, b);
         assert_eq!(b.to_string(), "[9]");
@@ -600,10 +580,10 @@ mod tests {
             Some(MapKey::Texto("n".into()))
         );
         assert_eq!(
-            MapKey::from_value(&Value::Numero(3.0)),
+            MapKey::from_value(&Value::Numero(3.0.into())),
             Some(MapKey::Numero(3))
         );
-        assert_eq!(MapKey::from_value(&Value::Numero(1.5)), None);
+        assert_eq!(MapKey::from_value(&Value::Numero(1.5.into())), None);
         assert_eq!(MapKey::from_value(&Value::lista(vec![])), None);
         assert_eq!(
             MapKey::from_value(&Value::Bool(true)),

@@ -134,7 +134,7 @@ impl Vm<'_> {
                 span,
             ));
         }
-        Ok(Value::Numero(tamanho_tela().0 as f64))
+        Ok(Value::Numero((tamanho_tela().0 as i64).into()))
     }
 
     pub(crate) fn bi_linhas(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
@@ -144,7 +144,7 @@ impl Vm<'_> {
                 span,
             ));
         }
-        Ok(Value::Numero(tamanho_tela().1 as f64))
+        Ok(Value::Numero((tamanho_tela().1 as i64).into()))
     }
 
     pub(crate) fn bi_quadro(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
@@ -181,8 +181,8 @@ impl Vm<'_> {
             return Err(self.err("bloco espera linha e coluna >= 1", span));
         }
         Ok(Value::mapa(vec![
-            (MapKey::Texto("linha".into()), Value::Numero(linha as f64)),
-            (MapKey::Texto("coluna".into()), Value::Numero(coluna as f64)),
+            (MapKey::Texto("linha".into()), Value::Numero(linha.into())),
+            (MapKey::Texto("coluna".into()), Value::Numero(coluna.into())),
         ]))
     }
 
@@ -239,7 +239,7 @@ fn map_int(
 fn set_map_numero(entries: &mut Vec<(MapKey, Value)>, chave: &str, n: i64) {
     let key = MapKey::Texto(chave.into());
     if let Some((_, v)) = entries.iter_mut().find(|(k, _)| *k == key) {
-        *v = Value::Numero(n as f64);
+        *v = Value::Numero(n.into());
     }
 }
 

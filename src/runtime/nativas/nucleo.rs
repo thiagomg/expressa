@@ -8,6 +8,7 @@ use crate::parser::parse;
 use super::super::env::Env;
 use super::super::error::{CallFrame, EvalError};
 use super::super::eval::Vm;
+use super::super::numero::NumeroAritmetica;
 use super::super::value::{MapKey, NumeroLocale, Value, conjunto_insert};
 use super::{
     builtin_args, builtin_doc_summary, builtin_modulo, lookup_ficha, sem_acento, value_as_texto,
@@ -48,7 +49,7 @@ impl Vm<'_> {
     }
     pub(crate) fn bi_durma(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
         self.expect_arity(args, 1, span)?;
-        let secs = self.expect_numero(&args[0], span)?;
+        let secs = self.expect_f64(&args[0], span)?;
         self.sleep_secs(secs, span)?;
         Ok(Value::Nada)
     }
@@ -159,16 +160,20 @@ impl Vm<'_> {
     pub(crate) fn bi_formato(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
         self.expect_arity(args, 1, span)?;
         let name = self.expect_texto(&args[0], span)?;
-        match NumeroLocale::from_name(&name) {
-            Some(loc) => {
-                self.numero_locale = loc;
-                Ok(Value::Nada)
-            }
-            None => Err(self.err(
-                format!("padrão desconhecido `{name}` (use \"pt\" ou \"en\")"),
-                span,
-            )),
+        if let Some(loc) = NumeroLocale::from_name(&name) {
+            self.numero_locale = loc;
+            return Ok(Value::Nada);
         }
+        if let Some(ar) = NumeroAritmetica::from_name(&name) {
+            self.numero_aritmetica = ar;
+            return Ok(Value::Nada);
+        }
+        Err(self.err(
+            format!(
+                "padrão desconhecido `{name}` (use \"pt\", \"en\", \"decimal\" ou \"float\")"
+            ),
+            span,
+        ))
     }
     pub(crate) fn bi_formate(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
         if args.is_empty() {
@@ -182,11 +187,11 @@ impl Vm<'_> {
     pub(crate) fn bi_tamanho(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
         self.expect_arity(args, 1, span)?;
         let n = match &args[0] {
-            Value::Texto(s) => s.chars().count() as f64,
-            Value::Lista(xs) => xs.borrow().len() as f64,
-            Value::Mapa(xs) => xs.borrow().len() as f64,
-            Value::Conjunto(xs) => xs.borrow().len() as f64,
-            Value::Matriz(m) => m.borrow().len() as f64,
+            Value::Texto(s) => s.chars().count(),
+            Value::Lista(xs) => xs.borrow().len(),
+            Value::Mapa(xs) => xs.borrow().len(),
+            Value::Conjunto(xs) => xs.borrow().len(),
+            Value::Matriz(m) => m.borrow().len(),
             other => {
                 return Err(self.err(
                     format!(
@@ -197,7 +202,7 @@ impl Vm<'_> {
                 ));
             }
         };
-        Ok(Value::Numero(n))
+        Ok(Value::Numero(super::super::numero::Numero::from_usize(n)))
     }
     pub(crate) fn bi_primeiro(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
         self.expect_arity(args, 1, span)?;
@@ -362,19 +367,19 @@ impl Vm<'_> {
                     return Err(self.err("procurar espera um trecho não vazio", span));
                 }
                 let pos = match s.find(&needle) {
-                    Some(byte_i) => s[..byte_i].chars().count() as f64 + 1.0,
-                    None => 0.0,
+                    Some(byte_i) => (s[..byte_i].chars().count() as i64) + 1,
+                    None => 0,
                 };
-                Ok(Value::Numero(pos))
+                Ok(Value::Numero(pos.into()))
             }
             Value::Lista(xs) => {
                 let pos = xs
                     .borrow()
                     .iter()
                     .position(|x| x == &args[1])
-                    .map(|i| (i + 1) as f64)
-                    .unwrap_or(0.0);
-                Ok(Value::Numero(pos))
+                    .map(|i| (i + 1) as i64)
+                    .unwrap_or(0);
+                Ok(Value::Numero(pos.into()))
             }
             other => Err(self.err(
                 format!(

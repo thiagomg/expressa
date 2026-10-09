@@ -331,7 +331,7 @@ pub fn make_native_modules() -> HashMap<String, Rc<RefCell<Env>>> {
     }
     if let Some(mat) = map.get("mat") {
         mat.borrow_mut()
-            .define("pi", Value::Numero(std::f64::consts::PI));
+            .define("pi", Value::Numero(std::f64::consts::PI.into()));
     }
     if let Some(tela) = map.get("tela") {
         tela.borrow_mut()
@@ -654,6 +654,45 @@ escreva(f(3))
             "pilha: {:?}",
             err.stack
         );
+    }
+
+    #[test]
+    fn aritmetica_decimal_padrao_e_float_opcional() {
+        assert_eq!(
+            run("escreva(35.87+12.63+11.05+11.47+10.35)"),
+            "81,37\n"
+        );
+        assert_eq!(run("escreva(0.1 + 0.2)"), "0,3\n");
+        assert_eq!(run("escreva(0.1 + 0.2 == 0.3)"), "verdadeiro\n");
+        assert_eq!(
+            run(r#"formato("float")
+escreva(0.1 + 0.2 == 0.3)"#),
+            "falso\n"
+        );
+        assert_ne!(
+            run(r#"formato("float")
+escreva(35.87+12.63+11.05+11.47+10.35)"#),
+            "81,37\n"
+        );
+        assert_eq!(
+            run(r#"formato("float")
+formato("decimal")
+escreva(0.1 + 0.2 == 0.3)"#),
+            "verdadeiro\n"
+        );
+        assert_eq!(
+            run(r#"formato("float")
+formato("en")
+escreva(0.1 + 0.2 == 0.3)"#),
+            "falso\n"
+        );
+        assert_eq!(
+            run(r#"formato("flutuante")
+formato("exato")
+escreva(0.1 + 0.2)"#),
+            "0,3\n"
+        );
+        assert!(run_err(r#"formato("xyz")"#).contains("pt"));
     }
 
     #[test]

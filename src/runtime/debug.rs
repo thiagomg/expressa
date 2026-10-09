@@ -871,7 +871,9 @@ mod tests {
     #[test]
     fn collect_vars_lists_module_bindings() {
         let env = env();
-        env.borrow_mut().vars.insert("n".into(), Value::Numero(3.0));
+        env.borrow_mut()
+            .vars
+            .insert("n".into(), Value::Numero(3.0.into()));
         let span = Span::new(1, 1, 0, 1);
         let ctx = ctx("a.lep", "n = 3", span, &env, &[]);
         let vars = collect_vars(&ctx);
