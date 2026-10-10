@@ -1,5 +1,6 @@
 importe "tela"
 
+/// Remove a letra de uma palavra na posição passada 
 remove_letra = função(palavra, posição) {
     se posição == 1 {
         palavra[2..]
@@ -84,6 +85,7 @@ completa_tentativas = funcao(ts, total, num_letras) {
     ts
 }
 
+/// Atualiza as cores to teclado dando preferencia para o verde, quando encontrado
 atualiza_teclado = função(cores_teclado, res) {
     para i de 1 até res.tamanho() {
         tok = res[i]
@@ -217,17 +219,26 @@ inicial = funcao(palavra_secreta) {
     cores_teclado = mapa()  // letra -> :verde, :amarelo ou :normal (já tentada e ausente)
     acertou = falso
 
+    // desenha tentativas desenhará o número de listas dentro de tentativas_comp
+    // então precisamos completar adicionando as tentativas em branco que ainda não foram feitas
     tentativas_comp = completa_tentativas(tentativas, numero_tentativas, palavra_secreta.tamanho())
     desenha_tentativa(palavra_secreta, tentativas_comp, cores_teclado)
 
     enquanto tentativas.tamanho() < numero_tentativas {
+        // Lê uma nova palavra do teclado, aceitando somente palavras
+        // com o tamanho válido
         chute = nova_palavra(palavra_secreta.tamanho())
         se chute.tamanho() == 0 {
             escreva("Obrigado por jogar. Tchau!")
             sair(0)
         }
         tentativas += [chute]
+
         atualiza_teclado(cores_teclado, compara_palavra(palavra_secreta, chute))
+        // A função abaixo é a mesma coisa que a de cima
+        // cores_teclado.atualiza_teclado(compara_palavra(palavra_secreta, chute))
+        // "ola".maiuscula() e maiuscula("ola") são a mesma coisa.
+        // Ao usar variável.função() a variável é passada como o primeiro argumento
 
         tentativas_comp = completa_tentativas(tentativas, numero_tentativas, palavra_secreta.tamanho())
         desenha_tentativa(palavra_secreta, tentativas_comp, cores_teclado)
@@ -247,4 +258,5 @@ inicial = funcao(palavra_secreta) {
     escreva()
 }
 
-inicial("carroça")
+// Para trocar a palavra secreta, passe ela como argumento desta função
+inicial("CAIXA")
