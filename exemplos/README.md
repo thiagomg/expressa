@@ -12,7 +12,9 @@ Programas que leem o teclado (`texto/saudacao.lep`, `programas/calculadora.lep`)
 cargo run -- exemplos/texto/saudacao.lep
 ```
 
-Pasta = para que o arquivo existe. Ordem de leitura sugerida: `linguagem/` → `texto/` → `programas/` → `escola/` / `unix/` / `jogos/`.
+Quem nunca programou: `../tutorial/basico.md`. Depois: `../tutorial/avancado.md`. Consulta: `docs/manual.md`.
+
+Pasta = para que o arquivo existe. Depois do tutorial: `linguagem/` → `texto/` → `programas/` → `escola/` / `unix/` / `jogos/`.
 
 | Pasta | Papel |
 |-------|--------|
@@ -21,7 +23,7 @@ Pasta = para que o arquivo existe. Ordem de leitura sugerida: `linguagem/` → `
 | `programas/` | mini app de ponta a ponta |
 | `escola/` | conta de caderno (ensino médio) |
 | `unix/` | `cat` / `grep` / `wc` |
-| `jogos/` | Termo, Forca, Conway, adivinhe o número |
+| `jogos/` | Termo, Forca, Conway, adivinhe o número, desenhos do bicho |
 | `lib/` | o que outro exemplo importa |
 
 ### `linguagem/`

@@ -1,0 +1,11 @@
+// Lista: vários valores num nome só. O primeiro item é o 1, não o 0.
+
+notas = [7, 8, 6.5, 9]
+escreva("primeira: " + notas[1])
+escreva("quantas: " + tamanho(notas))
+
+soma = 0
+para nota em notas {
+    soma = soma + nota
+}
+escreva("média: " + (soma / tamanho(notas)))

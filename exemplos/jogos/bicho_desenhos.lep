@@ -1,0 +1,86 @@
+importe "tela"
+importe "arquivo"
+
+/// Maior linha do desenho — para encostar o HUD à direita
+largura_de = função(linhas) {
+    m = 0
+    para l em linhas {
+        se l.tamanho() > m {
+            m = l.tamanho()
+        }
+    }
+    m
+}
+
+/// Barra 0..10
+barra = função(n) {
+    s = ""
+    para i de 1 até 10 {
+        s += se i <= n { "#" } senão { "." }
+    }
+    se n >= 7 {
+        s.pinte(:verde)
+    } ou se n >= 4 {
+        s.pinte(:amarelo)
+    } senão {
+        s.pinte(:vermelho)
+    }
+}
+
+/// Arte à esquerda, painel à direita (ou embaixo se a janela for estreita)
+desenha = função(arte, cor, nome, tipo, nv, hp, fome, humor, sono) {
+    corpo = junte(arte, nova_linha)
+    se cor != :normal {
+        corpo = corpo.pinte(cor)
+    }
+    quadro(corpo)
+
+    col_hud = largura_de(arte) + 4
+    lin_hud = 2
+    se colunas() < col_hud + 28 {
+        lin_hud = arte.tamanho() + 2
+        col_hud = 2
+    }
+
+    b = bloco(lin_hud, col_hud)
+    b.escreva_em(nome.negrito() + "   Nv." + nv + "   " + tipo.pinte(:amarelo))
+    b.escreva_em("HP    " + barra(hp) + "  " + (hp * 5) + "/50")
+    b.escreva_em("fome  " + barra(fome))
+    b.escreva_em("humor " + barra(humor))
+    b.escreva_em("sono  " + barra(sono))
+    b.escreva_em("")
+    b.escreva_em("(c) comida   (t) treino   (d) dormir")
+    b.escreva_em("Enter espera                q sai")
+    b.escreva_em("")
+    b.escreva_em(("tela " + colunas() + "x" + linhas()).pinte(:ciano))
+
+    bloco(arte.tamanho() + 2, 1).escreva_em("")
+}
+
+mostra = função(caminho, cor, nome, tipo, nv, hp, fome, humor, sono) {
+    arte = leia_arquivo(caminho)
+    desenha(arte, cor, nome, tipo, nv, hp, fome, humor, sono)
+}
+
+escreva("Enter passa o desenho. q sai.")
+escreva()
+
+// 1. o dragão que você mandou, saudável
+mostra("desenhos/dragao.txt", :amarelo, "BOLINHA", "FOGO", 7, 8, 3, 9, 6)
+se leia(">") == "q" { sair(0) }
+
+// 2. o mesmo, com fome
+mostra("desenhos/dragao.txt", :vermelho, "BOLINHA", "FOGO", 7, 3, 9, 2, 4)
+se leia(">") == "q" { sair(0) }
+
+// 3. dormindo
+mostra("desenhos/dragao.txt", :azul, "BOLINHA", "FOGO", 7, 8, 4, 5, 1)
+se leia(">") == "q" { sair(0) }
+
+// 4. bicho menor, cara de starter
+mostra("desenhos/chama.txt", :vermelho, "CHAMA", "FOGO", 5, 7, 4, 8, 7)
+se leia(">") == "q" { sair(0) }
+
+// 5. guerreiro (cabelo pontudo, não é o Goku)
+mostra("desenhos/guerreiro.txt", :ciano, "SPIKE", "LUTA", 12, 9, 5, 8, 6)
+leia(">")

@@ -1,0 +1,13 @@
+// repete junta o mesmo pedaço várias vezes. daí vira desenho.
+
+repete = função(pedaco, n) {
+    s = ""
+    repita n vezes {
+        s = s + pedaco
+    }
+    s
+}
+
+para i de 1 até 6 {
+    escreva(repete("*", i))
+}

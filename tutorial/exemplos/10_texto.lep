@@ -1,0 +1,13 @@
+// Texto: fatia, procurar, partir e juntar. Índice 1 é a primeira letra.
+
+s = "Expressa"
+escreva(s[1])
+escreva(s[1..4])
+escreva(tamanho(s))
+escreva(s contem "press")
+escreva(procurar(s, "s"))
+
+partes = separe("Ana,Bruno,Cris", ",")
+escreva(junte(partes, " / "))
+escreva(maiuscula("olá"))
+escreva(sem_acento("Ação"))

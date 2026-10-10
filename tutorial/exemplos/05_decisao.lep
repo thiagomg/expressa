@@ -1,0 +1,11 @@
+// se / senão: o programa escolhe um caminho.
+
+nota = 8
+
+se nota >= 7 {
+    escreva("Aprovado")
+} senão {
+    escreva("Reprovado")
+}
+
+escreva("nota: " + nota)

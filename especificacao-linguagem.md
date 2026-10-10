@@ -6,6 +6,8 @@
 -->
 # Expressa: Especificação da Linguagem
 Expressa - linguagem de programaçao em português
+
+Quem **usa** a linguagem: [tutorial](tutorial/basico.md), [avançado](tutorial/avancado.md), [manual](docs/manual.md). Este arquivo é a regra fina.
 Extensao de arquivos: .lep
 ---
 

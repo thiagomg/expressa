@@ -35,7 +35,7 @@ use rpc::{Rpc, ensure_server};
 
 const APP_ID: &str = "dev.expressa.aula";
 const DEFAULT_URL: &str = "http://127.0.0.1:50051";
-const WELCOME: &str = "// F5 roda. F6 depura. Ctrl+F busca. F1 ajuda. Ctrl+clique vai para a definição.\n\nescreva(\"Olá, Expressa!\")\n";
+const WELCOME: &str = "// F5 executa. F6 depura. Ctrl+F busca. F1 ajuda. Ctrl+clique vai para a definição.\n\nescreva(\"Olá, Expressa!\")\n";
 
 /// A program running or being debugged.
 struct Run {
@@ -266,8 +266,8 @@ fn build_ui(app: &Application) {
     btn_new.set_tooltip_text(Some("Arquivo novo em outra aba (Ctrl+N)"));
     let btn_save = Button::with_label("Salvar");
     btn_save.set_tooltip_text(Some("Salvar a aba atual (Ctrl+S)"));
-    let btn_run = Button::with_label("Rodar");
-    btn_run.set_tooltip_text(Some("Rodar a aba atual (F5)"));
+    let btn_run = Button::with_label("Executar");
+    btn_run.set_tooltip_text(Some("Executar a aba atual (F5)"));
     let btn_debug = Button::with_label("Depurar");
     btn_debug.set_tooltip_text(Some("Depurar a aba atual (F6)"));
     let btn_bp = Button::with_label("Ponto");
@@ -405,8 +405,8 @@ fn build_ui(app: &Application) {
             save_doc(ui, &d);
         }
     });
-    connect(&btn_run, &ui, |ui| rodar(ui, false));
-    connect(&btn_debug, &ui, |ui| rodar(ui, true));
+    connect(&btn_run, &ui, |ui| executar(ui, false));
+    connect(&btn_debug, &ui, |ui| executar(ui, true));
     connect(&btn_bp, &ui, toggle_breakpoint_here);
     connect(&btn_refresh, &ui, conectar);
     connect(&btn_smaller, &ui, |ui| zoom(ui, -1));
@@ -507,8 +507,8 @@ fn build_ui(app: &Application) {
             let ui = Rc::clone(&ui);
             add_shortcut(c, accel, move || f(&ui));
         };
-        k(&fkeys, "F5", |ui| rodar(ui, false));
-        k(&fkeys, "F6", |ui| rodar(ui, true));
+        k(&fkeys, "F5", |ui| executar(ui, false));
+        k(&fkeys, "F6", |ui| executar(ui, true));
         k(&fkeys, "F9", toggle_breakpoint_here);
         k(&fkeys, "F10", |ui| send_debug_cmd(ui, "proximo"));
         k(&fkeys, "F11", |ui| send_debug_cmd(ui, "entrar"));
@@ -1455,7 +1455,7 @@ fn send_debug_cmd(ui: &UiRc, cmd: &str) {
     if sent && matches!(cmd, "continuar" | "proximo" | "entrar" | "sair") {
         set_debug_buttons(ui, false, true);
         clear_debug_views(ui);
-        set_status(ui, "rodando… (Parar encerra)");
+        set_status(ui, "executando… (Parar encerra)");
     }
 }
 
@@ -1540,9 +1540,9 @@ fn show_pause(ui: &UiRc, p: &expressa::runtime::DebugPaused) {
 /// cannot freeze the window. The rest wait in the (bounded) channel.
 const EVENTS_PER_TICK: usize = 200;
 
-fn rodar(ui: &UiRc, debug: bool) {
+fn executar(ui: &UiRc, debug: bool) {
     if ui.borrow().run.is_some() {
-        set_status(ui, "já tem um programa rodando — aperte Parar primeiro");
+        set_status(ui, "já tem um programa executando — aperte Parar primeiro");
         return;
     }
     let Some(doc) = current_doc(ui) else { return };
@@ -1588,14 +1588,14 @@ fn rodar(ui: &UiRc, debug: bool) {
         set_status(
             ui,
             &format!(
-                "atenção: erro de sintaxe na linha {} — rodando mesmo assim",
+                "atenção: erro de sintaxe na linha {} — executando mesmo assim",
                 d.line
             ),
         );
     } else {
         set_status(
             ui,
-            &format!("{} {name}…", if debug { "depurando" } else { "rodando" }),
+            &format!("{} {name}…", if debug { "depurando" } else { "executando" }),
         );
     }
 
@@ -1658,7 +1658,7 @@ fn rodar(ui: &UiRc, debug: bool) {
                             "erro: {} em {}:{}\n",
                             f.error_message, f.error_file, f.error_line
                         ));
-                        set_status(&ui_ev, "erro ao rodar (clique no erro para ir à linha)");
+                        set_status(&ui_ev, "erro ao executar (clique no erro para ir à linha)");
                         if f.error_line > 0 {
                             let file = if f.error_file.is_empty() {
                                 name.clone()

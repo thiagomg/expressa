@@ -1,0 +1,12 @@
+// Função: um pedaço com nome, para não copiar o mesmo código.
+
+tabuada = função(n) {
+    para i de 1 até 10 {
+        escreva(n + " x " + i + " = " + (n * i))
+    }
+}
+
+escreva("Tabuada do 7")
+tabuada(7)
+escreva("Tabuada do 3")
+tabuada(3)

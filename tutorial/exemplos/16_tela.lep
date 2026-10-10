@@ -1,0 +1,6 @@
+importe "tela"
+
+escreva("ok".pinte(:verde))
+escreva("alerta".pinte(:preto, :amarelo))
+escreva("fim".negrito().pinte(:vermelho))
+escreva("colunas: " + colunas() + "  linhas: " + linhas())

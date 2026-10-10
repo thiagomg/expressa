@@ -1,7 +1,9 @@
 # Expressa — folha de consulta
 
-Arquivos `.lep`. Palavras em português. Índices começam em **1**.  
-Detalhes: `especificacao-linguagem.md`. Nativas: `docs/nativas/*.lep`.
+Arquivos `.lep`. Palavras em português. Índices começam em **1**.
+
+Tutorial: `tutorial/basico.md`. Avançado: `tutorial/avancado.md`.  
+Manual: `docs/manual.md`. Spec: `especificacao-linguagem.md`. Fichas: `docs/nativas/*.lep`.
 
 ```text
 expressa                      REPL

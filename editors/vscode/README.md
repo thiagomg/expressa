@@ -37,4 +37,4 @@ node scripts/gerar.js --check   # falha se estiverem desatualizados (para CI)
 npm test
 ```
 
-O empacotamento já roda `gerar.js` e os testes.
+O empacotamento já executa `gerar.js` e os testes.

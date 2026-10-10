@@ -1,0 +1,8 @@
+// Conjunto: cada valor entra uma vez só.
+
+visto = conjunto(["a", "b"])
+visto += "c"
+visto += "a"
+escreva(visto contem "a")
+escreva(visto contem "z")
+escreva(tamanho(visto))

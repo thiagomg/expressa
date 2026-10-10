@@ -1,0 +1,5 @@
+// A tela mostra o que está entre aspas.
+// Rode. Depois troque a frase e rode de novo.
+
+escreva("Olá")
+escreva("Isso saiu na tela.")

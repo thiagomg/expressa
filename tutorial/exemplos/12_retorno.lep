@@ -1,0 +1,18 @@
+// A última expressão da função é o resultado. retorne sai mais cedo.
+
+soma = função(a, b) {
+    a + b
+}
+
+tem = função(xs, alvo) {
+    para x em xs {
+        se x == alvo {
+            retorne verdadeiro
+        }
+    }
+    falso
+}
+
+escreva(soma(10, 5))
+escreva(tem([2, 4, 6], 4))
+escreva(tem([2, 4, 6], 5))

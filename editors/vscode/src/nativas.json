@@ -86,7 +86,7 @@
         "sair(codigo)"
       ],
       "summary": "Encerra o programa. Sem argumento, código 0; sair(1) indica falha.",
-      "doc": "Encerra o programa. Sem argumento, código 0; sair(1) indica falha.\n\nNada depois da chamada roda. Não é capturado por se_falhar.\nNo REPL, a linha sair (sem parênteses) sai do interpretador; sair() encerra o processo.\n\nExemplo: se nome == \"\" { sair(1) }"
+      "doc": "Encerra o programa. Sem argumento, código 0; sair(1) indica falha.\n\nNada depois da chamada executa. Não é capturado por se_falhar.\nNo REPL, a linha sair (sem parênteses) sai do interpretador; sair() encerra o processo.\n\nExemplo: se nome == \"\" { sair(1) }"
     },
     {
       "name": "durma",

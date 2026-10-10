@@ -1,0 +1,8 @@
+// O valor pode ir na frente, com ponto. tamanho(s) e s.tamanho() são iguais.
+// O () no fim é obrigatório.
+
+s = "olá"
+escreva(tamanho(s))
+escreva(s.tamanho())
+escreva(s.maiuscula())
+escreva([10, 20].primeiro())

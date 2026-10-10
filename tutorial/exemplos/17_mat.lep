@@ -1,0 +1,7 @@
+importe "mat"
+
+escreva(raiz(9))
+escreva(aleatorio(1, 6))
+escreva("pi ≈ " + pi)
+escreva("seno de 30°: " + seno(radianos(30)))
+escreva(potencia(2, 10))

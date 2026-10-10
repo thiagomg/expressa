@@ -14,7 +14,7 @@ fn usage() {
         "Uso: expressa-aula-server [--root DIR] [--bind HOST:PORT]\n\n  \
          --root   pasta das turmas (padrão: ./aula-data)\n  \
          --bind   endereço (padrão: 127.0.0.1:50051)\n\n\
-         Só guarda os arquivos; o editor roda e depura os programas."
+         Só guarda os arquivos; o editor executa e depura os programas."
     );
 }
 

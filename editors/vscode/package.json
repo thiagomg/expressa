@@ -2,7 +2,7 @@
   "name": "expressa",
   "displayName": "Expressa",
   "description": "Linguagem Expressa (.lep): cores, autocompletar, ajuda das funções nativas e ir para a definição.",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "publisher": "thiagomg",
   "license": "MIT",
   "author": "Thiago Massari Guedes",

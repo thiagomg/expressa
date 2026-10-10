@@ -24,7 +24,7 @@ escreva_erro = funcao(valor) { 0 }
 
 /// Encerra o programa. Sem argumento, código 0; sair(1) indica falha.
 ///
-/// Nada depois da chamada roda. Não é capturado por se_falhar.
+/// Nada depois da chamada executa. Não é capturado por se_falhar.
 /// No REPL, a linha sair (sem parênteses) sai do interpretador; sair() encerra o processo.
 ///
 /// Exemplo: se nome == "" { sair(1) }

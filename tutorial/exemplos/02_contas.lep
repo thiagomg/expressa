@@ -1,0 +1,7 @@
+// Contas. No código o decimal usa ponto: 3.5
+// Na tela em português aparece vírgula: 3,5
+
+escreva(2 + 3)
+escreva(10 * 4)
+escreva(35.87 + 12.63)
+escreva("2 + 3 = " + (2 + 3))

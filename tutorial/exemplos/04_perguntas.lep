@@ -1,0 +1,6 @@
+// leia espera você digitar e apertar Enter.
+// Na Aula: clique na saída, digite, Enter.
+
+escreva("Qual o seu nome?")
+nome = leia()
+escreva("Olá, " + nome)

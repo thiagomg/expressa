@@ -461,7 +461,7 @@ impl DebugHook for CliDebugger {
     }
 }
 
-/// For **Rodar**: ignore step commands, honour `terminar` so Parar works.
+/// For **Executar**: ignore step commands, honour `terminar` so Parar works.
 pub struct StopHook {
     cmd_rx: std::sync::mpsc::Receiver<String>,
 }

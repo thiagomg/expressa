@@ -32,7 +32,7 @@ desenha = funcao(m) {
     ser = "*"
     // ser = "█"
     
-    // borda to topo e rodapé - +- linhas -+
+    // borda to topo e executapé - +- linhas -+
     borda = "+"
     para i de 1 até m.ncolunas() {
         borda += "-"

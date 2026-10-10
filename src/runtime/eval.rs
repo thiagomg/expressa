@@ -2990,7 +2990,7 @@ leia_arquivo("../secret.txt")
         assert!(done.recv_timeout(WAIT).is_ok());
         assert!(started.elapsed() < std::time::Duration::from_secs(5));
 
-        // Same with Rodar's hook.
+        // Same with Executar's hook.
         use super::super::debug::StopHook;
         let (tx, rx) = std::sync::mpsc::channel::<String>();
         let (done_tx, done_rx) = std::sync::mpsc::channel();
@@ -3015,7 +3015,7 @@ leia_arquivo("../secret.txt")
         tx.send("terminar".into()).unwrap();
         assert!(
             done_rx.recv_timeout(WAIT).is_ok(),
-            "Rodar: Parar during durma"
+            "Executar: Parar during durma"
         );
     }
 

@@ -1,0 +1,5 @@
+// se_falhar: se der erro, usa o valor da direita em vez de encerrar.
+
+escreva(10 / 0 se_falhar "não dá para dividir")
+escreva([1, 2][9] se_falhar "índice longe")
+escreva(numero("xyz") se_falhar 0)
