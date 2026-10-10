@@ -3,7 +3,7 @@ importe "mat"
 // Teorema de Pitágoras e distância entre dois pontos no plano.
 // a² + b² = c²     d = √((x2−x1)² + (y2−y1)²)
 //
-// Altere os dados e rode: cargo run -- examples/escola/pitagoras.lep
+// Altere os dados e execute: cargo run -- examples/escola/pitagoras.lep
 
 // Triângulo retângulo: catetos 3 e 4 → hipotenusa 5
 cateto_a = 3

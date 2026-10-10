@@ -1,5 +1,5 @@
 // Áreas e volumes do ensino médio.
-// Altere as medidas e rode: cargo run -- exemplos/escola/geometria.lep
+// Altere as medidas e execute: cargo run -- exemplos/escola/geometria.lep
 
 importe "mat"
 

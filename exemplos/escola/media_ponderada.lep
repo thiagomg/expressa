@@ -1,7 +1,7 @@
 // Média ponderada — o cálculo do boletim com pesos.
 // M = (n1·p1 + n2·p2 + …) / (p1 + p2 + …)
 //
-// Altere notas e pesos e rode: cargo run -- examples/media_ponderada.lep
+// Altere notas e pesos e execute: cargo run -- examples/media_ponderada.lep
 
 atividades = ["prova 1", "prova 2", "trabalho", "participação"]
 notas = [6, 9, 8, 7]

@@ -210,7 +210,7 @@ function main() {
     const old = fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : '';
     if (old === text) continue;
     if (check) {
-      console.error(`desatualizado: ${path.relative(EXT, file)} (rode: node scripts/gerar.js)`);
+      console.error(`desatualizado: ${path.relative(EXT, file)} (execute: node scripts/gerar.js)`);
       stale = true;
     } else {
       fs.mkdirSync(path.dirname(file), { recursive: true });

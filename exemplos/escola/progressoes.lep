@@ -2,7 +2,7 @@
 // PA: a_n = a1 + (n−1)·r     S_n = n · (a1 + a_n) / 2
 // PG: a_n = a1 · q^(n−1)     S_n = a1 · (q^n − 1) / (q − 1)
 //
-// Altere os dados e rode: cargo run -- examples/progressoes.lep
+// Altere os dados e execute: cargo run -- examples/progressoes.lep
 
 potencia = funcao(base, exp)
 inicio

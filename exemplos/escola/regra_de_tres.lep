@@ -2,7 +2,7 @@
 // Direta:  a está para b assim como c está para x  →  x = c · b / a
 // Inversa: quanto mais de um, menos do outro      →  x = a · b / c
 //
-// Altere os dados e rode: cargo run -- examples/regra_de_tres.lep
+// Altere os dados e execute: cargo run -- examples/regra_de_tres.lep
 
 // --- Porcentagem ---
 preco = 250

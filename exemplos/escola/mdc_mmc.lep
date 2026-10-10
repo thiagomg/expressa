@@ -1,7 +1,7 @@
 // MDC (algoritmo de Euclides) e MMC.
 // mdc(a, b) = mdc(b, a mod b)     mmc(a, b) = a · b / mdc(a, b)
 //
-// Altere a e b e rode: cargo run -- examples/mdc_mmc.lep
+// Altere a e b e execute: cargo run -- examples/mdc_mmc.lep
 
 a = 48
 b = 18

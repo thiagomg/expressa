@@ -3,7 +3,7 @@
 // Compostos: M = C · (1 + i)^t
 //
 // C = capital, i = taxa (0.02 = 2%), t = número de períodos.
-// Altere os dados e rode: cargo run -- examples/juros.lep
+// Altere os dados e execute: cargo run -- examples/juros.lep
 
 capital = 1000
 taxa = 0.02

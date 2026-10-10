@@ -2,7 +2,7 @@
 
 Você já fez o [tutorial básico](basico.md) (`01`–`08`). Daqui para frente: mapa, texto, `enquanto`, funções que devolvem valor, erro, módulo, arquivo, tela.
 
-Mesma regra: rode o `.lep`, mude uma linha, desafio no fim. A [folha](../folha-de-consulta.md) e o [manual](../docs/manual.md) são para consultar o nome de uma função, não para ler em sequência.
+Mesma regra: execute o `.lep`, mude uma linha, desafio no fim. A [folha](../folha-de-consulta.md) e o [manual](../docs/manual.md) são para consultar o nome de uma função, não para ler em sequência.
 
 ## 9. Mapa
 
@@ -172,7 +172,7 @@ Diário (grava e relê): `../exemplos/programas/diario.lep`. Agenda CSV: `../exe
 
 Na Aula o programa só vê a pasta do projeto.
 
-**Desafio:** rode o diário, abra `exemplos/programas/saida/diario.txt`.
+**Desafio:** execute o diário, abra `exemplos/programas/saida/diario.txt`.
 
 ---
 
@@ -223,7 +223,7 @@ expressa tutorial/exemplos/18_argumentos.lep Ana 16
 
 Filtro de linhas (tipo `grep`): `../exemplos/unix/grep.lep`.
 
-**Desafio:** rode com dois nomes e escreva os dois.
+**Desafio:** execute com dois nomes e escreva os dois.
 
 ---
 

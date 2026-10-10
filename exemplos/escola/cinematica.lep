@@ -3,7 +3,7 @@
 // MRUV: v = v0 + a · t
 //       s = s0 + v0 · t + a · t² / 2
 //
-// Altere os dados e rode: cargo run -- examples/cinematica.lep
+// Altere os dados e execute: cargo run -- examples/cinematica.lep
 
 // Carro parte do repouso com aceleração constante.
 s0 = 0

@@ -3,7 +3,7 @@ importe "mat"
 // Equação do 2º grau: a·x² + b·x + c = 0
 // Fórmula de Bhaskara: x = (-b ± √Δ) / (2a),  Δ = b² - 4ac
 //
-// Altere a, b e c e rode: cargo run -- examples/escola/bhaskara.lep
+// Altere a, b e c e execute: cargo run -- examples/escola/bhaskara.lep
 
 a = 1
 b = -5

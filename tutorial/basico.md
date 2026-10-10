@@ -171,7 +171,7 @@ se nota >= 7 {
 
 Se a condição for verdadeira, executa o bloco de cima. Senão, o de baixo. `>=` é “maior ou igual”.
 
-Troque `nota = 8` por `5` e rode.
+Troque `nota = 8` por `5` e execute.
 
 Comparações: `==` (igual), `!=` (diferente), `>` `<` `>=` `<=`.
 
@@ -275,13 +275,13 @@ Mais desenhos (triângulo centrado, histograma): `../exemplos/texto/ascii.lep`.
 
 ## 9. Um programa de verdade
 
-Agora junte o que você já viu. Não precisa escrever do zero: abra, rode, mude um número.
+Agora junte o que você já viu. Não precisa escrever do zero: abra, execute, mude um número.
 
 **Caixa da padaria** — `../exemplos/programas/caixa.lep`
 
 Lista de compras, preço de cada item, desconto se passar de R$ 20, recibo na tela. Funções (`preco_de`, `subtotal`, `recibo`) iguais às da tabuada: nome + parênteses.
 
-Mude o `pedido` no fim do arquivo e rode.
+Mude o `pedido` no fim do arquivo e execute.
 
 **Adivinhe o número** — `../exemplos/jogos/adivinhe_o_numero.lep`
 
@@ -309,14 +309,14 @@ Erros comuns no começo:
 
 - aspas só de um lado: `"Olá`
 - `escreva(Olá)` sem aspas — a linguagem acha que `Olá` é um nome
-- `se nota > 7` sem `{` / `inicio` no bloco
+- `se nota > 7` sem `{` ou `inicio` no bloco
 - `notas[0]` — não existe; o primeiro é `notas[1]`
 
 ---
 
 ## Depois
 
-| Quer… | Abra |
+| O que | Onde |
 |--------|------|
 | texto (fatia, maiúscula) | `../exemplos/texto/poema.lep` |
 | boletim | `../exemplos/programas/turma.lep` |
@@ -325,6 +325,6 @@ Erros comuns no começo:
 | Termo, Conway, desenhos de bicho | `../exemplos/jogos/` |
 | lista de funções | REPL: `ajuda` / `ls` / `ajuda escreva` · Aula: **F1** · [manual](../docs/manual.md) |
 
-A folha de consulta é um cartão, não um capítulo. Use quando esquecer um nome (`tamanho`, `contem`, `para`).
+A folha de consulta é um super resumo, não um capítulo. Use quando esquecer um nome (`tamanho`, `contem`, `para`).
 
 Quando `01`–`08` e um dos programas da aula 9 estiverem ok: [tutorial avançado](avancado.md).
