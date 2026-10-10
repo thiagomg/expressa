@@ -21,7 +21,7 @@ Pasta = para que o arquivo existe. Ordem de leitura sugerida: `linguagem/` → `
 | `programas/` | mini app de ponta a ponta |
 | `escola/` | conta de caderno (ensino médio) |
 | `unix/` | `cat` / `grep` / `wc` |
-| `jogos/` | Termo, Conway, adivinhe o número |
+| `jogos/` | Termo, Forca, Conway, adivinhe o número |
 | `lib/` | o que outro exemplo importa |
 
 ### `linguagem/`
