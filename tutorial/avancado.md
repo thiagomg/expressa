@@ -203,9 +203,9 @@ escreva("colunas: " + colunas())
 
 Cores: `preto vermelho verde amarelo azul magenta ciano branco`. `pinte(texto, frente)` ou `pinte(texto, frente, fundo)`.
 
-`quadro` + `bloco` + `escreva_em`: um quadro de jogo (Termo, Forca). Desenhos grandes: `../exemplos/jogos/bicho_desenhos.lep` no terminal (não na Aula 80×24).
+Para exemplos de `quadro` + `bloco` + `escreva_em` veja os jogos Termo e Forca.
 
-**Desafio:** uma linha vermelha e uma verde.
+**Desafio:** Escreva uma linha com o texto em verde com fundo branco.
 
 ---
 

@@ -12,7 +12,7 @@ Cada capítulo tem um arquivo em `exemplos/`. Execute, mude uma linha, execute d
 
 ## Como executar
 
-Três formas diferente. Use o que preferir.
+Três formas diferentes. Use o que preferir.
 
 > **IMPORTANTE:** a localização do binário expressa (expressa.exe no windows) deve estar no PATH para que você possa executar ele de qualquer lugar no terminal
 
@@ -91,7 +91,7 @@ escreva("Isso saiu na tela.")
 
 No REPL: `escreva("Olá")`
 
-**Mude:** a frase entre aspas. Rode de novo.
+**Mude:** a frase entre aspas. Execute de novo.
 
 **Desafio:** três `escreva`, três frases suas.
 
@@ -150,8 +150,6 @@ escreva("Olá, " + nome)
 ```
 
 `leia()` espera uma entrada do teclado até que seja pressionado Enter. O que você digitou vai para `nome`.
-
-No expressa-aula: depois de Executar, o cursor vai para a saída. Digite o nome e pressione Enter.
 
 **Desafio:** pergunte também a comida favorita e escreva as duas respostas.
 
