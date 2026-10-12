@@ -1,8 +1,8 @@
 # Tutorial avançado
 
-Você já fez o [tutorial básico](basico.md) (`01`–`08`). Daqui para frente: mapa, texto, `enquanto`, funções que devolvem valor, erro, módulo, arquivo, tela.
+Você já fez o [tutorial básico](basico.md) (`01`–`08`). Agora aprederá mapa, texto, `enquanto`, funções que retornam valor, erro, módulo, arquivo, tela.
 
-Mesma regra: execute o `.lep`, mude uma linha, desafio no fim. A [folha](../folha-de-consulta.md) e o [manual](../docs/manual.md) são para consultar o nome de uma função, não para ler em sequência.
+Mesma regra: execute o `.lep`, mude uma linha e faça o desafio no fim. A [folha](../folha-de-consulta.md) e o [manual](../docs/manual.md) são para ver as funções e duas definições, não para ler em sequência.
 
 ## 9. Mapa
 
@@ -17,7 +17,7 @@ escreva(pessoa:nome)
 pessoa:cidade = "Fortaleza"
 ```
 
-Um mapa liga **chave** a **valor**. `:nome` é a chave (o texto `"nome"`). `pessoa:nome` e `pessoa["nome"]` leem a mesma coisa.
+Um mapa liga uma **chave** a um **valor**. `:nome` é a chave (o texto `"nome"`). `pessoa:nome` e `pessoa["nome"]` são iguais.
 
 Receita de bolo com mapa de quantidades: `../exemplos/programas/receita.lep`.
 
@@ -25,7 +25,7 @@ Receita de bolo com mapa de quantidades: `../exemplos/programas/receita.lep`.
 
 ---
 
-## 10. Texto de verdade
+## 10. Interagindo com texto
 
 Arquivo: `exemplos/10_texto.lep`
 
@@ -37,9 +37,20 @@ escreva(s contem "press")
 escreva(procurar(s, "s"))   // 6;  0 se não achar
 ```
 
-`separe` parte; `junte` cola. `sem_acento("Ação")` vira `Acao` — a Forca usa isso para C e Ç.
+`separe` gera uma lista baseado num texto; `junte` gera um texto baseado numa lista. 
 
-Oficina maior: `../exemplos/texto/poema.lep`. Palíndromo no braço: `../exemplos/texto/palindromo.lep`.
+```text
+expressa> "A B C".separe(" ")
+["A", "B", "C"]
+expressa> separe("abacate", "a")
+["", "b", "c", "te"]
+expressa> ["A", "B", "C"].junte("-")
+"A-B-C"
+```
+
+`sem_acento("Ação")` vira `Acao` — a Forca usa isso para C e Ç.
+
+Para mais exemplos: `../exemplos/texto/poema.lep`. Palíndromo no braço: `../exemplos/texto/palindromo.lep`.
 
 **Desafio:** `separe` seu nome completo por espaço e escreva só o primeiro nome (`primeiro`).
 
@@ -49,7 +60,7 @@ Oficina maior: `../exemplos/texto/poema.lep`. Palíndromo no braço: `../exemplo
 
 Arquivo: `exemplos/11_enquanto.lep`
 
-`para` sabe o fim. `enquanto` pergunta de novo a cada volta.
+`para` tem a condição de saída do laço pre-determinada. `enquanto` pergunta de novo a cada volta.
 
 ```text
 i = 1
@@ -59,7 +70,7 @@ enquanto i <= 5 {
 }
 ```
 
-`+=` é `i = i + 1`. `pare` sai do laço; `continue` pula o resto desta volta.
+`+=` e `i = i + 1` são a mesma coisa. `pare` sai do laço; `continue` pula o resto desta volta.
 
 Jogo que usa `enquanto` + `leia`: `../exemplos/jogos/adivinhe_o_numero.lep`.
 
@@ -67,7 +78,7 @@ Jogo que usa `enquanto` + `leia`: `../exemplos/jogos/adivinhe_o_numero.lep`.
 
 ---
 
-## 12. Função que devolve valor
+## 12. Funções que retornam valor
 
 Arquivo: `exemplos/12_retorno.lep`
 
@@ -80,11 +91,12 @@ escreva(soma(10, 5))    // 15
 
 A **última expressão** do bloco é o resultado. `retorne verdadeiro` sai no meio (útil num `para` que já achou o que queria).
 
-Função **lê** nomes de fora e **não altera**. Para devolver um número novo, use o resultado: `x = soma(x, 1)`.
+Função **recebe** nomes de fora e **não altera**. Para devolver um número novo, use o resultado: `x = soma(x, 1)`.
 
-Tabuada (só efeito na tela): `exemplos/07_funcao.lep`. Alta ordem (função que recebe função): `../exemplos/linguagem/filtra.lep`.
+Tabuada: `exemplos/07_funcao.lep`. 
+Super avançado - função que recebe função: `../exemplos/linguagem/filtra.lep`.
 
-**Desafio:** `maximo(a, b)` que devolve o maior dos dois.
+**Desafio:** implemente `maximo(a, b)`. Essa função deverá retornar o maior dos dois números.
 
 ---
 
@@ -100,7 +112,7 @@ s.maiuscula()
 
 O primeiro argumento pode ir na frente do ponto. Encadear: `"oi".maiuscula().tamanho()`.
 
-**Desafio:** `primeiro([1, 2, 3])` nas duas formas.
+**Desafio:** Implemente `primeiro([1, 2, 3])` nas duas formas.
 
 ---
 
@@ -110,17 +122,17 @@ Arquivo: `exemplos/14_conjunto.lep`
 
 ```text
 visto = conjunto(["a", "b"])
-visto += "a"              // já estava: tamanho continua 2
+visto += "a" // "a" é repetido. Tamanho continua 2
 escreva(visto contem "a")
 ```
 
-Cada valor entra uma vez. A Forca usa conjunto para letras já acertadas.
+Cada valor entra somente uma vez. A Forca usa conjunto para verificar quais letras já foram usadas.
 
-**Desafio:** três tentativas repetidas; o tamanho tem que ser 1.
+**Desafio:** tente adicionar três vezes o mesmo valor; o tamanho tem que ser 1.
 
 ---
 
-## 15. Quando dá erro: `se_falhar`
+## 15. Tratamento de erro: `se_falhar`
 
 Arquivo: `exemplos/15_se_falhar.lep`
 
@@ -129,7 +141,7 @@ escreva(10 / 0 se_falhar "não dá para dividir")
 escreva(numero("xyz") se_falhar 0)
 ```
 
-Sem `se_falhar`, o programa encerra. Com, usa o valor da direita.
+Se você remover `se_falhar`, o programa encerra. Com `se_falhar`, o valor da direita é usado.
 
 Mais casos (arquivo, índice): `../exemplos/linguagem/erros.lep`.
 
@@ -139,29 +151,32 @@ Mais casos (arquivo, índice): `../exemplos/linguagem/erros.lep`.
 
 ## 16. Módulos: `importe`
 
-Arquivo pronto: `../exemplos/linguagem/usa_matematica.lep`
+Exemplos: `../exemplos/linguagem/usa_matematica.lep`
+Biblioteca importada: `../exemplos/lib/matematica.lep`.
 
 ```text
+// Caso 1
 mat = importe "../lib/matematica"
 escreva(mat::media([7, 8, 9]))
 
+// Caso 2
 importe "../lib/matematica"
 escreva(soma(10, 32))
 ```
 
-Com alias, o nome leva `::`. Sem, as funções entram soltas no arquivo.
+No caso 1, o arquivo é importado como mat, então `::` é usado.  
+No caso 2, as funções entram diretamente no arquivo.
 
-Nativos (não são arquivo seu): `"tela"`, `"mat"`, `"matriz"`, `"arquivo"`.
+Nativos (são definidos dentro do interpretador): `"tela"`, `"mat"`, `"matriz"`, `"arquivo"`.
 
-Biblioteca de aluno: `../exemplos/lib/matematica.lep`.
-
-**Desafio:** no `usa_matematica.lep`, escreva também o mínimo da lista (já existe `minimo`).
+**Desafio:** Altere `usa_matematica.lep` e `matematica.lep` para mostrar o mínimo e máximo de uma lista.
+Para isso, crie a função `min_max(a, b)` que retorna uma lista com os dois ou um mapa contendo os dois valores 
 
 ---
 
 ## 17. Arquivo
 
-`importe "arquivo"`. Caminho relativo: pasta do `.lep`.
+`importe "arquivo"`
 
 ```text
 salve_arquivo("saida/notas.txt", ["7", "8", "9"])

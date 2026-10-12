@@ -14,6 +14,8 @@ Cada capítulo tem um arquivo em `exemplos/`. Execute, mude uma linha, execute d
 
 Três formas diferente. Use o que preferir.
 
+> **IMPORTANTE:** a localização do binário expressa (expressa.exe no windows) deve estar no PATH para que você possa executar ele de qualquer lugar no terminal
+
 **REPL** (conversa: você digita uma linha, ela responde). Muito prático para iniciar e para explorar a linguagem no futuro
 
 ```text
