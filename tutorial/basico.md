@@ -14,7 +14,7 @@ Cada capítulo tem um arquivo em `exemplos/`. Execute, mude uma linha, execute d
 
 Três formas diferentes. Use o que preferir.
 
-> **IMPORTANTE:** a localização do binário expressa (expressa.exe no windows) deve estar no PATH para que você possa executar ele de qualquer lugar no terminal
+> **IMPORTANTE:** o binário `expressa` (`expressa.exe` no Windows) precisa estar no PATH para você executar de qualquer pasta no terminal.
 
 **REPL** (conversa: você digita uma linha, ela responde). Muito prático para iniciar e para explorar a linguagem no futuro
 
@@ -22,9 +22,9 @@ Três formas diferentes. Use o que preferir.
 expressa
 ```
 
-Aparece um `>`. Digite `2 + 3` e Enter. Digite `escreva("oi")` e Enter. `sair()` ou `Ctrl+D` encerra.
+Aparece um `>`. Digite `2 + 3` e Enter. Digite `escreva("oi")` e Enter. `sair` (sem parênteses) ou `Ctrl+D` encerra.
 
-**Aula** (editor integrado). Novo arquivo (Ctrl+N), cole o código, **Executar** (F5). A saída fica embaixo. Se o programa pedir texto, clique nessa saída, digite, Enter. **Parar** mata um programa que não acaba. Salve como `algo.lep`. F1 abre a ajuda das funções.
+**expressa-aula** (editor integrado). Novo arquivo (Ctrl+N), cole o código, **Executar** (F5). A saída fica embaixo. Se o programa pedir texto, clique nessa saída, digite, Enter. **Parar** mata um programa que não acaba. Salve como `algo.lep`. F1 abre a ajuda das funções.
 
 **Outro editor** (VS Code, Emacs, Bloco de Notas). Salve `ola.lep` e no terminal:
 
@@ -131,9 +131,10 @@ Arquivo: `exemplos/03_nomes.lep`
 nome = "Armelina"
 idade = 16
 escreva("Olá, " + nome)
+escreva(nome + " tem " + idade + " anos")
 ```
 
-`nome` guarda `"Armelina"`. Na linha seguinte você usa `nome` em vez de escrever Ana de novo. Trocar `nome = "Armelina"` para `"Filadelfo"` muda as duas linhas de baixo.
+`nome` guarda `"Armelina"`. Na linha seguinte você usa `nome` em vez de escrever Armelina de novo. Trocar `nome = "Armelina"` para `"Filadelfo"` muda as duas linhas de baixo.
 
 **Desafio:** um nome `cidade` e um `escreva` que fale a cidade.
 
@@ -151,6 +152,8 @@ escreva("Olá, " + nome)
 
 `leia()` espera uma entrada do teclado até que seja pressionado Enter. O que você digitou vai para `nome`.
 
+No expressa-aula: depois de Executar, o cursor vai para a saída. Digite o nome e pressione Enter. No terminal (`expressa tutorial/exemplos/04_perguntas.lep`) o programa também espera o Enter.
+
 **Desafio:** pergunte também a comida favorita e escreva as duas respostas.
 
 ---
@@ -167,6 +170,8 @@ se nota >= 7 {
 } senão {
     escreva("Reprovado")
 }
+
+escreva("nota: " + nota)
 ```
 
 Se a condição for verdadeira, executa o bloco de cima. Senão, o de baixo. `>=` é “maior ou igual”.
@@ -273,7 +278,7 @@ Mais desenhos (triângulo centrado, histograma): `../exemplos/texto/ascii.lep`.
 
 ---
 
-## 9. Um programa de verdade
+## Projeto: um programa de verdade
 
 Agora junte o que você já viu. Não precisa escrever do zero: abra, execute, mude um número.
 
@@ -323,8 +328,8 @@ Erros comuns no começo:
 | gravar arquivo | `../exemplos/programas/diario.lep` |
 | conta de caderno (Bhaskara, juros) | `../exemplos/escola/` |
 | Termo, Conway, desenhos de bicho | `../exemplos/jogos/` |
-| lista de funções | REPL: `ajuda` / `ls` / `ajuda escreva` · Aula: **F1** · [manual](../docs/manual.md) |
+| lista de funções | REPL: `ajuda` / `ls` / `ajuda escreva` · expressa-aula: **F1** · [manual](../docs/manual.md) |
 
 A folha de consulta é um super resumo, não um capítulo. Use quando esquecer um nome (`tamanho`, `contem`, `para`).
 
-Quando `01`–`08` e um dos programas da aula 9 estiverem ok: [tutorial avançado](avancado.md).
+Quando `01`–`08` e um dos programas do projeto estiverem ok: [tutorial avançado](avancado.md).

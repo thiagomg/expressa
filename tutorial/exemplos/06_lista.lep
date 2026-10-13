@@ -2,7 +2,7 @@
 
 notas = [7, 8, 6.5, 9]
 escreva("primeira: " + notas[1])
-escreva("quantas: " + tamanho(notas))
+escreva("quantidade: " + tamanho(notas))
 
 soma = 0
 para nota em notas {

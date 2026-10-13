@@ -1,12 +1,14 @@
 # Tutorial avançado
 
-Você já fez o [tutorial básico](basico.md) (`01`–`08`). Agora aprederá mapa, texto, `enquanto`, funções que retornam valor, erro, módulo, arquivo, tela.
+Você já fez o [tutorial básico](basico.md) (`01`–`08` e o projeto). Agora aprenderá mapa, texto, `enquanto`, funções que retornam valor, erro, módulo, arquivo, tela.
 
-Mesma regra: execute o `.lep`, mude uma linha e faça o desafio no fim. A [folha](../folha-de-consulta.md) e o [manual](../docs/manual.md) são para ver as funções e duas definições, não para ler em sequência.
+Mesma regra: execute o `.lep`, mude uma linha e faça o desafio no fim. A [folha](../folha-de-consulta.md) e o [manual](../docs/manual.md) são para ver as funções e suas definições, não para ler em sequência.
 
 ## 9. Mapa
 
 Arquivo: `exemplos/09_mapa.lep`
+
+Um mapa liga uma **chave** a um **valor**. `:nome` é a chave (o texto `"nome"`). `pessoa:nome` e `pessoa["nome"]` são iguais.
 
 ```text
 pessoa = mapa([
@@ -14,10 +16,29 @@ pessoa = mapa([
     :idade -> 16,
 ])
 escreva(pessoa:nome)
+escreva(pessoa:idade)
+
 pessoa:cidade = "Fortaleza"
+escreva(pessoa:cidade)
+
+se pessoa contem "idade" {
+    escreva("tem idade")
+}
 ```
 
-Um mapa liga uma **chave** a um **valor**. `:nome` é a chave (o texto `"nome"`). `pessoa:nome` e `pessoa["nome"]` são iguais.
+No REPL:
+
+```text
+expressa> pessoa = mapa([:nome -> "Ana", :idade -> 16])
+expressa> pessoa:nome
+"Ana"
+expressa> pessoa["nome"]
+"Ana"
+expressa> pessoa contem "idade"
+verdadeiro
+expressa> pessoa contem "serie"
+falso
+```
 
 Receita de bolo com mapa de quantidades: `../exemplos/programas/receita.lep`.
 
@@ -37,7 +58,7 @@ escreva(s contem "press")
 escreva(procurar(s, "s"))   // 6;  0 se não achar
 ```
 
-`separe` gera uma lista baseado num texto; `junte` gera um texto baseado numa lista. 
+`separe` gera uma lista baseado num texto; `junte` gera um texto baseado numa lista.
 
 ```text
 expressa> "A B C".separe(" ")
@@ -60,7 +81,9 @@ Para mais exemplos: `../exemplos/texto/poema.lep`. Palíndromo no braço: `../ex
 
 Arquivo: `exemplos/11_enquanto.lep`
 
-`para` tem a condição de saída do laço pre-determinada. `enquanto` pergunta de novo a cada volta.
+`para` tem a condição de saída do laço predeterminada. `enquanto` pergunta de novo a cada volta.
+
+O laço mais simples conta até 5:
 
 ```text
 i = 1
@@ -70,7 +93,24 @@ enquanto i <= 5 {
 }
 ```
 
-`+=` e `i = i + 1` são a mesma coisa. `pare` sai do laço; `continue` pula o resto desta volta.
+`+=` e `i = i + 1` são a mesma coisa. `continue` pula o resto desta volta e testa a condição de novo. `pare` sai do laço na hora.
+
+O arquivo `11_enquanto.lep` junta os dois: pula o 3 e para no 4. A tela mostra `1`, `2` e `4`.
+
+```text
+i = 1
+enquanto i <= 5 {
+    se i == 3 {
+        i += 1
+        continue
+    }
+    escreva(i)
+    se i == 4 {
+        pare
+    }
+    i += 1
+}
+```
 
 Jogo que usa `enquanto` + `leia`: `../exemplos/jogos/adivinhe_o_numero.lep`.
 
@@ -91,10 +131,12 @@ escreva(soma(10, 5))    // 15
 
 A **última expressão** do bloco é o resultado. `retorne verdadeiro` sai no meio (útil num `para` que já achou o que queria).
 
-Função **recebe** nomes de fora e **não altera**. Para devolver um número novo, use o resultado: `x = soma(x, 1)`.
+Função **enxerga** nomes de fora e **não altera**. Para devolver um número novo, use o resultado: `x = soma(x, 1)`.
 
-Tabuada: `exemplos/07_funcao.lep`. 
-Super avançado - função que recebe função: `../exemplos/linguagem/filtra.lep`.
+O arquivo também tem `tem(xs, alvo)`, que percorre a lista e usa `retorne` quando acha o valor.
+
+Tabuada: `exemplos/07_funcao.lep`.
+Super avançado — função que recebe função: `../exemplos/linguagem/filtra.lep`.
 
 **Desafio:** implemente `maximo(a, b)`. Essa função deverá retornar o maior dos dois números.
 
@@ -104,15 +146,24 @@ Super avançado - função que recebe função: `../exemplos/linguagem/filtra.le
 
 Arquivo: `exemplos/13_ufcs.lep`
 
+O primeiro argumento pode ir na frente do ponto. `tamanho(s)` e `s.tamanho()` são iguais. O `()` no fim é obrigatório.
+
 ```text
-tamanho(s)
-s.tamanho()     // igual; o () é obrigatório
-s.maiuscula()
+s = "olá"
+escreva(tamanho(s))
+escreva(s.tamanho())
+escreva(s.maiuscula())
+escreva([10, 20].primeiro())
 ```
 
-O primeiro argumento pode ir na frente do ponto. Encadear: `"oi".maiuscula().tamanho()`.
+Dá para encadear: cada ponto usa o resultado do anterior.
 
-**Desafio:** Implemente `primeiro([1, 2, 3])` nas duas formas.
+```text
+expressa> "oi".maiuscula().tamanho()
+2
+```
+
+**Desafio:** chame `primeiro([1, 2, 3])` nas duas formas (`primeiro(lista)` e `lista.primeiro()`). `primeiro` já existe; não precisa criar.
 
 ---
 
@@ -138,6 +189,7 @@ Arquivo: `exemplos/15_se_falhar.lep`
 
 ```text
 escreva(10 / 0 se_falhar "não dá para dividir")
+escreva([1, 2][9] se_falhar "índice longe")
 escreva(numero("xyz") se_falhar 0)
 ```
 
@@ -151,43 +203,57 @@ Mais casos (arquivo, índice): `../exemplos/linguagem/erros.lep`.
 
 ## 16. Módulos: `importe`
 
-Exemplos: `../exemplos/linguagem/usa_matematica.lep`
+Execute `../exemplos/linguagem/usa_matematica.lep` **nessa pasta** (`exemplos/linguagem/`). O `importe "../lib/matematica"` só acha a biblioteca a partir dali.
+
 Biblioteca importada: `../exemplos/lib/matematica.lep`.
 
 ```text
-// Caso 1
+// Caso 1 — com apelido
 mat = importe "../lib/matematica"
 escreva(mat::media([7, 8, 9]))
 
-// Caso 2
+// Caso 2 — nomes soltos no arquivo
 importe "../lib/matematica"
 escreva(soma(10, 32))
 ```
 
-No caso 1, o arquivo é importado como mat, então `::` é usado.  
+No caso 1, o arquivo vira `mat`, então os nomes levam `::`.  
 No caso 2, as funções entram diretamente no arquivo.
 
-Nativos (são definidos dentro do interpretador): `"tela"`, `"mat"`, `"matriz"`, `"arquivo"`.
+Nativos (`"tela"`, `"mat"`, `"matriz"`, `"arquivo"`) não têm arquivo seu: `importe "mat"` basta, de qualquer pasta.
 
-**Desafio:** Altere `usa_matematica.lep` e `matematica.lep` para mostrar o mínimo e máximo de uma lista.
-Para isso, crie a função `min_max(a, b)` que retorna uma lista com os dois ou um mapa contendo os dois valores 
+**Desafio:** no `usa_matematica.lep`, depois do caso 1 escreva `mat::minimo(notas)` e `mat::maximo(notas)`. Depois do caso 2, `minimo(notas)` e `maximo(notas)`. Essas funções já existem em `matematica.lep`.
 
 ---
 
 ## 17. Arquivo
 
-`importe "arquivo"`
+`importe "arquivo"` lê e grava texto. O caminho é relativo à **pasta do `.lep`**, não à pasta de onde você chamou `expressa`.
 
 ```text
+importe "arquivo"
+
 salve_arquivo("saida/notas.txt", ["7", "8", "9"])
 linhas = leia_arquivo("saida/notas.txt") se_falhar []
+escreva(linhas)
+```
+
+Se o arquivo não existir, `leia_arquivo` é um erro. Com `se_falhar []` você continua com lista vazia.
+
+No REPL (a pasta atual conta como pasta do programa):
+
+```text
+expressa> importe "arquivo"
+expressa> salve_arquivo("oi.txt", ["olá"])
+expressa> leia_arquivo("oi.txt")
+["olá"]
 ```
 
 Diário (grava e relê): `../exemplos/programas/diario.lep`. Agenda CSV: `../exemplos/programas/contatos.lep`.
 
-Na Aula o programa só vê a pasta do projeto.
+No expressa-aula o programa só vê a pasta do projeto.
 
-**Desafio:** execute o diário, abra `exemplos/programas/saida/diario.txt`.
+**Desafio:** execute o diário e abra `exemplos/programas/saida/diario.txt`.
 
 ---
 
@@ -195,15 +261,30 @@ Na Aula o programa só vê a pasta do projeto.
 
 Arquivo: `exemplos/16_tela.lep`
 
+`importe "tela"`  
+contém funções para pintar a tela e tamanho do terminal.
+
 ```text
 importe "tela"
+
 escreva("ok".pinte(:verde))
-escreva("colunas: " + colunas())
+escreva("alerta".pinte(:preto, :amarelo))
+escreva("fim".negrito().pinte(:vermelho))
+escreva("colunas: " + colunas() + "  linhas: " + linhas())
 ```
 
-Cores: `preto vermelho verde amarelo azul magenta ciano branco`. `pinte(texto, frente)` ou `pinte(texto, frente, fundo)`.
+Cores: `preto vermelho verde amarelo azul magenta ciano branco`.  
+`pinte(texto, frente)` ou `pinte(texto, frente, fundo)`.
 
-Para exemplos de `quadro` + `bloco` + `escreva_em` veja os jogos Termo e Forca.
+No REPL:
+
+```text
+expressa> importe "tela"
+expressa> "HP".pinte(:verde)
+expressa> colunas()
+```
+
+`quadro` + `bloco` + `escreva_em` montam a tela de um jogo (Termo, Forca). Desenhos grandes: `../exemplos/jogos/bicho_desenhos.lep` no terminal (o painel do expressa-aula mente 80×24).
 
 **Desafio:** Escreva uma linha com o texto em verde com fundo branco.
 
@@ -215,14 +296,25 @@ Arquivo: `exemplos/17_mat.lep`
 
 ```text
 importe "mat"
+
 escreva(raiz(9))
 escreva(aleatorio(1, 6))
-escreva(seno(radianos(30)))
+escreva("pi ≈ " + pi)
+escreva("seno de 30°: " + seno(radianos(30)))
+escreva(potencia(2, 10))
 ```
 
-`pi` é valor, não função: `pi`, não `pi()`. Contas de caderno: `../exemplos/escola/`.
+`pi` é valor, não função: escreva `pi`, não `pi()`. Seno e cosseno pedem **radianos**; `radianos(30)` converte graus.
 
-**Desafio:** área do círculo de raio 3 (`pi * r * r`).
+```text
+expressa> importe "mat"
+expressa> pi
+expressa> seno(radianos(90))
+```
+
+Contas de caderno: `../exemplos/escola/`.
+
+**Desafio:** Mostre no terminal a área do círculo de raio 3 (`pi * r * r`).
 
 ---
 
@@ -230,23 +322,46 @@ escreva(seno(radianos(30)))
 
 Arquivo: `exemplos/18_argumentos.lep`
 
+O que vem depois do `.lep` entra na lista `argumentos`. O primeiro é `argumentos[1]`.
+
 ```text
 expressa tutorial/exemplos/18_argumentos.lep Ana 16
 ```
 
-`argumentos[1]` é `Ana`. Na Aula, a caixa **argumentos**.
+Saída: `olá, Ana` e `idade: 16`. Sem argumentos, o programa pede o nome.
 
-Filtro de linhas (tipo `grep`): `../exemplos/unix/grep.lep`.
+No expressa-aula, a caixa **argumentos** em cima é a mesma lista.
 
-**Desafio:** execute com dois nomes e escreva os dois.
+Exemplo avançado - filtrar linhas: `../exemplos/unix/grep.lep`.
+
+**Desafio:** execute 18_argumentos.lep com dois nomes e escreva os dois.
 
 ---
 
 ## 21. Matriz
 
-Só números. `importe "matriz"`. `A[1, 2]` é linha 1, coluna 2.
+Estrutura bidimensional que só aceita números
 
-Tabela de frutas (imprime bonito): `../exemplos/programas/frutas.lep`. Geometria escolar: `../exemplos/escola/geometria.lep`.
+`importe "matriz"`. `A[1, 2]` é linha 1, coluna 2.
+
+```text
+importe "matriz"
+
+A = matriz([[1, 2, 3], [4, 5, 6]])
+escreva(A[1, 2])        // 2
+escreva(nlinhas(A))     // 2
+escreva(ncolunas(A))    // 3
+escreva(identidade(3))
+```
+
+No REPL:
+
+```text
+expressa> importe "matriz"
+expressa> identidade(2)
+```
+
+Tabela de frutas: `../exemplos/programas/frutas.lep`. Geometria escolar: `../exemplos/escola/geometria.lep`.
 
 **Desafio:** `identidade(3)` e `escreva` a matriz.
 
@@ -256,22 +371,27 @@ Tabela de frutas (imprime bonito): `../exemplos/programas/frutas.lep`. Geometria
 
 Arquivo: `../exemplos/linguagem/filtra.lep`
 
+Você passa o **teste** como argumento. `filtra` percorre a lista e fica com os itens para os quais o teste dá verdadeiro.
+
 ```text
 pares = filtra([1, 2, 3, 4], função(n) { n % 2 == 0 })
+escreva(pares)    // [2, 4]
 ```
 
-Você passa o **teste** como argumento. Closures (função que devolve função): `../exemplos/linguagem/closures.lep`.
+O `%` é o resto da divisão: `n % 2 == 0` são os pares.
+
+Closures (função que devolve função): `../exemplos/linguagem/closures.lep`.
 
 **Desafio:** filtre as notas `>= 7` de `[5, 8, 6, 9]`.
 
 ---
 
-## E agora
+## O que mais?
 
-| | |
+| O que | Onde |
 |---|---|
 | jogos | `../exemplos/jogos/` (Termo, Forca, Conway, adivinhe) |
 | padaria, boletim, calculadora | `../exemplos/programas/` |
-| referência de cada função | [manual](../docs/manual.md) · Aula **F1** · `ajuda("escreva")` |
+| referência de cada função | [manual](../docs/manual.md) · expressa-aula **F1** · `ajuda("escreva")` |
 | cartão de uma página | [folha-de-consulta.md](../folha-de-consulta.md) |
 | regra fina da linguagem | [especificacao-linguagem.md](../especificacao-linguagem.md) |
