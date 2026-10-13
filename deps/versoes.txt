@@ -1,0 +1,6 @@
+gtk4 4.22.4
+gtksourceview-5 5.20.0
+gvsbuild 2026.8.0
+arquivo GTK4_Gvsbuild_2026.8.0_x64.zip
+protoc 36.2
+arquivo protoc-36.2-win64.zip
