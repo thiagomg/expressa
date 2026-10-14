@@ -11,6 +11,10 @@ const MAX_FONT: u32 = 40;
 pub struct Prefs {
     pub font_size: u32,
     pub dark: bool,
+    /// Last local project folder. The chooser starts there.
+    pub pasta: String,
+    /// Last remote server URL.
+    pub servidor: String,
 }
 
 impl Default for Prefs {
@@ -18,6 +22,8 @@ impl Default for Prefs {
         Self {
             font_size: DEFAULT_FONT,
             dark: false,
+            pasta: String::new(),
+            servidor: "http://127.0.0.1:50051".to_string(),
         }
     }
 }
@@ -42,6 +48,8 @@ impl Prefs {
                     }
                 }
                 "tema" => p.dark = v.trim() == "escuro",
+                "pasta" => p.pasta = v.trim().to_string(),
+                "servidor" => p.servidor = v.trim().to_string(),
                 _ => {}
             }
         }
@@ -50,9 +58,11 @@ impl Prefs {
 
     pub fn to_text(&self) -> String {
         format!(
-            "fonte={}\ntema={}\n",
+            "fonte={}\ntema={}\npasta={}\nservidor={}\n",
             self.font_size,
-            if self.dark { "escuro" } else { "claro" }
+            if self.dark { "escuro" } else { "claro" },
+            self.pasta,
+            self.servidor,
         )
     }
 
@@ -117,13 +127,10 @@ mod tests {
     #[test]
     fn parse_and_print() {
         let p = Prefs::parse("fonte=18\ntema=escuro\n");
-        assert_eq!(
-            p,
-            Prefs {
-                font_size: 18,
-                dark: true
-            }
-        );
+        let mut expect = Prefs::default();
+        expect.font_size = 18;
+        expect.dark = true;
+        assert_eq!(p, expect);
         assert_eq!(Prefs::parse(&p.to_text()), p);
         assert_eq!(Prefs::parse("fonte=999\nlixo\n").font_size, MAX_FONT);
         assert_eq!(Prefs::parse(""), Prefs::default());

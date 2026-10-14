@@ -11,7 +11,7 @@ use expressa::runtime::{
     ChannelDebugger, DebugHook, DebugPaused, LeiaHost, StopHook, run_with_hook,
 };
 
-use crate::rpc::Rpc;
+use crate::store::Files;
 
 /// Events the UI may lag behind before the program blocks. Keeps a program
 /// that prints forever from piling up memory or starving the UI.
@@ -48,34 +48,43 @@ fn cache_root() -> PathBuf {
         .join("expressa-aula")
 }
 
-/// Same rule as the server: the name becomes a folder name.
-fn valid_student(student: &str) -> bool {
-    !student.is_empty()
-        && student
-            .chars()
-            .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
+/// Cache folder name. Local directories may contain spaces; remote student
+/// names are already a single path segment.
+fn cache_name(project: &str) -> String {
+    let s: String = project
+        .chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '_' || c == '-' {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect();
+    if s.is_empty() || s.chars().all(|c| c == '_') {
+        "projeto".to_string()
+    } else {
+        s
+    }
 }
 
 impl Workspace {
-    /// Replace the local copy with the server's files.
-    pub fn download(rpc: &Rpc, student: &str) -> Result<Self, String> {
-        if !valid_student(student) {
-            return Err(format!("nome de projeto inválido: {student:?}"));
-        }
-        let dir = cache_root().join(student);
+    /// Replace the local copy with the project's files.
+    pub fn download(files: &Files, project: &str) -> Result<Self, String> {
+        let dir = cache_root().join(cache_name(project));
         if dir.exists() {
             std::fs::remove_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
         }
         std::fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
         let dir = dir.canonicalize().map_err(|e| e.to_string())?;
         let mut snapshot = HashMap::new();
-        for entry in rpc.list_tree(student)? {
+        for entry in files.list_tree(project)? {
             let local = dir.join(&entry.path);
             if entry.is_dir {
                 std::fs::create_dir_all(&local).map_err(|e| e.to_string())?;
                 continue;
             }
-            let source = rpc.read_file(student, &entry.path)?;
+            let source = files.read_file(project, &entry.path)?;
             write_file(&local, &source)?;
             snapshot.insert(entry.path, source);
         }
@@ -97,18 +106,18 @@ impl Workspace {
     }
 
     /// Send files that are new or differ from the download. Returns how many.
-    pub fn upload_changes(&self, rpc: &Rpc, student: &str) -> Result<usize, String> {
-        let mut files = Vec::new();
-        walk(&self.dir, &mut files).map_err(|e| e.to_string())?;
+    pub fn upload_changes(&self, files: &Files, project: &str) -> Result<usize, String> {
+        let mut paths = Vec::new();
+        walk(&self.dir, &mut paths).map_err(|e| e.to_string())?;
         let mut sent = 0;
-        for path in files {
+        for path in paths {
             let rel = self.relative(&path);
             // The repository holds text; skip anything that is not UTF-8.
             let Ok(source) = std::fs::read_to_string(&path) else {
                 continue;
             };
             if self.snapshot.get(&rel) != Some(&source) {
-                rpc.write_file(student, &rel, &source)?;
+                files.write_file(project, &rel, &source)?;
                 sent += 1;
             }
         }
@@ -320,11 +329,11 @@ mod tests {
     use super::*;
 
     #[test]
-    fn student_names_are_folder_safe() {
-        assert!(valid_student("ana"));
-        assert!(valid_student("turma-1_b"));
-        assert!(!valid_student(""));
-        assert!(!valid_student("../x"));
-        assert!(!valid_student("a/b"));
+    fn cache_name_keeps_letters_and_replaces_the_rest() {
+        assert_eq!(cache_name("ana"), "ana");
+        assert_eq!(cache_name("turma-1_b"), "turma-1_b");
+        assert_eq!(cache_name("Meu Projeto"), "Meu_Projeto");
+        assert_eq!(cache_name(""), "projeto");
+        assert_eq!(cache_name("../x"), "___x");
     }
 }

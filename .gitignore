@@ -2,3 +2,14 @@
 .idea/
 exemplos/**/saida/
 aula-data/
+
+# Binários nativos do Windows (GTK do gvsbuild e protoc). O script deps/ativar.ps1 fica versionado.
+/deps/gtk/
+/deps/protoc/
+/deps/_download/
+
+# Caminhos absolutos desta máquina. No Linux esse arquivo quebraria o build.
+/.cargo/config.toml
+
+# Pasta e zip gerados por empacotar.ps1.
+/dist/

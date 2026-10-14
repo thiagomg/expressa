@@ -1,3 +1,5 @@
+#![cfg_attr(windows, windows_subsystem = "windows")]
+
 mod ajuda;
 mod assist;
 mod console;
@@ -8,6 +10,7 @@ mod indent;
 mod lang;
 mod prefs;
 mod rpc;
+mod store;
 
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -31,7 +34,8 @@ use console::Console;
 use docs::Doc;
 use exec::{ExecEvent, Workspace};
 use prefs::{FontCss, Prefs};
-use rpc::{Rpc, ensure_server};
+use rpc::Rpc;
+use store::{Files, valid_aluno};
 
 const APP_ID: &str = "dev.expressa.aula";
 const DEFAULT_URL: &str = "http://127.0.0.1:50051";
@@ -45,10 +49,10 @@ struct Run {
 }
 
 struct Ui {
-    rpc: Rpc,
+    files: Files,
     student: Entry,
-    /// Project whose files the tabs show (the student entry may be edited
-    /// before Conectar).
+    /// Folder name locally, student name on a remote server. The entry may
+    /// show the full path and be edited before Pasta or Servidor.
     project: String,
     tree: TreeView,
     store: TreeStore,
@@ -93,33 +97,14 @@ struct Ui {
 type UiRc = Rc<RefCell<Ui>>;
 
 fn main() {
+    prepare_runtime_prefix();
     rpc::install_signal_handlers();
     let app = Application::builder().application_id(APP_ID).build();
     app.connect_activate(build_ui);
-    app.connect_shutdown(|_| {
-        rpc::kill_spawned_server();
-    });
     app.run();
-    rpc::kill_spawned_server();
 }
 
 fn build_ui(app: &Application) {
-    let rpc = match ensure_server(DEFAULT_URL) {
-        Ok(rpc) => rpc,
-        Err(e) => {
-            eprintln!("{e}");
-            let win = ApplicationWindow::builder()
-                .application(app)
-                .title("Expressa Aula")
-                .default_width(480)
-                .default_height(160)
-                .child(&Label::new(Some(&e)))
-                .build();
-            win.present();
-            return;
-        }
-    };
-
     // ibus + GTK4 leaves the dead key (´ ~ `) stuck as preedit after composing
     // á/ã. GTK's built-in input method composes dead keys itself.
     // GTK_IM_MODULE in the environment still takes precedence over this.
@@ -133,10 +118,14 @@ fn build_ui(app: &Application) {
     font_css.set_size(prefs.font_size);
 
     let student = Entry::builder()
-        .text("local")
-        .placeholder_text("aluno")
-        .width_chars(10)
+        .text(&prefs.pasta)
+        .placeholder_text("pasta do projeto")
+        .width_chars(28)
+        .hexpand(true)
         .build();
+    if !prefs.pasta.is_empty() {
+        student.set_tooltip_text(Some(prefs.pasta.as_str()));
+    }
     #[allow(deprecated)]
     let store = TreeStore::new(&[glib::Type::STRING, glib::Type::STRING, glib::Type::BOOL]);
     let tree = TreeView::with_model(&store);
@@ -199,7 +188,7 @@ fn build_ui(app: &Application) {
         .placeholder_text("argumentos (ex.: Thiago --ajuda)")
         .hexpand(true)
         .build();
-    let status = Label::new(Some("conectado a 127.0.0.1:50051"));
+    let status = Label::new(Some("escolha uma pasta para o projeto"));
     status.set_xalign(0.0);
     status.set_hexpand(true);
     status.add_css_class("dim-label");
@@ -216,8 +205,8 @@ fn build_ui(app: &Application) {
         .build();
 
     let ui: UiRc = Rc::new(RefCell::new(Ui {
-        rpc,
-        project: student.text().to_string(),
+        files: Files::None,
+        project: String::new(),
         student,
         tree,
         store,
@@ -272,7 +261,12 @@ fn build_ui(app: &Application) {
     btn_debug.set_tooltip_text(Some("Depurar a aba atual (F6)"));
     let btn_bp = Button::with_label("Ponto");
     btn_bp.set_tooltip_text(Some("Ponto de parada na linha (F9)"));
-    let btn_refresh = Button::with_label("Conectar");
+    let btn_pasta = Button::with_label("Pasta");
+    btn_pasta.set_tooltip_text(Some("Escolher a pasta do projeto neste computador"));
+    let btn_servidor = Button::with_label("Servidor");
+    btn_servidor.set_tooltip_text(Some(
+        "Conectar a um servidor. Os arquivos ficam em aula-data/aluno",
+    ));
     let btn_smaller = Button::with_label("A−");
     btn_smaller.set_tooltip_text(Some("Letra menor (Ctrl+-)"));
     let btn_bigger = Button::with_label("A+");
@@ -294,7 +288,8 @@ fn build_ui(app: &Application) {
         toolbar.append(&Label::new(Some("projeto:")));
         toolbar.append(&u.student);
     }
-    toolbar.append(&btn_refresh);
+    toolbar.append(&btn_pasta);
+    toolbar.append(&btn_servidor);
     let btn_files = ToggleButton::with_label("Arquivos");
     btn_files.set_active(true);
     btn_files.set_tooltip_text(Some("Mostrar ou ocultar a lista de arquivos (F7)"));
@@ -408,7 +403,10 @@ fn build_ui(app: &Application) {
     connect(&btn_run, &ui, |ui| executar(ui, false));
     connect(&btn_debug, &ui, |ui| executar(ui, true));
     connect(&btn_bp, &ui, toggle_breakpoint_here);
-    connect(&btn_refresh, &ui, conectar);
+    connect(&btn_pasta, &ui, |ui| {
+        choose_local_folder(ui);
+    });
+    connect(&btn_servidor, &ui, ask_server);
     connect(&btn_smaller, &ui, |ui| zoom(ui, -1));
     connect(&btn_bigger, &ui, |ui| zoom(ui, 1));
     {
@@ -429,7 +427,7 @@ fn build_ui(app: &Application) {
         let ui_e = Rc::clone(&ui);
         ui.borrow()
             .student
-            .connect_activate(move |_| conectar(&ui_e));
+            .connect_activate(move |_| on_project_entry(&ui_e));
     }
     {
         let ui_o = Rc::clone(&ui);
@@ -578,12 +576,12 @@ fn build_ui(app: &Application) {
         let ui_close = Rc::clone(&ui);
         win.connect_close_request(move |w| {
             if ui_close.borrow().closing {
-                ui_close.borrow_mut().rpc.shutdown_spawned_server();
+                ui_close.borrow_mut().files.shutdown();
                 return glib::Propagation::Proceed;
             }
             let dirty: Vec<Rc<Doc>> = dirty_docs(&ui_close);
             if dirty.is_empty() {
-                ui_close.borrow_mut().rpc.shutdown_spawned_server();
+                ui_close.borrow_mut().files.shutdown();
                 return glib::Propagation::Proceed;
             }
             let ui_c = Rc::clone(&ui_close);
@@ -596,18 +594,26 @@ fn build_ui(app: &Application) {
         });
     }
 
-    conectar(&ui);
-    let doc = open_doc(&ui, None, WELCOME);
-    doc.mark_saved();
     apply_theme(&ui);
-    if !lang_ok {
-        set_status(
-            &ui,
-            "aviso: gramática Expressa não carregou; o texto fica sem cores",
-        );
-    }
     win.maximize();
     win.present();
+    schedule_raise();
+    {
+        let ui_p = Rc::clone(&ui);
+        glib::timeout_add_local_once(std::time::Duration::from_millis(250), move || {
+            let opened = choose_local_folder(&ui_p);
+            schedule_raise();
+            if !opened {
+                set_status(&ui_p, "escolha uma pasta para o projeto");
+            }
+            if !lang_ok {
+                set_status(
+                    &ui_p,
+                    "aviso: gramática Expressa não carregou; o texto fica sem cores",
+                );
+            }
+        });
+    }
     {
         // Place the splits once the window has its final size (the window
         // manager may maximize it a moment after it appears): re-apply
@@ -723,7 +729,50 @@ fn install_css() {
 }
 
 fn data_dir() -> std::path::PathBuf {
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(dir) = exe.parent() {
+            let bundled = dir.join("res");
+            if bundled.join("language-specs").is_dir() {
+                return bundled;
+            }
+        }
+    }
     std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("res")
+}
+
+/// A packaged build keeps GTK data beside the exe. Point GLib, GDK and
+/// fontconfig at that tree before GTK starts. A dev build has no `share/`
+/// next to the binary and keeps using `deps/gtk` from the environment.
+fn prepare_runtime_prefix() {
+    let Ok(exe) = std::env::current_exe() else {
+        return;
+    };
+    let Some(dir) = exe.parent() else {
+        return;
+    };
+    let schemas = dir.join("share").join("glib-2.0").join("schemas");
+    if !schemas.join("gschemas.compiled").is_file() {
+        return;
+    }
+    let fonts = dir.join("etc").join("fonts").join("fonts.conf");
+    let loaders = dir
+        .join("lib")
+        .join("gdk-pixbuf-2.0")
+        .join("2.10.0")
+        .join("loaders.cache");
+    let share = dir.join("share");
+    unsafe {
+        std::env::set_var("GSETTINGS_SCHEMA_DIR", &schemas);
+        if fonts.is_file() {
+            std::env::set_var("FONTCONFIG_FILE", &fonts);
+        }
+        if loaders.is_file() {
+            std::env::set_var("GDK_PIXBUF_MODULE_FILE", &loaders);
+        }
+        if share.is_dir() {
+            std::env::set_var("XDG_DATA_DIRS", &share);
+        }
+    }
 }
 
 fn language_manager() -> LanguageManager {
@@ -762,7 +811,7 @@ fn make_help(ui: &UiRc) -> Rc<Help> {
             if let Some(hit) = u.file_cache.borrow().get(path) {
                 return hit.clone();
             }
-            let text = u.rpc.read_file(&u.project, path).ok();
+            let text = u.files.read_file(&u.project, path).ok();
             u.file_cache
                 .borrow_mut()
                 .insert(path.to_string(), text.clone());
@@ -1016,7 +1065,7 @@ fn open_path(ui: &UiRc, path: &str) -> Option<Rc<Doc>> {
     }
     let result = {
         let u = ui.borrow();
-        u.rpc.read_file(&u.project, path)
+        u.files.read_file(&u.project, path)
     };
     match result {
         Ok(src) => {
@@ -1095,7 +1144,7 @@ fn save_doc(ui: &UiRc, doc: &Rc<Doc>) -> bool {
     let name = doc.name();
     let result = {
         let u = ui.borrow();
-        u.rpc.write_file(&u.project, &name, &doc.text())
+        u.files.write_file(&u.project, &name, &doc.text())
     };
     match result {
         Ok(()) => {
@@ -1556,7 +1605,7 @@ fn executar(ui: &UiRc, debug: bool) {
     // program and its `importe`s run what is on screen (saved or not).
     let ws = {
         let u = ui.borrow();
-        Workspace::download(&u.rpc, &project).and_then(|mut ws| {
+        Workspace::download(&u.files, &project).and_then(|mut ws| {
             for d in &docs {
                 ws.write_editor_text(&d.name(), &d.text())?;
             }
@@ -1646,7 +1695,7 @@ fn executar(ui: &UiRc, debug: bool) {
                     // the server.
                     let sent = {
                         let u = ui_ev.borrow();
-                        ws.upload_changes(&u.rpc, &project)
+                        ws.upload_changes(&u.files, &project)
                     };
                     if matches!(sent, Ok(n) if n > 0) {
                         refresh_tree(&ui_ev);
@@ -1688,46 +1737,370 @@ fn executar(ui: &UiRc, debug: bool) {
 
 // ── Project and file tree ──────────────────────────────────────────────────
 
-/// Load the project named in the entry. Another project replaces the tabs
-/// (asking about unsaved changes first).
-fn conectar(ui: &UiRc) {
-    let wanted = {
-        let s = ui.borrow().student.text().trim().to_string();
-        if s.is_empty() { "local".to_string() } else { s }
+/// Ask for a local project folder. True when the user picked one.
+fn choose_local_folder(ui: &UiRc) -> bool {
+    if ui.borrow().run.is_some() {
+        set_status(ui, "pare o programa antes de trocar de projeto");
+        return false;
+    }
+    pause_raise();
+    let start = {
+        let u = ui.borrow();
+        match &u.files {
+            Files::Local(p) => p.display().to_string(),
+            _ => u.prefs.pasta.clone(),
+        }
     };
-    let same = ui.borrow().project == wanted;
-    if same || ui.borrow().docs.is_empty() {
-        ui.borrow_mut().project = wanted;
+    let window = ui.borrow().window.clone();
+    let chosen = pick_folder(&window, &start);
+    resume_raise();
+    if let Some(path) = chosen {
+        open_local_project(ui, path);
+        true
+    } else {
+        false
+    }
+}
+
+fn open_local_project(ui: &UiRc, path: PathBuf) {
+    let path = match path.canonicalize() {
+        Ok(p) if p.is_dir() => p,
+        Ok(_) => {
+            set_status(ui, "escolha uma pasta");
+            return;
+        }
+        Err(e) => {
+            set_status(ui, &format!("pasta: {e}"));
+            return;
+        }
+    };
+    let same = {
+        matches!(&ui.borrow().files, Files::Local(cur) if cur == &path)
+    };
+    if same {
         refresh_tree(ui);
         return;
     }
     let ui_c = Rc::clone(ui);
-    let switch = move || {
-        for d in all_docs(&ui_c) {
-            // Already saved or discarded: close without asking again.
-            d.mark_saved();
-            remove_tab(&ui_c, &d);
-        }
-        ui_c.borrow_mut().project = wanted.clone();
-        ui_c.borrow().file_cache.borrow_mut().clear();
-        refresh_tree(&ui_c);
-        refresh_title(&ui_c);
+    after_unsaved(ui, move || apply_local(&ui_c, path));
+}
+
+fn apply_local(ui: &UiRc, path: PathBuf) {
+    close_project_tabs(ui);
+    let name = path
+        .file_name()
+        .map(|s| s.to_string_lossy().into_owned())
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| path.display().to_string());
+    let shown = path.display().to_string();
+    {
+        let mut u = ui.borrow_mut();
+        u.files.shutdown();
+        u.files = Files::Local(path);
+        u.project = name;
+        u.prefs.pasta = shown.clone();
+        u.prefs.save();
+        u.student.set_text(&shown);
+        u.student.set_placeholder_text(Some("pasta do projeto"));
+        u.student.set_tooltip_text(Some(&shown));
+        u.file_cache.borrow_mut().clear();
+    }
+    finish_open(ui);
+}
+
+/// URL and student name. Files on that server live in `aula-data/aluno`.
+fn ask_server(ui: &UiRc) {
+    if ui.borrow().run.is_some() {
+        set_status(ui, "pare o programa antes de trocar de projeto");
+        return;
+    }
+    let (url, aluno) = {
+        let u = ui.borrow();
+        let url = if u.prefs.servidor.is_empty() {
+            DEFAULT_URL.to_string()
+        } else {
+            u.prefs.servidor.clone()
+        };
+        let aluno = if u.files.is_remote() {
+            u.project.clone()
+        } else {
+            "local".to_string()
+        };
+        (url, aluno)
     };
-    let dirty = dirty_docs(ui);
-    if dirty.is_empty() {
-        switch();
-    } else {
-        confirm_unsaved(ui, dirty, switch);
+    let window = ui.borrow().window.clone();
+    pause_raise();
+    let answer = perguntar_servidor(&window, &url, &aluno);
+    resume_raise();
+    let Some((url, aluno)) = answer else {
+        return;
+    };
+    let aluno = aluno.trim().to_string();
+    if !valid_aluno(&aluno) {
+        set_status(ui, "nome do aluno: letras, números, _ e -");
+        return;
+    }
+    let url = normalize_url(&url);
+    match Rpc::connect(&url) {
+        Ok(rpc) => {
+            let ui_c = Rc::clone(ui);
+            after_unsaved(ui, move || apply_remote(&ui_c, rpc, url, aluno));
+        }
+        Err(e) => set_status(ui, &format!("servidor: {e}")),
     }
 }
 
+fn apply_remote(ui: &UiRc, rpc: Rpc, url: String, aluno: String) {
+    close_project_tabs(ui);
+    let tip = format!("{url} — aula-data/{aluno}");
+    {
+        let mut u = ui.borrow_mut();
+        u.files.shutdown();
+        u.files = Files::Remote(rpc);
+        u.project = aluno.clone();
+        u.prefs.servidor = url;
+        u.prefs.save();
+        u.student.set_text(&aluno);
+        u.student.set_placeholder_text(Some("aluno"));
+        u.student.set_tooltip_text(Some(&tip));
+        u.file_cache.borrow_mut().clear();
+    }
+    finish_open(ui);
+}
+
+fn on_project_entry(ui: &UiRc) {
+    let text = ui.borrow().student.text().trim().to_string();
+    let remote = ui.borrow().files.is_remote();
+    if remote {
+        if !valid_aluno(&text) {
+            set_status(ui, "nome do aluno: letras, números, _ e -");
+            return;
+        }
+        switch_remote_aluno(ui, text);
+        return;
+    }
+    let path = PathBuf::from(&text);
+    if path.is_dir() {
+        open_local_project(ui, path);
+    } else {
+        set_status(ui, "digite o caminho de uma pasta, ou use Pasta");
+    }
+}
+
+fn switch_remote_aluno(ui: &UiRc, aluno: String) {
+    if !ui.borrow().files.is_remote() {
+        return;
+    }
+    let same = ui.borrow().project == aluno;
+    let has_docs = !ui.borrow().docs.is_empty();
+    if same && has_docs {
+        refresh_tree(ui);
+        return;
+    }
+    let ui_c = Rc::clone(ui);
+    after_unsaved(ui, move || {
+        close_project_tabs(&ui_c);
+        {
+            let mut u = ui_c.borrow_mut();
+            u.project = aluno.clone();
+            let tip = format!("{} — aula-data/{aluno}", u.prefs.servidor);
+            u.student.set_text(&aluno);
+            u.student.set_tooltip_text(Some(&tip));
+            u.file_cache.borrow_mut().clear();
+        }
+        finish_open(&ui_c);
+    });
+}
+
+fn after_unsaved(ui: &UiRc, then: impl FnOnce() + 'static) {
+    if ui.borrow().run.is_some() {
+        set_status(ui, "pare o programa antes de trocar de projeto");
+        return;
+    }
+    let dirty = dirty_docs(ui);
+    if dirty.is_empty() {
+        then();
+    } else {
+        confirm_unsaved(ui, dirty, then);
+    }
+}
+
+fn close_project_tabs(ui: &UiRc) {
+    for d in all_docs(ui) {
+        d.mark_saved();
+        remove_tab(ui, &d);
+    }
+}
+
+/// Open the first `.lep` file, or a welcome scratch when the folder is empty.
+fn finish_open(ui: &UiRc) {
+    refresh_tree(ui);
+    let first_lep = ui
+        .borrow()
+        .project_files
+        .iter()
+        .find(|p| p.ends_with(".lep"))
+        .cloned();
+    if let Some(path) = first_lep {
+        open_path(ui, &path);
+        let empty: Vec<Rc<Doc>> = all_docs(ui)
+            .into_iter()
+            .filter(|d| d.is_untitled() && d.text().trim().is_empty())
+            .collect();
+        for d in empty {
+            if ui.borrow().docs.len() > 1 {
+                remove_tab(ui, &d);
+            }
+        }
+    } else if let Some(d) = all_docs(ui).into_iter().find(|d| d.is_untitled()) {
+        d.buffer.set_text(WELCOME);
+        d.mark_saved();
+        switch_to(ui, &d);
+    } else {
+        let doc = open_doc(ui, None, WELCOME);
+        doc.mark_saved();
+    }
+    refresh_title(ui);
+}
+
+fn normalize_url(url: &str) -> String {
+    let url = url.trim();
+    if url.is_empty() {
+        DEFAULT_URL.to_string()
+    } else if url.starts_with("http://") || url.starts_with("https://") {
+        url.to_string()
+    } else {
+        format!("http://{url}")
+    }
+}
+
+/// Folder picker. `start` is preselected when it is an existing directory.
+fn pick_folder(parent: &impl IsA<gtk::Window>, start: &str) -> Option<PathBuf> {
+    let dialog = gtk::FileChooserNative::builder()
+        .title("Pasta do projeto")
+        .transient_for(parent)
+        .modal(true)
+        .action(gtk::FileChooserAction::SelectFolder)
+        .accept_label("Abrir")
+        .cancel_label("Cancelar")
+        .build();
+    let start_path = PathBuf::from(start);
+    if start_path.is_dir() {
+        let _ = dialog.set_current_folder(Some(&gtk::gio::File::for_path(&start_path)));
+    }
+    let loop_ = glib::MainLoop::new(None, false);
+    let chosen = Rc::new(RefCell::new(None::<PathBuf>));
+    {
+        let loop_ = loop_.clone();
+        let chosen = Rc::clone(&chosen);
+        dialog.connect_response(move |dialog, resp| {
+            if resp == gtk::ResponseType::Accept {
+                if let Some(file) = dialog.file() {
+                    *chosen.borrow_mut() = file.path();
+                }
+            }
+            dialog.destroy();
+            loop_.quit();
+        });
+    }
+    dialog.show();
+    loop_.run();
+    chosen.borrow().clone()
+}
+
+fn perguntar_servidor(
+    parent: &impl IsA<gtk::Window>,
+    url: &str,
+    aluno: &str,
+) -> Option<(String, String)> {
+    let dialog = gtk::Window::builder()
+        .transient_for(parent)
+        .modal(true)
+        .title("Servidor remoto")
+        .default_width(460)
+        .build();
+    let v = GtkBox::new(Orientation::Vertical, 10);
+    v.set_margin_start(16);
+    v.set_margin_end(16);
+    v.set_margin_top(16);
+    v.set_margin_bottom(16);
+    let info = Label::new(Some(
+        "Os arquivos ficam em aula-data/aluno nesse servidor.",
+    ));
+    info.set_wrap(true);
+    info.set_xalign(0.0);
+    let url_entry = Entry::builder().text(url).hexpand(true).build();
+    let aluno_entry = Entry::builder().text(aluno).hexpand(true).build();
+    let buttons = GtkBox::new(Orientation::Horizontal, 8);
+    buttons.set_halign(gtk::Align::End);
+    let cancel = Button::with_label("Cancelar");
+    let ok = Button::with_label("Conectar");
+    ok.add_css_class("suggested-action");
+    buttons.append(&cancel);
+    buttons.append(&ok);
+    v.append(&info);
+    v.append(&Label::new(Some("endereço:")));
+    v.append(&url_entry);
+    v.append(&Label::new(Some("aluno:")));
+    v.append(&aluno_entry);
+    v.append(&buttons);
+    dialog.set_child(Some(&v));
+
+    let loop_ = glib::MainLoop::new(None, false);
+    let out = Rc::new(RefCell::new(None::<(String, String)>));
+    let accept = Rc::new({
+        let loop_q = loop_.clone();
+        let out_q = Rc::clone(&out);
+        let url_q = url_entry.clone();
+        let aluno_q = aluno_entry.clone();
+        let dialog_q = dialog.clone();
+        move || {
+            *out_q.borrow_mut() = Some((url_q.text().to_string(), aluno_q.text().to_string()));
+            dialog_q.close();
+            loop_q.quit();
+        }
+    });
+    {
+        let accept = Rc::clone(&accept);
+        ok.connect_clicked(move |_| accept());
+    }
+    {
+        let accept = Rc::clone(&accept);
+        aluno_entry.connect_activate(move |_| accept());
+    }
+    {
+        let loop_c = loop_.clone();
+        let dialog_c = dialog.clone();
+        cancel.connect_clicked(move |_| {
+            dialog_c.close();
+            loop_c.quit();
+        });
+    }
+    {
+        let loop_c = loop_.clone();
+        dialog.connect_close_request(move |_| {
+            loop_c.quit();
+            glib::Propagation::Proceed
+        });
+    }
+    dialog.present();
+    url_entry.grab_focus();
+    loop_.run();
+    out.borrow_mut().take()
+}
+
 fn refresh_tree(ui: &UiRc) {
-    let (entries, projeto, err) = {
+    let (entries, projeto, err, onde) = {
         let u = ui.borrow();
         let projeto = u.project.clone();
-        match u.rpc.list_tree(&projeto) {
-            Ok(p) => (p, projeto, None),
-            Err(e) => (Vec::new(), projeto, Some(e)),
+        let onde = match &u.files {
+            Files::None => "sem pasta".to_string(),
+            Files::Local(p) => p.display().to_string(),
+            Files::Remote(_) => format!("servidor {} \\ {}", u.prefs.servidor, projeto),
+        };
+        match u.files.list_tree(&projeto) {
+            Ok(p) => (p, projeto, None, onde),
+            Err(e) => (Vec::new(), projeto, Some(e), onde),
         }
     };
     {
@@ -1751,11 +2124,8 @@ fn refresh_tree(ui: &UiRc) {
         });
     }
     match err {
-        Some(e) => set_status(ui, &format!("conectar: {e}")),
-        None => set_status(
-            ui,
-            &format!("projeto `{projeto}` — {} itens", entries.len()),
-        ),
+        Some(e) => set_status(ui, &e),
+        None => set_status(ui, &format!("{onde} — {} itens", entries.len())),
     }
 }
 
@@ -1907,7 +2277,7 @@ fn tree_popup(ui: &UiRc, x: f64, y: f64) {
                     let path = join_path(&dir, &name);
                     let result = {
                         let u = ui.borrow();
-                        u.rpc.write_file(&u.project, &path, "escreva(\"Olá\")\n")
+                        u.files.write_file(&u.project, &path, "escreva(\"Olá\")\n")
                     };
                     match result {
                         Ok(()) => {
@@ -1936,7 +2306,7 @@ fn tree_popup(ui: &UiRc, x: f64, y: f64) {
                     let path = join_path(&dir, name.trim());
                     let result = {
                         let u = ui.borrow();
-                        u.rpc.mkdir(&u.project, &path)
+                        u.files.mkdir(&u.project, &path)
                     };
                     match result {
                         Ok(()) => {
@@ -1966,7 +2336,7 @@ fn tree_popup(ui: &UiRc, x: f64, y: f64) {
                         let to = join_path(&parent_dir(&rel, false), name.trim());
                         let result = {
                             let u = ui.borrow();
-                            u.rpc.rename(&u.project, &rel, &to)
+                            u.files.rename(&u.project, &rel, &to)
                         };
                         match result {
                             Ok(()) => {
@@ -2003,7 +2373,7 @@ fn tree_popup(ui: &UiRc, x: f64, y: f64) {
                         move || {
                             let result = {
                                 let u = ui.borrow();
-                                u.rpc.delete_file(&u.project, &rel)
+                                u.files.delete_file(&u.project, &rel)
                             };
                             match result {
                                 Ok(()) => {
@@ -2151,6 +2521,182 @@ mod gtk_test {
         jobs.lock().unwrap().send((Box::new(f), done_tx)).unwrap();
         if let Err(panic) = done_rx.recv().unwrap() {
             resume_unwind(panic);
+        }
+    }
+}
+
+/// Ask Windows to put our top-level window in front. A newly started process
+/// is often not allowed to cover the window that already has focus, so the
+/// IDE was opening maximized and invisible behind it.
+fn schedule_raise() {
+    #[cfg(windows)]
+    win32_foreground::schedule();
+}
+
+/// Stop stealing focus while a folder or server dialog is open.
+fn pause_raise() {
+    #[cfg(windows)]
+    win32_foreground::pause();
+}
+
+fn resume_raise() {
+    #[cfg(windows)]
+    win32_foreground::resume();
+}
+
+#[cfg(windows)]
+mod win32_foreground {
+    use std::ffi::c_void;
+    use std::sync::atomic::{AtomicBool, AtomicI64, AtomicUsize, Ordering};
+
+    static HWND: AtomicUsize = AtomicUsize::new(0);
+    static AREA: AtomicI64 = AtomicI64::new(0);
+    static PAUSED: AtomicBool = AtomicBool::new(false);
+
+    pub fn pause() {
+        PAUSED.store(true, Ordering::SeqCst);
+    }
+
+    pub fn resume() {
+        PAUSED.store(false, Ordering::SeqCst);
+    }
+
+    const SW_SHOWMAXIMIZED: i32 = 3;
+    const KEYEVENTF_KEYUP: u32 = 2;
+    const VK_MENU: u8 = 0x12;
+
+    #[repr(C)]
+    struct Rect {
+        left: i32,
+        top: i32,
+        right: i32,
+        bottom: i32,
+    }
+
+    unsafe extern "system" {
+        fn EnumWindows(
+            cb: Option<unsafe extern "system" fn(*mut c_void, isize) -> i32>,
+            lparam: isize,
+        ) -> i32;
+        fn GetWindowThreadProcessId(hwnd: *mut c_void, pid: *mut u32) -> u32;
+        fn GetCurrentProcessId() -> u32;
+        fn GetCurrentThreadId() -> u32;
+        fn IsWindowVisible(hwnd: *mut c_void) -> i32;
+        fn GetWindowTextW(hwnd: *mut c_void, buf: *mut u16, max: i32) -> i32;
+        fn GetWindowRect(hwnd: *mut c_void, rect: *mut Rect) -> i32;
+        fn GetForegroundWindow() -> *mut c_void;
+        fn SetForegroundWindow(hwnd: *mut c_void) -> i32;
+        fn BringWindowToTop(hwnd: *mut c_void) -> i32;
+        fn ShowWindow(hwnd: *mut c_void, cmd: i32) -> i32;
+        fn AttachThreadInput(from: u32, to: u32, attach: i32) -> i32;
+        fn keybd_event(vk: u8, scan: u8, flags: u32, extra: usize);
+    }
+
+    enum Step {
+        Wait,
+        Done,
+        Failed,
+    }
+
+    pub fn schedule() {
+        let ticks = std::cell::Cell::new(0i32);
+        let fails = std::cell::Cell::new(0i32);
+        gtk::glib::timeout_add_local(std::time::Duration::from_millis(50), move || {
+            ticks.set(ticks.get() + 1);
+            match poke() {
+                Step::Done => gtk::glib::ControlFlow::Break,
+                Step::Failed => {
+                    fails.set(fails.get() + 1);
+                    if fails.get() >= 3 {
+                        gtk::glib::ControlFlow::Break
+                    } else {
+                        gtk::glib::ControlFlow::Continue
+                    }
+                }
+                Step::Wait => {
+                    if ticks.get() >= 40 {
+                        gtk::glib::ControlFlow::Break
+                    } else {
+                        gtk::glib::ControlFlow::Continue
+                    }
+                }
+            }
+        });
+    }
+
+    fn poke() -> Step {
+        if PAUSED.load(Ordering::SeqCst) {
+            return Step::Done;
+        }
+        let hwnd = our_main_hwnd();
+        if hwnd.is_null() {
+            return Step::Wait;
+        }
+        unsafe {
+            if GetForegroundWindow() == hwnd {
+                return Step::Done;
+            }
+            let fg = GetForegroundWindow();
+            let mut fg_pid = 0u32;
+            let fg_thread = GetWindowThreadProcessId(fg, &mut fg_pid);
+            let our_thread = GetCurrentThreadId();
+            let attached = fg_thread != 0
+                && fg_thread != our_thread
+                && AttachThreadInput(fg_thread, our_thread, 1) != 0;
+            ShowWindow(hwnd, SW_SHOWMAXIMIZED);
+            BringWindowToTop(hwnd);
+            // A bare Alt press is what lets SetForegroundWindow succeed when
+            // this process was not started by the foreground window. Release
+            // it before taking focus so the menu bar does not open.
+            keybd_event(VK_MENU, 0x38, 0, 0);
+            keybd_event(VK_MENU, 0x38, KEYEVENTF_KEYUP, 0);
+            SetForegroundWindow(hwnd);
+            if attached {
+                AttachThreadInput(fg_thread, our_thread, 0);
+            }
+            if GetForegroundWindow() == hwnd {
+                Step::Done
+            } else {
+                Step::Failed
+            }
+        }
+    }
+
+    fn our_main_hwnd() -> *mut c_void {
+        HWND.store(0, Ordering::Relaxed);
+        AREA.store(0, Ordering::Relaxed);
+        unsafe {
+            EnumWindows(Some(enum_our_window), 0);
+        }
+        HWND.load(Ordering::Relaxed) as *mut c_void
+    }
+
+    unsafe extern "system" fn enum_our_window(hwnd: *mut c_void, _lparam: isize) -> i32 {
+        unsafe {
+            let mut pid = 0u32;
+            GetWindowThreadProcessId(hwnd, &mut pid);
+            if pid != GetCurrentProcessId() || IsWindowVisible(hwnd) == 0 {
+                return 1;
+            }
+            let mut title = [0u16; 4];
+            if GetWindowTextW(hwnd, title.as_mut_ptr(), title.len() as i32) <= 0 {
+                return 1;
+            }
+            let mut rect = Rect {
+                left: 0,
+                top: 0,
+                right: 0,
+                bottom: 0,
+            };
+            if GetWindowRect(hwnd, &mut rect) == 0 {
+                return 1;
+            }
+            let area = (rect.right - rect.left) as i64 * (rect.bottom - rect.top) as i64;
+            if area > AREA.load(Ordering::Relaxed) {
+                AREA.store(area, Ordering::Relaxed);
+                HWND.store(hwnd as usize, Ordering::Relaxed);
+            }
+            1
         }
     }
 }
