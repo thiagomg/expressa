@@ -196,6 +196,28 @@
       "doc": "Ficha de uma função nativa ou definida: assinatura, argumentos e documentação.\n\nO alvo é um texto (\"escreva\", \"matriz::zeros\"), uma função ou uma nativa.\nA mesma ficha alimenta o REPL (ajuda escreva) e a janela Ajuda da Aula.\n\nExemplo: ajuda(\"matriz::zeros\")"
     },
     {
+      "name": "tipo",
+      "aliases": [],
+      "module": null,
+      "kind": "funcao",
+      "signatures": [
+        "tipo(valor)"
+      ],
+      "summary": "Quantidade de caracteres, itens, pares ou linhas.",
+      "doc": "Quantidade de caracteres, itens, pares ou linhas.\n\nNome do tipo do valor: numero, texto, bool, lista, par, mapa,\nconjunto, matriz, funcao, modulo ou nada.\n\nServe para uma função aceitar mais de um tipo (se tipo(x) == \"numero\").\nOs nomes são os mesmos das mensagens de erro (sem acento).\n\nExemplo: tipo(10)"
+    },
+    {
+      "name": "tipos",
+      "aliases": [],
+      "module": null,
+      "kind": "funcao",
+      "signatures": [
+        "tipos()"
+      ],
+      "summary": "Lista os nomes de tipo que tipo() pode devolver.",
+      "doc": "Lista os nomes de tipo que tipo() pode devolver.\n\nExemplo: tipos()"
+    },
+    {
       "name": "tamanho",
       "aliases": [],
       "module": null,
@@ -203,8 +225,8 @@
       "signatures": [
         "tamanho(valor)"
       ],
-      "summary": "Quantidade de caracteres, itens, pares ou linhas.",
-      "doc": "Quantidade de caracteres, itens, pares ou linhas.\n\nTexto usa caracteres Unicode, não bytes. Para colunas de matriz, use ncolunas.\n\nExemplo: tamanho(\"olá\")"
+      "summary": "Texto usa caracteres Unicode, não bytes. Para colunas de matriz, use ncolunas.",
+      "doc": "Texto usa caracteres Unicode, não bytes. Para colunas de matriz, use ncolunas.\n\nExemplo: tamanho(\"olá\")"
     },
     {
       "name": "primeiro",

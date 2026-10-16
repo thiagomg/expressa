@@ -73,6 +73,14 @@ pub const NATIVAS: &[Nativa] = &[
         module: None,
     },
     Nativa {
+        names: &["tipo"],
+        module: None,
+    },
+    Nativa {
+        names: &["tipos"],
+        module: None,
+    },
+    Nativa {
         names: &["tamanho"],
         module: None,
     },
@@ -400,6 +408,8 @@ impl Vm<'_> {
             "avaliar" => self.bi_avaliar(args, span, env),
             "catalogo" | "catálogo" => self.bi_catalogo(args, span, env),
             "ajuda" => self.bi_ajuda(args, span),
+            "tipo" => self.bi_tipo(args, span),
+            "tipos" => self.bi_tipos(args, span),
             "tamanho" => self.bi_tamanho(args, span),
             "primeiro" => self.bi_primeiro(args, span),
             "ultimo" => self.bi_ultimo(args, span),
@@ -580,6 +590,8 @@ mod tests {
         assert!(names.contains(&"sem_acento"));
         assert!(names.contains(&"remova"));
         assert!(names.contains(&"procurar"));
+        assert!(names.contains(&"tipo"));
+        assert!(names.contains(&"tipos"));
         assert!(names.contains(&"catalogo"));
         assert!(names.contains(&"catálogo"));
         assert!(names.contains(&"mapa"));
@@ -621,6 +633,36 @@ mod tests {
             }
         }
         let _ = builtin_docs().len();
+    }
+
+    #[test]
+    fn tipo_names_match_errors() {
+        assert_eq!(run(r#"escreva(tipo(10))"#), "numero\n");
+        assert_eq!(run(r#"escreva(tipo("x"))"#), "texto\n");
+        assert_eq!(run(r#"escreva(tipo(verdadeiro))"#), "bool\n");
+        assert_eq!(run(r#"escreva(tipo([1]))"#), "lista\n");
+        assert_eq!(run(r#"escreva(tipo(:n -> 1))"#), "par\n");
+        assert_eq!(run(r#"escreva(tipo(mapa()))"#), "mapa\n");
+        assert_eq!(run(r#"escreva(tipo(conjunto()))"#), "conjunto\n");
+        assert_eq!(run(r#"escreva(tipo(escreva))"#), "funcao\n");
+        assert_eq!(run(r#"m = importe "mat"
+escreva(tipo(m))"#), "modulo\n");
+        assert_eq!(run(r#"escreva(tipo(10) == "numero")"#), "verdadeiro\n");
+        assert_eq!(
+            run(
+                r#"f = função(x) { x * 2 }
+escreva(tipo(f))"#
+            ),
+            "funcao\n"
+        );
+        assert!(run_err("tipo()").contains("argumento"));
+        assert_eq!(run(r#"escreva(10.tipo())"#), "numero\n");
+        assert_eq!(
+            run(r#"escreva(tipos())"#),
+            "[\"numero\", \"texto\", \"bool\", \"lista\", \"par\", \"mapa\", \"conjunto\", \"matriz\", \"funcao\", \"modulo\", \"nada\"]\n"
+        );
+        assert_eq!(run(r#"escreva(tipos() contem "numero")"#), "verdadeiro\n");
+        assert!(run_err("tipos(1)").contains("argumento"));
     }
 
     #[test]

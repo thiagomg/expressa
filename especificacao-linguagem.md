@@ -28,6 +28,8 @@ Todo bloco (`inicio`/`fim` ou `{`/`}`) é uma expressão e retorna o valor da ú
 
 Tipos compostos: **lista**, **par**, **mapa**, **conjunto** e **matriz**.
 
+`tipo(valor)` devolve o nome do tipo como texto (`"numero"`, `"texto"`, `"bool"`, `"lista"`, `"par"`, `"mapa"`, `"conjunto"`, `"matriz"`, `"funcao"`, `"modulo"`, `"nada"`). Os nomes são os mesmos das mensagens de erro (sem acento). `escreva` e funções do aluno são `"funcao"`. `tipos()` lista esses nomes.
+
 ---
 
 ## 2. Variáveis e Escopo

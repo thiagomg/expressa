@@ -142,6 +142,33 @@ Super avançado — função que recebe função: `../exemplos/linguagem/filtra.
 
 ---
 
+## Tipo: `tipo(x)`
+
+Arquivo: `exemplos/19_tipo.lep`
+
+`tipo(valor)` devolve o nome do tipo como texto (`"numero"`, `"texto"`, `"lista"`, `"funcao"`, …). Assim uma função trata mais de um tipo:
+
+```text
+mostra = função(x) {
+    se tipo(x) == "numero" {
+        escreva(x * 2)
+    } ou se tipo(x) == "texto" {
+        escreva(x.maiuscula())
+    } senão {
+        escreva(x)
+    }
+}
+
+mostra(10)
+mostra("oi")
+```
+
+Os nomes são os mesmos das mensagens de erro (sem acento: `funcao`, não `função`). `tipos()` lista todos. No REPL: `tipo(10)`, `10.tipo()`, `tipos()`, `ajuda tipo`.
+
+**Desafio:** se `x` for lista, escreva o `tamanho(x)`.
+
+---
+
 ## 13. Ponto: `s.tamanho()`
 
 Arquivo: `exemplos/13_ufcs.lep`

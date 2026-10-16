@@ -228,6 +228,25 @@ Lista, não função. O que veio depois do `.lep`. `argumentos[1]` é o primeiro
 escreva(argumentos[1])
 ```
 
+### `tipo(valor)`
+
+Nome do tipo, como texto: `numero`, `texto`, `bool`, `lista`, `par`, `mapa`, `conjunto`, `matriz`, `funcao`, `modulo`, `nada`. Iguais às mensagens de erro (sem acento). Nativa e função do aluno: `"funcao"`.
+
+```text
+se tipo(x) == "numero" { x * 2 } senão { x }
+x.tipo()
+tipos()    // lista dos nomes
+```
+
+### `tipos()`
+
+Lista de textos: os nomes que `tipo()` pode devolver, nesta ordem.
+
+```text
+tipos()
+tipos() contem "mapa"
+```
+
 ### `numero(texto)` / `número(texto)`
 
 Texto → número. Aceita `3.14` ou `3,14` conforme `formato`. Espaços nas pontas e `_`. Se já for número, devolve o mesmo.

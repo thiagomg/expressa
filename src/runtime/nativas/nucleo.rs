@@ -184,6 +184,19 @@ impl Vm<'_> {
             .map_err(|msg| self.err(msg, span))?;
         Ok(Value::Texto(text))
     }
+    pub(crate) fn bi_tipo(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
+        self.expect_arity(args, 1, span)?;
+        Ok(Value::Texto(args[0].type_name().into()))
+    }
+    pub(crate) fn bi_tipos(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
+        self.expect_arity(args, 0, span)?;
+        Ok(Value::lista(
+            Value::NOMES_DE_TIPO
+                .iter()
+                .map(|n| Value::Texto((*n).into()))
+                .collect(),
+        ))
+    }
     pub(crate) fn bi_tamanho(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
         self.expect_arity(args, 1, span)?;
         let n = match &args[0] {

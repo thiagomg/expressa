@@ -208,6 +208,8 @@ idade = numero(leia("Idade: ")) se_falhar 0    // também número()
 linhas = leia_linhas()         // resto da entrada → lista; vazio = []
 
 busca = argumentos[1]          // depois do .lep; REPL → []
+tipo(10)                       // "numero"  (texto, bool, lista, mapa, …)
+tipos()                        // lista desses nomes
 
 importe "tela"
 cls()                          // limpa a tela  (também limpe_tela())

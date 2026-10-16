@@ -1,0 +1,16 @@
+// tipo(x) devolve o nome do tipo. Uma função pode tratar número e texto.
+
+mostra = função(x) {
+    se tipo(x) == "numero" {
+        escreva(x * 2)
+    } ou se tipo(x) == "texto" {
+        escreva(x.maiuscula())
+    } senão {
+        escreva(x)
+    }
+}
+
+mostra(10)
+mostra("oi")
+mostra([1, 2])
+escreva(tipos())

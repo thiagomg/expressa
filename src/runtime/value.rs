@@ -127,6 +127,21 @@ impl Value {
         }
     }
 
+    /// Nomes que `tipo()` devolve e `tipos()` lista (iguais às mensagens de erro).
+    pub const NOMES_DE_TIPO: &'static [&'static str] = &[
+        "numero",
+        "texto",
+        "bool",
+        "lista",
+        "par",
+        "mapa",
+        "conjunto",
+        "matriz",
+        "funcao",
+        "modulo",
+        "nada",
+    ];
+
     pub fn type_name(&self) -> &'static str {
         match self {
             Value::Nada => "nada",
@@ -490,6 +505,22 @@ mod tests {
         assert_eq!(Value::mapa(vec![]).type_name(), "mapa");
         assert_eq!(Value::conjunto(vec![]).type_name(), "conjunto");
         assert_eq!(Value::Builtin("escreva").type_name(), "funcao");
+        for v in [
+            Value::Nada,
+            Value::Numero(1.0.into()),
+            Value::Texto("x".into()),
+            Value::Bool(true),
+            Value::lista(vec![]),
+            Value::mapa(vec![]),
+            Value::conjunto(vec![]),
+            Value::Builtin("escreva"),
+        ] {
+            assert!(
+                Value::NOMES_DE_TIPO.contains(&v.type_name()),
+                "{}",
+                v.type_name()
+            );
+        }
     }
 
     #[test]

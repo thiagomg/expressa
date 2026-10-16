@@ -152,6 +152,20 @@ conjunto = funcao(xs) { 0 }
 
 /// Quantidade de caracteres, itens, pares ou linhas.
 ///
+/// Nome do tipo do valor: numero, texto, bool, lista, par, mapa,
+/// conjunto, matriz, funcao, modulo ou nada.
+///
+/// Serve para uma função aceitar mais de um tipo (se tipo(x) == "numero").
+/// Os nomes são os mesmos das mensagens de erro (sem acento).
+///
+/// Exemplo: tipo(10)
+tipo = funcao(valor) { 0 }
+
+/// Lista os nomes de tipo que tipo() pode devolver.
+///
+/// Exemplo: tipos()
+tipos = funcao() { 0 }
+
 /// Texto usa caracteres Unicode, não bytes. Para colunas de matriz, use ncolunas.
 ///
 /// Exemplo: tamanho("olá")

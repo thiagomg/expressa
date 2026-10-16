@@ -23,7 +23,7 @@
 (defconst expressa-builtins
   '("escreva" "escreva_erro" "sair" "cls" "limpe_tela" "casa" "quadro" "bloco" "escreva_em" "colunas" "linhas" "nova_linha" "durma" "pinte" "fundo" "negrito" "leia" "leia_linhas"
     "eh_terminal" "é_terminal" "argumentos"
-    "numero" "número" "formato" "formate" "avaliar" "catalogo" "catálogo" "ajuda" "raiz" "aleatorio" "aleatório" "semente"
+    "numero" "número" "formato" "formate" "avaliar" "catalogo" "catálogo" "ajuda" "tipo" "tipos" "raiz" "aleatorio" "aleatório" "semente"
     "pi" "seno" "sen" "cosseno" "cos" "tangente" "tan" "arcoseno" "arcocosseno" "arcotangente" "arcotangente2"
     "radianos" "graus" "exp" "log" "log10" "potencia" "piso" "teto" "arredonde"
     "mapa" "conjunto" "matriz"
