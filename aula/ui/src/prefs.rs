@@ -192,7 +192,47 @@ button {
 }
 button:hover { background-color: @aula_hover; }
 button:checked, togglebutton:checked { background-color: @aula_sel; }
-menubar, popover, popover > contents, tooltip {
+menubar {
+  background-color: @aula_bg;
+  color: @aula_fg;
+  box-shadow: none;
+  border: none;
+}
+menubar button {
+  background-image: none;
+  background-color: transparent;
+  border: none;
+  box-shadow: none;
+  color: @aula_fg;
+}
+menubar button:hover, menubar button:checked { background-color: @aula_hover; }
+popover.background {
+  background-color: transparent;
+  background-image: none;
+  border: none;
+  box-shadow: none;
+  padding: 0;
+}
+popover > contents {
+  background-color: @aula_view;
+  color: @aula_fg;
+  border: 1px solid @aula_border;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px alpha(black, 0.16);
+  padding: 6px;
+}
+popover > arrow {
+  background-color: transparent;
+  border: none;
+}
+modelbutton {
+  background: none;
+  border: none;
+  box-shadow: none;
+  color: @aula_fg;
+}
+modelbutton:hover, modelbutton:selected { background-color: @aula_hover; }
+tooltip {
   background-color: @aula_view;
   color: @aula_fg;
 }
@@ -262,7 +302,47 @@ button {
 }
 button:hover { background-color: @aula_hover; }
 button:checked, togglebutton:checked { background-color: @aula_sel; }
-menubar, popover, popover > contents, tooltip {
+menubar {
+  background-color: @aula_bg;
+  color: @aula_fg;
+  box-shadow: none;
+  border: none;
+}
+menubar button {
+  background-image: none;
+  background-color: transparent;
+  border: none;
+  box-shadow: none;
+  color: @aula_fg;
+}
+menubar button:hover, menubar button:checked { background-color: @aula_hover; }
+popover.background {
+  background-color: transparent;
+  background-image: none;
+  border: none;
+  box-shadow: none;
+  padding: 0;
+}
+popover > contents {
+  background-color: #2a2a32;
+  color: @aula_fg;
+  border: 1px solid @aula_border;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px alpha(black, 0.35);
+  padding: 6px;
+}
+popover > arrow {
+  background-color: transparent;
+  border: none;
+}
+modelbutton {
+  background: none;
+  border: none;
+  box-shadow: none;
+  color: @aula_fg;
+}
+modelbutton:hover, modelbutton:selected { background-color: @aula_hover; }
+tooltip {
   background-color: #2a2a32;
   color: @aula_fg;
 }

@@ -25,8 +25,8 @@ use gtk::gio::{self, prelude::*};
 use gtk::prelude::*;
 use gtk::{
     Application, ApplicationWindow, Box as GtkBox, Button, CellRendererText, Entry, Label,
-    Orientation, Paned, PolicyType, PopoverMenuBar, Revealer, ScrolledWindow, TreeStore,
-    TreeView, TreeViewColumn,
+    Orientation, Paned, PolicyType, Revealer, ScrolledWindow, TreeStore, TreeView,
+    TreeViewColumn,
 };
 use sourceview5::prelude::*;
 use sourceview5::{LanguageManager, SearchSettings, StyleSchemeManager};
@@ -336,8 +336,7 @@ fn build_ui(app: &Application) {
     status_row.append(&ui.borrow().diag_label);
     status_row.append(&ui.borrow().project_path);
 
-    let menubar = install_menubar(&win, &ui, &file_scroll, &debug_panel);
-    root.append(&menubar);
+    install_menubar(&win, &ui, &file_scroll, &debug_panel);
     root.append(&args_row);
     root.append(&ui.borrow().search_revealer);
     root.append(&body);
@@ -675,7 +674,7 @@ fn install_menubar(
     ui: &UiRc,
     file_scroll: &ScrolledWindow,
     debug_panel: &GtkBox,
-) -> PopoverMenuBar {
+) {
     add_win_action(win, ui, "novo", new_untitled_tab);
     add_win_action(win, ui, "salvar", |ui| {
         if let Some(d) = current_doc(ui) {
@@ -737,69 +736,70 @@ fn install_menubar(
     }
 
     let arquivo = gio::Menu::new();
-    arquivo.append_item(&menu_item("Novo", "win.novo", Some("<Primary>n")));
-    arquivo.append_item(&menu_item("Salvar", "win.salvar", Some("<Primary>s")));
-    arquivo.append_item(&menu_item("Fechar aba", "win.fechar-aba", Some("<Primary>w")));
+    arquivo.append_item(&menu_item("_Novo", "win.novo", Some("<Primary>n")));
+    arquivo.append_item(&menu_item("_Salvar", "win.salvar", Some("<Primary>s")));
+    arquivo.append_item(&menu_item("_Fechar aba", "win.fechar-aba", Some("<Primary>w")));
     let projeto = gio::Menu::new();
-    projeto.append_item(&menu_item("Pasta…", "win.pasta", None));
-    projeto.append_item(&menu_item("Servidor…", "win.servidor", None));
+    projeto.append_item(&menu_item("_Pasta…", "win.pasta", None));
+    projeto.append_item(&menu_item("Se_rvidor…", "win.servidor", None));
     arquivo.append_section(None, &projeto);
 
     let exec = gio::Menu::new();
-    exec.append_item(&menu_item("Executar", "win.executar", Some("F5")));
-    exec.append_item(&menu_item("Depurar", "win.depurar", Some("F6")));
-    exec.append_item(&menu_item("Parar", "win.parar", None));
+    exec.append_item(&menu_item("_Executar", "win.executar", Some("F5")));
+    exec.append_item(&menu_item("_Depurar", "win.depurar", Some("F6")));
+    exec.append_item(&menu_item("_Parar", "win.parar", None));
 
     let debug = gio::Menu::new();
-    debug.append_item(&menu_item("Continuar", "win.continuar", None));
-    debug.append_item(&menu_item("Próximo", "win.proximo", Some("F10")));
-    debug.append_item(&menu_item("Entrar", "win.entrar", Some("F11")));
-    debug.append_item(&menu_item("Sair", "win.sair", Some("<Shift>F11")));
-    debug.append_item(&menu_item("Ponto de parada", "win.ponto", Some("F9")));
+    debug.append_item(&menu_item("_Continuar", "win.continuar", None));
+    debug.append_item(&menu_item("_Próximo", "win.proximo", Some("F10")));
+    debug.append_item(&menu_item("E_ntrar", "win.entrar", Some("F11")));
+    debug.append_item(&menu_item("_Sair", "win.sair", Some("<Shift>F11")));
+    debug.append_item(&menu_item("Pon_to de parada", "win.ponto", Some("F9")));
 
     let ver = gio::Menu::new();
     ver.append_item(&menu_item(
-        "Arquivos",
+        "_Arquivos",
         "win.mostrar-arquivos",
         Some("F7"),
     ));
-    ver.append_item(&menu_item("Painel", "win.mostrar-painel", Some("F8")));
-    ver.append_item(&menu_item("Buscar", "win.buscar", Some("<Primary>f")));
+    ver.append_item(&menu_item("_Painel", "win.mostrar-painel", Some("F8")));
+    ver.append_item(&menu_item("_Buscar", "win.buscar", Some("<Primary>f")));
     let aparencia = gio::Menu::new();
     aparencia.append_item(&menu_item(
-        "Letra maior",
+        "Letra _maior",
         "win.letra-maior",
         Some("<Primary>equal"),
     ));
     aparencia.append_item(&menu_item(
-        "Letra menor",
+        "Letra m_enor",
         "win.letra-menor",
         Some("<Primary>minus"),
     ));
     aparencia.append_item(&menu_item(
-        "Tamanho normal",
+        "_Tamanho normal",
         "win.letra-normal",
         Some("<Primary>0"),
     ));
     let tema = gio::Menu::new();
-    tema.append_item(&menu_radio("Claro", "win.tema", "claro"));
-    tema.append_item(&menu_radio("Escuro", "win.tema", "escuro"));
+    tema.append_item(&menu_radio("_Claro", "win.tema", "claro"));
+    tema.append_item(&menu_radio("E_scuro", "win.tema", "escuro"));
     aparencia.append_section(None, &tema);
     ver.append_section(None, &aparencia);
 
     let ajuda = gio::Menu::new();
-    ajuda.append_item(&menu_item("Funções nativas", "win.ajuda", Some("F1")));
+    ajuda.append_item(&menu_item("_Funções nativas", "win.ajuda", Some("F1")));
 
     let model = gio::Menu::new();
-    model.append_submenu(Some("Arquivo"), &arquivo);
-    model.append_submenu(Some("Executar"), &exec);
-    model.append_submenu(Some("Depurar"), &debug);
-    model.append_submenu(Some("Ver"), &ver);
-    model.append_submenu(Some("Ajuda"), &ajuda);
+    model.append_submenu(Some("_Arquivo"), &arquivo);
+    model.append_submenu(Some("_Executar"), &exec);
+    model.append_submenu(Some("_Depurar"), &debug);
+    model.append_submenu(Some("_Ver"), &ver);
+    model.append_submenu(Some("A_juda"), &ajuda);
 
-    let bar = PopoverMenuBar::from_model(Some(&model));
-    bar.add_css_class("aula-menubar");
-    bar
+    if let Some(app) = win.application() {
+        app.set_menubar(Some(&model));
+    }
+    win.set_show_menubar(true);
 }
 
 /// Like `add_shortcut`, but `f` returning false lets the key through.
@@ -833,7 +833,7 @@ fn install_css() {
             margin: 0;
             background-color: alpha(currentColor, 0.12);
         }
-        menubar.aula-menubar { padding: 2px 8px 0 8px; }
+        menubar { padding: 2px 8px 0 8px; }
         label.aula-catalogo { font-family: monospace; }
         label.aula-ajuda-grupo { font-weight: bold; opacity: 0.7; padding-top: 6px; }
         paned.aula-paned > separator:hover {
