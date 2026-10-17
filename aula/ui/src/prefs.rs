@@ -170,7 +170,6 @@ const LIGHT_CSS: &str = r#"
 window, dialog, messagedialog, .background {
   background-color: @aula_bg;
   color: @aula_fg;
-  color-scheme: light;
 }
 box, paned, notebook, stack, scrolledwindow, viewport, frame, grid, revealer {
   color: inherit;
@@ -212,6 +211,7 @@ popover.background {
   border: none;
   box-shadow: none;
   padding: 0;
+  min-width: 0;
 }
 popover > contents {
   background-color: @aula_view;
@@ -219,7 +219,8 @@ popover > contents {
   border: 1px solid @aula_border;
   border-radius: 12px;
   box-shadow: 0 2px 8px alpha(black, 0.16);
-  padding: 6px;
+  padding: 4px;
+  min-width: 0;
 }
 popover > arrow {
   background-color: transparent;
@@ -230,8 +231,13 @@ modelbutton {
   border: none;
   box-shadow: none;
   color: @aula_fg;
+  min-width: 0;
+  padding: 4px 8px;
 }
 modelbutton:hover, modelbutton:selected { background-color: @aula_hover; }
+modelbutton > box { min-width: 0; }
+modelbutton image { min-width: 0; padding: 0; }
+popover.menu scrolledwindow { min-width: 0; min-height: 0; }
 tooltip {
   background-color: @aula_view;
   color: @aula_fg;
@@ -280,7 +286,6 @@ const DARK_CSS: &str = r#"
 window, dialog, messagedialog, .background {
   background-color: @aula_bg;
   color: @aula_fg;
-  color-scheme: dark;
 }
 box, paned, notebook, stack, scrolledwindow, viewport, frame, grid, revealer {
   color: inherit;
@@ -322,6 +327,7 @@ popover.background {
   border: none;
   box-shadow: none;
   padding: 0;
+  min-width: 0;
 }
 popover > contents {
   background-color: #2a2a32;
@@ -329,7 +335,8 @@ popover > contents {
   border: 1px solid @aula_border;
   border-radius: 12px;
   box-shadow: 0 2px 8px alpha(black, 0.35);
-  padding: 6px;
+  padding: 4px;
+  min-width: 0;
 }
 popover > arrow {
   background-color: transparent;
@@ -340,8 +347,13 @@ modelbutton {
   border: none;
   box-shadow: none;
   color: @aula_fg;
+  min-width: 0;
+  padding: 4px 8px;
 }
 modelbutton:hover, modelbutton:selected { background-color: @aula_hover; }
+modelbutton > box { min-width: 0; }
+modelbutton image { min-width: 0; padding: 0; }
+popover.menu scrolledwindow { min-width: 0; min-height: 0; }
 tooltip {
   background-color: #2a2a32;
   color: @aula_fg;
@@ -388,8 +400,6 @@ mod tests {
 
     #[test]
     fn palettes_cover_window_and_editor() {
-        assert!(LIGHT_CSS.contains("color-scheme: light"));
-        assert!(DARK_CSS.contains("color-scheme: dark"));
         assert!(LIGHT_CSS.contains("#fcfcfc"));
         assert!(DARK_CSS.contains("#1e1e24"));
         assert!(LIGHT_CSS.contains("window, dialog"));

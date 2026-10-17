@@ -424,6 +424,7 @@ fn build_ui(app: &Application) {
             let win = win.clone();
             move || trigger_win_action(&win, "mostrar-painel")
         });
+        k(&shortcuts, "<Primary>q", encerrar);
         k(&shortcuts, "<Primary>s", |ui| {
             if let Some(d) = current_doc(ui) {
                 save_doc(ui, &d);
@@ -552,10 +553,18 @@ fn build_ui(app: &Application) {
     }
 }
 
+fn encerrar(ui: &UiRc) {
+    let w = ui.borrow().window.clone();
+    w.close();
+}
+
 fn fechar_janelas_filhas(ui: &UiRc) {
-    let u = ui.borrow();
-    u.graficos.fechar_janela_destacada();
-    if let Some(w) = u.ajuda_win.borrow_mut().take() {
+    let (graficos, ajuda) = {
+        let u = ui.borrow();
+        (Rc::clone(&u.graficos), u.ajuda_win.borrow_mut().take())
+    };
+    graficos.fechar_janela_destacada();
+    if let Some(w) = ajuda {
         w.close();
     }
 }
@@ -703,6 +712,7 @@ fn install_menubar(
     add_win_action(win, ui, "letra-normal", |ui| zoom(ui, 0));
     add_win_action(win, ui, "ajuda", open_ajuda);
     add_win_action(win, ui, "buscar", show_search);
+    add_win_action(win, ui, "encerrar", encerrar);
     for name in ["continuar", "proximo", "entrar", "sair", "parar"] {
         set_action_enabled(win, name, false);
     }
@@ -743,6 +753,9 @@ fn install_menubar(
     projeto.append_item(&menu_item("_Pasta…", "win.pasta", None));
     projeto.append_item(&menu_item("Se_rvidor…", "win.servidor", None));
     arquivo.append_section(None, &projeto);
+    let sair = gio::Menu::new();
+    sair.append_item(&menu_item("Sa_ir", "win.encerrar", Some("<Primary>q")));
+    arquivo.append_section(None, &sair);
 
     let exec = gio::Menu::new();
     exec.append_item(&menu_item("_Executar", "win.executar", Some("F5")));
@@ -843,9 +856,12 @@ fn install_css() {
             padding: 4px 8px;
         }
         /* GtkSourceView default is 150px; that clips name, params and nativa. */
-        popover.completion,
-        GtkSourceAssistant.completion {
+        popover.completion > contents,
+        assistant.completion > contents {
             min-width: 32em;
+        }
+        popover.menu > contents {
+            min-width: 0;
         }
         ",
     );
