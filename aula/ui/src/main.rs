@@ -23,9 +23,9 @@ use gtk::glib;
 use gtk::glib::prelude::*;
 use gtk::prelude::*;
 use gtk::{
-    Application, ApplicationWindow, Box as GtkBox, Button, CellRendererText, Entry, Label,
-    Orientation, Paned, Revealer, ScrolledWindow, ToggleButton, TreeStore, TreeView,
-    TreeViewColumn,
+    Application, ApplicationWindow, Box as GtkBox, Button, CellRendererText, Entry, FlowBox,
+    Label, Orientation, Paned, PolicyType, Revealer, ScrolledWindow, SelectionMode, ToggleButton,
+    TreeStore, TreeView, TreeViewColumn,
 };
 use sourceview5::prelude::*;
 use sourceview5::{LanguageManager, SearchSettings, StyleSchemeManager};
@@ -122,7 +122,7 @@ fn build_ui(app: &Application) {
     let student = Entry::builder()
         .text(&prefs.pasta)
         .placeholder_text("pasta do projeto")
-        .width_chars(28)
+        .width_chars(8)
         .hexpand(true)
         .build();
     if !prefs.pasta.is_empty() {
@@ -252,7 +252,15 @@ fn build_ui(app: &Application) {
     let help = make_help(&ui);
     ui.borrow_mut().help = Some(help);
 
-    let toolbar = GtkBox::new(Orientation::Horizontal, 8);
+    let toolbar = FlowBox::new();
+    toolbar.set_selection_mode(SelectionMode::None);
+    toolbar.set_homogeneous(false);
+    toolbar.set_min_children_per_line(1);
+    toolbar.set_max_children_per_line(24);
+    toolbar.set_column_spacing(8);
+    toolbar.set_row_spacing(4);
+    toolbar.set_hexpand(true);
+    toolbar.add_css_class("aula-toolbar");
     toolbar.set_margin_start(8);
     toolbar.set_margin_end(8);
     toolbar.set_margin_top(8);
@@ -290,8 +298,10 @@ fn build_ui(app: &Application) {
         ] {
             toolbar.append(b);
         }
-        toolbar.append(&Label::new(Some("projeto:")));
-        toolbar.append(&u.student);
+        let projeto = GtkBox::new(Orientation::Horizontal, 8);
+        projeto.append(&Label::new(Some("projeto:")));
+        projeto.append(&u.student);
+        toolbar.append(&projeto);
     }
     toolbar.append(&btn_pasta);
     toolbar.append(&btn_servidor);
@@ -318,19 +328,21 @@ fn build_ui(app: &Application) {
 
     const FILES_WIDTH: i32 = 240;
     let file_scroll = ScrolledWindow::builder()
-        .min_content_width(FILES_WIDTH)
+        .hscrollbar_policy(PolicyType::Automatic)
+        .vscrollbar_policy(PolicyType::Automatic)
         .child(&ui.borrow().tree)
         .build();
     const OUTPUT_HEIGHT: i32 = 160;
     let output_scroll = ScrolledWindow::builder()
-        .min_content_height(80)
+        .hscrollbar_policy(PolicyType::Automatic)
+        .vscrollbar_policy(PolicyType::Automatic)
         .hexpand(true)
+        .vexpand(true)
         .child(&ui.borrow().console.view)
         .build();
 
     let debug_panel = make_debug_panel(&ui);
     const DEBUG_PANEL_WIDTH: i32 = 320;
-    debug_panel.set_width_request(DEBUG_PANEL_WIDTH);
     debug_panel.set_hexpand(false);
 
     install_css();
@@ -349,8 +361,8 @@ fn build_ui(app: &Application) {
     editor_col.set_end_child(Some(&bottom));
     editor_col.set_resize_start_child(true);
     editor_col.set_resize_end_child(false);
-    editor_col.set_shrink_start_child(false);
-    editor_col.set_shrink_end_child(false);
+    editor_col.set_shrink_start_child(true);
+    editor_col.set_shrink_end_child(true);
 
     let main_split = Paned::new(Orientation::Horizontal);
     main_split.add_css_class("aula-paned");
@@ -358,7 +370,7 @@ fn build_ui(app: &Application) {
     main_split.set_end_child(Some(&debug_panel));
     main_split.set_resize_start_child(true);
     main_split.set_resize_end_child(false);
-    main_split.set_shrink_end_child(false);
+    main_split.set_shrink_end_child(true);
     main_split.set_wide_handle(false);
 
     let body = Paned::new(Orientation::Horizontal);
@@ -367,7 +379,7 @@ fn build_ui(app: &Application) {
     body.set_end_child(Some(&main_split));
     // The file list keeps its width; the editor takes what the window gains.
     body.set_resize_start_child(false);
-    body.set_shrink_start_child(false);
+    body.set_shrink_start_child(true);
     body.set_resize_end_child(true);
     body.set_position(FILES_WIDTH);
 
@@ -588,11 +600,13 @@ fn build_ui(app: &Application) {
         let ui_close = Rc::clone(&ui);
         win.connect_close_request(move |w| {
             if ui_close.borrow().closing {
+                fechar_janelas_filhas(&ui_close);
                 ui_close.borrow_mut().files.shutdown();
                 return glib::Propagation::Proceed;
             }
             let dirty: Vec<Rc<Doc>> = dirty_docs(&ui_close);
             if dirty.is_empty() {
+                fechar_janelas_filhas(&ui_close);
                 ui_close.borrow_mut().files.shutdown();
                 return glib::Propagation::Proceed;
             }
@@ -657,6 +671,14 @@ fn build_ui(app: &Application) {
     }
 }
 
+fn fechar_janelas_filhas(ui: &UiRc) {
+    let u = ui.borrow();
+    u.graficos.fechar_janela_destacada();
+    if let Some(w) = u.ajuda_win.borrow_mut().take() {
+        w.close();
+    }
+}
+
 fn open_ajuda(ui: &UiRc) {
     let u = ui.borrow();
     if let Some(w) = u.ajuda_win.borrow().as_ref() {
@@ -716,6 +738,8 @@ fn install_css() {
             margin: 0;
             background-color: alpha(currentColor, 0.12);
         }
+        flowbox.aula-toolbar { padding: 0; }
+        flowbox.aula-toolbar > flowboxchild { padding: 0; }
         label.aula-catalogo { font-family: monospace; }
         label.aula-ajuda-grupo { font-weight: bold; opacity: 0.7; padding-top: 6px; }
         paned.aula-paned > separator:hover {
@@ -1456,11 +1480,11 @@ fn make_debug_panel(ui: &UiRc) -> GtkBox {
     panel.append(&Label::new(Some(
         "Observados (ficam visíveis a cada passo)",
     )));
-    panel.append(&scroll_tree(&watch_tree, 70));
+    panel.append(&scroll_tree(&watch_tree, 40));
     panel.append(&Label::new(Some("Variáveis")));
-    panel.append(&scroll_tree(&vars_tree, 120));
+    panel.append(&scroll_tree(&vars_tree, 40));
     panel.append(&Label::new(Some("Pilha")));
-    panel.append(&scroll_tree(&stack_tree, 70));
+    panel.append(&scroll_tree(&stack_tree, 40));
     panel
 }
 

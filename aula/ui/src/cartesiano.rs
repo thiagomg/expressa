@@ -30,7 +30,6 @@ impl Painel {
         let dock = GtkBox::new(Orientation::Vertical, 0);
         dock.set_visible(false);
         dock.set_hexpand(true);
-        dock.set_height_request(240);
 
         let header = GtkBox::new(Orientation::Horizontal, 8);
         header.set_margin_start(8);
@@ -85,8 +84,10 @@ impl Painel {
             let area = DrawingArea::new();
             area.set_hexpand(true);
             area.set_vexpand(true);
-            area.set_content_width(320);
-            area.set_content_height(200);
+            // Small content size so the drawing area does not inflate the
+            // editor window's minimum; hexpand/vexpand fill the allocation.
+            area.set_content_width(64);
+            area.set_content_height(48);
             let folhas = Rc::clone(&self.folhas);
             area.set_draw_func(move |_, cr, w, h| {
                 let folhas = folhas.borrow();
@@ -133,13 +134,14 @@ impl Painel {
     }
 
     pub fn limpar(&self) {
-        self.acoplar();
         while self.notebook.n_pages() > 0 {
             self.notebook.remove_page(Some(0));
         }
         self.areas.borrow_mut().clear();
         self.folhas.borrow_mut().clear();
-        self.dock.set_visible(false);
+        if self.detached.borrow().is_none() {
+            self.dock.set_visible(false);
+        }
     }
 
     fn destacar_rc(self: &Rc<Self>) {
@@ -185,6 +187,17 @@ impl Painel {
         if let Some(win) = win {
             win.close();
         }
+    }
+
+    /// Close the floating graphs window without docking it back. Used when
+    /// the editor itself is closing, so the sibling window does not keep
+    /// the GtkApplication alive.
+    pub fn fechar_janela_destacada(&self) {
+        let Some(win) = self.detached.borrow_mut().take() else {
+            return;
+        };
+        win.set_child(None::<&gtk::Widget>);
+        win.close();
     }
 
     pub fn set_application(&self, app: &gtk::Application) {

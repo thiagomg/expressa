@@ -16,7 +16,7 @@ c.cart::adicione(g2)
 
 g2 = cart::grafico()
 g2.cart::eixos(-5, 5, -5, 5)
-g2.cart::plotar(função(x) { (x*x) - 4 }, :amarelo)
+g2.cart::plotar(função(x) { (x*x) - 4 }, :preto)
 c.cart::adicione(g2)
 
 c.cart::mostre()

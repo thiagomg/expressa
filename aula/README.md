@@ -39,7 +39,7 @@ cargo run -p expressa-aula-server -- --root ./aula-data --bind 127.0.0.1:50051
 cargo run -p expressa-aula
 ```
 
-F5 executa a aba atual, **F6 depura**, F7 mostra/oculta arquivos, F8 o painel do depurador, F9 (ou clique no número da linha) ponto de parada, F10 próximo, F11 entrar, Shift+F11 sair, Ctrl+S salva. `mostre()` do módulo `cartesiano` abre o painel **Gráficos** (Destacar vira janela irmã).
+F5 executa a aba atual, **F6 depura**, F7 mostra/oculta arquivos, F8 o painel do depurador, F9 (ou clique no número da linha) ponto de parada, F10 próximo, F11 entrar, Shift+F11 sair, Ctrl+S salva. `mostre()` do módulo `cartesiano` abre o painel **Gráficos** (Destacar vira janela irmã e fica assim até Acoplar ou fechar).
 
 A linha **argumentos** vai para `argumentos[1]…` no programa. `escreva_erro` aparece em vermelho. **Parar** encerra Executar e Depurar. Clique na linha `erro: … em arquivo:linha` abre o arquivo na linha. Executar usa o texto de todas as abas abertas, salvas ou não.
 
@@ -51,7 +51,7 @@ A linha **argumentos** vai para `argumentos[1]…` no programa. `escreva_erro` a
 
 **Sala de aula**: Ctrl+= / Ctrl+- (ou A+ / A−) aumentam e diminuem a letra, Ctrl+0 volta; **Escuro** troca o tema. As duas escolhas ficam salvas em `~/.config/expressa-aula/prefs`.
 
-Fechar o editor encerra o `expressa-aula-server` que ele mesmo tiver iniciado. A janela abre maximizada; o código ocupa a maior parte da tela.
+Fechar o editor fecha as janelas irmãs (gráficos destacados e Ajuda) e encerra o `expressa-aula-server` que ele mesmo tiver iniciado. A janela abre maximizada; o código ocupa a maior parte da tela. Em janela estreita a barra de botões quebra em mais de uma linha e os painéis encolhem.
 
 No depurador: a linha atual fica amarela, no arquivo certo (abre o módulo importado se for preciso); um erro durante a depuração para na linha (em vermelho) com as variáveis visíveis, e Continuar encerra. **Observados** guarda nomes para ver o valor a cada passo; **Variáveis** lista o que está no escopo; **Pilha** as chamadas.
 
