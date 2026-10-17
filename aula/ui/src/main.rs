@@ -21,11 +21,12 @@ use std::rc::{Rc, Weak};
 use gtk::gdk::Key;
 use gtk::glib;
 use gtk::glib::prelude::*;
+use gtk::gio::{self, prelude::*};
 use gtk::prelude::*;
 use gtk::{
-    Application, ApplicationWindow, Box as GtkBox, Button, CellRendererText, Entry, FlowBox,
-    Label, Orientation, Paned, PolicyType, Revealer, ScrolledWindow, SelectionMode, ToggleButton,
-    TreeStore, TreeView, TreeViewColumn,
+    Application, ApplicationWindow, Box as GtkBox, Button, CellRendererText, Entry, Label,
+    Orientation, Paned, PolicyType, PopoverMenuBar, Revealer, ScrolledWindow, TreeStore,
+    TreeView, TreeViewColumn,
 };
 use sourceview5::prelude::*;
 use sourceview5::{LanguageManager, SearchSettings, StyleSchemeManager};
@@ -34,7 +35,7 @@ use assist::{Help, Target, ViewHelp};
 use console::Console;
 use docs::Doc;
 use exec::{ExecEvent, Workspace};
-use prefs::{FontCss, Prefs};
+use prefs::{FontCss, Prefs, ThemeCss};
 use rpc::Rpc;
 use store::{Files, valid_aluno};
 
@@ -51,10 +52,10 @@ struct Run {
 
 struct Ui {
     files: Files,
-    student: Entry,
-    /// Folder name locally, student name on a remote server. The entry may
-    /// show the full path and be edited before Pasta or Servidor.
+    /// Folder name locally, student name on a remote server.
     project: String,
+    /// Full local path or `url — aula-data/aluno`, shown on the status bar.
+    project_path: Label,
     tree: TreeView,
     store: TreeStore,
     project_files: Vec<String>,
@@ -79,17 +80,12 @@ struct Ui {
     stack_store: TreeStore,
     watch_store: TreeStore,
     watch_entry: Entry,
-    btn_continue: Button,
-    btn_next: Button,
-    btn_step: Button,
-    btn_out: Button,
-    btn_stop: Button,
-    btn_dark: ToggleButton,
     /// Kept alive so GtkSourceView does not drop the Expressa language spec.
     languages: LanguageManager,
     schemes: StyleSchemeManager,
     prefs: Prefs,
     font_css: FontCss,
+    theme_css: ThemeCss,
     help: Option<Rc<Help>>,
     /// Unsaved changes were handled: the window may close now.
     closing: bool,
@@ -115,18 +111,23 @@ fn build_ui(app: &Application) {
     }
 
     let prefs = Prefs::load();
-    prefs::apply_widget_theme(prefs.dark);
+    let theme_css = ThemeCss::install();
+    theme_css.apply(prefs.dark);
     let font_css = FontCss::install();
     font_css.set_size(prefs.font_size);
 
-    let student = Entry::builder()
-        .text(&prefs.pasta)
-        .placeholder_text("pasta do projeto")
-        .width_chars(8)
-        .hexpand(true)
-        .build();
+    let project_path = Label::new(if prefs.pasta.is_empty() {
+        None
+    } else {
+        Some(prefs.pasta.as_str())
+    });
+    project_path.set_xalign(1.0);
+    project_path.set_ellipsize(gtk::pango::EllipsizeMode::Middle);
+    project_path.set_max_width_chars(42);
+    project_path.set_selectable(true);
+    project_path.add_css_class("dim-label");
     if !prefs.pasta.is_empty() {
-        student.set_tooltip_text(Some(prefs.pasta.as_str()));
+        project_path.set_tooltip_text(Some(prefs.pasta.as_str()));
     }
     #[allow(deprecated)]
     let store = TreeStore::new(&[glib::Type::STRING, glib::Type::STRING, glib::Type::BOOL]);
@@ -168,17 +169,6 @@ fn build_ui(app: &Application) {
     let watch_entry = Entry::builder()
         .placeholder_text("nome da variável")
         .build();
-    let btn_continue = Button::with_label("Continuar");
-    let btn_next = Button::with_label("Próximo");
-    let btn_step = Button::with_label("Entrar");
-    let btn_out = Button::with_label("Sair");
-    let btn_stop = Button::with_label("Parar");
-    for b in [&btn_continue, &btn_next, &btn_step, &btn_out, &btn_stop] {
-        b.set_sensitive(false);
-    }
-    let btn_dark = ToggleButton::with_label("Escuro");
-    btn_dark.set_active(prefs.dark);
-    btn_dark.set_tooltip_text(Some("Tema escuro"));
 
     let notebook = gtk::Notebook::new();
     notebook.set_scrollable(true);
@@ -207,11 +197,12 @@ fn build_ui(app: &Application) {
         .default_width(1400)
         .default_height(900)
         .build();
+    win.add_css_class("aula-window");
 
     let ui: UiRc = Rc::new(RefCell::new(Ui {
         files: Files::None,
         project: String::new(),
-        student,
+        project_path,
         tree,
         store,
         project_files: Vec::new(),
@@ -235,16 +226,11 @@ fn build_ui(app: &Application) {
         stack_store,
         watch_store,
         watch_entry,
-        btn_continue,
-        btn_next,
-        btn_step,
-        btn_out,
-        btn_stop,
-        btn_dark,
         languages,
         schemes,
         prefs,
         font_css,
+        theme_css,
         help: None,
         closing: false,
         ajuda_win: RefCell::new(None),
@@ -252,70 +238,10 @@ fn build_ui(app: &Application) {
     let help = make_help(&ui);
     ui.borrow_mut().help = Some(help);
 
-    let toolbar = FlowBox::new();
-    toolbar.set_selection_mode(SelectionMode::None);
-    toolbar.set_homogeneous(false);
-    toolbar.set_min_children_per_line(1);
-    toolbar.set_max_children_per_line(24);
-    toolbar.set_column_spacing(8);
-    toolbar.set_row_spacing(4);
-    toolbar.set_hexpand(true);
-    toolbar.add_css_class("aula-toolbar");
-    toolbar.set_margin_start(8);
-    toolbar.set_margin_end(8);
-    toolbar.set_margin_top(8);
-    let btn_new = Button::with_label("Novo");
-    btn_new.set_tooltip_text(Some("Arquivo novo em outra aba (Ctrl+N)"));
-    let btn_save = Button::with_label("Salvar");
-    btn_save.set_tooltip_text(Some("Salvar a aba atual (Ctrl+S)"));
-    let btn_run = Button::with_label("Executar");
-    btn_run.set_tooltip_text(Some("Executar a aba atual (F5)"));
-    let btn_debug = Button::with_label("Depurar");
-    btn_debug.set_tooltip_text(Some("Depurar a aba atual (F6)"));
-    let btn_bp = Button::with_label("Ponto");
-    btn_bp.set_tooltip_text(Some("Ponto de parada na linha (F9)"));
-    let btn_pasta = Button::with_label("Pasta");
-    btn_pasta.set_tooltip_text(Some("Escolher a pasta do projeto neste computador"));
-    let btn_servidor = Button::with_label("Servidor");
-    btn_servidor.set_tooltip_text(Some(
-        "Conectar a um servidor. Os arquivos ficam em aula-data/aluno",
-    ));
     let btn_smaller = Button::with_label("A−");
     btn_smaller.set_tooltip_text(Some("Letra menor (Ctrl+-)"));
     let btn_bigger = Button::with_label("A+");
     btn_bigger.set_tooltip_text(Some("Letra maior (Ctrl+=)"));
-    for b in [&btn_new, &btn_save, &btn_run, &btn_debug, &btn_bp] {
-        toolbar.append(b);
-    }
-    {
-        let u = ui.borrow();
-        for b in [
-            &u.btn_continue,
-            &u.btn_next,
-            &u.btn_step,
-            &u.btn_out,
-            &u.btn_stop,
-        ] {
-            toolbar.append(b);
-        }
-        let projeto = GtkBox::new(Orientation::Horizontal, 8);
-        projeto.append(&Label::new(Some("projeto:")));
-        projeto.append(&u.student);
-        toolbar.append(&projeto);
-    }
-    toolbar.append(&btn_pasta);
-    toolbar.append(&btn_servidor);
-    let btn_files = ToggleButton::with_label("Arquivos");
-    btn_files.set_active(true);
-    btn_files.set_tooltip_text(Some("Mostrar ou ocultar a lista de arquivos (F7)"));
-    let btn_panel = ToggleButton::with_label("Painel");
-    btn_panel.set_active(true);
-    btn_panel.set_tooltip_text(Some("Mostrar ou ocultar o depurador (F8)"));
-    toolbar.append(&btn_files);
-    toolbar.append(&btn_panel);
-    let btn_ajuda = Button::with_label("Ajuda");
-    btn_ajuda.set_tooltip_text(Some("Funções nativas (núcleo e módulos)"));
-    toolbar.append(&btn_ajuda);
 
     let args_row = GtkBox::new(Orientation::Horizontal, 8);
     args_row.set_margin_start(8);
@@ -324,7 +250,6 @@ fn build_ui(app: &Application) {
     args_row.append(&ui.borrow().args_entry);
     args_row.append(&btn_smaller);
     args_row.append(&btn_bigger);
-    args_row.append(&ui.borrow().btn_dark);
 
     const FILES_WIDTH: i32 = 240;
     let file_scroll = ScrolledWindow::builder()
@@ -409,8 +334,10 @@ fn build_ui(app: &Application) {
     status_row.set_margin_bottom(6);
     status_row.append(&ui.borrow().status);
     status_row.append(&ui.borrow().diag_label);
+    status_row.append(&ui.borrow().project_path);
 
-    root.append(&toolbar);
+    let menubar = install_menubar(&win, &ui, &file_scroll, &debug_panel);
+    root.append(&menubar);
     root.append(&args_row);
     root.append(&ui.borrow().search_revealer);
     root.append(&body);
@@ -418,41 +345,8 @@ fn build_ui(app: &Application) {
     body.set_vexpand(true);
     win.set_child(Some(&root));
 
-    connect(&btn_new, &ui, new_untitled_tab);
-    connect(&btn_save, &ui, |ui| {
-        if let Some(d) = current_doc(ui) {
-            save_doc(ui, &d);
-        }
-    });
-    connect(&btn_run, &ui, |ui| executar(ui, false));
-    connect(&btn_debug, &ui, |ui| executar(ui, true));
-    connect(&btn_bp, &ui, toggle_breakpoint_here);
-    connect(&btn_pasta, &ui, |ui| {
-        choose_local_folder(ui);
-    });
-    connect(&btn_servidor, &ui, ask_server);
     connect(&btn_smaller, &ui, |ui| zoom(ui, -1));
     connect(&btn_bigger, &ui, |ui| zoom(ui, 1));
-    {
-        let u = ui.borrow();
-        connect(&u.btn_continue, &ui, |ui| send_debug_cmd(ui, "continuar"));
-        connect(&u.btn_next, &ui, |ui| send_debug_cmd(ui, "proximo"));
-        connect(&u.btn_step, &ui, |ui| send_debug_cmd(ui, "entrar"));
-        connect(&u.btn_out, &ui, |ui| send_debug_cmd(ui, "sair"));
-        connect(&u.btn_stop, &ui, |ui| send_debug_cmd(ui, "terminar"));
-    }
-    {
-        let ui_d = Rc::clone(&ui);
-        ui.borrow()
-            .btn_dark
-            .connect_toggled(move |b| set_dark(&ui_d, b.is_active()));
-    }
-    {
-        let ui_e = Rc::clone(&ui);
-        ui.borrow()
-            .student
-            .connect_activate(move |_| on_project_entry(&ui_e));
-    }
     {
         let ui_o = Rc::clone(&ui);
         ui.borrow()
@@ -469,18 +363,6 @@ fn build_ui(app: &Application) {
                 refresh_diag_label(&ui_t);
             });
         });
-    }
-    {
-        let pane = file_scroll.clone();
-        btn_files.connect_toggled(move |b| pane.set_visible(b.is_active()));
-    }
-    {
-        let pane = debug_panel.clone();
-        btn_panel.connect_toggled(move |b| pane.set_visible(b.is_active()));
-    }
-    {
-        let ui_a = Rc::clone(&ui);
-        btn_ajuda.connect_clicked(move |_| open_ajuda(&ui_a));
     }
     {
         // Click on `erro: … em arquivo:linha`; clicks while reading keep the
@@ -536,12 +418,12 @@ fn build_ui(app: &Application) {
         k(&fkeys, "F11", |ui| send_debug_cmd(ui, "entrar"));
         k(&fkeys, "<Shift>F11", |ui| send_debug_cmd(ui, "sair"));
         add_shortcut(&fkeys, "F7", {
-            let b = btn_files.clone();
-            move || b.set_active(!b.is_active())
+            let win = win.clone();
+            move || trigger_win_action(&win, "mostrar-arquivos")
         });
         add_shortcut(&fkeys, "F8", {
-            let b = btn_panel.clone();
-            move || b.set_active(!b.is_active())
+            let win = win.clone();
+            move || trigger_win_action(&win, "mostrar-painel")
         });
         k(&shortcuts, "<Primary>s", |ui| {
             if let Some(d) = current_doc(ui) {
@@ -707,6 +589,219 @@ fn add_shortcut(controller: &gtk::ShortcutController, accel: &str, f: impl Fn() 
     });
 }
 
+fn menu_item(label: &str, action: &str, accel: Option<&str>) -> gio::MenuItem {
+    let item = gio::MenuItem::new(Some(label), Some(action));
+    if let Some(accel) = accel {
+        item.set_attribute_value("accel", Some(&accel.to_variant()));
+    }
+    item
+}
+
+fn menu_radio(label: &str, action: &str, target: &str) -> gio::MenuItem {
+    let item = gio::MenuItem::new(Some(label), None);
+    item.set_action_and_target_value(Some(action), Some(&target.to_variant()));
+    item
+}
+
+fn add_win_action(
+    win: &ApplicationWindow,
+    ui: &UiRc,
+    name: &str,
+    f: impl Fn(&UiRc) + 'static,
+) -> gio::SimpleAction {
+    let action = gio::SimpleAction::new(name, None);
+    let ui = Rc::clone(ui);
+    action.connect_activate(move |_, _| f(&ui));
+    win.add_action(&action);
+    action
+}
+
+fn add_win_toggle(
+    win: &ApplicationWindow,
+    name: &str,
+    initial: bool,
+    f: impl Fn(bool) + 'static,
+) -> gio::SimpleAction {
+    let action = gio::SimpleAction::new_stateful(name, None, &initial.to_variant());
+    // Stateful actions: GTK toggles via change-state (menu checkbox, activate).
+    // Connecting activate and inverting again would flip twice.
+    action.connect_change_state(move |a, value| {
+        let Some(value) = value else { return };
+        let on = value.get::<bool>().unwrap_or(initial);
+        if a.state().and_then(|v| v.get::<bool>()) == Some(on) {
+            return;
+        }
+        a.set_state(value);
+        f(on);
+    });
+    win.add_action(&action);
+    action
+}
+
+fn set_action_enabled(win: &ApplicationWindow, name: &str, on: bool) {
+    if let Some(a) = win.lookup_action(name) {
+        if let Ok(a) = a.downcast::<gio::SimpleAction>() {
+            a.set_enabled(on);
+        }
+    }
+}
+
+fn trigger_win_action(win: &ApplicationWindow, name: &str) {
+    if let Some(a) = win.lookup_action(name) {
+        gio::prelude::ActionExt::activate(&a, None);
+    }
+}
+
+fn set_action_state_str(win: &ApplicationWindow, name: &str, value: &str) {
+    if let Some(a) = win.lookup_action(name) {
+        if let Ok(a) = a.downcast::<gio::SimpleAction>() {
+            a.set_state(&value.to_variant());
+        }
+    }
+}
+
+fn set_project_path(ui: &UiRc, text: &str) {
+    let u = ui.borrow();
+    u.project_path.set_text(text);
+    if text.is_empty() {
+        u.project_path.set_tooltip_text(None);
+    } else {
+        u.project_path.set_tooltip_text(Some(text));
+    }
+}
+
+fn install_menubar(
+    win: &ApplicationWindow,
+    ui: &UiRc,
+    file_scroll: &ScrolledWindow,
+    debug_panel: &GtkBox,
+) -> PopoverMenuBar {
+    add_win_action(win, ui, "novo", new_untitled_tab);
+    add_win_action(win, ui, "salvar", |ui| {
+        if let Some(d) = current_doc(ui) {
+            save_doc(ui, &d);
+        }
+    });
+    add_win_action(win, ui, "fechar-aba", |ui| {
+        if let Some(d) = current_doc(ui) {
+            close_doc(ui, &d);
+        }
+    });
+    add_win_action(win, ui, "pasta", |ui| {
+        choose_local_folder(ui);
+    });
+    add_win_action(win, ui, "servidor", ask_server);
+    add_win_action(win, ui, "executar", |ui| executar(ui, false));
+    add_win_action(win, ui, "depurar", |ui| executar(ui, true));
+    add_win_action(win, ui, "parar", |ui| send_debug_cmd(ui, "terminar"));
+    add_win_action(win, ui, "continuar", |ui| send_debug_cmd(ui, "continuar"));
+    add_win_action(win, ui, "proximo", |ui| send_debug_cmd(ui, "proximo"));
+    add_win_action(win, ui, "entrar", |ui| send_debug_cmd(ui, "entrar"));
+    add_win_action(win, ui, "sair", |ui| send_debug_cmd(ui, "sair"));
+    add_win_action(win, ui, "ponto", toggle_breakpoint_here);
+    add_win_action(win, ui, "letra-maior", |ui| zoom(ui, 1));
+    add_win_action(win, ui, "letra-menor", |ui| zoom(ui, -1));
+    add_win_action(win, ui, "letra-normal", |ui| zoom(ui, 0));
+    add_win_action(win, ui, "ajuda", open_ajuda);
+    add_win_action(win, ui, "buscar", show_search);
+    for name in ["continuar", "proximo", "entrar", "sair", "parar"] {
+        set_action_enabled(win, name, false);
+    }
+
+    {
+        let pane = file_scroll.clone();
+        add_win_toggle(win, "mostrar-arquivos", true, move |on| pane.set_visible(on));
+    }
+    {
+        let pane = debug_panel.clone();
+        add_win_toggle(win, "mostrar-painel", true, move |on| pane.set_visible(on));
+    }
+    {
+        let dark = ui.borrow().prefs.dark;
+        let initial = if dark { "escuro" } else { "claro" };
+        let action = gio::SimpleAction::new_stateful(
+            "tema",
+            Some(gtk::glib::VariantTy::STRING),
+            &initial.to_variant(),
+        );
+        let ui = Rc::clone(ui);
+        action.connect_change_state(move |a, value| {
+            let Some(value) = value else { return };
+            if a.state().as_ref() == Some(value) {
+                return;
+            }
+            a.set_state(value);
+            set_dark(&ui, value.str() == Some("escuro"));
+        });
+        win.add_action(&action);
+    }
+
+    let arquivo = gio::Menu::new();
+    arquivo.append_item(&menu_item("Novo", "win.novo", Some("<Primary>n")));
+    arquivo.append_item(&menu_item("Salvar", "win.salvar", Some("<Primary>s")));
+    arquivo.append_item(&menu_item("Fechar aba", "win.fechar-aba", Some("<Primary>w")));
+    let projeto = gio::Menu::new();
+    projeto.append_item(&menu_item("Pasta…", "win.pasta", None));
+    projeto.append_item(&menu_item("Servidor…", "win.servidor", None));
+    arquivo.append_section(None, &projeto);
+
+    let exec = gio::Menu::new();
+    exec.append_item(&menu_item("Executar", "win.executar", Some("F5")));
+    exec.append_item(&menu_item("Depurar", "win.depurar", Some("F6")));
+    exec.append_item(&menu_item("Parar", "win.parar", None));
+
+    let debug = gio::Menu::new();
+    debug.append_item(&menu_item("Continuar", "win.continuar", None));
+    debug.append_item(&menu_item("Próximo", "win.proximo", Some("F10")));
+    debug.append_item(&menu_item("Entrar", "win.entrar", Some("F11")));
+    debug.append_item(&menu_item("Sair", "win.sair", Some("<Shift>F11")));
+    debug.append_item(&menu_item("Ponto de parada", "win.ponto", Some("F9")));
+
+    let ver = gio::Menu::new();
+    ver.append_item(&menu_item(
+        "Arquivos",
+        "win.mostrar-arquivos",
+        Some("F7"),
+    ));
+    ver.append_item(&menu_item("Painel", "win.mostrar-painel", Some("F8")));
+    ver.append_item(&menu_item("Buscar", "win.buscar", Some("<Primary>f")));
+    let aparencia = gio::Menu::new();
+    aparencia.append_item(&menu_item(
+        "Letra maior",
+        "win.letra-maior",
+        Some("<Primary>equal"),
+    ));
+    aparencia.append_item(&menu_item(
+        "Letra menor",
+        "win.letra-menor",
+        Some("<Primary>minus"),
+    ));
+    aparencia.append_item(&menu_item(
+        "Tamanho normal",
+        "win.letra-normal",
+        Some("<Primary>0"),
+    ));
+    let tema = gio::Menu::new();
+    tema.append_item(&menu_radio("Claro", "win.tema", "claro"));
+    tema.append_item(&menu_radio("Escuro", "win.tema", "escuro"));
+    aparencia.append_section(None, &tema);
+    ver.append_section(None, &aparencia);
+
+    let ajuda = gio::Menu::new();
+    ajuda.append_item(&menu_item("Funções nativas", "win.ajuda", Some("F1")));
+
+    let model = gio::Menu::new();
+    model.append_submenu(Some("Arquivo"), &arquivo);
+    model.append_submenu(Some("Executar"), &exec);
+    model.append_submenu(Some("Depurar"), &debug);
+    model.append_submenu(Some("Ver"), &ver);
+    model.append_submenu(Some("Ajuda"), &ajuda);
+
+    let bar = PopoverMenuBar::from_model(Some(&model));
+    bar.add_css_class("aula-menubar");
+    bar
+}
+
 /// Like `add_shortcut`, but `f` returning false lets the key through.
 fn add_shortcut_if(
     controller: &gtk::ShortcutController,
@@ -738,8 +833,7 @@ fn install_css() {
             margin: 0;
             background-color: alpha(currentColor, 0.12);
         }
-        flowbox.aula-toolbar { padding: 0; }
-        flowbox.aula-toolbar > flowboxchild { padding: 0; }
+        menubar.aula-menubar { padding: 2px 8px 0 8px; }
         label.aula-catalogo { font-family: monospace; }
         label.aula-ajuda-grupo { font-weight: bold; opacity: 0.7; padding-top: 6px; }
         paned.aula-paned > separator:hover {
@@ -1337,11 +1431,29 @@ fn theme_scheme(ui: &UiRc) -> (bool, Option<sourceview5::StyleScheme>) {
 
 fn apply_theme(ui: &UiRc) {
     let (dark, scheme) = theme_scheme(ui);
-    prefs::apply_widget_theme(dark);
+    let win = {
+        let u = ui.borrow();
+        u.theme_css.apply(dark);
+        u.window.clone()
+    };
+    set_action_state_str(&win, "tema", if dark { "escuro" } else { "claro" });
     for d in all_docs(ui) {
         d.set_theme(scheme.as_ref(), dark);
     }
     ui.borrow().console.set_dark(dark);
+}
+
+fn popdown_popovers(widget: &impl IsA<gtk::Widget>) {
+    let widget = widget.as_ref();
+    if let Ok(p) = widget.clone().downcast::<gtk::Popover>() {
+        p.popdown();
+    }
+    let mut child = widget.first_child();
+    while let Some(c) = child {
+        let next = c.next_sibling();
+        popdown_popovers(&c);
+        child = next;
+    }
 }
 
 fn set_dark(ui: &UiRc, dark: bool) {
@@ -1353,6 +1465,8 @@ fn set_dark(ui: &UiRc, dark: bool) {
         u.prefs.dark = dark;
         u.prefs.save();
     }
+    let win = ui.borrow().window.clone();
+    popdown_popovers(&win);
     apply_theme(ui);
 }
 
@@ -1545,12 +1659,12 @@ fn send_debug_cmd(ui: &UiRc, cmd: &str) {
 }
 
 fn set_debug_buttons(ui: &UiRc, paused: bool, running: bool) {
-    let u = ui.borrow();
-    u.btn_continue.set_sensitive(paused);
-    u.btn_next.set_sensitive(paused);
-    u.btn_step.set_sensitive(paused);
-    u.btn_out.set_sensitive(paused);
-    u.btn_stop.set_sensitive(running);
+    let win = ui.borrow().window.clone();
+    set_action_enabled(&win, "continuar", paused);
+    set_action_enabled(&win, "proximo", paused);
+    set_action_enabled(&win, "entrar", paused);
+    set_action_enabled(&win, "sair", paused);
+    set_action_enabled(&win, "parar", running);
 }
 
 fn toggle_breakpoint_here(ui: &UiRc) {
@@ -1841,11 +1955,9 @@ fn apply_local(ui: &UiRc, path: PathBuf) {
         u.project = name;
         u.prefs.pasta = shown.clone();
         u.prefs.save();
-        u.student.set_text(&shown);
-        u.student.set_placeholder_text(Some("pasta do projeto"));
-        u.student.set_tooltip_text(Some(&shown));
         u.file_cache.borrow_mut().clear();
     }
+    set_project_path(ui, &shown);
     finish_open(ui);
 }
 
@@ -1901,56 +2013,10 @@ fn apply_remote(ui: &UiRc, rpc: Rpc, url: String, aluno: String) {
         u.project = aluno.clone();
         u.prefs.servidor = url;
         u.prefs.save();
-        u.student.set_text(&aluno);
-        u.student.set_placeholder_text(Some("aluno"));
-        u.student.set_tooltip_text(Some(&tip));
         u.file_cache.borrow_mut().clear();
     }
+    set_project_path(ui, &tip);
     finish_open(ui);
-}
-
-fn on_project_entry(ui: &UiRc) {
-    let text = ui.borrow().student.text().trim().to_string();
-    let remote = ui.borrow().files.is_remote();
-    if remote {
-        if !valid_aluno(&text) {
-            set_status(ui, "nome do aluno: letras, números, _ e -");
-            return;
-        }
-        switch_remote_aluno(ui, text);
-        return;
-    }
-    let path = PathBuf::from(&text);
-    if path.is_dir() {
-        open_local_project(ui, path);
-    } else {
-        set_status(ui, "digite o caminho de uma pasta, ou use Pasta");
-    }
-}
-
-fn switch_remote_aluno(ui: &UiRc, aluno: String) {
-    if !ui.borrow().files.is_remote() {
-        return;
-    }
-    let same = ui.borrow().project == aluno;
-    let has_docs = !ui.borrow().docs.is_empty();
-    if same && has_docs {
-        refresh_tree(ui);
-        return;
-    }
-    let ui_c = Rc::clone(ui);
-    after_unsaved(ui, move || {
-        close_project_tabs(&ui_c);
-        {
-            let mut u = ui_c.borrow_mut();
-            u.project = aluno.clone();
-            let tip = format!("{} — aula-data/{aluno}", u.prefs.servidor);
-            u.student.set_text(&aluno);
-            u.student.set_tooltip_text(Some(&tip));
-            u.file_cache.borrow_mut().clear();
-        }
-        finish_open(&ui_c);
-    });
 }
 
 fn after_unsaved(ui: &UiRc, then: impl FnOnce() + 'static) {

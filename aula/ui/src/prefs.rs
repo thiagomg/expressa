@@ -113,12 +113,169 @@ impl FontCss {
     }
 }
 
-/// Dark or light GTK widgets.
-pub fn apply_widget_theme(dark: bool) {
-    if let Some(settings) = gtk::Settings::default() {
-        settings.set_gtk_application_prefer_dark_theme(dark);
+/// App-wide light/dark chrome. Does not touch `gtk-theme-name` or
+/// `gtk-application-prefer-dark-theme`: on Yaru those reload a missing
+/// `gtk-dark.css` gresource and leave the window unstyled, while only the
+/// GtkSourceView scheme would change.
+pub struct ThemeCss(gtk::CssProvider);
+
+impl ThemeCss {
+    pub fn install() -> Self {
+        let css = gtk::CssProvider::new();
+        if let Some(display) = gtk::gdk::Display::default() {
+            gtk::style_context_add_provider_for_display(
+                &display,
+                &css,
+                gtk::STYLE_PROVIDER_PRIORITY_APPLICATION,
+            );
+        }
+        Self(css)
+    }
+
+    pub fn apply(&self, dark: bool) {
+        self.0.load_from_data(if dark { DARK_CSS } else { LIGHT_CSS });
     }
 }
+
+const LIGHT_CSS: &str = r#"
+@define-color aula_bg #f6f5f4;
+@define-color aula_fg #3d3846;
+@define-color aula_view #fcfcfc;
+@define-color aula_view_fg #3d3846;
+@define-color aula_btn #e9e7e4;
+@define-color aula_hover #ddd9d4;
+@define-color aula_sel #c5e1a5;
+@define-color aula_border #d3cfc8;
+@define-color aula_accent #0e8420;
+@define-color window_bg_color @aula_bg;
+@define-color window_fg_color @aula_fg;
+@define-color view_bg_color @aula_view;
+@define-color view_fg_color @aula_view_fg;
+@define-color headerbar_bg_color @aula_bg;
+@define-color headerbar_fg_color @aula_fg;
+@define-color popover_bg_color @aula_view;
+@define-color popover_fg_color @aula_fg;
+@define-color sidebar_bg_color @aula_bg;
+@define-color sidebar_fg_color @aula_fg;
+@define-color card_bg_color @aula_view;
+@define-color card_fg_color @aula_fg;
+@define-color dialog_bg_color @aula_bg;
+@define-color dialog_fg_color @aula_fg;
+@define-color theme_bg_color @aula_bg;
+@define-color theme_fg_color @aula_fg;
+@define-color theme_base_color @aula_view;
+@define-color theme_text_color @aula_view_fg;
+@define-color theme_selected_bg_color #c5e1a5;
+@define-color theme_selected_fg_color #1a1a1a;
+window, dialog, messagedialog, .background {
+  background-color: @aula_bg;
+  color: @aula_fg;
+  color-scheme: light;
+}
+box, paned, notebook, stack, scrolledwindow, viewport, frame, grid, revealer {
+  color: inherit;
+}
+textview, textview > text, treeview, treeview.view, listview, list {
+  background-color: @aula_view;
+  color: @aula_view_fg;
+}
+entry, spinbutton {
+  background-color: @aula_view;
+  color: @aula_view_fg;
+  caret-color: @aula_view_fg;
+}
+button {
+  background-image: none;
+  background-color: @aula_btn;
+  color: @aula_fg;
+  border-color: @aula_border;
+}
+button:hover { background-color: @aula_hover; }
+button:checked, togglebutton:checked { background-color: @aula_sel; }
+menubar, popover, popover > contents, tooltip {
+  background-color: @aula_view;
+  color: @aula_fg;
+}
+notebook > header { background-color: @aula_bg; }
+notebook > header tabs tab {
+  background-color: @aula_btn;
+  color: @aula_fg;
+}
+notebook > header tabs tab:checked { background-color: @aula_view; }
+scrollbar slider { background-color: @aula_border; }
+label { color: inherit; }
+selection { background-color: @aula_sel; color: #1a1a1a; }
+"#;
+
+const DARK_CSS: &str = r#"
+@define-color aula_bg #24242c;
+@define-color aula_fg #e4e2ea;
+@define-color aula_view #1e1e24;
+@define-color aula_view_fg #e4e2ea;
+@define-color aula_btn #2e2e38;
+@define-color aula_hover #3a3a46;
+@define-color aula_sel #3d4f74;
+@define-color aula_border #3a3a44;
+@define-color aula_accent #7ee08a;
+@define-color window_bg_color @aula_bg;
+@define-color window_fg_color @aula_fg;
+@define-color view_bg_color @aula_view;
+@define-color view_fg_color @aula_view_fg;
+@define-color headerbar_bg_color @aula_bg;
+@define-color headerbar_fg_color @aula_fg;
+@define-color popover_bg_color #2a2a32;
+@define-color popover_fg_color @aula_fg;
+@define-color sidebar_bg_color @aula_bg;
+@define-color sidebar_fg_color @aula_fg;
+@define-color card_bg_color #2a2a32;
+@define-color card_fg_color @aula_fg;
+@define-color dialog_bg_color @aula_bg;
+@define-color dialog_fg_color @aula_fg;
+@define-color theme_bg_color @aula_bg;
+@define-color theme_fg_color @aula_fg;
+@define-color theme_base_color @aula_view;
+@define-color theme_text_color @aula_view_fg;
+@define-color theme_selected_bg_color #3d4f74;
+@define-color theme_selected_fg_color #ffffff;
+window, dialog, messagedialog, .background {
+  background-color: @aula_bg;
+  color: @aula_fg;
+  color-scheme: dark;
+}
+box, paned, notebook, stack, scrolledwindow, viewport, frame, grid, revealer {
+  color: inherit;
+}
+textview, textview > text, treeview, treeview.view, listview, list {
+  background-color: @aula_view;
+  color: @aula_view_fg;
+}
+entry, spinbutton {
+  background-color: @aula_view;
+  color: @aula_view_fg;
+  caret-color: @aula_view_fg;
+}
+button {
+  background-image: none;
+  background-color: @aula_btn;
+  color: @aula_fg;
+  border-color: @aula_border;
+}
+button:hover { background-color: @aula_hover; }
+button:checked, togglebutton:checked { background-color: @aula_sel; }
+menubar, popover, popover > contents, tooltip {
+  background-color: #2a2a32;
+  color: @aula_fg;
+}
+notebook > header { background-color: @aula_bg; }
+notebook > header tabs tab {
+  background-color: @aula_btn;
+  color: @aula_fg;
+}
+notebook > header tabs tab:checked { background-color: @aula_view; }
+scrollbar slider { background-color: @aula_border; }
+label { color: inherit; }
+selection { background-color: @aula_sel; color: #ffffff; }
+"#;
 
 #[cfg(test)]
 mod tests {
@@ -147,5 +304,15 @@ mod tests {
             p.zoom(-1);
         }
         assert_eq!(p.font_size, MIN_FONT);
+    }
+
+    #[test]
+    fn palettes_cover_window_and_editor() {
+        assert!(LIGHT_CSS.contains("color-scheme: light"));
+        assert!(DARK_CSS.contains("color-scheme: dark"));
+        assert!(LIGHT_CSS.contains("#fcfcfc"));
+        assert!(DARK_CSS.contains("#1e1e24"));
+        assert!(LIGHT_CSS.contains("window, dialog"));
+        assert!(DARK_CSS.contains("window, dialog"));
     }
 }

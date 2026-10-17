@@ -39,7 +39,7 @@ cargo run -p expressa-aula-server -- --root ./aula-data --bind 127.0.0.1:50051
 cargo run -p expressa-aula
 ```
 
-F5 executa a aba atual, **F6 depura**, F7 mostra/oculta arquivos, F8 o painel do depurador, F9 (ou clique no número da linha) ponto de parada, F10 próximo, F11 entrar, Shift+F11 sair, Ctrl+S salva. `mostre()` do módulo `cartesiano` abre o painel **Gráficos** (Destacar vira janela irmã e fica assim até Acoplar ou fechar).
+Os comandos ficam no menu do topo (**Arquivo**, **Executar**, **Depurar**, **Ver**, **Ajuda**), cada um com o atalho à direita. F5 executa a aba atual, **F6 depura**, F7 mostra/oculta arquivos, F8 o painel do depurador, F9 (ou clique no número da linha) ponto de parada, F10 próximo, F11 entrar, Shift+F11 sair, Ctrl+S salva. O caminho do projeto aparece à direita da barra de baixo. `mostre()` do módulo `cartesiano` abre o painel **Gráficos** (Destacar vira janela irmã e fica assim até Acoplar ou fechar).
 
 A linha **argumentos** vai para `argumentos[1]…` no programa. `escreva_erro` aparece em vermelho. **Parar** encerra Executar e Depurar. Clique na linha `erro: … em arquivo:linha` abre o arquivo na linha. Executar usa o texto de todas as abas abertas, salvas ou não.
 
@@ -47,15 +47,15 @@ A linha **argumentos** vai para `argumentos[1]…` no programa. `escreva_erro` a
 
 **Edição**: Tab indenta como no Emacs (com linhas selecionadas, desloca o bloco; Shift+Tab volta), Ctrl+Alt+\\ reindenta a seleção, Enter já indenta a linha nova e `}`/`fim` voltam sozinhos. Ctrl+/ comenta ou descomenta, Ctrl+D duplica a linha, Alt+↑/↓ move. O par `inicio`/`fim` ou `{`/`}` do cursor fica destacado. **Ctrl+F** busca (Esc fecha). Clique direito na árvore: novo arquivo/pasta, renomear, apagar.
 
-**Ajuda da linguagem**: o botão **Ajuda** (ou **F1** fora de um nome) abre uma janela com todas as funções nativas (núcleo, `tela`, `mat`, `matriz`, `arquivo`, `cartesiano`) e a ficha de cada uma (`ajuda("matriz::zeros")`). Ao digitar aparecem as funções nativas, as do arquivo e as dos `importe` (escolher `pinte` acrescenta `importe "tela"`); dentro de `importe "` aparecem os módulos e os arquivos. Dentro dos parênteses, a assinatura mostra o argumento atual. Passar o mouse ou **F1** no nome mostra a ficha. **Esc** fecha o autocomplete; ao continuar digitando a lista volta. **Ctrl+clique** ou **F12** vai para a definição (inclusive em outro arquivo e no próprio `importe`). Erros de sintaxe aparecem sublinhados enquanto digita, com a mensagem na barra de baixo.
+**Ajuda da linguagem**: **Ajuda → Funções nativas** (ou **F1** fora de um nome) abre uma janela com todas as funções nativas (núcleo, `tela`, `mat`, `matriz`, `arquivo`, `cartesiano`) e a ficha de cada uma (`ajuda("matriz::zeros")`). Ao digitar aparecem as funções nativas, as do arquivo e as dos `importe` (escolher `pinte` acrescenta `importe "tela"`); dentro de `importe "` aparecem os módulos e os arquivos. Dentro dos parênteses, a assinatura mostra o argumento atual. Passar o mouse ou **F1** no nome mostra a ficha. **Esc** fecha o autocomplete; ao continuar digitando a lista volta. **Ctrl+clique** ou **F12** vai para a definição (inclusive em outro arquivo e no próprio `importe`). Erros de sintaxe aparecem sublinhados enquanto digita, com a mensagem na barra de baixo.
 
-**Sala de aula**: Ctrl+= / Ctrl+- (ou A+ / A−) aumentam e diminuem a letra, Ctrl+0 volta; **Escuro** troca o tema. As duas escolhas ficam salvas em `~/.config/expressa-aula/prefs`.
+**Sala de aula**: Ctrl+= / Ctrl+- (ou A+ / A−) aumentam e diminuem a letra, Ctrl+0 volta. **Ver → Claro** ou **Ver → Escuro** pinta a janela inteira (menus, painéis, editor e saída). A escolha fica em `~/.config/expressa-aula/prefs`.
 
-Fechar o editor fecha as janelas irmãs (gráficos destacados e Ajuda) e encerra o `expressa-aula-server` que ele mesmo tiver iniciado. A janela abre maximizada; o código ocupa a maior parte da tela. Em janela estreita a barra de botões quebra em mais de uma linha e os painéis encolhem.
+Fechar o editor fecha as janelas irmãs (gráficos destacados e Ajuda) e encerra o `expressa-aula-server` que ele mesmo tiver iniciado. A janela abre maximizada; o código ocupa a maior parte da tela. Em janela estreita os painéis encolhem.
 
 No depurador: a linha atual fica amarela, no arquivo certo (abre o módulo importado se for preciso); um erro durante a depuração para na linha (em vermelho) com as variáveis visíveis, e Continuar encerra. **Observados** guarda nomes para ver o valor a cada passo; **Variáveis** lista o que está no escopo; **Pilha** as chamadas.
 
-**projeto** é a pasta do aluno no servidor (`local` em casa). **Conectar** (ou Enter no nome) carrega a árvore de arquivos e pastas.
+**Arquivo → Pasta…** escolhe a pasta do projeto neste computador; **Arquivo → Servidor…** conecta a um servidor (`aula-data/aluno`). O caminho (ou `url — aula-data/aluno`) fica à direita da barra de status.
 
 `leia("Seu nome:")` espera a resposta na própria saída: digite e aperte Enter, como num terminal (o interpretador avisa com `<<<EXPRESSA-LEIA>>>`). Na linha de comando:
 
