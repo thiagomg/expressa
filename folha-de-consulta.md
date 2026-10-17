@@ -257,6 +257,17 @@ dados = leia_csv("pessoas.csv")    // lista de listas de texto
 salve_csv("saida.csv", dados)
 ```
 
+```text
+importe "mat"
+cart = importe "cartesiano"
+c = cart::documento()
+g = cart::grafico()
+g.cart::eixos(-2 * pi, 2 * pi, -1.5, 1.5)
+g.cart::plotar(função(x) { seno(x) }, :azul)
+c.cart::adicione(g)
+c.cart::mostre()                 // mesma janela a cada mostre; não espera
+```
+
 Caminhos relativos: pasta do `.lep`, não a pasta de onde você chamou `expressa`.
 
 ---
@@ -275,7 +286,7 @@ matriz = importe "matriz"      // alias: matriz::zeros, A.matriz::transposta()
 importe "./matriz"             // arquivo local se o nativo colidir
 ```
 
-Nativos: `matriz`, `arquivo`, `tela`, `mat`. Nome nu sem `/` nem `.lep` procura o nativo; se existir também `matriz.lep` no mesmo diretório, `importe "matriz"` é erro.
+Nativos: `matriz`, `arquivo`, `tela`, `mat`, `cartesiano`. Nome nu sem `/` nem `.lep` procura o nativo; se existir também `matriz.lep` no mesmo diretório, `importe "matriz"` é erro.
 
 ---
 
@@ -301,6 +312,7 @@ Módulos (`importe "…"`):
 | `mat` | `pi` `raiz` `aleatorio` `semente` `seno` `cosseno` `tangente` `arcoseno` `arcocosseno` `arcotangente` `arcotangente2` `radianos` `graus` `exp` `log` `log10` `potencia` `piso` `teto` `arredonde` |
 | `matriz` | `matriz` `transposta` `det` `identidade` `zeros` `uns` `cheia` `nlinhas` `ncolunas` |
 | `arquivo` | `leia_arquivo` `salve_arquivo` `adicione_arquivo` `leia_csv` `salve_csv` |
+| `cartesiano` | `documento` `grafico` `eixos` `plotar` `adicione` `mostre` |
 
 Nativas não podem ser reatribuídas (`escreva = 1` é erro).
 

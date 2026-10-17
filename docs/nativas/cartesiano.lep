@@ -1,0 +1,42 @@
+/// Folha de gráficos: uma janela. Ainda não abre nada.
+///
+/// Adicione gráficos com adicione e abra com mostre. Dois documentos são duas janelas.
+///
+/// Exemplo: c = documento()
+documento = funcao() { mapa() }
+
+/// Plano xy vazio. Defina eixos e depois plotar.
+///
+/// tipo(g) continua "mapa".
+///
+/// Exemplo: g = grafico()
+grafico = funcao() { mapa() }
+
+/// Limites do plano. xmin < xmax e ymin < ymax. y cresce para cima.
+///
+/// Sem eixos, plotar é erro.
+///
+/// Exemplo: g.eixos(-2 * pi, 2 * pi, -1.5, 1.5)
+eixos = funcao(grafico, xmin, xmax, ymin, ymax) { 0 }
+
+/// Amostra a função de xmin a xmax (~400 pontos) e acrescenta a curva.
+///
+/// A função recebe um número e devolve um número. y não finito vira um furo na linha.
+/// Cores: as mesmas da tela (azul, vermelho, …).
+///
+/// Exemplo: g.plotar(função(x) { seno(x) }, :azul)
+plotar = funcao(grafico, f, cor) { 0 }
+
+/// Copia o gráfico para o documento (congela as curvas).
+///
+/// Plotar de novo no gráfico original não muda o que já está na folha.
+///
+/// Exemplo: c.adicione(g)
+adicione = funcao(documento, grafico) { 0 }
+
+/// Abre ou atualiza a janela deste documento e devolve o foco. Não espera fechar.
+///
+/// O primeiro mostre abre; os seguintes só atualizam a mesma janela. Folha vazia é erro.
+///
+/// Exemplo: c.mostre()
+mostre = funcao(documento) { 0 }

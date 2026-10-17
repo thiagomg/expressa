@@ -14,7 +14,7 @@ use super::{
     builtin_args, builtin_doc_summary, builtin_modulo, lookup_ficha, sem_acento, value_as_texto,
 };
 
-impl Vm<'_> {
+impl Vm<'_, '_> {
     pub(crate) fn bi_escreva(&mut self, args: &[Value], _span: Span) -> Result<Value, EvalError> {
         let mut first = true;
         for arg in args {

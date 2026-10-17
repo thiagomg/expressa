@@ -45,6 +45,7 @@
   },
   "modules": [
     "arquivo",
+    "cartesiano",
     "mat",
     "matriz",
     "tela"
@@ -874,6 +875,72 @@
       ],
       "summary": "Grava uma lista de listas como CSV.",
       "doc": "Grava uma lista de listas como CSV.\n\nSubstitui o arquivo. Células viram texto e são unidas por vírgula.\n\nExemplo: salve_csv(\"saida.csv\", [[\"Ana\", 25]])"
+    },
+    {
+      "name": "documento",
+      "aliases": [],
+      "module": "cartesiano",
+      "kind": "funcao",
+      "signatures": [
+        "documento()"
+      ],
+      "summary": "Folha de gráficos: uma janela. Ainda não abre nada.",
+      "doc": "Folha de gráficos: uma janela. Ainda não abre nada.\n\nAdicione gráficos com adicione e abra com mostre. Dois documentos são duas janelas.\n\nExemplo: c = documento()"
+    },
+    {
+      "name": "grafico",
+      "aliases": [],
+      "module": "cartesiano",
+      "kind": "funcao",
+      "signatures": [
+        "grafico()"
+      ],
+      "summary": "Plano xy vazio. Defina eixos e depois plotar.",
+      "doc": "Plano xy vazio. Defina eixos e depois plotar.\n\ntipo(g) continua \"mapa\".\n\nExemplo: g = grafico()"
+    },
+    {
+      "name": "eixos",
+      "aliases": [],
+      "module": "cartesiano",
+      "kind": "funcao",
+      "signatures": [
+        "eixos(grafico, xmin, xmax, ymin, ymax)"
+      ],
+      "summary": "Limites do plano. xmin < xmax e ymin < ymax. y cresce para cima.",
+      "doc": "Limites do plano. xmin < xmax e ymin < ymax. y cresce para cima.\n\nSem eixos, plotar é erro.\n\nExemplo: g.eixos(-2 * pi, 2 * pi, -1.5, 1.5)"
+    },
+    {
+      "name": "plotar",
+      "aliases": [],
+      "module": "cartesiano",
+      "kind": "funcao",
+      "signatures": [
+        "plotar(grafico, f, cor)"
+      ],
+      "summary": "Amostra a função de xmin a xmax (~400 pontos) e acrescenta a curva.",
+      "doc": "Amostra a função de xmin a xmax (~400 pontos) e acrescenta a curva.\n\nA função recebe um número e devolve um número. y não finito vira um furo na linha.\nCores: as mesmas da tela (azul, vermelho, …).\n\nExemplo: g.plotar(função(x) { seno(x) }, :azul)"
+    },
+    {
+      "name": "adicione",
+      "aliases": [],
+      "module": "cartesiano",
+      "kind": "funcao",
+      "signatures": [
+        "adicione(documento, grafico)"
+      ],
+      "summary": "Copia o gráfico para o documento (congela as curvas).",
+      "doc": "Copia o gráfico para o documento (congela as curvas).\n\nPlotar de novo no gráfico original não muda o que já está na folha.\n\nExemplo: c.adicione(g)"
+    },
+    {
+      "name": "mostre",
+      "aliases": [],
+      "module": "cartesiano",
+      "kind": "funcao",
+      "signatures": [
+        "mostre(documento)"
+      ],
+      "summary": "Abre ou atualiza a janela deste documento e devolve o foco. Não espera fechar.",
+      "doc": "Abre ou atualiza a janela deste documento e devolve o foco. Não espera fechar.\n\nO primeiro mostre abre; os seguintes só atualizam a mesma janela. Folha vazia é erro.\n\nExemplo: c.mostre()"
     },
     {
       "name": "argumentos",

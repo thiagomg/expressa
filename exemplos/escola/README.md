@@ -20,6 +20,7 @@ cargo run -- exemplos/escola/bhaskara.lep
 | `mdc_mmc.lep` | MDC (Euclides), MMC, simplificar fração |
 | `media_ponderada.lep` | boletim com pesos |
 | `cinematica.lep` | MRU e MRUV |
+| `seno_cosseno.lep` | seno e cosseno no plano cartesiano |
 
 Tabuada, fatorial/combinações e boletim sem pesos estão em `linguagem/` e `programas/`.
 

@@ -2,6 +2,7 @@
 
 mod ajuda;
 mod assist;
+mod cartesiano;
 mod console;
 mod docs;
 mod editing;
@@ -63,6 +64,7 @@ struct Ui {
     /// Server files read for help on imports (`None` = missing).
     file_cache: RefCell<HashMap<String, Option<String>>>,
     console: Rc<Console>,
+    graficos: Rc<cartesiano::Painel>,
     args_entry: Entry,
     search_settings: SearchSettings,
     search_entry: Entry,
@@ -184,6 +186,8 @@ fn build_ui(app: &Application) {
     notebook.set_hexpand(true);
 
     let console = Rc::new(Console::new());
+    let graficos = cartesiano::Painel::new();
+    graficos.set_application(app);
     let args_entry = Entry::builder()
         .placeholder_text("argumentos (ex.: Thiago --ajuda)")
         .hexpand(true)
@@ -216,6 +220,7 @@ fn build_ui(app: &Application) {
         untitled_count: 0,
         file_cache: RefCell::new(HashMap::new()),
         console,
+        graficos,
         args_entry,
         search_settings,
         search_entry,
@@ -330,11 +335,18 @@ fn build_ui(app: &Application) {
 
     install_css();
 
+    let bottom = GtkBox::new(Orientation::Vertical, 0);
+    bottom.set_hexpand(true);
+    {
+        let u = ui.borrow();
+        bottom.append(&u.graficos.dock);
+        bottom.append(&output_scroll);
+    }
     let editor_col = Paned::new(Orientation::Vertical);
     editor_col.add_css_class("aula-paned");
     editor_col.set_wide_handle(false);
     editor_col.set_start_child(Some(&ui.borrow().notebook));
-    editor_col.set_end_child(Some(&output_scroll));
+    editor_col.set_end_child(Some(&bottom));
     editor_col.set_resize_start_child(true);
     editor_col.set_resize_end_child(false);
     editor_col.set_shrink_start_child(false);
@@ -1631,7 +1643,9 @@ fn executar(ui: &UiRc, debug: bool) {
         })
         .collect();
     let console = Rc::clone(&ui.borrow().console);
+    let graficos = Rc::clone(&ui.borrow().graficos);
     console.clear();
+    graficos.limpar();
     clear_debug_views(ui);
     if let Some(d) = doc.diag.borrow().as_ref() {
         set_status(
@@ -1685,6 +1699,9 @@ fn executar(ui: &UiRc, debug: bool) {
                         &ui_ev,
                         "o programa espera uma resposta: digite na saída e aperte Enter",
                     );
+                }
+                Ok(ExecEvent::Folha(folha)) => {
+                    graficos.mostrar(folha);
                 }
                 Ok(ExecEvent::Finished(f)) => {
                     console.cancel_input();

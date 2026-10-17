@@ -6,7 +6,7 @@ Arquivos `.lep`. Índices começam em **1**. Inspirada em SML, Rust, Lua, C, Pas
 
 - **Um tipo número** — não há `i16`, `i32`, `i64`, `f32`, `f64`. Contas de caderno são: `0.1 + 0.2` é `0.3`.
 - **Pouca ambiguidade** — uma leitura, um significado; o par de bloco combina (`{` com `}`, `inicio` com `fim`).
-- **Baterias inclusas** — texto, listas, mapas, arquivo, tela, matemática e matriz, sem baixar biblioteca para o primeiro programa.
+- **Baterias inclusas** — texto, listas, mapas, arquivo, tela, matemática, matriz e gráfico cartesiano, sem baixar biblioteca para o primeiro programa.
 - **REPL com introspecção** — `ajuda`, `ajuda escreva`, `ls`, `ls mat`, `tipo`, `tipos`.
 - **Editor com executar e depurar** — [expressa-aula](aula/README.md).
 - **Manual e exemplos** — [tutorial](tutorial/basico.md), [avançado](tutorial/avancado.md), [manual](docs/manual.md), [folha](folha-de-consulta.md), [exemplos/](exemplos/).

@@ -741,7 +741,10 @@ mod tests {
         assert_eq!(native("nova_linha").unwrap().module, Some("tela"));
         assert_eq!(native("sen").unwrap().name, "seno");
         assert!(native("escreva").unwrap().module.is_none());
-        assert_eq!(modules(), ["arquivo", "mat", "matriz", "tela"]);
+        assert_eq!(
+            modules(),
+            ["arquivo", "cartesiano", "mat", "matriz", "tela"]
+        );
         for n in natives() {
             assert!(!n.summary.is_empty(), "{} has no summary", n.name);
         }

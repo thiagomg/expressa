@@ -9,7 +9,7 @@ use super::super::eval::Vm;
 use super::super::value::Value;
 use super::{csv_cell, lines_to_text};
 
-impl Vm<'_> {
+impl Vm<'_, '_> {
     pub(crate) fn bi_leia_arquivo(
         &mut self,
         args: &[Value],

@@ -4,7 +4,7 @@ use super::super::error::EvalError;
 use super::super::eval::Vm;
 use super::super::value::Value;
 
-impl Vm<'_> {
+impl Vm<'_, '_> {
     pub(crate) fn expect_matriz(
         &self,
         v: &Value,

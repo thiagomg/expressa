@@ -39,7 +39,7 @@ cargo run -p expressa-aula-server -- --root ./aula-data --bind 127.0.0.1:50051
 cargo run -p expressa-aula
 ```
 
-F5 executa a aba atual, **F6 depura**, F7 mostra/oculta arquivos, F8 o painel do depurador, F9 (ou clique no número da linha) ponto de parada, F10 próximo, F11 entrar, Shift+F11 sair, Ctrl+S salva.
+F5 executa a aba atual, **F6 depura**, F7 mostra/oculta arquivos, F8 o painel do depurador, F9 (ou clique no número da linha) ponto de parada, F10 próximo, F11 entrar, Shift+F11 sair, Ctrl+S salva. `mostre()` do módulo `cartesiano` abre o painel **Gráficos** (Destacar vira janela irmã).
 
 A linha **argumentos** vai para `argumentos[1]…` no programa. `escreva_erro` aparece em vermelho. **Parar** encerra Executar e Depurar. Clique na linha `erro: … em arquivo:linha` abre o arquivo na linha. Executar usa o texto de todas as abas abertas, salvas ou não.
 
@@ -47,7 +47,7 @@ A linha **argumentos** vai para `argumentos[1]…` no programa. `escreva_erro` a
 
 **Edição**: Tab indenta como no Emacs (com linhas selecionadas, desloca o bloco; Shift+Tab volta), Ctrl+Alt+\\ reindenta a seleção, Enter já indenta a linha nova e `}`/`fim` voltam sozinhos. Ctrl+/ comenta ou descomenta, Ctrl+D duplica a linha, Alt+↑/↓ move. O par `inicio`/`fim` ou `{`/`}` do cursor fica destacado. **Ctrl+F** busca (Esc fecha). Clique direito na árvore: novo arquivo/pasta, renomear, apagar.
 
-**Ajuda da linguagem**: o botão **Ajuda** (ou **F1** fora de um nome) abre uma janela com todas as funções nativas (núcleo, `tela`, `mat`, `matriz`, `arquivo`) e a ficha de cada uma (`ajuda("matriz::zeros")`). Ao digitar aparecem as funções nativas, as do arquivo e as dos `importe` (escolher `pinte` acrescenta `importe "tela"`); dentro de `importe "` aparecem os módulos e os arquivos. Dentro dos parênteses, a assinatura mostra o argumento atual. Passar o mouse ou **F1** no nome mostra a ficha. **Esc** fecha o autocomplete; ao continuar digitando a lista volta. **Ctrl+clique** ou **F12** vai para a definição (inclusive em outro arquivo e no próprio `importe`). Erros de sintaxe aparecem sublinhados enquanto digita, com a mensagem na barra de baixo.
+**Ajuda da linguagem**: o botão **Ajuda** (ou **F1** fora de um nome) abre uma janela com todas as funções nativas (núcleo, `tela`, `mat`, `matriz`, `arquivo`, `cartesiano`) e a ficha de cada uma (`ajuda("matriz::zeros")`). Ao digitar aparecem as funções nativas, as do arquivo e as dos `importe` (escolher `pinte` acrescenta `importe "tela"`); dentro de `importe "` aparecem os módulos e os arquivos. Dentro dos parênteses, a assinatura mostra o argumento atual. Passar o mouse ou **F1** no nome mostra a ficha. **Esc** fecha o autocomplete; ao continuar digitando a lista volta. **Ctrl+clique** ou **F12** vai para a definição (inclusive em outro arquivo e no próprio `importe`). Erros de sintaxe aparecem sublinhados enquanto digita, com a mensagem na barra de baixo.
 
 **Sala de aula**: Ctrl+= / Ctrl+- (ou A+ / A−) aumentam e diminuem a letra, Ctrl+0 volta; **Escuro** troca o tema. As duas escolhas ficam salvas em `~/.config/expressa-aula/prefs`.
 

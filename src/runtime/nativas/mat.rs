@@ -4,7 +4,7 @@ use super::super::error::EvalError;
 use super::super::eval::Vm;
 use super::super::value::Value;
 
-impl Vm<'_> {
+impl Vm<'_, '_> {
     pub(crate) fn bi_raiz(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
         self.expect_arity(args, 1, span)?;
         let n = self.expect_f64(&args[0], span)?;

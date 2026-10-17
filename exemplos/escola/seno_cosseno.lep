@@ -1,0 +1,22 @@
+importe "mat"
+cart = importe "cartesiano"
+
+c = cart::documento()
+
+g1 = cart::grafico()
+g1.cart::eixos(-2 * pi, 2 * pi, -1.5, 1.5)
+g1.cart::plotar(função(x) { seno(x) }, :azul)
+g1.cart::plotar(função(x) { cosseno(x) }, :vermelho)
+c.cart::adicione(g1)
+
+g2 = cart::grafico()
+g2.cart::eixos(-5, 5, -5, 5)
+g2.cart::plotar(função(x) { x + 1 }, :verde)
+c.cart::adicione(g2)
+
+g2 = cart::grafico()
+g2.cart::eixos(-5, 5, -5, 5)
+g2.cart::plotar(função(x) { (x*x) - 4 }, :amarelo)
+c.cart::adicione(g2)
+
+c.cart::mostre()

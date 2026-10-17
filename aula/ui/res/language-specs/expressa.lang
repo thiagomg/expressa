@@ -164,6 +164,12 @@
       <keyword>adicione_arquivo</keyword>
       <keyword>leia_csv</keyword>
       <keyword>salve_csv</keyword>
+      <keyword>documento</keyword>
+      <keyword>grafico</keyword>
+      <keyword>eixos</keyword>
+      <keyword>plotar</keyword>
+      <keyword>adicione</keyword>
+      <keyword>mostre</keyword>
     </context>
     <context id="expressa" class="no-spell-check">
       <include>

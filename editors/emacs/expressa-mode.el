@@ -31,7 +31,8 @@
     "tamanho" "primeiro" "ultimo"
     "maiuscula" "minuscula" "sem_acento" "remova" "substitua" "procurar" "separe" "junte" "limpe"
     "leia_arquivo" "salve_arquivo" "adicione_arquivo"
-    "leia_csv" "salve_csv"))
+    "leia_csv" "salve_csv"
+    "documento" "grafico" "eixos" "plotar" "adicione" "mostre"))
 
 (defconst expressa-constants
   '("verdadeiro" "falso"))

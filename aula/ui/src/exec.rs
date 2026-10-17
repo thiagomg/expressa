@@ -8,7 +8,8 @@ use std::path::{Path, PathBuf};
 use std::sync::mpsc::{Receiver, Sender, SyncSender};
 
 use expressa::runtime::{
-    ChannelDebugger, DebugHook, DebugPaused, LeiaHost, StopHook, run_with_hook,
+    ChannelDebugger, CartesianoHost, DebugHook, DebugPaused, FolhaPronta, LeiaHost, StopHook,
+    run_with_hosts,
 };
 
 use crate::store::Files;
@@ -21,6 +22,7 @@ pub enum ExecEvent {
     Stdout(String),
     Stderr(String),
     Leia(String),
+    Folha(FolhaPronta),
     Paused(DebugPaused),
     Finished(Finished),
 }
@@ -166,6 +168,18 @@ impl LeiaHost for ChannelLeia {
     }
 }
 
+struct ChannelCartesiano {
+    tx: SyncSender<ExecEvent>,
+}
+
+impl CartesianoHost for ChannelCartesiano {
+    fn mostre(&mut self, folha: FolhaPronta) -> Result<(), String> {
+        self.tx
+            .send(ExecEvent::Folha(folha))
+            .map_err(|_| "IDE fechada".to_string())
+    }
+}
+
 struct ChannelOut {
     tx: SyncSender<ExecEvent>,
     stderr: bool,
@@ -265,6 +279,9 @@ pub fn spawn(
             prompts: event_tx.clone(),
             lines: line_rx,
         };
+        let mut cart = ChannelCartesiano {
+            tx: event_tx.clone(),
+        };
         let mut out = ChannelOut {
             tx: event_tx.clone(),
             stderr: false,
@@ -283,7 +300,7 @@ pub fn spawn(
             drop(pause_tx);
             Box::new(StopHook::new(dcmd_rx))
         };
-        let result = run_with_hook(
+        let result = run_with_hosts(
             &source,
             &file,
             hook,
@@ -292,6 +309,7 @@ pub fn spawn(
             &mut out,
             &mut err,
             &mut host,
+            Some(&mut cart),
             &args,
         );
         let finished = match result {

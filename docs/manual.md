@@ -150,7 +150,7 @@ importe "matematica"      // nomes soltos
 soma(10, 5)
 ```
 
-Nativos: `tela`, `mat`, `matriz`, `arquivo`. Nome sem `/` nem `.lep` procura o nativo primeiro. `importe "./matriz"` força arquivo local.
+Nativos: `tela`, `mat`, `matriz`, `arquivo`, `cartesiano`. Nome sem `/` nem `.lep` procura o nativo primeiro. `importe "./matriz"` força arquivo local.
 
 ---
 
@@ -481,6 +481,51 @@ Uma linha na coluna do bloco; devolve o mesmo mapa (a linha anda). UFCS: `b.escr
 b = bloco(1, 28)
 b.escreva_em("Q W E R T")
 ```
+
+---
+
+## `importe "cartesiano"`
+
+Gráfico de função no plano xy (caderno: y para cima). O **documento** é a janela; `mostre` atualiza e foca a mesma.
+
+```text
+importe "mat"
+cart = importe "cartesiano"
+
+c = cart::documento()
+g = cart::grafico()
+g.cart::eixos(-2 * pi, 2 * pi, -1.5, 1.5)
+g.cart::plotar(função(x) { seno(x) }, :azul)
+g.cart::plotar(função(x) { cosseno(x) }, :vermelho)
+c.cart::adicione(g)
+c.cart::mostre()
+```
+
+`adicione` copia o gráfico (congelado). O próximo `mostre` do mesmo `c` não abre outra janela. Dois `documento()` são duas janelas. Cores: as da `tela`. `tipo(g)` é `"mapa"`. Na Aula aparece o painel **Gráficos** (botão Destacar). No terminal, `expressa-grafico` (ou `expressa --grafico`).
+
+### `documento()`
+
+Mapa-folha. Ainda não abre janela.
+
+### `grafico()`
+
+Plano vazio. Depois `eixos` e `plotar`.
+
+### `eixos(grafico, xmin, xmax, ymin, ymax)`
+
+`xmin < xmax`, `ymin < ymax`. Sem isso, `plotar` é erro.
+
+### `plotar(grafico, f, cor)`
+
+`f` recebe x e devolve y. ~400 amostras. y infinito vira um furo na linha.
+
+### `adicione(documento, grafico)`
+
+Pelo menos uma curva. Devolve o documento.
+
+### `mostre(documento)`
+
+Abre ou atualiza. Não espera fechar. Folha vazia é erro (`se_falhar`).
 
 ---
 

@@ -398,6 +398,8 @@ Com `importe "tela"`: `cls()` (também `limpe_tela()`) limpa a tela; `casa()` ma
 
 `sair()` encerra o programa com código 0. `sair(1)` encerra com falha (o shell vê o código). Não é capturado por `se_falhar`.
 
+Com `importe "cartesiano"`: `documento()` é a identidade da janela (um mapa `:graficos`). `grafico()` é um plano xy (`:xmin`… e `:curvas`). `eixos(g, xmin, xmax, ymin, ymax)` grava os limites (y para cima). `plotar(g, função, cor)` amostra ~400 pontos de xmin a xmax; y não finito vira um furo na linha. Cores: as da `tela`. `adicione(c, g)` copia o gráfico para a folha (congela). `mostre(c)` abre ou atualiza a janela daquele documento e traz o foco; não espera fechar. Folha vazia é erro. Dois `documento()` são duas janelas. `tipo(g)` continua `"mapa"`. Sem display, `mostre` falha (`se_falhar`). O CLI abre `expressa-grafico` (ou `expressa --grafico`). Na Aula o painel Gráficos (Destacar vira janela irmã).
+
 ```text
 se nome == ""
 inicio
@@ -450,7 +452,7 @@ item = lista[99] se_falhar "não existe"
 
 ## 16. Módulos / Importação
 
-A mesma forma vale para arquivos `.lep` e para os módulos nativos `matriz`, `arquivo`, `tela` e `mat`.
+A mesma forma vale para arquivos `.lep` e para os módulos nativos `matriz`, `arquivo`, `tela`, `mat` e `cartesiano`.
 
 ```text
 mat = importe "matematica"     // alias: nomes em mat::

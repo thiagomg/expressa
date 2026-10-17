@@ -11,6 +11,7 @@ use crate::parser::{
     AssignTarget, BinaryOp, Block, Expr, Import, Item, Param, Program, Stmt, UnaryOp, parse,
 };
 
+use super::cartesiano_host::{CartesianoHost, CliCartesianoHost};
 use super::debug::{DebugAction, DebugCtx, DebugHook, NoopHook};
 use super::env::{AssignError, Env, FrameKind};
 use super::error::{CallFrame, EvalError, RuntimeError};
@@ -50,7 +51,7 @@ impl LineInput for ConsoleInput {
     }
 }
 
-pub(crate) struct Vm<'a> {
+pub(crate) struct Vm<'a, 'c> {
     pub(crate) out: &'a mut dyn Write,
     pub(crate) err: &'a mut dyn Write,
     pub(crate) input: &'a mut dyn LineInput,
@@ -68,6 +69,9 @@ pub(crate) struct Vm<'a> {
     workspace_root: Option<PathBuf>,
     deadline: Option<Instant>,
     pub(crate) leia_host: Option<&'a mut dyn LeiaHost>,
+    pub(crate) cartesiano_host: Option<&'c mut dyn CartesianoHost>,
+    pub(crate) cli_cart: CliCartesianoHost,
+    pub(crate) abrir_cartesiano: bool,
     pub(crate) numero_locale: NumeroLocale,
     pub(crate) numero_aritmetica: NumeroAritmetica,
     pub(crate) rng: Rng,
@@ -90,7 +94,7 @@ pub fn run_source_args(source: &str, file: &str, args: &[String]) -> Result<i32,
     let mut input = ConsoleInput;
     let mut stdout = io::stdout();
     let mut stderr = io::stderr();
-    run_with(
+    run_with_io(
         source,
         file,
         Box::new(NoopHook),
@@ -100,6 +104,8 @@ pub fn run_source_args(source: &str, file: &str, args: &[String]) -> Result<i32,
         None,
         None,
         None,
+        None,
+        true,
         args,
     )
 }
@@ -122,7 +128,7 @@ pub fn run_source_marcador_args(
     let mut dummy_in = io::Cursor::new("");
     let mut stdout = io::stdout();
     let mut stderr = io::stderr();
-    run_with(
+    run_with_io(
         source,
         file,
         Box::new(NoopHook),
@@ -132,6 +138,8 @@ pub fn run_source_marcador_args(
         None,
         None,
         Some(&mut host),
+        None,
+        true,
         args,
     )
 }
@@ -144,7 +152,7 @@ pub fn debug_source_args(source: &str, file: &str, args: &[String]) -> Result<i3
     let mut input = ConsoleInput;
     let mut stdout = io::stdout();
     let mut stderr = io::stderr();
-    run_with(
+    run_with_io(
         source,
         file,
         Box::new(super::debug::CliDebugger::new()),
@@ -154,6 +162,8 @@ pub fn debug_source_args(source: &str, file: &str, args: &[String]) -> Result<i3
         None,
         None,
         None,
+        None,
+        true,
         args,
     )
 }
@@ -249,8 +259,34 @@ pub fn run_with_hook(
     leia_host: &mut dyn LeiaHost,
     script_args: &[String],
 ) -> Result<i32, RuntimeError> {
+    run_with_hosts(
+        source,
+        file,
+        hook,
+        workspace_root,
+        time_limit,
+        out,
+        err,
+        leia_host,
+        None,
+        script_args,
+    )
+}
+
+pub fn run_with_hosts(
+    source: &str,
+    file: &str,
+    hook: Box<dyn DebugHook>,
+    workspace_root: Option<PathBuf>,
+    time_limit: Option<Duration>,
+    out: &mut dyn Write,
+    err: &mut dyn Write,
+    leia_host: &mut dyn LeiaHost,
+    cartesiano_host: Option<&mut dyn CartesianoHost>,
+    script_args: &[String],
+) -> Result<i32, RuntimeError> {
     let mut dummy_in = io::Cursor::new("");
-    run_with(
+    run_with_io(
         source,
         file,
         hook,
@@ -260,6 +296,8 @@ pub fn run_with_hook(
         workspace_root,
         time_limit,
         Some(leia_host),
+        cartesiano_host,
+        false,
         script_args,
     )
 }
@@ -274,6 +312,36 @@ pub(crate) fn run_with<'a>(
     workspace_root: Option<PathBuf>,
     time_limit: Option<Duration>,
     leia_host: Option<&'a mut dyn LeiaHost>,
+    script_args: &[String],
+) -> Result<i32, RuntimeError> {
+    run_with_io(
+        source,
+        file,
+        hook,
+        input,
+        out,
+        err,
+        workspace_root,
+        time_limit,
+        leia_host,
+        None,
+        false,
+        script_args,
+    )
+}
+
+pub(crate) fn run_with_io<'a, 'c>(
+    source: &str,
+    file: &str,
+    hook: Box<dyn DebugHook>,
+    input: &'a mut dyn LineInput,
+    out: &'a mut dyn Write,
+    err: &'a mut dyn Write,
+    workspace_root: Option<PathBuf>,
+    time_limit: Option<Duration>,
+    leia_host: Option<&'a mut dyn LeiaHost>,
+    cartesiano_host: Option<&'c mut dyn CartesianoHost>,
+    abrir_cartesiano: bool,
     script_args: &[String],
 ) -> Result<i32, RuntimeError> {
     let program = parse(source).map_err(|e| RuntimeError {
@@ -292,6 +360,8 @@ pub(crate) fn run_with<'a>(
         workspace_root,
         time_limit,
         leia_host,
+        cartesiano_host,
+        abrir_cartesiano,
         script_args,
     );
     match vm.run(&program) {
@@ -319,7 +389,7 @@ pub(crate) fn run_with<'a>(
     }
 }
 
-impl<'a> Vm<'a> {
+impl<'a, 'c> Vm<'a, 'c> {
     pub(crate) fn new(
         file: &str,
         source: &str,
@@ -330,6 +400,8 @@ impl<'a> Vm<'a> {
         workspace_root: Option<PathBuf>,
         time_limit: Option<Duration>,
         leia_host: Option<&'a mut dyn LeiaHost>,
+        cartesiano_host: Option<&'c mut dyn CartesianoHost>,
+        abrir_cartesiano: bool,
         script_args: &[String],
     ) -> Self {
         let builtins = Env::new(FrameKind::Builtins, None);
@@ -355,6 +427,9 @@ impl<'a> Vm<'a> {
             workspace_root,
             deadline: time_limit.map(|d| Instant::now() + d),
             leia_host,
+            cartesiano_host,
+            cli_cart: CliCartesianoHost::new(),
+            abrir_cartesiano,
             numero_locale: default_numero_locale(),
             numero_aritmetica: default_numero_aritmetica(),
             rng: Rng::new(),
@@ -1095,7 +1170,7 @@ impl<'a> Vm<'a> {
         }
     }
 
-    fn call_value(
+    pub(crate) fn call_value(
         &mut self,
         func: &Value,
         args: &[Value],
@@ -1851,7 +1926,7 @@ fn check_unique_params(params: &[Param]) -> Result<(), String> {
     Ok(())
 }
 
-impl Vm<'_> {
+impl Vm<'_, '_> {
     pub(crate) fn format_value(&self, v: &Value) -> String {
         v.format_with(self.numero_locale)
     }
@@ -2015,6 +2090,10 @@ mod tests {
             (
                 "exemplos/escola/cinematica.lep",
                 include_str!("../../exemplos/escola/cinematica.lep"),
+            ),
+            (
+                "exemplos/escola/seno_cosseno.lep",
+                include_str!("../../exemplos/escola/seno_cosseno.lep"),
             ),
         ];
         for (file, src) in examples {

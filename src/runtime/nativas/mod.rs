@@ -10,6 +10,7 @@ use super::eval::Vm;
 use super::value::{NumeroLocale, Value, format_numero};
 
 mod arquivo;
+mod cartesiano;
 mod mat;
 mod matriz;
 mod nucleo;
@@ -312,6 +313,30 @@ pub const NATIVAS: &[Nativa] = &[
         names: &["salve_csv"],
         module: Some("arquivo"),
     },
+    Nativa {
+        names: &["documento"],
+        module: Some("cartesiano"),
+    },
+    Nativa {
+        names: &["grafico"],
+        module: Some("cartesiano"),
+    },
+    Nativa {
+        names: &["eixos"],
+        module: Some("cartesiano"),
+    },
+    Nativa {
+        names: &["plotar"],
+        module: Some("cartesiano"),
+    },
+    Nativa {
+        names: &["adicione"],
+        module: Some("cartesiano"),
+    },
+    Nativa {
+        names: &["mostre"],
+        module: Some("cartesiano"),
+    },
 ];
 
 pub fn bind_nucleo(env: &Rc<RefCell<Env>>) {
@@ -348,7 +373,7 @@ pub fn make_native_modules() -> HashMap<String, Rc<RefCell<Env>>> {
     map
 }
 
-impl Vm<'_> {
+impl Vm<'_, '_> {
     pub(crate) fn call_builtin(
         &mut self,
         name: &str,
@@ -427,6 +452,12 @@ impl Vm<'_> {
             "adicione_arquivo" => self.bi_adicione_arquivo(args, span),
             "leia_csv" => self.bi_leia_csv(args, span),
             "salve_csv" => self.bi_salve_csv(args, span),
+            "documento" => self.bi_documento(args, span),
+            "grafico" => self.bi_grafico(args, span),
+            "eixos" => self.bi_eixos(args, span),
+            "plotar" => self.bi_plotar(args, span, env),
+            "adicione" => self.bi_adicione(args, span),
+            "mostre" => self.bi_mostre(args, span),
             "mapa" => self.bi_mapa(args, span),
             "conjunto" => self.bi_conjunto(args, span),
             other => Err(self.err(format!("função nativa desconhecida: {other}"), span)),
@@ -508,7 +539,7 @@ pub(super) fn csv_cell(v: &Value) -> String {
     }
 }
 
-pub(super) fn lines_to_text(lines: &[Value], span: Span, vm: &Vm<'_>) -> Result<String, EvalError> {
+pub(super) fn lines_to_text(lines: &[Value], span: Span, vm: &Vm<'_, '_>) -> Result<String, EvalError> {
     let mut body = String::new();
     for line in lines {
         match line {

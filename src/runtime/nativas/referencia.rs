@@ -57,6 +57,7 @@ const TELA: &str = include_str!("../../../docs/nativas/tela.lep");
 const MAT: &str = include_str!("../../../docs/nativas/mat.lep");
 const MATRIZ: &str = include_str!("../../../docs/nativas/matriz.lep");
 const ARQUIVO: &str = include_str!("../../../docs/nativas/arquivo.lep");
+const CARTESIANO: &str = include_str!("../../../docs/nativas/cartesiano.lep");
 
 pub fn builtin_docs() -> &'static [BuiltinDoc] {
     static DOCS: OnceLock<Vec<BuiltinDoc>> = OnceLock::new();
@@ -106,6 +107,7 @@ fn load_all() -> Vec<BuiltinDoc> {
         (MAT, Some("mat")),
         (MATRIZ, Some("matriz")),
         (ARQUIVO, Some("arquivo")),
+        (CARTESIANO, Some("cartesiano")),
     ] {
         out.extend(extract(src, module).unwrap_or_else(|e| {
             panic!("docs/nativas ({module:?}): {e}");

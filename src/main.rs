@@ -51,9 +51,18 @@ fn try_main() -> Result<(), Box<dyn std::error::Error>> {
              expressa debug <arquivo.lep> [args…]\n  \
              expressa --ast <arquivo.lep>\n  \
              expressa --marcador-leia <arquivo.lep> [args…]\n  \
+             expressa --grafico <arquivo.cart>\n  \
              expressa --numeros pt|en [arquivo.lep] [args…]\n  \
              expressa --aritmetica decimal|float [arquivo.lep] [args…]"
         );
+        return Ok(());
+    }
+    if args[0] == "--grafico" {
+        if args.len() < 2 {
+            eprintln!("Uso: expressa --grafico <arquivo.cart>");
+            return Ok(());
+        }
+        expressa::runtime::run_viewer(std::path::Path::new(&args[1]))?;
         return Ok(());
     }
 

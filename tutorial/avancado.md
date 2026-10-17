@@ -345,6 +345,30 @@ Contas de caderno: `../exemplos/escola/`.
 
 ---
 
+## Plano cartesiano
+
+Arquivo: `../exemplos/escola/seno_cosseno.lep`
+
+`importe "cartesiano"` desenha *y = f(x)* como no caderno (y para cima). O **documento** é a janela; `mostre` atualiza a mesma.
+
+```text
+importe "mat"
+cart = importe "cartesiano"
+
+c = cart::documento()
+g = cart::grafico()
+g.cart::eixos(-2 * pi, 2 * pi, -1.5, 1.5)
+g.cart::plotar(função(x) { seno(x) }, :azul)
+c.cart::adicione(g)
+c.cart::mostre()
+```
+
+Na Aula o gráfico aparece no painel; **Destacar** abre janela à parte. No terminal, `expressa` chama `expressa-grafico`.
+
+**Desafio:** No mesmo documento, acrescente a parábola `x * x` em verde.
+
+---
+
 ## 20. Argumentos da linha de comando
 
 Arquivo: `exemplos/18_argumentos.lep`

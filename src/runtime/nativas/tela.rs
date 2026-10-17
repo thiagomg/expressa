@@ -15,6 +15,10 @@ pub(crate) const NOVA_LINHA: &str = if cfg!(windows) { "\r\n" } else { "\n" };
 
 const RESET: &str = "\x1b[0m";
 
+pub(crate) fn cor_conhecida(nome: &str) -> bool {
+    sgr_cor(nome, false).is_some()
+}
+
 fn sgr_cor(nome: &str, fundo: bool) -> Option<u8> {
     let n = match nome {
         "normal" => return Some(if fundo { 49 } else { 39 }),
@@ -45,7 +49,7 @@ fn wrap_sgr(texto: &str, codes: &[u8]) -> String {
     out
 }
 
-impl Vm<'_> {
+impl Vm<'_, '_> {
     fn cor_codigo(&self, v: &Value, fundo: bool, span: Span) -> Result<u8, EvalError> {
         let nome = self.expect_texto(v, span)?;
         sgr_cor(&nome, fundo).ok_or_else(|| {
@@ -224,7 +228,7 @@ fn map_int(
     xs: &std::rc::Rc<std::cell::RefCell<Vec<(MapKey, Value)>>>,
     chave: &str,
     span: Span,
-    vm: &Vm<'_>,
+    vm: &Vm<'_, '_>,
 ) -> Result<i64, EvalError> {
     let key = MapKey::Texto(chave.into());
     let v = xs

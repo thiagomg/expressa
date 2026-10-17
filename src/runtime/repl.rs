@@ -16,7 +16,7 @@ use super::leia::CLEAR_SCREEN;
 use super::value::{MapKey, Value};
 
 pub struct ReplSession<'a> {
-    vm: Vm<'a>,
+    vm: Vm<'a, 'static>,
     env: Rc<std::cell::RefCell<Env>>,
     exit_code: Option<i32>,
 }
@@ -37,6 +37,8 @@ impl<'a> ReplSession<'a> {
             None,
             None,
             None,
+            None,
+            true,
             &[],
         );
         let env = Env::child(&vm.builtins_env(), FrameKind::Module);
