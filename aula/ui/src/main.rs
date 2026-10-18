@@ -41,7 +41,6 @@ use store::{Files, valid_aluno};
 
 const APP_ID: &str = "dev.expressa.aula";
 const DEFAULT_URL: &str = "http://127.0.0.1:50051";
-const WELCOME: &str = "// F5 executa. F6 depura. Ctrl+F busca. F1 ajuda. Ctrl+clique vai para a definição.\n\nescreva(\"Olá, Expressa!\")\n";
 
 /// A program running or being debugged.
 struct Run {
@@ -1261,11 +1260,8 @@ fn remove_tab(ui: &UiRc, doc: &Rc<Doc>) {
     if let Some(n) = nb.page_num(&doc.page) {
         nb.remove_page(Some(n));
     }
-    if ui.borrow().docs.is_empty() {
-        let d = open_doc(ui, None, "");
-        d.mark_saved();
-    }
     refresh_title(ui);
+    refresh_diag_label(ui);
 }
 
 fn close_doc(ui: &UiRc, doc: &Rc<Doc>) {
@@ -1381,14 +1377,17 @@ fn confirm_unsaved(ui: &UiRc, docs: Vec<Rc<Doc>>, then: impl FnOnce() + 'static)
 }
 
 fn refresh_title(ui: &UiRc) {
-    let Some(doc) = current_doc(ui) else { return };
+    let doc = current_doc(ui);
     let Ok(u) = ui.try_borrow() else { return };
-    let star = if doc.is_dirty() { "● " } else { "" };
-    u.window.set_title(Some(&format!(
-        "{star}{} — {} — Expressa Aula",
-        doc.name(),
-        u.project
-    )));
+    let title = match &doc {
+        Some(doc) => {
+            let star = if doc.is_dirty() { "● " } else { "" };
+            format!("{star}{} — {} — Expressa Aula", doc.name(), u.project)
+        }
+        None if u.project.is_empty() => "Expressa Aula".to_string(),
+        None => format!("{} — Expressa Aula", u.project),
+    };
+    u.window.set_title(Some(&title));
 }
 
 fn refresh_diag_label(ui: &UiRc) {
@@ -1774,7 +1773,10 @@ fn executar(ui: &UiRc, debug: bool) {
         set_status(ui, "já tem um programa executando — aperte Parar primeiro");
         return;
     }
-    let Some(doc) = current_doc(ui) else { return };
+    let Some(doc) = current_doc(ui) else {
+        set_status(ui, "abra um arquivo para executar");
+        return;
+    };
     let name = doc.name();
     let docs = all_docs(ui);
     let (project, args) = {
@@ -2070,35 +2072,11 @@ fn close_project_tabs(ui: &UiRc) {
     }
 }
 
-/// Open the first `.lep` file, or a welcome scratch when the folder is empty.
+/// Show the project tree. No file is opened; the user picks one.
 fn finish_open(ui: &UiRc) {
     refresh_tree(ui);
-    let first_lep = ui
-        .borrow()
-        .project_files
-        .iter()
-        .find(|p| p.ends_with(".lep"))
-        .cloned();
-    if let Some(path) = first_lep {
-        open_path(ui, &path);
-        let empty: Vec<Rc<Doc>> = all_docs(ui)
-            .into_iter()
-            .filter(|d| d.is_untitled() && d.text().trim().is_empty())
-            .collect();
-        for d in empty {
-            if ui.borrow().docs.len() > 1 {
-                remove_tab(ui, &d);
-            }
-        }
-    } else if let Some(d) = all_docs(ui).into_iter().find(|d| d.is_untitled()) {
-        d.buffer.set_text(WELCOME);
-        d.mark_saved();
-        switch_to(ui, &d);
-    } else {
-        let doc = open_doc(ui, None, WELCOME);
-        doc.mark_saved();
-    }
     refresh_title(ui);
+    refresh_diag_label(ui);
 }
 
 fn normalize_url(url: &str) -> String {
