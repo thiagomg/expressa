@@ -1,6 +1,6 @@
 //! Graphs pane: stacked `FolhaPronta` in a notebook, detachable window.
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::rc::Rc;
 
@@ -8,10 +8,15 @@ use gtk::cairo::{Format, ImageSurface};
 use gtk::glib;
 use gtk::prelude::*;
 use gtk::{
-    Align, Box as GtkBox, Button, DrawingArea, Label, Notebook, Orientation, Window,
+    Align, Box as GtkBox, Button, DrawingArea, Label, Notebook, Orientation, PolicyType,
+    ScrolledWindow, Window,
 };
 
 use expressa::runtime::{FolhaPronta, pintar};
+
+/// Viewport height for one graph at the viewer ratio, capped so the editor
+/// keeps room. Extra graphs (and a taller plot) scroll inside this.
+const VIEWPORT_MAX: i32 = 360;
 
 pub struct Painel {
     /// Stays in the editor column so we can dock again.
@@ -30,6 +35,7 @@ impl Painel {
         let dock = GtkBox::new(Orientation::Vertical, 0);
         dock.set_visible(false);
         dock.set_hexpand(true);
+        dock.set_vexpand(false);
 
         let header = GtkBox::new(Orientation::Horizontal, 8);
         header.set_margin_start(8);
@@ -45,10 +51,12 @@ impl Painel {
 
         let notebook = Notebook::new();
         notebook.set_hexpand(true);
-        notebook.set_vexpand(true);
+        notebook.set_vexpand(false);
         notebook.set_scrollable(true);
 
         let root = GtkBox::new(Orientation::Vertical, 0);
+        root.set_hexpand(true);
+        root.set_vexpand(false);
         root.append(&header);
         root.append(&notebook);
         dock.append(&root);
@@ -83,11 +91,9 @@ impl Painel {
         if nova {
             let area = DrawingArea::new();
             area.set_hexpand(true);
-            area.set_vexpand(true);
-            // Small content size so the drawing area does not inflate the
-            // editor window's minimum; hexpand/vexpand fill the allocation.
-            area.set_content_width(64);
-            area.set_content_height(48);
+            area.set_vexpand(false);
+            area.set_halign(Align::Fill);
+            area.set_valign(Align::Start);
             let folhas = Rc::clone(&self.folhas);
             area.set_draw_func(move |_, cr, w, h| {
                 let folhas = folhas.borrow();
@@ -118,14 +124,68 @@ impl Painel {
                 cr.set_source_surface(&surf, 0.0, 0.0).ok();
                 let _ = cr.paint();
             });
+            let inner = GtkBox::new(Orientation::Vertical, 0);
+            inner.set_halign(Align::Fill);
+            inner.set_valign(Align::Start);
+            inner.set_hexpand(true);
+            inner.set_vexpand(false);
+            inner.append(&area);
+            let scroll = ScrolledWindow::builder()
+                .hscrollbar_policy(PolicyType::Never)
+                .vscrollbar_policy(PolicyType::Automatic)
+                .propagate_natural_width(false)
+                .propagate_natural_height(true)
+                .overlay_scrolling(true)
+                .hexpand(true)
+                .vexpand(false)
+                .max_content_height(VIEWPORT_MAX)
+                .child(&inner)
+                .build();
+            {
+                let folhas = Rc::clone(&self.folhas);
+                let pending = Rc::new(Cell::new(false));
+                area.connect_resize(move |area, w, _h| {
+                    if w < 8 || pending.get() {
+                        return;
+                    }
+                    pending.set(true);
+                    let area = area.clone();
+                    let folhas = Rc::clone(&folhas);
+                    let pending = Rc::clone(&pending);
+                    glib::idle_add_local_once(move || {
+                        pending.set(false);
+                        let n = folhas
+                            .borrow()
+                            .get(&id)
+                            .map(|f| f.graficos.len())
+                            .unwrap_or(1);
+                        let w = area.allocated_width();
+                        if w >= 8 {
+                            ajustar_conteudo(&area, w, n);
+                        }
+                    });
+                });
+            }
             let n = self.areas.borrow().len() + 1;
             let lab = Label::new(Some(&format!("{n}")));
-            self.notebook.append_page(&area, Some(&lab));
+            self.notebook.append_page(&scroll, Some(&lab));
             self.areas.borrow_mut().insert(id, area);
         }
         if let Some(area) = self.areas.borrow().get(&id) {
+            let n = self
+                .folhas
+                .borrow()
+                .get(&id)
+                .map(|f| f.graficos.len())
+                .unwrap_or(1);
+            let w = largura_util(area);
+            if w >= 8 {
+                ajustar_conteudo(area, w, n);
+            }
             area.queue_draw();
-            self.notebook.set_current_page(self.notebook.page_num(area));
+            if let Some(page) = area.ancestor(ScrolledWindow::static_type()) {
+                self.notebook.set_current_page(self.notebook.page_num(&page));
+            }
         }
         self.dock.set_visible(self.detached.borrow().is_none());
         if let Some(win) = self.detached.borrow().as_ref() {
@@ -205,5 +265,62 @@ impl Painel {
         if let Some(win) = self.detached.borrow().as_ref() {
             win.set_application(Some(app));
         }
+    }
+}
+
+/// Viewer default 800×560 → 7:10. Each stacked graph keeps that ratio from
+/// the allocated width; extra height scrolls instead of shrinking the plot.
+fn altura_folha(largura: i32, n_graficos: usize) -> i32 {
+    let n = n_graficos.max(1) as i64;
+    let por = (largura as i64 * 7 / 10).max(64);
+    let gap = 8 * (n - 1);
+    (por * n + gap).clamp(64, 4096) as i32
+}
+
+fn ajustar_conteudo(area: &DrawingArea, largura: i32, n_graficos: usize) {
+    let w = largura.max(1);
+    let h = altura_folha(w, n_graficos);
+    if area.content_width() != w {
+        area.set_content_width(w);
+    }
+    if area.content_height() != h {
+        area.set_content_height(h);
+    }
+    if area.height_request() != h {
+        area.set_height_request(h);
+    }
+    let cap = altura_folha(w, 1).clamp(96, VIEWPORT_MAX);
+    if let Some(scroll) = area
+        .ancestor(ScrolledWindow::static_type())
+        .and_then(|wid| wid.downcast::<ScrolledWindow>().ok())
+    {
+        if scroll.max_content_height() != cap {
+            scroll.set_max_content_height(cap);
+        }
+    }
+}
+
+fn largura_util(area: &DrawingArea) -> i32 {
+    let da_janela = area
+        .ancestor(ScrolledWindow::static_type())
+        .and_then(|w| w.downcast::<ScrolledWindow>().ok())
+        .map(|s| s.allocated_width())
+        .unwrap_or(0);
+    if da_janela >= 8 {
+        da_janela
+    } else {
+        area.allocated_width()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::altura_folha;
+
+    #[test]
+    fn altura_segue_a_largura_e_o_numero_de_graficos() {
+        assert_eq!(altura_folha(800, 1), 560);
+        assert_eq!(altura_folha(800, 2), 560 * 2 + 8);
+        assert_eq!(altura_folha(400, 1), 280);
     }
 }

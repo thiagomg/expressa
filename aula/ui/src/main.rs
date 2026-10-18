@@ -269,6 +269,7 @@ fn build_ui(app: &Application) {
         .vscrollbar_policy(PolicyType::Automatic)
         .hexpand(true)
         .vexpand(true)
+        .min_content_height(64)
         .child(&ui.borrow().console.view)
         .build();
 
