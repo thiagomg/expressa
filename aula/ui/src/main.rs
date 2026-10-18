@@ -35,7 +35,7 @@ use assist::{Help, Target, ViewHelp};
 use console::Console;
 use docs::Doc;
 use exec::{ExecEvent, Workspace};
-use prefs::{FontCss, Prefs, ThemeCss};
+use prefs::{FontCss, Prefs, ThemeCss, expand_tilde, path_for_display};
 use rpc::Rpc;
 use store::{Files, valid_aluno};
 
@@ -116,10 +116,16 @@ fn build_ui(app: &Application) {
     let font_css = FontCss::install();
     font_css.set_size(prefs.font_size);
 
-    let project_path = Label::new(if prefs.pasta.is_empty() {
+    let pasta_abs = expand_tilde(&prefs.pasta);
+    let pasta_shown = if prefs.pasta.is_empty() {
+        String::new()
+    } else {
+        path_for_display(&pasta_abs)
+    };
+    let project_path = Label::new(if pasta_shown.is_empty() {
         None
     } else {
-        Some(prefs.pasta.as_str())
+        Some(pasta_shown.as_str())
     });
     project_path.set_xalign(1.0);
     project_path.set_ellipsize(gtk::pango::EllipsizeMode::Middle);
@@ -127,7 +133,7 @@ fn build_ui(app: &Application) {
     project_path.set_selectable(true);
     project_path.add_css_class("dim-label");
     if !prefs.pasta.is_empty() {
-        project_path.set_tooltip_text(Some(prefs.pasta.as_str()));
+        project_path.set_tooltip_text(Some(&pasta_abs.display().to_string()));
     }
     #[allow(deprecated)]
     let store = TreeStore::new(&[glib::Type::STRING, glib::Type::STRING, glib::Type::BOOL]);
@@ -668,14 +674,19 @@ fn set_action_state_str(win: &ApplicationWindow, name: &str, value: &str) {
     }
 }
 
-fn set_project_path(ui: &UiRc, text: &str) {
+fn set_project_path(ui: &UiRc, shown: &str, tooltip: Option<&str>) {
     let u = ui.borrow();
-    u.project_path.set_text(text);
-    if text.is_empty() {
+    u.project_path.set_text(shown);
+    if tooltip.unwrap_or("").is_empty() {
         u.project_path.set_tooltip_text(None);
     } else {
-        u.project_path.set_tooltip_text(Some(text));
+        u.project_path.set_tooltip_text(tooltip);
     }
+}
+
+fn set_local_project_path(ui: &UiRc, path: &std::path::Path) {
+    let full = path.display().to_string();
+    set_project_path(ui, &path_for_display(path), Some(&full));
 }
 
 fn install_menubar(
@@ -1934,6 +1945,7 @@ fn choose_local_folder(ui: &UiRc) -> bool {
 }
 
 fn open_local_project(ui: &UiRc, path: PathBuf) {
+    let path = expand_tilde(&path.to_string_lossy());
     let path = match path.canonicalize() {
         Ok(p) if p.is_dir() => p,
         Ok(_) => {
@@ -1967,13 +1979,13 @@ fn apply_local(ui: &UiRc, path: PathBuf) {
     {
         let mut u = ui.borrow_mut();
         u.files.shutdown();
-        u.files = Files::Local(path);
+        u.files = Files::Local(path.clone());
         u.project = name;
         u.prefs.pasta = shown.clone();
         u.prefs.save();
         u.file_cache.borrow_mut().clear();
     }
-    set_project_path(ui, &shown);
+    set_local_project_path(ui, &path);
     finish_open(ui);
 }
 
@@ -2031,7 +2043,7 @@ fn apply_remote(ui: &UiRc, rpc: Rpc, url: String, aluno: String) {
         u.prefs.save();
         u.file_cache.borrow_mut().clear();
     }
-    set_project_path(ui, &tip);
+    set_project_path(ui, &tip, Some(&tip));
     finish_open(ui);
 }
 
@@ -2107,7 +2119,7 @@ fn pick_folder(parent: &impl IsA<gtk::Window>, start: &str) -> Option<PathBuf> {
         .accept_label("Abrir")
         .cancel_label("Cancelar")
         .build();
-    let start_path = PathBuf::from(start);
+    let start_path = expand_tilde(start);
     if start_path.is_dir() {
         let _ = dialog.set_current_folder(Some(&gtk::gio::File::for_path(&start_path)));
     }

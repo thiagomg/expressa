@@ -1,7 +1,7 @@
 //! Font size (zoom for projectors) and light/dark theme, saved in
 //! `~/.config/expressa-aula/prefs`.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 pub const DEFAULT_FONT: u32 = 11;
 const MIN_FONT: u32 = 7;
@@ -88,6 +88,56 @@ impl Prefs {
             (self.font_size as i32 + step).clamp(MIN_FONT as i32, MAX_FONT as i32) as u32
         };
     }
+}
+
+fn home_dir() -> Option<PathBuf> {
+    std::env::var_os("HOME")
+        .or_else(|| std::env::var_os("USERPROFILE"))
+        .map(PathBuf::from)
+}
+
+/// `~` and `~/…` become the user home directory. `~nome` is left as-is.
+pub fn expand_tilde(path: &str) -> PathBuf {
+    if path == "~" {
+        return home_dir().unwrap_or_else(|| PathBuf::from("~"));
+    }
+    let rest = path
+        .strip_prefix("~/")
+        .or_else(|| path.strip_prefix("~\\"));
+    if let Some(rest) = rest {
+        if let Some(home) = home_dir() {
+            return home.join(rest);
+        }
+    }
+    PathBuf::from(path)
+}
+
+/// `/home/ana/proj` → `~/proj` when the prefix is this user’s home.
+pub fn path_for_display(path: &Path) -> String {
+    let shown = path.display().to_string();
+    let Some(home) = home_dir() else {
+        return shown;
+    };
+    let home = home.canonicalize().unwrap_or(home);
+    let home_s = home.display().to_string();
+    if shown == home_s {
+        return "~".to_string();
+    }
+    let sep = std::path::MAIN_SEPARATOR;
+    let prefix = format!("{home_s}{sep}");
+    if let Some(rest) = shown.strip_prefix(&prefix) {
+        return format!("~{sep}{rest}");
+    }
+    if let Ok(canon) = path.canonicalize() {
+        let cs = canon.display().to_string();
+        if cs == home_s {
+            return "~".to_string();
+        }
+        if let Some(rest) = cs.strip_prefix(&prefix) {
+            return format!("~{sep}{rest}");
+        }
+    }
+    shown
 }
 
 /// Applies the font size to every widget with the `aula-code` class (the
@@ -404,5 +454,17 @@ mod tests {
         assert!(DARK_CSS.contains("#1e1e24"));
         assert!(LIGHT_CSS.contains("window, dialog"));
         assert!(DARK_CSS.contains("window, dialog"));
+    }
+
+    #[test]
+    fn tilde_becomes_home() {
+        let home = std::env::temp_dir().join("expressa-aula-tilde-home");
+        unsafe { std::env::set_var("HOME", &home) };
+        assert_eq!(expand_tilde("~"), home);
+        assert_eq!(expand_tilde("~/proj/a"), home.join("proj/a"));
+        assert_eq!(expand_tilde("/abs"), PathBuf::from("/abs"));
+        assert_eq!(expand_tilde("~nao"), PathBuf::from("~nao"));
+        let proj = home.join("proj");
+        assert_eq!(path_for_display(&proj), format!("~/proj"));
     }
 }
