@@ -7,11 +7,14 @@ use std::rc::Rc;
 use gtk::cairo::{Format, ImageSurface};
 use gtk::glib;
 use gtk::prelude::*;
-use gtk::{
-    Align, Box as GtkBox, Button, DrawingArea, Label, Notebook, Orientation, Window,
-};
+use gtk::{Align, Box as GtkBox, Button, DrawingArea, Label, Notebook, Orientation, Window};
 
 use expressa::runtime::{FolhaPronta, pintar};
+
+/// Minimum plot height while docked, so the pane does not collapse to the
+/// header. The drawing area still grows to whatever it is allocated — the
+/// same way `expressa-grafico` paints the whole window.
+const ALTURA_MIN: i32 = 280;
 
 pub struct Painel {
     /// Stays in the editor column so we can dock again.
@@ -30,6 +33,7 @@ impl Painel {
         let dock = GtkBox::new(Orientation::Vertical, 0);
         dock.set_visible(false);
         dock.set_hexpand(true);
+        dock.set_vexpand(true);
 
         let header = GtkBox::new(Orientation::Horizontal, 8);
         header.set_margin_start(8);
@@ -49,6 +53,8 @@ impl Painel {
         notebook.set_scrollable(true);
 
         let root = GtkBox::new(Orientation::Vertical, 0);
+        root.set_hexpand(true);
+        root.set_vexpand(true);
         root.append(&header);
         root.append(&notebook);
         dock.append(&root);
@@ -84,10 +90,11 @@ impl Painel {
             let area = DrawingArea::new();
             area.set_hexpand(true);
             area.set_vexpand(true);
-            // Small content size so the drawing area does not inflate the
-            // editor window's minimum; hexpand/vexpand fill the allocation.
-            area.set_content_width(64);
-            area.set_content_height(48);
+            area.set_halign(Align::Fill);
+            area.set_valign(Align::Fill);
+            // Floor for the docked pane. A taller allocation (the detached
+            // window, or a dragged split) is what `pintar` receives.
+            area.set_content_height(ALTURA_MIN);
             let folhas = Rc::clone(&self.folhas);
             area.set_draw_func(move |_, cr, w, h| {
                 let folhas = folhas.borrow();
@@ -125,7 +132,9 @@ impl Painel {
         }
         if let Some(area) = self.areas.borrow().get(&id) {
             area.queue_draw();
-            self.notebook.set_current_page(self.notebook.page_num(area));
+            if let Some(num) = self.notebook.page_num(area) {
+                self.notebook.set_current_page(Some(num));
+            }
         }
         self.dock.set_visible(self.detached.borrow().is_none());
         if let Some(win) = self.detached.borrow().as_ref() {
@@ -152,8 +161,8 @@ impl Painel {
         self.dock.set_visible(false);
         let win = Window::builder()
             .title("Gráficos — Expressa")
-            .default_width(720)
-            .default_height(480)
+            .default_width(800)
+            .default_height(560)
             .build();
         win.set_child(Some(&self.root));
         if let Some(app) = self.app.borrow().as_ref() {
@@ -207,3 +216,5 @@ impl Painel {
         }
     }
 }
+
+
