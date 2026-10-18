@@ -228,6 +228,14 @@ textview, textview > text, treeview, treeview.view, listview, list {
   background-color: @aula_view;
   color: @aula_view_fg;
 }
+/* Application priority beats the theme's :selected rule, so the row
+   highlight has to be set here or a click looks like it did nothing. */
+treeview.view:selected,
+treeview.view:selected:focus,
+treeview.view:selected:hover {
+  background-color: @aula_sel;
+  color: #1a1a1a;
+}
 entry, spinbutton {
   background-color: @aula_view;
   color: @aula_view_fg;
@@ -343,6 +351,14 @@ box, paned, notebook, stack, scrolledwindow, viewport, frame, grid, revealer {
 textview, textview > text, treeview, treeview.view, listview, list {
   background-color: @aula_view;
   color: @aula_view_fg;
+}
+/* Application priority beats the theme's :selected rule, so the row
+   highlight has to be set here or a click looks like it did nothing. */
+treeview.view:selected,
+treeview.view:selected:focus,
+treeview.view:selected:hover {
+  background-color: @aula_sel;
+  color: #ffffff;
 }
 entry, spinbutton {
   background-color: @aula_view;

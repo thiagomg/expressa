@@ -145,6 +145,8 @@ fn build_ui(app: &Application) {
     let cell = CellRendererText::new();
     column.pack_start(&cell, true);
     column.add_attribute(&cell, "text", 0);
+    // The row, not just the letters, is the click and highlight target.
+    column.set_expand(true);
     tree.append_column(&column);
 
     let languages = language_manager();
