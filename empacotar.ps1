@@ -7,6 +7,9 @@
 # O script tambem grava dist\expressa-aula-windows.zip.
 # Compilar exige deps\gtk e deps\protoc (veja deps\ativar.ps1). Rodar o
 # pacote nao exige.
+#
+# Para o instalador (Inno Setup 7), use criar-instalador.ps1. Ele chama
+# este script e gera dist\ExpressaAula-<versao>-Setup.exe.
 
 $ErrorActionPreference = "Stop"
 $root = $PSScriptRoot
@@ -76,6 +79,9 @@ foreach ($loc in @("pt", "pt_BR")) {
     }
 }
 Copy-Tree (Join-Path $root "aula\ui\res") (Join-Path $dest "res")
+# Modelos somente leitura. Na primeira execucao o editor copia esta pasta
+# para Documentos\Expressa Aula\exemplos, onde o usuario pode gravar.
+Copy-Tree (Join-Path $root "exemplos") (Join-Path $dest "exemplos")
 
 $bytes = (Get-ChildItem $dest -Recurse -File | Measure-Object Length -Sum).Sum
 Write-Output ("Pasta pronta: {0} ({1:N0} MB)" -f $dest, ($bytes / 1MB))

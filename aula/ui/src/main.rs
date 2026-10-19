@@ -517,7 +517,13 @@ fn build_ui(app: &Application) {
     {
         let ui_p = Rc::clone(&ui);
         glib::timeout_add_local_once(std::time::Duration::from_millis(250), move || {
-            let opened = choose_local_folder(&ui_p);
+            // No saved folder yet: open a writable copy of the shipped examples.
+            let first = ui_p.borrow().prefs.pasta.trim().is_empty();
+            let opened = if first && open_shipped_exemplos(&ui_p) {
+                true
+            } else {
+                choose_local_folder(&ui_p)
+            };
             schedule_raise();
             if !opened {
                 set_status(&ui_p, "escolha uma pasta para o projeto");
@@ -885,6 +891,67 @@ fn install_css() {
             gtk::STYLE_PROVIDER_PRIORITY_APPLICATION,
         );
     }
+}
+
+/// Examples shipped beside the exe, or the repo copy in a dev build.
+fn bundled_exemplos_dir() -> Option<PathBuf> {
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(dir) = exe.parent() {
+            let bundled = dir.join("exemplos");
+            if bundled.join("linguagem").is_dir() {
+                return Some(bundled);
+            }
+        }
+    }
+    let dev = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../exemplos");
+    dev.join("linguagem").is_dir().then_some(dev)
+}
+
+/// A folder the user can edit. Documents first; AppData if that is not writable.
+fn writable_exemplos_dir() -> std::io::Result<PathBuf> {
+    let mut candidates = Vec::new();
+    if let Some(docs) = glib::user_special_dir(glib::UserDirectory::Documents) {
+        if !docs.as_os_str().is_empty() {
+            candidates.push(docs.join("Expressa Aula").join("exemplos"));
+        }
+    }
+    candidates.push(glib::user_data_dir().join("expressa-aula").join("exemplos"));
+    let mut last_err = std::io::Error::other("nenhuma pasta gravavel");
+    for dir in candidates {
+        if let Err(e) = probe_writable(&dir) {
+            last_err = e;
+            continue;
+        }
+        return Ok(dir);
+    }
+    Err(last_err)
+}
+
+fn probe_writable(dir: &std::path::Path) -> std::io::Result<()> {
+    std::fs::create_dir_all(dir)?;
+    let probe = dir.join(".expressa-grava");
+    std::fs::write(&probe, b"ok")?;
+    let _ = std::fs::remove_file(&probe);
+    Ok(())
+}
+
+/// Copy files that are not already at `dst`. Existing files stay as the user left them.
+fn copy_missing(src: &std::path::Path, dst: &std::path::Path) -> std::io::Result<()> {
+    std::fs::create_dir_all(dst)?;
+    for entry in std::fs::read_dir(src)? {
+        let entry = entry?;
+        let kind = entry.file_type()?;
+        if kind.is_symlink() {
+            continue;
+        }
+        let to = dst.join(entry.file_name());
+        if kind.is_dir() {
+            copy_missing(&entry.path(), &to)?;
+        } else if kind.is_file() && !to.exists() {
+            std::fs::copy(entry.path(), &to)?;
+        }
+    }
+    Ok(())
 }
 
 fn data_dir() -> std::path::PathBuf {
@@ -1924,6 +1991,33 @@ fn executar(ui: &UiRc, debug: bool) {
 
 // ── Project and file tree ──────────────────────────────────────────────────
 
+/// First launch: copy the shipped examples into a writable folder and open it.
+fn open_shipped_exemplos(ui: &UiRc) -> bool {
+    let Some(src) = bundled_exemplos_dir() else {
+        return false;
+    };
+    let dst = match writable_exemplos_dir() {
+        Ok(dir) => dir,
+        Err(e) => {
+            set_status(ui, &format!("exemplos: {e}"));
+            return false;
+        }
+    };
+    if let Err(e) = copy_missing(&src, &dst) {
+        set_status(ui, &format!("exemplos: {e}"));
+        return false;
+    }
+    open_local_project(ui, dst.clone());
+    let opened = matches!(&ui.borrow().files, Files::Local(_));
+    if opened {
+        set_status(
+            ui,
+            &format!("exemplos em {} — pode editar", path_for_display(&dst)),
+        );
+    }
+    opened
+}
+
 /// Ask for a local project folder. True when the user picked one.
 fn choose_local_folder(ui: &UiRc) -> bool {
     if ui.borrow().run.is_some() {
@@ -2605,6 +2699,41 @@ fn search_replace_all(ui: &UiRc) {
     }
 }
 
+#[cfg(test)]
+mod exemplos_copy {
+    use super::copy_missing;
+
+    #[test]
+    fn copy_missing_keeps_edits_and_adds_new_files() {
+        let root = std::env::temp_dir().join(format!(
+            "expressa-exemplos-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let src = root.join("src");
+        let dst = root.join("dst");
+        std::fs::create_dir_all(src.join("linguagem")).unwrap();
+        std::fs::write(src.join("linguagem").join("media.lep"), "novo").unwrap();
+        std::fs::create_dir_all(dst.join("linguagem")).unwrap();
+        std::fs::write(dst.join("linguagem").join("media.lep"), "editado").unwrap();
+        copy_missing(&src, &dst).unwrap();
+        assert_eq!(
+            std::fs::read_to_string(dst.join("linguagem").join("media.lep")).unwrap(),
+            "editado"
+        );
+        std::fs::write(src.join("linguagem").join("novo.lep"), "x").unwrap();
+        copy_missing(&src, &dst).unwrap();
+        assert_eq!(
+            std::fs::read_to_string(dst.join("linguagem").join("novo.lep")).unwrap(),
+            "x"
+        );
+        let _ = std::fs::remove_dir_all(root);
+    }
+}
+
 /// GTK may only be used from the thread that initialized it, but tests run
 /// on many threads: every GTK test runs its body on one shared thread.
 #[cfg(test)]
@@ -2706,6 +2835,49 @@ mod win32_foreground {
         fn ShowWindow(hwnd: *mut c_void, cmd: i32) -> i32;
         fn AttachThreadInput(from: u32, to: u32, attach: i32) -> i32;
         fn keybd_event(vk: u8, scan: u8, flags: u32, extra: usize);
+        fn GetModuleHandleW(name: *const u16) -> *mut c_void;
+        fn LoadImageW(
+            inst: *mut c_void,
+            name: *const u16,
+            typ: u32,
+            cx: i32,
+            cy: i32,
+            flags: u32,
+        ) -> *mut c_void;
+        fn SendMessageW(hwnd: *mut c_void, msg: u32, wparam: usize, lparam: isize) -> isize;
+        fn SetClassLongPtrW(hwnd: *mut c_void, index: i32, new_long: isize) -> isize;
+    }
+
+    const IMAGE_ICON: u32 = 1;
+    const LR_SHARED: u32 = 0x8000;
+    const WM_SETICON: u32 = 0x0080;
+    const ICON_SMALL: usize = 0;
+    const ICON_BIG: usize = 1;
+    const GCLP_HICON: i32 = -14;
+    const GCLP_HICONSM: i32 = -34;
+
+    static ICON_SET: AtomicBool = AtomicBool::new(false);
+
+    /// The file icon is resource 1. Point the window class at it so the
+    /// taskbar and the title bar use the same picture as the exe.
+    fn apply_icon(hwnd: *mut c_void) {
+        if ICON_SET.swap(true, Ordering::SeqCst) {
+            return;
+        }
+        unsafe {
+            let module = GetModuleHandleW(std::ptr::null());
+            let id = 1u16 as usize as *const u16;
+            let big = LoadImageW(module, id, IMAGE_ICON, 32, 32, LR_SHARED);
+            let small = LoadImageW(module, id, IMAGE_ICON, 16, 16, LR_SHARED);
+            if !big.is_null() {
+                SendMessageW(hwnd, WM_SETICON, ICON_BIG, big as isize);
+                SetClassLongPtrW(hwnd, GCLP_HICON, big as isize);
+            }
+            if !small.is_null() {
+                SendMessageW(hwnd, WM_SETICON, ICON_SMALL, small as isize);
+                SetClassLongPtrW(hwnd, GCLP_HICONSM, small as isize);
+            }
+        }
     }
 
     enum Step {
@@ -2741,10 +2913,13 @@ mod win32_foreground {
     }
 
     fn poke() -> Step {
+        let hwnd = our_main_hwnd();
+        if !hwnd.is_null() {
+            apply_icon(hwnd);
+        }
         if PAUSED.load(Ordering::SeqCst) {
             return Step::Done;
         }
-        let hwnd = our_main_hwnd();
         if hwnd.is_null() {
             return Step::Wait;
         }

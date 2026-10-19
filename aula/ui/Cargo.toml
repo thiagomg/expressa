@@ -4,6 +4,10 @@ version.workspace = true
 edition.workspace = true
 publish = false
 description = "Editor GTK da Expressa Aula (executa os programas; o servidor guarda os arquivos)"
+build = "build.rs"
+
+[build-dependencies]
+winresource = "0.1"
 
 [dependencies]
 expressa = { workspace = true }
