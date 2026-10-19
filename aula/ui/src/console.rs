@@ -77,7 +77,15 @@ impl Console {
     fn write(&self, text: &str, stderr: bool) {
         let buf = self.buffer();
         let mut screen = self.screen.borrow_mut();
-        if !stderr && (screen.row.is_some() || has_screen_code(text)) {
+        // `escreva_em` builds "\x1b[{linha};{coluna}H" with write!, which
+        // delivers the introducer, the numbers and the final byte as
+        // separate chunks. An unfinished one still belongs to the screen.
+        if !stderr
+            && (screen.row.is_some()
+                || !screen.held.is_empty()
+                || has_screen_code(text)
+                || csi_incomplete(text))
+        {
             write_screen(&buf, &mut screen, text);
             return;
         }
@@ -227,12 +235,25 @@ struct Screen {
     start_col: i32,
     /// Text of the current run not yet committed (may hold SGR codes).
     partial: String,
+    /// Tail of a CSI cut between writes (`\x1b[` then `12` then `;` …).
+    held: String,
 }
 
 /// Terminal-like writing: cursor home goes back to the first line and each
 /// new line overwrites the old one. `escreva_em` uses CUP (`\x1b[n;mH`) to
 /// overlay from a column. `\x1b[J` erases from the cursor down (`quadro`).
+/// A CSI may arrive split across chunks; the unfinished tail stays in `held`.
 fn write_screen(buf: &gtk::TextBuffer, screen: &mut Screen, text: &str) {
+    if screen.held.is_empty() {
+        write_screen_now(buf, screen, text);
+    } else {
+        let mut all = std::mem::take(&mut screen.held);
+        all.push_str(text);
+        write_screen_now(buf, screen, &all);
+    }
+}
+
+fn write_screen_now(buf: &gtk::TextBuffer, screen: &mut Screen, text: &str) {
     let mut row = screen.row.unwrap_or_else(|| (buf.line_count() - 1).max(0));
     let mut col = screen.col;
     let mut start_col = screen.start_col;
@@ -271,6 +292,10 @@ fn write_screen(buf: &gtk::TextBuffer, screen: &mut Screen, text: &str) {
                 }
             }
             continue;
+        }
+        if rest.as_bytes().first() == Some(&0x1b) && csi_incomplete(rest) {
+            screen.held = rest.to_string();
+            break;
         }
         if c == '\r' {
             rest = &rest[1..];
@@ -553,6 +578,29 @@ fn ansi_spans(text: &str) -> Vec<(String, AnsiStyle)> {
     out
 }
 
+/// A CSI that has started but has no final byte yet (`\x1b`, `\x1b[12;`).
+/// Longer than a real cursor command is treated as ordinary text.
+fn csi_incomplete(text: &str) -> bool {
+    let bytes = text.as_bytes();
+    if bytes.is_empty() || bytes.len() > 64 || bytes[0] != 0x1b {
+        return false;
+    }
+    if bytes.len() == 1 {
+        return true;
+    }
+    if bytes[1] != b'[' {
+        return false;
+    }
+    let mut i = 2;
+    while i < bytes.len() && (0x30..=0x3f).contains(&bytes[i]) {
+        i += 1;
+    }
+    while i < bytes.len() && (0x20..=0x2f).contains(&bytes[i]) {
+        i += 1;
+    }
+    i == bytes.len()
+}
+
 /// `\x1b[` + params + final byte (0x40..=0x7E). `params` is the inner string.
 fn parse_csi(text: &str) -> Option<(usize, u8, &str)> {
     let bytes = text.as_bytes();
@@ -668,7 +716,54 @@ mod tests {
             // escreva_em: CUP + overlay from a column, EL clears the tail.
             let t = screen_text(&["AAAAAA\n", "\x1b[1;4HXY\x1b[K"]).unwrap();
             assert_eq!(t, "AAAXY\n");
+            // write! splits "\x1b[{row};{col}H" into separate writes. Forca
+            // and Termo place the keyboard that way.
+            let t = screen_text(&[
+                "AAAAAA\n",
+                "\x1b[",
+                "1",
+                ";",
+                "4",
+                "H",
+                "XY",
+                "\x1b[K",
+            ])
+            .unwrap();
+            assert_eq!(t, "AAAXY\n", "split CUP still overlays");
+            let t = screen_text(&[
+                "\x1b[H",
+                "  |   |",
+                "\x1b[K",
+                "\r\n",
+                "\x1b[",
+                "1",
+                ";",
+                "12",
+                "H",
+                "Q W",
+                "\x1b[K",
+            ])
+            .unwrap();
+            assert_eq!(t, "  |   |    Q W\n");
+            let c = Console::new();
+            for chunk in ["\x1b[", "1", ";", "4", "H", "XY", "\x1b[K"] {
+                c.stdout(chunk);
+            }
+            let buf = c.view.buffer();
+            let (s, e) = buf.bounds();
+            assert_eq!(buf.text(&s, &e, false), "   XY");
         });
+    }
+
+    #[test]
+    fn csi_prefix_waits_for_the_final_byte() {
+        assert!(csi_incomplete("\u{1b}"));
+        assert!(csi_incomplete("\u{1b}["));
+        assert!(csi_incomplete("\u{1b}[12;"));
+        assert!(!csi_incomplete("\u{1b}[12;1H"));
+        assert!(!csi_incomplete("\u{1b}[K"));
+        assert!(!csi_incomplete("hello"));
+        assert!(!csi_incomplete("\u{1b}x"));
     }
 
     #[test]
