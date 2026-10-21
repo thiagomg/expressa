@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Expressa
+Comment=Interpretador e REPL da linguagem Expressa
+Comment[pt_BR]=Interpretador e REPL da linguagem Expressa
+Exec=expressa
+Icon=expressa
+Terminal=true
+Categories=Development;Education;
+MimeType=text/x-expressa;
+StartupNotify=false

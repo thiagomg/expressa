@@ -15,7 +15,7 @@ mod store;
 
 use std::cell::RefCell;
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::rc::{Rc, Weak};
 
 use gtk::gdk::Key;
@@ -480,11 +480,38 @@ fn build_ui(app: &Application) {
         ui.borrow().search_entry.add_controller(search_keys);
     }
     {
+        // Capture + released: a Popover shown on pressed is dismissed by the
+        // same click. Parent later is the window so the ScrolledWindow does
+        // not clip the menu. Claim so TreeView does not eat the event.
         let ui_t = Rc::clone(&ui);
+        let tree = ui.borrow().tree.clone();
+        let scroll = file_scroll.clone();
         let right = gtk::GestureClick::new();
-        right.set_button(3);
-        right.connect_pressed(move |_, _, x, y| tree_popup(&ui_t, x, y));
-        ui.borrow().tree.add_controller(right);
+        right.set_button(gtk::gdk::BUTTON_SECONDARY);
+        right.set_propagation_phase(gtk::PropagationPhase::Capture);
+        right.connect_pressed(|g, _, _, _| {
+            g.set_state(gtk::EventSequenceState::Claimed);
+        });
+        right.connect_released(move |_, _, x, y| {
+            let (tx, ty) = scroll
+                .translate_coordinates(&tree, x, y)
+                .unwrap_or((x, y));
+            tree_popup(&ui_t, tx, ty);
+        });
+        file_scroll.add_controller(right);
+        let ui_del = Rc::clone(&ui);
+        let del = gtk::EventControllerKey::new();
+        del.connect_key_pressed(move |_, key, _, _| {
+            if key == Key::Delete || key == Key::KP_Delete {
+                let (rel, _) = selected_tree_entry(&ui_del);
+                if !rel.is_empty() {
+                    confirmar_apagar(&ui_del, &rel);
+                }
+                return glib::Propagation::Stop;
+            }
+            glib::Propagation::Proceed
+        });
+        ui.borrow().tree.add_controller(del);
     }
     {
         let ui_close = Rc::clone(&ui);
@@ -893,7 +920,7 @@ fn install_css() {
     }
 }
 
-/// Examples shipped beside the exe, or the repo copy in a dev build.
+/// Examples shipped beside the exe, the Debian share dir, or the repo copy.
 fn bundled_exemplos_dir() -> Option<PathBuf> {
     if let Ok(exe) = std::env::current_exe() {
         if let Some(dir) = exe.parent() {
@@ -902,6 +929,10 @@ fn bundled_exemplos_dir() -> Option<PathBuf> {
                 return Some(bundled);
             }
         }
+    }
+    let share = PathBuf::from("/usr/share/expressa/exemplos");
+    if share.join("linguagem").is_dir() {
+        return Some(share);
     }
     let dev = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../exemplos");
     dev.join("linguagem").is_dir().then_some(dev)
@@ -954,7 +985,7 @@ fn copy_missing(src: &std::path::Path, dst: &std::path::Path) -> std::io::Result
     Ok(())
 }
 
-fn data_dir() -> std::path::PathBuf {
+fn data_dir() -> PathBuf {
     if let Ok(exe) = std::env::current_exe() {
         if let Some(dir) = exe.parent() {
             let bundled = dir.join("res");
@@ -963,7 +994,11 @@ fn data_dir() -> std::path::PathBuf {
             }
         }
     }
-    std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("res")
+    let share = PathBuf::from("/usr/share/expressa-aula");
+    if share.join("language-specs").is_dir() {
+        return share;
+    }
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("res")
 }
 
 /// A packaged build keeps GTK data beside the exe. Point GLib, GDK and
@@ -2440,10 +2475,20 @@ fn tree_popup(ui: &UiRc, x: f64, y: f64) {
     }
     let (rel, is_dir) = selected_tree_entry(ui);
     let window = ui.borrow().window.clone();
+    let (px, py) = tree
+        .translate_coordinates(&window, x, y)
+        .unwrap_or((x, y));
     let pop = gtk::Popover::new();
-    pop.set_parent(&tree);
+    pop.add_css_class("menu");
+    pop.set_parent(&window);
     pop.set_has_arrow(false);
-    pop.set_pointing_to(Some(&gtk::gdk::Rectangle::new(x as i32, y as i32, 1, 1)));
+    pop.set_autohide(true);
+    pop.set_pointing_to(Some(&gtk::gdk::Rectangle::new(
+        px.round() as i32,
+        py.round() as i32,
+        1,
+        1,
+    )));
     {
         let pop_c = pop.clone();
         pop.connect_closed(move |_| {
@@ -2455,6 +2500,8 @@ fn tree_popup(ui: &UiRc, x: f64, y: f64) {
     let add_item = |box_: &GtkBox, label: &str, action: Box<dyn FnOnce() + 'static>| {
         let btn = Button::with_label(label);
         btn.set_has_frame(false);
+        btn.set_halign(gtk::Align::Start);
+        btn.set_hexpand(true);
         let pop_c = pop.clone();
         let action = RefCell::new(Some(action));
         btn.connect_clicked(move |_| {
@@ -2466,107 +2513,42 @@ fn tree_popup(ui: &UiRc, x: f64, y: f64) {
         box_.append(&btn);
     };
     let dir = parent_dir(&rel, is_dir);
+    let novo_arq = if is_dir && !rel.is_empty() {
+        "Novo arquivo nesta pasta…"
+    } else {
+        "Novo arquivo…"
+    };
+    let nova_pasta = if is_dir && !rel.is_empty() {
+        "Nova pasta nesta pasta…"
+    } else {
+        "Nova pasta…"
+    };
     add_item(
         &box_,
-        "Novo arquivo",
+        novo_arq,
         Box::new({
             let ui = Rc::clone(ui);
             let dir = dir.clone();
-            let window = window.clone();
-            move || {
-                if let Some(name) = perguntar_linha(&window, "Nome do arquivo:") {
-                    let name = name.trim().to_string();
-                    if name.is_empty() {
-                        return;
-                    }
-                    let name = if name.contains('.') {
-                        name
-                    } else {
-                        format!("{name}.lep")
-                    };
-                    let path = join_path(&dir, &name);
-                    let result = {
-                        let u = ui.borrow();
-                        u.files.write_file(&u.project, &path, "escreva(\"Olá\")\n")
-                    };
-                    match result {
-                        Ok(()) => {
-                            refresh_tree(&ui);
-                            open_path(&ui, &path);
-                            set_status(&ui, &format!("criado {path}"));
-                        }
-                        Err(e) => set_status(&ui, &format!("criar: {e}")),
-                    }
-                }
-            }
+            move || criar_arquivo(&ui, &dir)
         }),
     );
     add_item(
         &box_,
-        "Nova pasta",
+        nova_pasta,
         Box::new({
             let ui = Rc::clone(ui);
             let dir = dir.clone();
-            let window = window.clone();
-            move || {
-                if let Some(name) = perguntar_linha(&window, "Nome da pasta:") {
-                    if name.trim().is_empty() {
-                        return;
-                    }
-                    let path = join_path(&dir, name.trim());
-                    let result = {
-                        let u = ui.borrow();
-                        u.files.mkdir(&u.project, &path)
-                    };
-                    match result {
-                        Ok(()) => {
-                            refresh_tree(&ui);
-                            set_status(&ui, &format!("pasta {path}"));
-                        }
-                        Err(e) => set_status(&ui, &format!("pasta: {e}")),
-                    }
-                }
-            }
+            move || criar_pasta(&ui, &dir)
         }),
     );
     if !rel.is_empty() {
         add_item(
             &box_,
-            "Renomear",
+            "Renomear…",
             Box::new({
                 let ui = Rc::clone(ui);
                 let rel = rel.clone();
-                let window = window.clone();
-                move || {
-                    let base = rel.rsplit('/').next().unwrap_or(&rel).to_string();
-                    if let Some(name) = perguntar_linha(&window, &format!("Renomear `{base}`:")) {
-                        if name.trim().is_empty() {
-                            return;
-                        }
-                        let to = join_path(&parent_dir(&rel, false), name.trim());
-                        let result = {
-                            let u = ui.borrow();
-                            u.files.rename(&u.project, &rel, &to)
-                        };
-                        match result {
-                            Ok(()) => {
-                                // Open tabs follow the rename (files and folders).
-                                for d in all_docs(&ui) {
-                                    let n = d.name();
-                                    if n == rel {
-                                        d.set_path(to.clone());
-                                    } else if let Some(rest) = n.strip_prefix(&format!("{rel}/")) {
-                                        d.set_path(format!("{to}/{rest}"));
-                                    }
-                                }
-                                refresh_tree(&ui);
-                                refresh_title(&ui);
-                                set_status(&ui, &format!("{rel} → {to}"));
-                            }
-                            Err(e) => set_status(&ui, &format!("renomear: {e}")),
-                        }
-                    }
-                }
+                move || renomear_entrada(&ui, &rel)
             }),
         );
         add_item(
@@ -2575,57 +2557,147 @@ fn tree_popup(ui: &UiRc, x: f64, y: f64) {
             Box::new({
                 let ui = Rc::clone(ui);
                 let rel = rel.clone();
-                let window = window.clone();
-                move || {
-                    let then = {
-                        let ui = Rc::clone(&ui);
-                        let rel = rel.clone();
-                        move || {
-                            let result = {
-                                let u = ui.borrow();
-                                u.files.delete_file(&u.project, &rel)
-                            };
-                            match result {
-                                Ok(()) => {
-                                    for d in all_docs(&ui) {
-                                        let n = d.name();
-                                        if n == rel || n.starts_with(&format!("{rel}/")) {
-                                            d.mark_saved();
-                                            remove_tab(&ui, &d);
-                                        }
-                                    }
-                                    refresh_tree(&ui);
-                                    set_status(&ui, &format!("apagado {rel}"));
-                                }
-                                Err(e) => set_status(&ui, &format!("apagar: {e}")),
-                            }
-                        }
-                    };
-                    let then = RefCell::new(Some(then));
-                    let dlg = gtk::MessageDialog::builder()
-                        .transient_for(&window)
-                        .modal(true)
-                        .message_type(gtk::MessageType::Warning)
-                        .buttons(gtk::ButtonsType::None)
-                        .text(format!("Apagar `{rel}`?"))
-                        .build();
-                    dlg.add_button("Cancelar", gtk::ResponseType::Cancel);
-                    dlg.add_button("Apagar", gtk::ResponseType::Accept);
-                    dlg.connect_response(move |d, resp| {
-                        d.close();
-                        if resp == gtk::ResponseType::Accept {
-                            if let Some(f) = then.borrow_mut().take() {
-                                f();
-                            }
-                        }
-                    });
-                    dlg.present();
-                }
+                move || confirmar_apagar(&ui, &rel)
             }),
         );
     }
     pop.set_child(Some(&box_));
-    pop.popup();
+    glib::idle_add_local_once(move || {
+        pop.popup();
+    });
+}
+
+fn criar_arquivo(ui: &UiRc, dir: &str) {
+    let window = ui.borrow().window.clone();
+    let Some(name) = perguntar_linha(&window, "Nome do arquivo:") else {
+        return;
+    };
+    let name = name.trim().to_string();
+    if name.is_empty() {
+        return;
+    }
+    let name = if name.contains('.') {
+        name
+    } else {
+        format!("{name}.lep")
+    };
+    let path = join_path(dir, &name);
+    let result = {
+        let u = ui.borrow();
+        u.files.write_file(&u.project, &path, "escreva(\"Olá\")\n")
+    };
+    match result {
+        Ok(()) => {
+            refresh_tree(ui);
+            open_path(ui, &path);
+            set_status(ui, &format!("criado {path}"));
+        }
+        Err(e) => set_status(ui, &format!("criar: {e}")),
+    }
+}
+
+fn criar_pasta(ui: &UiRc, dir: &str) {
+    let window = ui.borrow().window.clone();
+    let Some(name) = perguntar_linha(&window, "Nome da pasta:") else {
+        return;
+    };
+    if name.trim().is_empty() {
+        return;
+    }
+    let path = join_path(dir, name.trim());
+    let result = {
+        let u = ui.borrow();
+        u.files.mkdir(&u.project, &path)
+    };
+    match result {
+        Ok(()) => {
+            refresh_tree(ui);
+            set_status(ui, &format!("pasta {path}"));
+        }
+        Err(e) => set_status(ui, &format!("pasta: {e}")),
+    }
+}
+
+fn renomear_entrada(ui: &UiRc, rel: &str) {
+    let window = ui.borrow().window.clone();
+    let base = rel.rsplit('/').next().unwrap_or(rel).to_string();
+    let Some(name) = perguntar_linha(&window, &format!("Renomear `{base}`:")) else {
+        return;
+    };
+    if name.trim().is_empty() {
+        return;
+    }
+    let to = join_path(&parent_dir(rel, false), name.trim());
+    let result = {
+        let u = ui.borrow();
+        u.files.rename(&u.project, rel, &to)
+    };
+    match result {
+        Ok(()) => {
+            for d in all_docs(ui) {
+                let n = d.name();
+                if n == rel {
+                    d.set_path(to.clone());
+                } else if let Some(rest) = n.strip_prefix(&format!("{rel}/")) {
+                    d.set_path(format!("{to}/{rest}"));
+                }
+            }
+            refresh_tree(ui);
+            refresh_title(ui);
+            set_status(ui, &format!("{rel} → {to}"));
+        }
+        Err(e) => set_status(ui, &format!("renomear: {e}")),
+    }
+}
+
+fn confirmar_apagar(ui: &UiRc, rel: &str) {
+    if rel.is_empty() {
+        return;
+    }
+    let window = ui.borrow().window.clone();
+    let then = {
+        let ui = Rc::clone(ui);
+        let rel = rel.to_string();
+        move || {
+            let result = {
+                let u = ui.borrow();
+                u.files.delete_file(&u.project, &rel)
+            };
+            match result {
+                Ok(()) => {
+                    for d in all_docs(&ui) {
+                        let n = d.name();
+                        if n == rel || n.starts_with(&format!("{rel}/")) {
+                            d.mark_saved();
+                            remove_tab(&ui, &d);
+                        }
+                    }
+                    refresh_tree(&ui);
+                    set_status(&ui, &format!("apagado {rel}"));
+                }
+                Err(e) => set_status(&ui, &format!("apagar: {e}")),
+            }
+        }
+    };
+    let then = RefCell::new(Some(then));
+    let dlg = gtk::MessageDialog::builder()
+        .transient_for(&window)
+        .modal(true)
+        .message_type(gtk::MessageType::Warning)
+        .buttons(gtk::ButtonsType::None)
+        .text(format!("Apagar `{rel}`?"))
+        .build();
+    dlg.add_button("Cancelar", gtk::ResponseType::Cancel);
+    dlg.add_button("Apagar", gtk::ResponseType::Accept);
+    dlg.connect_response(move |d, resp| {
+        d.close();
+        if resp == gtk::ResponseType::Accept {
+            if let Some(f) = then.borrow_mut().take() {
+                f();
+            }
+        }
+    });
+    dlg.present();
 }
 
 // ── Search (current tab) ───────────────────────────────────────────────────

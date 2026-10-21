@@ -1,0 +1,32 @@
+
+
+nova = função(numerador, denominador)
+inicio
+    mapa([
+        :numerador -> numerador,
+        :denominador -> denominador,
+    ])
+fim
+
+soma = função(fr1, fr2)
+inicio
+    se fr1:denominador == fr2:denominador
+    inicio
+        escreva("simples")
+        nova(fr1:numerador + fr2:numerador, fr1:denominador)
+    fim
+    senão
+    inicio
+        escreva("complicado")
+    fim
+fim
+
+fr1 = nova(1, 4)
+fr2 = nova(2, 4)
+
+escreva(soma(fr1, fr2))
+
+fr1 = nova(1, 2)
+fr2 = nova(1, 4)
+
+escreva(soma(fr1, fr2))

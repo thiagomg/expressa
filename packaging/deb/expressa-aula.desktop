@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=Expressa Aula
+Comment=Editor da linguagem Expressa
+Comment[pt_BR]=Editor da linguagem Expressa
+Exec=expressa-aula
+Icon=expressa
+Terminal=false
+Categories=Development;Education;GTK;
+MimeType=text/x-expressa;
+StartupNotify=true
+StartupWMClass=expressa-aula
