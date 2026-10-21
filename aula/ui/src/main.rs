@@ -1109,7 +1109,7 @@ fn doc_by_name(ui: &UiRc, name: &str) -> Option<Rc<Doc>> {
     ui.borrow()
         .docs
         .iter()
-        .find(|(d, _)| d.name() == name)
+        .find(|(d, _)| exec::same_project_path(&d.name(), name))
         .map(|(d, _)| Rc::clone(d))
 }
 

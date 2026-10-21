@@ -128,11 +128,25 @@ impl Workspace {
 
     /// `/cache/ana/lib/m.lep` -> `lib/m.lep`; other paths unchanged.
     pub fn relative(&self, path: &Path) -> String {
-        path.strip_prefix(&self.dir)
-            .unwrap_or(path)
-            .to_string_lossy()
-            .replace('\\', "/")
+        display_path(&self.dir, &path.to_string_lossy())
     }
+}
+
+/// Path as the editor names tabs: relative to `root` when it sits inside,
+/// always with `/`. The debugger reports Windows paths with `\`; a second
+/// form would open another tab of the same file and the breakpoint, which
+/// lives on the first tab, would look gone.
+pub fn display_path(root: &Path, path: &str) -> String {
+    Path::new(path)
+        .strip_prefix(root)
+        .map(|r| r.to_string_lossy().into_owned())
+        .unwrap_or_else(|_| path.to_string())
+        .replace('\\', "/")
+}
+
+/// Tab names and debugger paths name the same file when only `\` and `/` differ.
+pub fn same_project_path(a: &str, b: &str) -> bool {
+    a.replace('\\', "/") == b.replace('\\', "/")
 }
 
 fn write_file(path: &Path, source: &str) -> Result<(), String> {
@@ -249,12 +263,7 @@ pub fn spawn(
         .map(|(f, l)| (ws.abs(&f), l))
         .collect();
     let root = ws.dir.clone();
-    let rel = move |p: &str| {
-        Path::new(p)
-            .strip_prefix(&root)
-            .map(|r| r.to_string_lossy().into_owned())
-            .unwrap_or_else(|_| p.to_string())
-    };
+    let rel = move |p: &str| display_path(&root, p);
     let ws_dir = ws.dir.clone();
 
     // Paused snapshots carry cache paths; show them relative to the project.
@@ -353,5 +362,21 @@ mod tests {
         assert_eq!(cache_name("Meu Projeto"), "Meu_Projeto");
         assert_eq!(cache_name(""), "projeto");
         assert_eq!(cache_name("../x"), "___x");
+    }
+
+    #[test]
+    fn debug_file_uses_the_same_slashes_as_the_tab() {
+        let root = std::env::temp_dir().join("expressa-aula-path");
+        let abs = root.join("jogos").join("forca.lep");
+        assert_eq!(
+            display_path(&root, &abs.to_string_lossy()),
+            "jogos/forca.lep"
+        );
+        assert!(same_project_path(
+            "jogos/forca.lep",
+            &display_path(&root, &abs.to_string_lossy())
+        ));
+        assert!(same_project_path(r"jogos\forca.lep", "jogos/forca.lep"));
+        assert!(!same_project_path("jogos/forca.lep", "jogos/termo.lep"));
     }
 }

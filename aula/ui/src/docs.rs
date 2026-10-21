@@ -58,6 +58,9 @@ pub fn diagnose(text: &str) -> Option<Diag> {
     })
 }
 
+/// Named mark `scroll_to_mark` follows. Reused so pauses do not pile up marks.
+const SCROLL_MARK: &str = "aula-scroll";
+
 pub struct Doc {
     /// Project-relative path; `None` until the first save.
     pub path: RefCell<Option<String>>,
@@ -227,7 +230,11 @@ impl Doc {
 
     pub fn refresh_label(&self) {
         let name = self.name();
-        let base = name.rsplit('/').next().unwrap_or(&name).to_string();
+        let base = name
+            .rsplit(['/', '\\'])
+            .next()
+            .unwrap_or(&name)
+            .to_string();
         self.label.set_text(&if self.is_dirty() {
             format!("● {base}")
         } else {
@@ -256,8 +263,24 @@ impl Doc {
             .iter_at_line(line.saturating_sub(1) as i32)
             .unwrap_or_else(|| self.buffer.start_iter());
         self.buffer.place_cursor(&it);
-        self.view
-            .scroll_to_iter(&mut it.clone(), 0.2, false, 0.0, 0.0);
+        self.scroll_iter_into_view(&it);
+    }
+
+    /// Bring `iter` on screen.
+    ///
+    /// `scroll_to_iter` reads the line's cached y and returns. On Windows that
+    /// cache is filled a page at a time, so one call stops short and the
+    /// breakpoint the debugger just hit is left off screen. `scroll_to_mark`
+    /// asks again once the heights exist.
+    fn scroll_iter_into_view(&self, iter: &gtk::TextIter) {
+        if self.buffer.mark(SCROLL_MARK).is_some() {
+            self.buffer.move_mark_by_name(SCROLL_MARK, iter);
+        } else {
+            self.buffer.create_mark(Some(SCROLL_MARK), iter, true);
+        }
+        if let Some(mark) = self.buffer.mark(SCROLL_MARK) {
+            self.view.scroll_to_mark(&mark, 0.0, true, 0.0, 0.25);
+        }
     }
 
     // ── Breakpoints ────────────────────────────────────────────────────────
@@ -306,8 +329,7 @@ impl Doc {
         };
         self.buffer.apply_tag(tag, &a, &b);
         self.buffer.place_cursor(&a);
-        self.view
-            .scroll_to_iter(&mut a.clone(), 0.2, false, 0.0, 0.0);
+        self.scroll_iter_into_view(&a);
     }
 
     pub fn clear_debug_line(&self) {
@@ -420,6 +442,26 @@ pub fn dot_pixbuf((r, g, b): (u8, u8, u8)) -> gtk::gdk_pixbuf::Pixbuf {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn breakpoint_mark_survives_the_debug_line() {
+        crate::gtk_test::run(|| {
+            let languages = sourceview5::LanguageManager::new();
+            let search = sourceview5::SearchSettings::new();
+            let doc = Doc::new(
+                Some("jogos/forca.lep".into()),
+                "sem-titulo.lep".into(),
+                "escreva(1)\nescreva(2)\n",
+                &languages,
+                &search,
+            );
+            assert!(doc.toggle_breakpoint(2));
+            doc.show_debug_line(1, false);
+            assert!(doc.breakpoints.borrow().contains(&2));
+            let marks = doc.buffer.source_marks_at_line(1, Some("breakpoint"));
+            assert_eq!(marks.len(), 1);
+        });
+    }
 
     #[test]
     fn syntax_errors_while_typing() {
