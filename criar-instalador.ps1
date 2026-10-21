@@ -113,4 +113,5 @@ if (-not (Test-Path -LiteralPath $setup)) {
 }
 $item = Get-Item -LiteralPath $setup
 Write-Output ("Instalador pronto: {0} ({1:N0} MB)" -f $item.FullName, ($item.Length / 1MB))
-Write-Output "Quem instalar nao precisa de PATH, de deps\ nem de permissao de administrador."
+Write-Output "Quem instalar nao precisa de PATH, de deps\ nem de permissao de administrador para abrir o editor."
+Write-Output "O terminal fica em bin\: expressa.exe e expressa-grafico.exe entram no PATH do usuario."

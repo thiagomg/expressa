@@ -24,13 +24,13 @@ if (-not (Test-Path (Join-Path $gtk "bin\gtk-4-1.dll"))) {
     Write-Error "Nao achei $gtk\bin\gtk-4-1.dll."
 }
 
-Write-Output "Compilando expressa-aula e expressa-aula-server (release)..."
-cargo build --release -p expressa-aula -p expressa-aula-server
+Write-Output "Compilando expressa, expressa-aula e expressa-aula-server (release)..."
+cargo build --release -p expressa -p expressa-aula -p expressa-aula-server
 if ($LASTEXITCODE -ne 0) {
     exit $LASTEXITCODE
 }
 
-foreach ($name in @("expressa-aula.exe", "expressa-aula-server.exe")) {
+foreach ($name in @("expressa.exe", "expressa-grafico.exe", "expressa-aula.exe", "expressa-aula-server.exe")) {
     if (-not (Test-Path (Join-Path $release $name))) {
         Write-Error "Faltou $release\$name."
     }
@@ -57,6 +57,14 @@ function Copy-Tree($src, $dst) {
 
 Copy-Item (Join-Path $release "expressa-aula.exe") $dest
 Copy-Item (Join-Path $release "expressa-aula-server.exe") $dest
+# So o interpretador entra no PATH. A pasta do editor tem as DLLs do GTK;
+# coloca-la no PATH faria outros programas acharem zlib, libpng etc.
+$bin = Join-Path $dest "bin"
+New-Item -ItemType Directory -Path $bin | Out-Null
+# Os dois ficam lado a lado: o expressa procura expressa-grafico.exe na mesma pasta.
+foreach ($name in @("expressa.exe", "expressa-grafico.exe")) {
+    Copy-Item (Join-Path $release $name) $bin
+}
 
 $helpers = @("gdbus.exe", "gspawn-win64-helper.exe", "gspawn-win64-helper-console.exe")
 Get-ChildItem (Join-Path $gtk "bin") -File | Where-Object {

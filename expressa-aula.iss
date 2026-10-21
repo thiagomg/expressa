@@ -31,14 +31,17 @@ SetupIconFile=res\expressa-2.ico
 UninstallDisplayIcon={app}\expressa-aula.exe
 CloseApplications=yes
 RestartApplications=no
+ChangesEnvironment=yes
 
 [Languages]
 Name: "brazilianportuguese"; MessagesFile: "compiler:Languages\BrazilianPortuguese.isl"
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"
+Name: "envpath"; Description: "Adicionar expressa e expressa-grafico ao PATH"; GroupDescription: "Terminal:"; Flags: checkedonce
 
 [Files]
+; A pasta inteira: editor, GTK, exemplos e bin\ (expressa.exe e expressa-grafico.exe).
 Source: "dist\expressa-aula\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
@@ -47,3 +50,111 @@ Name: "{autodesktop}\Expressa Aula"; Filename: "{app}\expressa-aula.exe"; Tasks:
 
 [Run]
 Filename: "{app}\expressa-aula.exe"; Description: "Abrir Expressa Aula"; Flags: postinstall nowait skipifsilent
+
+[Code]
+function NormDir(const S: string): string;
+begin
+  Result := Trim(S);
+  while (Result <> '') and (Result[Length(Result)] = '\') do
+    Delete(Result, Length(Result), 1);
+end;
+
+function BinDir: string;
+begin
+  Result := NormDir(ExpandConstant('{app}\bin'));
+end;
+
+function DirInPath(const Path, Dir: string): Boolean;
+var
+  Work, Piece: string;
+  P: Integer;
+begin
+  Result := False;
+  Work := Path;
+  while Work <> '' do
+  begin
+    P := Pos(';', Work);
+    if P = 0 then
+    begin
+      Piece := Work;
+      Work := '';
+    end
+    else
+    begin
+      Piece := Copy(Work, 1, P - 1);
+      Work := Copy(Work, P + 1, Length(Work) - P);
+    end;
+    if CompareText(NormDir(Piece), Dir) = 0 then
+    begin
+      Result := True;
+      Exit;
+    end;
+  end;
+end;
+
+function RemoveDirFromPath(const Path, Dir: string): string;
+var
+  Work, Piece: string;
+  P: Integer;
+begin
+  Work := Path;
+  Result := '';
+  while Work <> '' do
+  begin
+    P := Pos(';', Work);
+    if P = 0 then
+    begin
+      Piece := Work;
+      Work := '';
+    end
+    else
+    begin
+      Piece := Copy(Work, 1, P - 1);
+      Work := Copy(Work, P + 1, Length(Work) - P);
+    end;
+    if CompareText(NormDir(Piece), Dir) <> 0 then
+    begin
+      if Result <> '' then
+        Result := Result + ';';
+      Result := Result + Piece;
+    end;
+  end;
+end;
+
+procedure CurStepChanged(CurStep: TSetupStep);
+var
+  Orig, NewPath: string;
+begin
+  if CurStep <> ssPostInstall then
+    Exit;
+  if not WizardIsTaskSelected('envpath') then
+    Exit;
+  if not RegQueryStringValue(HKCU, 'Environment', 'Path', Orig) then
+    Orig := '';
+  if DirInPath(Orig, BinDir) then
+    Exit;
+  if Orig = '' then
+    NewPath := BinDir
+  else if Orig[Length(Orig)] = ';' then
+    NewPath := Orig + BinDir
+  else
+    NewPath := Orig + ';' + BinDir;
+  RegWriteExpandStringValue(HKCU, 'Environment', 'Path', NewPath);
+end;
+
+procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+var
+  Orig, NewPath: string;
+begin
+  if CurUninstallStep <> usPostUninstall then
+    Exit;
+  if not RegQueryStringValue(HKCU, 'Environment', 'Path', Orig) then
+    Exit;
+  if not DirInPath(Orig, BinDir) then
+    Exit;
+  NewPath := RemoveDirFromPath(Orig, BinDir);
+  if NewPath = '' then
+    RegDeleteValue(HKCU, 'Environment', 'Path')
+  else
+    RegWriteExpandStringValue(HKCU, 'Environment', 'Path', NewPath);
+end;
