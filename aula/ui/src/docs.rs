@@ -147,6 +147,7 @@ impl Doc {
         tab.append(&close_button);
 
         crate::indent::attach_electric(&buffer);
+        crate::editing::attach_plain_paste(&view);
         // Loading the file is not an undo step, and it is the saved state.
         buffer.begin_irreversible_action();
         buffer.set_text(text);

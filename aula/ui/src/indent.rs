@@ -388,9 +388,20 @@ pub fn attach_electric(buffer: &SourceBuffer) {
     use std::cell::Cell;
     use std::rc::Rc;
     let depth = Rc::new(Cell::new(0u32));
+    // Inserts in the current user action. A keystroke is one insert (`\n`,
+    // `}` or `m`). Paste between two Aula windows copies tagged runs, so
+    // Gtk emits one insert-text per token/`\n`; indent in the middle of
+    // that aborts the rest of the paste.
+    let inserts = Rc::new(Cell::new(0u32));
     {
         let d = Rc::clone(&depth);
-        buffer.connect_begin_user_action(move |_| d.set(d.get() + 1));
+        let n = Rc::clone(&inserts);
+        buffer.connect_begin_user_action(move |_| {
+            d.set(d.get() + 1);
+            if d.get() == 1 {
+                n.set(0);
+            }
+        });
     }
     {
         let d = Rc::clone(&depth);
@@ -398,6 +409,11 @@ pub fn attach_electric(buffer: &SourceBuffer) {
     }
     buffer.connect_local("insert-text", true, move |args| {
         if depth.get() == 0 {
+            return None;
+        }
+        let n = inserts.get().saturating_add(1);
+        inserts.set(n);
+        if n != 1 {
             return None;
         }
         let b = args[0].get::<SourceBuffer>().ok()?;

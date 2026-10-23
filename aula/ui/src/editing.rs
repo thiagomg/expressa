@@ -166,6 +166,36 @@ pub fn move_lines(buffer: &SourceBuffer, up: bool) {
     buffer.end_user_action();
 }
 
+/// Paste as `text/plain`. Two Aula windows share a GtkApplication, so the
+/// default paste copies tagged SourceBuffer runs; electric indent on those
+/// `\n` inserts aborts the rest (the other editor still sees the full
+/// clipboard as plain text).
+pub fn attach_plain_paste(view: &sourceview5::View) {
+    view.connect_paste_clipboard(|view| {
+        view.stop_signal_emission_by_name("paste-clipboard");
+        if !view.is_editable() {
+            return;
+        }
+        let buffer = view.buffer();
+        let view = view.clone();
+        view.clipboard().read_text_async(
+            gtk::gio::Cancellable::NONE,
+            move |res| {
+                let Ok(Some(text)) = res else {
+                    return;
+                };
+                if !view.is_editable() {
+                    return;
+                }
+                buffer.begin_user_action();
+                buffer.delete_selection(true, true);
+                buffer.insert_at_cursor(&text);
+                buffer.end_user_action();
+            },
+        );
+    });
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
