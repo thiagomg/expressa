@@ -729,6 +729,18 @@ mod tests {
     }
 
     #[test]
+    fn language_spec_lists_every_keyword() {
+        let spec = include_str!("../res/language-specs/expressa.lang");
+        for k in KEYWORDS {
+            let tag = format!("<keyword>{k}</keyword>");
+            assert!(
+                spec.contains(&tag),
+                "{k} missing from language-specs/expressa.lang"
+            );
+        }
+    }
+
+    #[test]
     fn natives_from_the_interpreter() {
         let pinte = native("pinte").unwrap();
         assert_eq!(pinte.module, Some("tela"));

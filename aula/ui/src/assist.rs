@@ -895,6 +895,8 @@ pub struct ViewHelp {
     /// GtkSourceCompletion list is showing: keep our popover down so the
     /// two GtkPopovers do not steal the grab / hide each other.
     completion_open: Cell<bool>,
+    /// Escape hid the signature; stay down until the cursor leaves the call.
+    signature_held: Cell<bool>,
 }
 
 impl ViewHelp {
@@ -905,11 +907,16 @@ impl ViewHelp {
 
     /// Escape: hide signature/F1 popovers and drop the GtkSourceCompletion
     /// context. The list widget hides itself on Escape without cancelling;
-    /// a leftover context then never shows the list again.
+    /// a leftover context then never shows the list again. Holds the
+    /// signature down until the cursor leaves the current call, otherwise
+    /// the idle updater shows it again on the next keystroke.
     pub fn dismiss(&self, view: &SourceView) -> bool {
         let completion = view.completion();
         let had =
             self.completion_open.get() || self.signature.is_visible() || self.info.is_visible();
+        if had {
+            self.signature_held.set(true);
+        }
         self.signature.popdown();
         self.info.popdown();
         completion.hide();
@@ -1004,6 +1011,7 @@ pub fn attach(
         info_label,
         pending: Rc::new(Cell::new(false)),
         completion_open: Cell::new(false),
+        signature_held: Cell::new(false),
     });
     // Signature popup follows the cursor and the typing (once per idle).
     let update = {
@@ -1037,6 +1045,10 @@ pub fn attach(
                 let path = sb.and_then(|b| (help.path_of)(b)).unwrap_or_default();
                 match signature_markup(&help, &path, &text, &before) {
                     Some(m) if !buffer.has_selection() => {
+                        if vh.signature_held.get() {
+                            vh.signature.popdown();
+                            return;
+                        }
                         vh.signature_label.set_markup(&m);
                         // A popover is centered on its target: aim at a box as
                         // wide as the popup so it starts at the cursor.
@@ -1053,7 +1065,10 @@ pub fn attach(
                             vh.signature.popup();
                         }
                     }
-                    _ => vh.signature.popdown(),
+                    _ => {
+                        vh.signature_held.set(false);
+                        vh.signature.popdown();
+                    }
                 }
             });
         }

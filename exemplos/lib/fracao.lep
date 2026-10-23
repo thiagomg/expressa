@@ -1,5 +1,13 @@
-// TODO: Implementar algo como to_string
+// cria uma nova fração
+nova = função(numerador, denominador)
+inicio
+    mapa([
+        :numerador -> numerador,
+        :denominador -> denominador,
+    ])
+fim
 
+// Calcula o MDC de dois números
 mdc = funcao(x, y)
 inicio
     se y == 0
@@ -12,26 +20,27 @@ inicio
     fim
 fim
 
-
+// Calcula o MMC de dois números
 mmc = funcao(x, y)
 inicio
     x * y / mdc(x, y)
 fim
 
-
-nova = função(numerador, denominador)
-inicio
-    mapa([
-        :numerador -> numerador,
-        :denominador -> denominador,
-    ])
-fim
-
+// transforma uma fração em texto
 em_texto = função(fr)
 inicio
-    formate("{}/{}", fr:numerador, fr:denominador)
+    se fr:denominador == 1
+    início
+        formate("{}", fr:numerador)
+    fim
+    senão
+    início
+        formate("{}/{}", fr:numerador, fr:denominador)
+    fim
 fim
 
+// transforma um número em fração
+// se já for fração, retorna a mesma
 em_fracao = função(n)
 inicio
     se tipo(n) == "numero"
@@ -44,12 +53,21 @@ inicio
     fim
 fim
 
+// simplifica a fração. Por exemplo, 2/4 vira 1/2
+simplifica = função(fr)
+início
+    fr = em_fracao(fr)
+    val = mdc(fr:numerador, fr:denominador)
+    nova(fr:numerador / val, fr:denominador / val)
+fim
+
+// Soma duas frações
 soma = função(fr1, fr2)
 inicio
     fr1 = em_fracao(fr1)
     fr2 = em_fracao(fr2)
     
-    se fr1:denominador == fr2:denominador
+    resultado = se fr1:denominador == fr2:denominador
     inicio
         // Este é muito simples. Basta somar o numerador
         nova(fr1:numerador + fr2:numerador, fr1:denominador)
@@ -65,32 +83,12 @@ inicio
         fim
         num1 = novo_num(novo_den, fr1:numerador, fr1:denominador)
         num2 = novo_num(novo_den, fr2:numerador, fr2:denominador)
-        escreva(formate("- 1: {}/{}, 2: {}/{}", num1, novo_den, num2, novo_den))
         
-        resultado = nova(num1 + num2, novo_den)
-        
-        // TODO: Adicionar simplificar fração
-        
-        resultado
+        nova(num1 + num2, novo_den)
     fim
+            
+    // Aqui, precisamos simplificar a fração
+    // Por exemplo, 2/4 vira 1/2
+    simplifica(resultado)    
 fim
-
-simplifica = função()
-inicio
-    
-fim
-
-// fr1 = nova(1, 4)
-// fr2 = nova(2, 4)
-// escreva(em_texto(soma(fr1, fr2)))
-
-fr1 = nova(2, 8)
-fr2 = nova(2, 8)
-escreva(em_texto(soma(fr1, fr2)))
-
-escreva(mdc(4, 8))
-escreva(mdc(2, 3))
-
-// fr1 = nova(2, 4)
-// escreva(em_texto(soma(fr1, 4)))
 

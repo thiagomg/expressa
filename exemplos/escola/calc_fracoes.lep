@@ -1,0 +1,26 @@
+fracao = importe "../lib/fracao"
+
+soma_e_escreva = função(fr1, fr2) {
+    res = fracao::soma(fr1, fr2)
+    escreva(formate("{} + {} = {}", fracao::em_texto(fr1), fracao::em_texto(fr2), fracao::em_texto(res)))
+}
+
+escreva("Calculando frações")
+escreva("------------------")
+
+fr1 = fracao::nova(1, 4)
+fr2 = fracao::nova(1, 4)
+soma_e_escreva(fr1, fr2)
+
+fr1 = fracao::nova(2, 8)
+fr2 = fracao::nova(2, 3)
+soma_e_escreva(fr1, fr2)
+
+fr1 = fracao::nova(1, 3)
+fr2 = fracao::nova(2, 3)
+soma_e_escreva(fr1, fr2)
+
+fr1 = fracao::nova(2, 4)
+soma_e_escreva(fr1, fr2)
+
+// Desafio: Será que você consegue abrir fracao.lep e implementar multiplicação de frações?

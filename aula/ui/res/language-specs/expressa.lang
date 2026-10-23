@@ -46,15 +46,17 @@
     <context id="number" style-ref="number">
       <match>\b[0-9][0-9_]*(\.[0-9_]+)?\b</match>
     </context>
+    <!-- Identifiers are [A-Za-zÀ-ÿ_][A-Za-zÀ-ÿ0-9_]*; ASCII \b misses
+         keywords that start or end with an accent (função, não, até). -->
     <context id="boolean" style-ref="boolean">
-      <prefix>\b</prefix>
-      <suffix>\b</suffix>
+      <prefix>(?&lt;![A-Za-zÀ-ÿ0-9_])</prefix>
+      <suffix>(?![A-Za-zÀ-ÿ0-9_])</suffix>
       <keyword>verdadeiro</keyword>
       <keyword>falso</keyword>
     </context>
     <context id="keyword" style-ref="keyword">
-      <prefix>\b</prefix>
-      <suffix>\b</suffix>
+      <prefix>(?&lt;![A-Za-zÀ-ÿ0-9_])</prefix>
+      <suffix>(?![A-Za-zÀ-ÿ0-9_])</suffix>
       <keyword>se_falhar</keyword>
       <keyword>retorne</keyword>
       <keyword>pare</keyword>
@@ -62,25 +64,31 @@
       <keyword>continua</keyword>
       <keyword>se</keyword>
       <keyword>senao</keyword>
+      <keyword>senão</keyword>
       <keyword>ou</keyword>
       <keyword>e</keyword>
       <keyword>nao</keyword>
+      <keyword>não</keyword>
       <keyword>inicio</keyword>
+      <keyword>início</keyword>
       <keyword>fim</keyword>
       <keyword>funcao</keyword>
+      <keyword>função</keyword>
       <keyword>para</keyword>
       <keyword>de</keyword>
       <keyword>ate</keyword>
+      <keyword>até</keyword>
       <keyword>em</keyword>
       <keyword>repita</keyword>
       <keyword>enquanto</keyword>
       <keyword>vezes</keyword>
       <keyword>importe</keyword>
       <keyword>contem</keyword>
+      <keyword>contém</keyword>
     </context>
     <context id="builtin" style-ref="builtin">
-      <prefix>\b</prefix>
-      <suffix>\b</suffix>
+      <prefix>(?&lt;![A-Za-zÀ-ÿ0-9_])</prefix>
+      <suffix>(?![A-Za-zÀ-ÿ0-9_])</suffix>
       <keyword>escreva</keyword>
       <keyword>escreva_erro</keyword>
       <keyword>sair</keyword>
