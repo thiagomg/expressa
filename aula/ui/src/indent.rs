@@ -22,32 +22,7 @@ fn line_text(buffer: &SourceBuffer, line: i32) -> String {
 }
 
 fn strip_line_code(s: &str) -> String {
-    let mut out = String::new();
-    let mut in_str = false;
-    let mut chars = s.chars().peekable();
-    while let Some(c) = chars.next() {
-        if in_str {
-            out.push(c);
-            if c == '\\' {
-                if let Some(n) = chars.next() {
-                    out.push(n);
-                }
-            } else if c == '"' {
-                in_str = false;
-            }
-            continue;
-        }
-        if c == '"' {
-            in_str = true;
-            out.push(c);
-            continue;
-        }
-        if c == '/' && chars.peek() == Some(&'/') {
-            break;
-        }
-        out.push(c);
-    }
-    out
+    crate::lang::blank_comments_and_strings(s)
 }
 
 fn leading_ws(s: &str) -> usize {
@@ -503,6 +478,20 @@ mod tests {
     #[test]
     fn close_then_open_on_same_line() {
         assert_eq!(want_indent(&["se a {", "    x", "} se b {"], "y"), 4);
+    }
+
+    #[test]
+    fn keywords_in_strings_and_comments_do_not_indent() {
+        assert_eq!(
+            want_indent(
+                &[r#"escreva("início: " + verso[1..5])"#],
+                r#"escreva("hashtag: " + junte(palavras, "0"))"#
+            ),
+            0
+        );
+        assert_eq!(want_indent(&[r#"s = "{""#], "x"), 0);
+        assert_eq!(want_indent(&["x // {"], "y"), 0);
+        assert_eq!(want_indent(&["se a {", r#"    s = "fim""#], "x"), 4);
     }
 }
 
