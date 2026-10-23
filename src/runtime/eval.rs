@@ -1792,11 +1792,12 @@ impl<'a, 'c> Vm<'a, 'c> {
     }
 
     pub(crate) fn err(&self, message: impl Into<String>, span: Span) -> EvalError {
+        let file = self.file.clone();
         EvalError::Runtime(RuntimeError {
             message: message.into(),
-            file: self.file.clone(),
+            stack: CallFrame::executing(&self.stack, &file, span),
+            file,
             span,
-            stack: self.stack.clone(),
         })
     }
 
@@ -2866,21 +2867,49 @@ escreva(x)
     #[test]
     fn call_stack_names_the_callee() {
         let err = match run_to_string(
-            r#"
-boom = funcao()
-inicio
-    1 / 0
-fim
-boom()
-"#,
+            "boom = funcao() {\n    1 / 0\n}\nboom()\n",
             "app.lep",
         ) {
             Err(e) => e,
             Ok(_) => panic!("expected error"),
         };
+        assert_eq!(err.stack.len(), 2, "{}", err);
+        assert_eq!(err.stack[0].name, "<modulo>");
+        assert_eq!(err.stack[0].span.line, 4);
+        assert_eq!(err.stack[1].name, "boom");
+        assert_eq!(err.stack[1].span.line, 2);
         let text = err.to_string();
-        assert!(text.contains("boom"), "{text}");
-        assert!(text.contains("app.lep"), "{text}");
+        assert!(text.contains("0: boom (app.lep:2:"), "{text}");
+        assert!(text.contains("1: <modulo> (app.lep:4:"), "{text}");
+    }
+
+    #[test]
+    fn call_stack_nested_functions_use_each_frame_line() {
+        let err = match run_to_string(
+            "foo = funcao() {\n    bar()\n}\nbar = funcao() {\n    1 / 0\n}\nfoo()\n",
+            "app.lep",
+        ) {
+            Err(e) => e,
+            Ok(_) => panic!("expected error"),
+        };
+        assert_eq!(
+            err.stack
+                .iter()
+                .map(|f| (f.name.as_str(), f.span.line))
+                .collect::<Vec<_>>(),
+            [("<modulo>", 7), ("foo", 2), ("bar", 5)]
+        );
+    }
+
+    #[test]
+    fn top_level_error_omits_the_module_frame() {
+        let err = match run_to_string("1 / 0\n", "app.lep") {
+            Err(e) => e,
+            Ok(_) => panic!("expected error"),
+        };
+        assert_eq!(err.stack.len(), 1);
+        assert!(!err.shows_stack());
+        assert!(!err.to_string().contains("pilha de chamadas"), "{err}");
     }
 
     #[test]
