@@ -1721,6 +1721,25 @@ fn make_debug_panel(ui: &UiRc) -> GtkBox {
     let vars_tree = make_string_tree(&u.vars_store, &["onde", "nome", "valor"]);
     let stack_tree = make_string_tree(&u.stack_store, &["função", "linha"]);
     drop(u);
+    {
+        let ui_s = Rc::clone(ui);
+        stack_tree.connect_row_activated(move |tree, path, _col| {
+            let Some(model) = tree.model() else { return };
+            let Ok(store) = model.downcast::<TreeStore>() else {
+                return;
+            };
+            let Some(iter) = store.iter(path) else { return };
+            let loc: String = store.get(&iter, 1);
+            if let Some((file, line)) = loc.rsplit_once(':').and_then(|(f, n)| {
+                n.parse()
+                    .ok()
+                    .filter(|l| *l > 0)
+                    .map(|l| (f.to_string(), l))
+            }) {
+                goto_file_line(&ui_s, &file, line);
+            }
+        });
+    }
 
     panel.append(&Label::new(Some(
         "Observados (ficam visíveis a cada passo)",
@@ -1834,6 +1853,16 @@ fn fill_debug_views(ui: &UiRc, paused: &expressa::runtime::DebugPaused) {
         }
     }
     refresh_watch_values(ui, &paused.vars);
+}
+
+fn fill_error_stack(ui: &UiRc, frames: &[exec::StackFrame]) {
+    let u = ui.borrow();
+    u.stack_store.clear();
+    for f in frames {
+        let loc = format!("{}:{}", f.file, f.line);
+        let iter = u.stack_store.append(None);
+        u.stack_store.set(&iter, &[(0, &f.name), (1, &loc)]);
+    }
 }
 
 fn clear_debug_views(ui: &UiRc) {
@@ -1996,6 +2025,16 @@ fn executar(ui: &UiRc, debug: bool) {
                             "erro: {} em {}:{}\n",
                             f.error_message, f.error_file, f.error_line
                         ));
+                        if !f.stack.is_empty() {
+                            console.stderr("pilha de chamadas:\n");
+                            for (i, fr) in f.stack.iter().enumerate() {
+                                console.error_link(&format!(
+                                    "  {i}: {} em {}:{}\n",
+                                    fr.name, fr.file, fr.line
+                                ));
+                            }
+                            fill_error_stack(&ui_ev, &f.stack);
+                        }
                         set_status(&ui_ev, "erro ao executar (clique no erro para ir à linha)");
                         if f.error_line > 0 {
                             let file = if f.error_file.is_empty() {

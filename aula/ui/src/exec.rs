@@ -27,12 +27,20 @@ pub enum ExecEvent {
     Finished(Finished),
 }
 
+pub struct StackFrame {
+    pub name: String,
+    pub file: String,
+    pub line: u32,
+}
+
 pub struct Finished {
     pub ok: bool,
     pub error_message: String,
     /// Relative to the project folder.
     pub error_file: String,
     pub error_line: u32,
+    /// Innermost first. Empty when the error is only the top-level module.
+    pub stack: Vec<StackFrame>,
 }
 
 /// Local copy of one student's project.
@@ -327,19 +335,37 @@ pub fn spawn(
                 error_message: String::new(),
                 error_file: String::new(),
                 error_line: 0,
+                stack: Vec::new(),
             },
             Ok(code) => Finished {
                 ok: false,
                 error_message: format!("encerrou com código {code}"),
                 error_file: String::new(),
                 error_line: 0,
+                stack: Vec::new(),
             },
-            Err(e) => Finished {
-                ok: false,
-                error_file: rel(&e.file),
-                error_message: e.message,
-                error_line: e.span.line,
-            },
+            Err(e) => {
+                let stack = if e.shows_stack() {
+                    e.stack
+                        .iter()
+                        .rev()
+                        .map(|f| StackFrame {
+                            name: f.name.clone(),
+                            file: rel(&f.file),
+                            line: f.span.line,
+                        })
+                        .collect()
+                } else {
+                    Vec::new()
+                };
+                Finished {
+                    ok: false,
+                    error_file: rel(&e.file),
+                    error_message: e.message,
+                    error_line: e.span.line,
+                    stack,
+                }
+            }
         };
         let _ = event_tx.send(ExecEvent::Finished(finished));
     });

@@ -199,12 +199,30 @@ impl Console {
     }
 }
 
-/// `"erro: … em lib/a.lep:12"` -> `("lib/a.lep", 12)`.
+/// `"lib/a.lep:12"` or `"lib/a.lep:12:8"` -> `(lib/a.lep, 12)`.
+fn parse_file_line(loc: &str) -> Option<(String, u32)> {
+    let loc = loc.trim();
+    let mut parts = loc.rsplitn(3, ':');
+    let last = parts.next()?;
+    let last: u32 = last.parse().ok()?;
+    let mid = parts.next()?;
+    match (mid.parse::<u32>(), parts.next()) {
+        (Ok(line), Some(file)) if !file.is_empty() => Some((file.to_string(), line)),
+        _ => Some((mid.to_string(), last)),
+    }
+}
+
+/// `"erro: … em lib/a.lep:12"` or `"  0: pega (app.lep:4:1)"` -> file and line.
 pub fn parse_error_location(line: &str) -> Option<(String, u32)> {
-    let em = line.rfind(" em ")?;
-    let loc = line[em + 4..].trim();
-    let (file, n) = loc.rsplit_once(':')?;
-    Some((file.to_string(), n.trim().parse().ok()?))
+    let line = line.trim();
+    if let Some(em) = line.rfind(" em ") {
+        if let Some(parsed) = parse_file_line(&line[em + 4..]) {
+            return Some(parsed);
+        }
+    }
+    let open = line.rfind('(')?;
+    let inner = line.get(open + 1..)?.strip_suffix(')')?;
+    parse_file_line(inner)
 }
 
 /// Lines kept in the output pane. A program that never ends keeps only the
@@ -668,6 +686,18 @@ mod tests {
         assert_eq!(
             parse_error_location("erro: divisão em main.lep:3\n"),
             Some(("main.lep".into(), 3))
+        );
+        assert_eq!(
+            parse_error_location("erro: x em lib/a.lep:12:8"),
+            Some(("lib/a.lep".into(), 12))
+        );
+        assert_eq!(
+            parse_error_location("  0: pega em app.lep:4"),
+            Some(("app.lep".into(), 4))
+        );
+        assert_eq!(
+            parse_error_location("  0: pega (app.lep:4:1)"),
+            Some(("app.lep".into(), 4))
         );
         assert_eq!(parse_error_location("nada aqui"), None);
     }
