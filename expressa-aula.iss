@@ -49,6 +49,7 @@ Source: "dist\expressa-aula\exemplos\*"; DestDir: "{userdocs}\Expressa Aula\exem
 
 [Icons]
 Name: "{group}\Expressa Aula"; Filename: "{app}\expressa-aula.exe"
+Name: "{group}\Tutoriais Expressa"; Filename: "{app}\expressa-tutorial.exe"
 Name: "{autodesktop}\Expressa Aula"; Filename: "{app}\expressa-aula.exe"; Tasks: desktopicon
 
 [Run]

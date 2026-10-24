@@ -328,6 +328,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "expressa-tutorial"
+version = "0.3.0"
+dependencies = [
+ "gtk4",
+ "winresource",
+]
+
+[[package]]
 name = "fastrand"
 version = "2.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"

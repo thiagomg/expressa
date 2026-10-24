@@ -13,6 +13,7 @@ mod lang;
 mod prefs;
 mod rpc;
 mod store;
+mod tutoriais;
 
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -545,24 +546,45 @@ fn build_ui(app: &Application) {
     {
         let ui_p = Rc::clone(&ui);
         glib::timeout_add_local_once(std::time::Duration::from_millis(250), move || {
-            // Merge new shipped examples into Documents without touching
-            // files the student already edited (first launch and upgrades).
-            let _ = sync_shipped_exemplos();
-            let first = ui_p.borrow().prefs.pasta.trim().is_empty();
-            let opened = if first && open_shipped_exemplos(&ui_p) {
-                true
+            let start = Rc::new({
+                let ui = Rc::clone(&ui_p);
+                move || {
+                    // Merge new shipped examples into Documents without touching
+                    // files the student already edited (first launch and upgrades).
+                    let _ = sync_shipped_exemplos();
+                    let first = ui.borrow().prefs.pasta.trim().is_empty();
+                    let opened = if first && open_shipped_exemplos(&ui) {
+                        true
+                    } else {
+                        choose_local_folder(&ui)
+                    };
+                    schedule_raise();
+                    if !opened {
+                        set_status(&ui, "escolha uma pasta para o projeto");
+                    }
+                    if !lang_ok {
+                        set_status(
+                            &ui,
+                            "aviso: gramática Expressa não carregou; o texto fica sem cores",
+                        );
+                    }
+                }
+            });
+            let viu = ui_p.borrow().prefs.viu_boas_vindas;
+            if viu {
+                start();
             } else {
-                choose_local_folder(&ui_p)
-            };
-            schedule_raise();
-            if !opened {
-                set_status(&ui_p, "escolha uma pasta para o projeto");
-            }
-            if !lang_ok {
-                set_status(
-                    &ui_p,
-                    "aviso: gramática Expressa não carregou; o texto fica sem cores",
-                );
+                let window = ui_p.borrow().window.clone();
+                let ui_w = Rc::clone(&ui_p);
+                let start = Rc::clone(&start);
+                tutoriais::mostrar_boas_vindas(&window, move || {
+                    {
+                        let mut u = ui_w.borrow_mut();
+                        u.prefs.viu_boas_vindas = true;
+                        u.prefs.save();
+                    }
+                    start();
+                });
             }
         });
     }
@@ -765,6 +787,11 @@ fn install_menubar(
     add_win_action(win, ui, "letra-menor", |ui| zoom(ui, -1));
     add_win_action(win, ui, "letra-normal", |ui| zoom(ui, 0));
     add_win_action(win, ui, "ajuda", open_ajuda);
+    add_win_action(win, ui, "tutoriais", |ui| {
+        if let Err(e) = tutoriais::spawn_tutorial() {
+            set_status(ui, &e);
+        }
+    });
     add_win_action(win, ui, "buscar", show_search);
     add_win_action(win, ui, "encerrar", encerrar);
     for name in ["continuar", "proximo", "entrar", "sair", "parar"] {
@@ -856,6 +883,7 @@ fn install_menubar(
     ver.append_section(None, &aparencia);
 
     let ajuda = gio::Menu::new();
+    ajuda.append_item(&menu_item("_Tutoriais", "win.tutoriais", None));
     ajuda.append_item(&menu_item("_Funções nativas", "win.ajuda", Some("F1")));
 
     let model = gio::Menu::new();

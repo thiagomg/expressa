@@ -24,13 +24,13 @@ if (-not (Test-Path (Join-Path $gtk "bin\gtk-4-1.dll"))) {
     Write-Error "Nao achei $gtk\bin\gtk-4-1.dll."
 }
 
-Write-Output "Compilando expressa, expressa-aula e expressa-aula-server (release)..."
-cargo build --release -p expressa -p expressa-aula -p expressa-aula-server
+Write-Output "Compilando expressa, expressa-aula, expressa-aula-server e expressa-tutorial (release)..."
+cargo build --release -p expressa -p expressa-aula -p expressa-aula-server -p expressa-tutorial
 if ($LASTEXITCODE -ne 0) {
     exit $LASTEXITCODE
 }
 
-foreach ($name in @("expressa.exe", "expressa-grafico.exe", "expressa-aula.exe", "expressa-aula-server.exe")) {
+foreach ($name in @("expressa.exe", "expressa-grafico.exe", "expressa-aula.exe", "expressa-aula-server.exe", "expressa-tutorial.exe")) {
     if (-not (Test-Path (Join-Path $release $name))) {
         Write-Error "Faltou $release\$name."
     }
@@ -57,6 +57,7 @@ function Copy-Tree($src, $dst) {
 
 Copy-Item (Join-Path $release "expressa-aula.exe") $dest
 Copy-Item (Join-Path $release "expressa-aula-server.exe") $dest
+Copy-Item (Join-Path $release "expressa-tutorial.exe") $dest
 # So o interpretador entra no PATH. A pasta do editor tem as DLLs do GTK;
 # coloca-la no PATH faria outros programas acharem zlib, libpng etc.
 $bin = Join-Path $dest "bin"
@@ -91,6 +92,7 @@ Copy-Tree (Join-Path $root "aula\ui\res") (Join-Path $dest "res")
 # Documentos\Expressa Aula\exemplos os arquivos que ainda nao existem;
 # o que o aluno ja editou permanece.
 Copy-Tree (Join-Path $root "exemplos") (Join-Path $dest "exemplos")
+Copy-Tree (Join-Path $root "tutorial") (Join-Path $dest "tutorial")
 
 $bytes = (Get-ChildItem $dest -Recurse -File | Measure-Object Length -Sum).Sum
 Write-Output ("Pasta pronta: {0} ({1:N0} MB)" -f $dest, ($bytes / 1MB))

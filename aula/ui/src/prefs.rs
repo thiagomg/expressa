@@ -15,6 +15,8 @@ pub struct Prefs {
     pub pasta: String,
     /// Last remote server URL.
     pub servidor: String,
+    /// The welcome window was already shown.
+    pub viu_boas_vindas: bool,
 }
 
 impl Default for Prefs {
@@ -24,6 +26,7 @@ impl Default for Prefs {
             dark: false,
             pasta: String::new(),
             servidor: "http://127.0.0.1:50051".to_string(),
+            viu_boas_vindas: false,
         }
     }
 }
@@ -50,6 +53,7 @@ impl Prefs {
                 "tema" => p.dark = v.trim() == "escuro",
                 "pasta" => p.pasta = v.trim().to_string(),
                 "servidor" => p.servidor = v.trim().to_string(),
+                "boas_vindas" => p.viu_boas_vindas = v.trim() == "visto",
                 _ => {}
             }
         }
@@ -58,11 +62,12 @@ impl Prefs {
 
     pub fn to_text(&self) -> String {
         format!(
-            "fonte={}\ntema={}\npasta={}\nservidor={}\n",
+            "fonte={}\ntema={}\npasta={}\nservidor={}\nboas_vindas={}\n",
             self.font_size,
             if self.dark { "escuro" } else { "claro" },
             self.pasta,
             self.servidor,
+            if self.viu_boas_vindas { "visto" } else { "nao" },
         )
     }
 
