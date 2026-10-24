@@ -73,6 +73,7 @@ struct Ui {
     replace_entry: Entry,
     search_revealer: Revealer,
     status: Label,
+    cursor_pos: Label,
     diag_label: Label,
     window: ApplicationWindow,
     run: Option<Run>,
@@ -196,6 +197,10 @@ fn build_ui(app: &Application) {
     status.set_xalign(0.0);
     status.set_hexpand(true);
     status.add_css_class("dim-label");
+    let cursor_pos = Label::new(Some("1:1"));
+    cursor_pos.set_xalign(1.0);
+    cursor_pos.add_css_class("dim-label");
+    cursor_pos.set_width_chars(8);
     let diag_label = Label::new(None);
     diag_label.set_xalign(1.0);
     diag_label.set_ellipsize(gtk::pango::EllipsizeMode::End);
@@ -229,6 +234,7 @@ fn build_ui(app: &Application) {
         replace_entry,
         search_revealer,
         status,
+        cursor_pos,
         diag_label,
         window: win.clone(),
         run: None,
@@ -345,6 +351,7 @@ fn build_ui(app: &Application) {
     status_row.set_margin_end(8);
     status_row.set_margin_bottom(6);
     status_row.append(&ui.borrow().status);
+    status_row.append(&ui.borrow().cursor_pos);
     status_row.append(&ui.borrow().diag_label);
     status_row.append(&ui.borrow().project_path);
 
@@ -372,6 +379,10 @@ fn build_ui(app: &Application) {
             glib::idle_add_local_once(move || {
                 refresh_title(&ui_t);
                 refresh_diag_label(&ui_t);
+                if let Some(d) = current_doc(&ui_t) {
+                    refresh_cursor(&ui_t, &d.buffer);
+                    remember_arquivo(&ui_t, &d);
+                }
             });
         });
     }
@@ -450,6 +461,7 @@ fn build_ui(app: &Application) {
         });
         k(&shortcuts, "<Primary>f", show_search);
         k(&shortcuts, "<Primary>h", show_search);
+        k(&shortcuts, "<Primary>g", ir_para_linha);
         for accel in ["<Primary>equal", "<Primary>plus", "<Primary>KP_Add"] {
             k(&fkeys, accel, |ui| zoom(ui, 1));
         }
@@ -549,8 +561,12 @@ fn build_ui(app: &Application) {
             let start = Rc::new({
                 let ui = Rc::clone(&ui_p);
                 move || {
-                    let first = ui.borrow().prefs.pasta.trim().is_empty();
-                    let opened = if first && open_shipped_exemplos(&ui) {
+                    let pasta = ui.borrow().prefs.pasta.clone();
+                    let pasta_path = expand_tilde(&pasta);
+                    let opened = if !pasta.is_empty() && pasta_path.is_dir() {
+                        open_local_project(&ui, pasta_path);
+                        true
+                    } else if open_shipped_exemplos(&ui) {
                         true
                     } else {
                         choose_local_folder(&ui)
@@ -790,6 +806,7 @@ fn install_menubar(
         }
     });
     add_win_action(win, ui, "buscar", show_search);
+    add_win_action(win, ui, "ir-linha", ir_para_linha);
     add_win_action(win, ui, "encerrar", encerrar);
     for name in ["continuar", "proximo", "entrar", "sair", "parar"] {
         set_action_enabled(win, name, false);
@@ -857,6 +874,7 @@ fn install_menubar(
     ver.append_item(&menu_item("_Arquivos", "win.mostrar-arquivos", Some("F7")));
     ver.append_item(&menu_item("_Painel", "win.mostrar-painel", Some("F8")));
     ver.append_item(&menu_item("_Buscar", "win.buscar", Some("<Primary>f")));
+    ver.append_item(&menu_item("_Ir para linha", "win.ir-linha", Some("<Primary>g")));
     let aparencia = gio::Menu::new();
     aparencia.append_item(&menu_item(
         "Letra _maior",
@@ -1042,6 +1060,26 @@ fn set_status(ui: &UiRc, text: &str) {
     }
 }
 
+fn refresh_cursor(ui: &UiRc, buffer: &sourceview5::Buffer) {
+    let it = buffer.iter_at_mark(&buffer.get_insert());
+    let text = format!("{}:{}", it.line() + 1, it.line_offset() + 1);
+    if let Ok(u) = ui.try_borrow() {
+        u.cursor_pos.set_text(&text);
+    }
+}
+
+fn remember_arquivo(ui: &UiRc, doc: &Doc) {
+    let Some(path) = doc.path.borrow().clone() else {
+        return;
+    };
+    if let Ok(mut u) = ui.try_borrow_mut() {
+        if u.prefs.arquivo != path {
+            u.prefs.arquivo = path;
+            u.prefs.save();
+        }
+    }
+}
+
 fn parse_run_args(s: &str) -> Vec<String> {
     s.split_whitespace().map(|w| w.to_string()).collect()
 }
@@ -1159,6 +1197,16 @@ fn open_doc(ui: &UiRc, path: Option<String>, text: &str) -> Rc<Doc> {
             }
         });
     }
+    {
+        let weak = Rc::downgrade(ui);
+        let buf = doc.buffer.clone();
+        doc.buffer
+            .connect_notify_local(Some("cursor-position"), move |_, _| {
+                if let Some(ui) = weak.upgrade() {
+                    refresh_cursor(&ui, &buf);
+                }
+            });
+    }
     let help = ui.borrow().help.clone().expect("help");
     let vh = {
         let weak = Rc::downgrade(&doc);
@@ -1189,6 +1237,8 @@ fn open_doc(ui: &UiRc, path: Option<String>, text: &str) -> Rc<Doc> {
     nb.set_current_page(Some(n));
     doc.view.grab_focus();
     refresh_title(ui);
+    refresh_cursor(ui, &doc.buffer);
+    remember_arquivo(ui, &doc);
     doc
 }
 
@@ -2222,11 +2272,19 @@ fn close_project_tabs(ui: &UiRc) {
     }
 }
 
-/// Show the project tree. No file is opened; the user picks one.
+/// Show the project tree. Reopens the last file of this project, if it is still there.
 fn finish_open(ui: &UiRc) {
     refresh_tree(ui);
     refresh_title(ui);
     refresh_diag_label(ui);
+    let arquivo = ui.borrow().prefs.arquivo.clone();
+    if arquivo.is_empty() {
+        return;
+    }
+    let known = ui.borrow().project_files.iter().any(|p| p == &arquivo);
+    if known {
+        let _ = open_path(ui, &arquivo);
+    }
 }
 
 fn normalize_url(url: &str) -> String {
@@ -2718,6 +2776,56 @@ fn confirmar_apagar(ui: &UiRc, rel: &str) {
 }
 
 // ── Search (current tab) ───────────────────────────────────────────────────
+
+fn ir_para_linha(ui: &UiRc) {
+    let Some(doc) = current_doc(ui) else { return };
+    let parent = ui.borrow().window.clone();
+    let win = gtk::Window::builder()
+        .title("Ir para linha")
+        .transient_for(&parent)
+        .modal(true)
+        .default_width(280)
+        .build();
+    let row = GtkBox::new(Orientation::Horizontal, 8);
+    row.set_margin_top(12);
+    row.set_margin_bottom(12);
+    row.set_margin_start(12);
+    row.set_margin_end(12);
+    let entry = Entry::builder()
+        .placeholder_text("número da linha")
+        .hexpand(true)
+        .build();
+    let ok = Button::with_label("Ir");
+    ok.add_css_class("suggested-action");
+    let go = Rc::new({
+        let entry = entry.clone();
+        let win = win.clone();
+        let doc = Rc::clone(&doc);
+        move || {
+            let t = entry.text();
+            if let Ok(n) = t.trim().parse::<u32>() {
+                if n >= 1 {
+                    doc.goto_line(n);
+                    doc.view.grab_focus();
+                }
+            }
+            win.close();
+        }
+    });
+    ok.connect_clicked({
+        let go = Rc::clone(&go);
+        move |_| go()
+    });
+    entry.connect_activate({
+        let go = Rc::clone(&go);
+        move |_| go()
+    });
+    row.append(&entry);
+    row.append(&ok);
+    win.set_child(Some(&row));
+    win.present();
+    entry.grab_focus();
+}
 
 fn show_search(ui: &UiRc) {
     let u = ui.borrow();

@@ -17,6 +17,8 @@ pub struct Prefs {
     pub servidor: String,
     /// The welcome window was already shown.
     pub viu_boas_vindas: bool,
+    /// Last file opened in the project (relative path).
+    pub arquivo: String,
 }
 
 impl Default for Prefs {
@@ -27,6 +29,7 @@ impl Default for Prefs {
             pasta: String::new(),
             servidor: "http://127.0.0.1:50051".to_string(),
             viu_boas_vindas: false,
+            arquivo: String::new(),
         }
     }
 }
@@ -54,6 +57,7 @@ impl Prefs {
                 "pasta" => p.pasta = v.trim().to_string(),
                 "servidor" => p.servidor = v.trim().to_string(),
                 "boas_vindas" => p.viu_boas_vindas = v.trim() == "visto",
+                "arquivo" => p.arquivo = v.trim().to_string(),
                 _ => {}
             }
         }
@@ -62,12 +66,13 @@ impl Prefs {
 
     pub fn to_text(&self) -> String {
         format!(
-            "fonte={}\ntema={}\npasta={}\nservidor={}\nboas_vindas={}\n",
+            "fonte={}\ntema={}\npasta={}\nservidor={}\nboas_vindas={}\narquivo={}\n",
             self.font_size,
             if self.dark { "escuro" } else { "claro" },
             self.pasta,
             self.servidor,
             if self.viu_boas_vindas { "visto" } else { "nao" },
+            self.arquivo,
         )
     }
 
