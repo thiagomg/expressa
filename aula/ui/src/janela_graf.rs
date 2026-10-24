@@ -1,4 +1,4 @@
-//! Sibling windows for `graf::mostre`. Not the Gráficos dock.
+//! Sibling windows for `tela_grafica::mostre`. Not the Gráficos dock.
 
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -29,7 +29,7 @@ impl Painel {
         self.telas.borrow_mut().insert(id, tela);
         if nova {
             let win = Window::builder()
-                .title("Expressa — graf")
+                .title("Expressa — tela gráfica")
                 .default_width(320)
                 .default_height(240)
                 .build();

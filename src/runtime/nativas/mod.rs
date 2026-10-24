@@ -340,39 +340,39 @@ pub const NATIVAS: &[Nativa] = &[
     },
     Nativa {
         names: &["nova"],
-        module: Some("graf"),
+        module: Some("tela_grafica"),
     },
     Nativa {
         names: &["cor"],
-        module: Some("graf"),
+        module: Some("tela_grafica"),
     },
     Nativa {
         names: &["linha"],
-        module: Some("graf"),
+        module: Some("tela_grafica"),
     },
     Nativa {
         names: &["circulo", "círculo"],
-        module: Some("graf"),
+        module: Some("tela_grafica"),
     },
     Nativa {
         names: &["ponto"],
-        module: Some("graf"),
+        module: Some("tela_grafica"),
     },
     Nativa {
         names: &["apague"],
-        module: Some("graf"),
+        module: Some("tela_grafica"),
     },
     Nativa {
         names: &["pixel"],
-        module: Some("graf"),
+        module: Some("tela_grafica"),
     },
     Nativa {
         names: &["salve"],
-        module: Some("graf"),
+        module: Some("tela_grafica"),
     },
     Nativa {
         names: &["mostre"],
-        module: Some("graf"),
+        module: Some("tela_grafica"),
     },
 ];
 

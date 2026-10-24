@@ -270,15 +270,15 @@ c.cart::mostre()                 // mesma janela a cada mostre; não espera
 ```
 
 ```text
-graf = importe "graf"
-g = graf::nova(320, 200)         // pixels; (0,0) canto superior esquerdo
-g.graf::cor(:azul)
-g.graf::linha(10, 10, 310, 190)
-g.graf::circulo(160, 100, 40)
-g.graf::mostre()                 // janela irmã; o próximo mostre atualiza
-g.graf::apague()                // zera o desenho
-g.graf::salve("casa.png")
-escreva(g.graf::pixel(10, 10))
+tela_grafica = importe "tela_grafica"
+g = tela_grafica::nova(320, 200) // pixels; (0,0) canto superior esquerdo
+g.tela_grafica::cor(:azul)
+g.tela_grafica::linha(10, 10, 310, 190)
+g.tela_grafica::circulo(160, 100, 40)
+g.tela_grafica::mostre()         // janela irmã; o próximo mostre atualiza
+g.tela_grafica::apague()        // zera o desenho
+g.tela_grafica::salve("casa.png")
+escreva(g.tela_grafica::pixel(10, 10))
 ```
 
 Caminhos relativos: pasta do `.lep`, não a pasta de onde você chamou `expressa`.
@@ -299,7 +299,7 @@ matriz = importe "matriz"      // alias: matriz::zeros, A.matriz::transposta()
 importe "./matriz"             // arquivo local se o nativo colidir
 ```
 
-Nativos: `matriz`, `arquivo`, `tela`, `mat`, `cartesiano`. Nome nu sem `/` nem `.lep` procura o nativo; se existir também `matriz.lep` no mesmo diretório, `importe "matriz"` é erro.
+Nativos: `matriz`, `arquivo`, `tela`, `mat`, `cartesiano`, `tela_grafica`. Nome nu sem `/` nem `.lep` procura o nativo; se existir também `matriz.lep` no mesmo diretório, `importe "matriz"` é erro.
 
 ---
 
@@ -326,6 +326,7 @@ Módulos (`importe "…"`):
 | `matriz` | `matriz` `transposta` `det` `identidade` `zeros` `uns` `cheia` `nlinhas` `ncolunas` |
 | `arquivo` | `leia_arquivo` `salve_arquivo` `adicione_arquivo` `leia_csv` `salve_csv` |
 | `cartesiano` | `documento` `grafico` `eixos` `plotar` `adicione` `mostre` |
+| `tela_grafica` | `nova` `cor` `linha` `circulo` `ponto` `apague` `pixel` `salve` `mostre` |
 
 Nativas não podem ser reatribuídas (`escreva = 1` é erro).
 

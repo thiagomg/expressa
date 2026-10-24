@@ -1,7 +1,7 @@
 /target
 .idea/
 exemplos/**/saida/
-exemplos/graf/*.png
+exemplos/tela_grafica/*.png
 aula-data/
 
 # Binários nativos do Windows (GTK do gvsbuild e protoc). O script deps/ativar.ps1 fica versionado.

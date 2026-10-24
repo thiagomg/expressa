@@ -201,9 +201,15 @@ fn expect_graf(
 ) -> Result<Rc<RefCell<Vec<(MapKey, Value)>>>, EvalError> {
     match v {
         Value::Mapa(xs) if is_graf(v) => Ok(Rc::clone(xs)),
-        Value::Mapa(_) => Err(vm.err("não é um graf (graf::nova())", span)),
+        Value::Mapa(_) => Err(vm.err(
+            "não é uma tela gráfica (tela_grafica::nova())",
+            span,
+        )),
         other => Err(vm.err(
-            format!("esperado graf, encontrado {}", other.type_name()),
+            format!(
+                "esperada tela gráfica, encontrado {}",
+                other.type_name()
+            ),
             span,
         )),
     }
@@ -214,10 +220,10 @@ fn tela_de(v: &Value, span: Span, vm: &Vm<'_, '_>) -> Result<TelaGrafica, EvalEr
     let Value::Mapa(xs) = v else {
         unreachable!();
     };
-    let largura = get_u32(&mapa, "largura").ok_or_else(|| vm.err("graf sem :largura", span))?;
-    let altura = get_u32(&mapa, "altura").ok_or_else(|| vm.err("graf sem :altura", span))?;
+    let largura = get_u32(&mapa, "largura").ok_or_else(|| vm.err("tela gráfica sem :largura", span))?;
+    let altura = get_u32(&mapa, "altura").ok_or_else(|| vm.err("tela gráfica sem :altura", span))?;
     let fundo = get_texto(&mapa, "fundo").unwrap_or_else(|| "branco".into());
-    let ops_v = get_lista(&mapa, "ops").ok_or_else(|| vm.err("graf sem :ops", span))?;
+    let ops_v = get_lista(&mapa, "ops").ok_or_else(|| vm.err("tela gráfica sem :ops", span))?;
     let mut ops = Vec::new();
     for item in ops_v.borrow().iter() {
         ops.push(op_de(item, span, vm)?);
@@ -234,7 +240,7 @@ fn tela_de(v: &Value, span: Span, vm: &Vm<'_, '_>) -> Result<TelaGrafica, EvalEr
 fn op_de(v: &Value, span: Span, vm: &Vm<'_, '_>) -> Result<OpGraf, EvalError> {
     let Value::Mapa(xs) = v else {
         return Err(vm.err(
-            format!("comando de graf inválido ({})", v.type_name()),
+            format!("comando de tela gráfica inválido ({})", v.type_name()),
             span,
         ));
     };
@@ -259,7 +265,7 @@ fn op_de(v: &Value, span: Span, vm: &Vm<'_, '_>) -> Result<OpGraf, EvalError> {
             r: get_i32(xs, "r").unwrap_or(0),
             cor,
         }),
-        other => Err(vm.err(format!("comando de graf desconhecido ({other})"), span)),
+        other => Err(vm.err(format!("comando de tela gráfica desconhecido ({other})"), span)),
     }
 }
 
@@ -356,12 +362,12 @@ mod tests {
     use crate::runtime::NoopHook;
 
     fn run(src: &str) -> String {
-        let src = format!("importe \"graf\"\n{src}");
+        let src = format!("importe \"tela_grafica\"\n{src}");
         run_to_string(&src, "teste.lep").unwrap_or_else(|e| panic!("run failed: {e}\n{src}"))
     }
 
     fn run_err(src: &str) -> String {
-        let src = format!("importe \"graf\"\n{src}");
+        let src = format!("importe \"tela_grafica\"\n{src}");
         match run_to_string(&src, "teste.lep") {
             Err(e) => e.message,
             Ok(out) => panic!("expected error, got {out:?}\n{src}"),
@@ -402,13 +408,13 @@ escreva(g.pixel(0, 0))
     fn pixel_fora_e_erro() {
         assert!(run_err("g = nova(8, 8)\nescreva(g.pixel(8, 0))\n").contains("fora"));
         assert!(run_err("g = nova(0, 8)\n").contains("inteiro"));
-        assert!(run_err("linha(1, 0, 0, 1, 1)\n").contains("graf"));
+        assert!(run_err("linha(1, 0, 0, 1, 1)\n").contains("tela gráfica"));
     }
 
     #[test]
     fn mostre_mesma_instancia_mesmo_id() {
         let src = r#"
-importe "graf"
+importe "tela_grafica"
 g = nova(8, 8)
 g.ponto(1, 1)
 g.mostre()
@@ -444,7 +450,7 @@ g.mostre()
     #[test]
     fn duas_novas_ids_diferentes() {
         let src = r#"
-importe "graf"
+importe "tela_grafica"
 a = nova(4, 4)
 b = nova(4, 4)
 a.mostre()
@@ -480,7 +486,7 @@ b.mostre()
         let _ = std::fs::create_dir_all(&dir);
         let path = dir.join("casa.png");
         let src = format!(
-            "importe \"graf\"\ng = nova(8, 8)\ng.cor(:vermelho)\ng.linha(0, 0, 7, 7)\ng.salve(\"{}\")\n",
+            "importe \"tela_grafica\"\ng = nova(8, 8)\ng.cor(:vermelho)\ng.linha(0, 0, 7, 7)\ng.salve(\"{}\")\n",
             path.display()
         );
         run_to_string(&src, dir.join("t.lep").to_str().unwrap()).unwrap();

@@ -46,10 +46,10 @@
   "modules": [
     "arquivo",
     "cartesiano",
-    "graf",
     "mat",
     "matriz",
-    "tela"
+    "tela",
+    "tela_grafica"
   ],
   "nativas": [
     {
@@ -947,7 +947,7 @@
     {
       "name": "nova",
       "aliases": [],
-      "module": "graf",
+      "module": "tela_grafica",
       "kind": "funcao",
       "signatures": [
         "nova(largura, altura)"
@@ -958,7 +958,7 @@
     {
       "name": "cor",
       "aliases": [],
-      "module": "graf",
+      "module": "tela_grafica",
       "kind": "funcao",
       "signatures": [
         "cor(g, cor)"
@@ -969,7 +969,7 @@
     {
       "name": "linha",
       "aliases": [],
-      "module": "graf",
+      "module": "tela_grafica",
       "kind": "funcao",
       "signatures": [
         "linha(g, x1, y1, x2, y2)"
@@ -982,7 +982,7 @@
       "aliases": [
         "círculo"
       ],
-      "module": "graf",
+      "module": "tela_grafica",
       "kind": "funcao",
       "signatures": [
         "circulo(g, x, y, r)"
@@ -993,7 +993,7 @@
     {
       "name": "ponto",
       "aliases": [],
-      "module": "graf",
+      "module": "tela_grafica",
       "kind": "funcao",
       "signatures": [
         "ponto(g, x, y)"
@@ -1004,7 +1004,7 @@
     {
       "name": "apague",
       "aliases": [],
-      "module": "graf",
+      "module": "tela_grafica",
       "kind": "funcao",
       "signatures": [
         "apague(g)"
@@ -1015,7 +1015,7 @@
     {
       "name": "pixel",
       "aliases": [],
-      "module": "graf",
+      "module": "tela_grafica",
       "kind": "funcao",
       "signatures": [
         "pixel(g, x, y)"
@@ -1026,7 +1026,7 @@
     {
       "name": "salve",
       "aliases": [],
-      "module": "graf",
+      "module": "tela_grafica",
       "kind": "funcao",
       "signatures": [
         "salve(g, caminho)"
@@ -1037,7 +1037,7 @@
     {
       "name": "mostre",
       "aliases": [],
-      "module": "graf",
+      "module": "tela_grafica",
       "kind": "funcao",
       "signatures": [
         "mostre(documento)",
