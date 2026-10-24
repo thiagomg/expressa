@@ -1,0 +1,9 @@
+graf = importe "graf"
+
+g = graf::nova(320, 200)
+g.graf::cor(:azul)
+g.graf::linha(10, 10, 310, 190)
+g.graf::cor(:vermelho)
+g.graf::circulo(160, 100, 50)
+g.graf::mostre()
+g.graf::salve("linha.png")

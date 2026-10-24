@@ -1,0 +1,300 @@
+//! Bitmap canvas after drawing commands. Shared by tests, PNG save,
+//! `expressa-grafico`, and the Aula window.
+
+use std::io::Cursor;
+use std::path::Path;
+
+use super::folha::cor_rgb;
+
+pub const LARGURA_MAX: u32 = 2048;
+pub const ALTURA_MAX: u32 = 2048;
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum OpGraf {
+    Ponto { x: i32, y: i32, cor: String },
+    Linha {
+        x1: i32,
+        y1: i32,
+        x2: i32,
+        y2: i32,
+        cor: String,
+    },
+    Circulo {
+        x: i32,
+        y: i32,
+        r: i32,
+        cor: String,
+    },
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct TelaGrafica {
+    pub id: u64,
+    pub largura: u32,
+    pub altura: u32,
+    pub fundo: String,
+    pub ops: Vec<OpGraf>,
+}
+
+/// Palette index per pixel, then RGB for PNG / minifb.
+pub struct Raster {
+    pub largura: u32,
+    pub altura: u32,
+    idx: Vec<u8>,
+}
+
+const PALETA: &[&str] = &[
+    "preto",
+    "vermelho",
+    "verde",
+    "amarelo",
+    "azul",
+    "magenta",
+    "ciano",
+    "branco",
+    "normal",
+];
+
+fn idx_cor(nome: &str) -> u8 {
+    PALETA
+        .iter()
+        .position(|n| *n == nome)
+        .unwrap_or(8) as u8
+}
+
+pub fn nome_cor(idx: u8) -> &'static str {
+    PALETA.get(idx as usize).copied().unwrap_or("normal")
+}
+
+impl TelaGrafica {
+    pub fn raster(&self) -> Raster {
+        let w = self.largura.max(1);
+        let h = self.altura.max(1);
+        let fundo = idx_cor(&self.fundo);
+        let mut idx = vec![fundo; (w * h) as usize];
+        for op in &self.ops {
+            match op {
+                OpGraf::Ponto { x, y, cor } => {
+                    plot_idx(&mut idx, w, h, *x, *y, idx_cor(cor));
+                }
+                OpGraf::Linha {
+                    x1,
+                    y1,
+                    x2,
+                    y2,
+                    cor,
+                } => {
+                    linha_idx(&mut idx, w, h, *x1, *y1, *x2, *y2, idx_cor(cor));
+                }
+                OpGraf::Circulo { x, y, r, cor } => {
+                    circulo_idx(&mut idx, w, h, *x, *y, *r, idx_cor(cor));
+                }
+            }
+        }
+        Raster {
+            largura: w,
+            altura: h,
+            idx,
+        }
+    }
+}
+
+impl Raster {
+    pub fn pixel(&self, x: i32, y: i32) -> Option<&'static str> {
+        if x < 0 || y < 0 {
+            return None;
+        }
+        let x = x as u32;
+        let y = y as u32;
+        if x >= self.largura || y >= self.altura {
+            return None;
+        }
+        let i = (y * self.largura + x) as usize;
+        Some(nome_cor(self.idx[i]))
+    }
+
+    pub fn rgb32(&self) -> Vec<u32> {
+        self.idx
+            .iter()
+            .map(|&i| {
+                let n = nome_cor(i);
+                if n == "branco" {
+                    0x00FFFFFF
+                } else if n == "preto" {
+                    0x00000000
+                } else {
+                    cor_rgb(n)
+                }
+            })
+            .collect()
+    }
+
+    pub fn png_bytes(&self) -> Result<Vec<u8>, String> {
+        let w = self.largura;
+        let h = self.altura;
+        let rgb32 = self.rgb32();
+        let mut raw = Vec::with_capacity((w * h * 3) as usize);
+        for px in rgb32 {
+            raw.push(((px >> 16) & 0xff) as u8);
+            raw.push(((px >> 8) & 0xff) as u8);
+            raw.push((px & 0xff) as u8);
+        }
+        let mut out = Vec::new();
+        {
+            let mut enc = png::Encoder::new(&mut out, w, h);
+            enc.set_color(png::ColorType::Rgb);
+            enc.set_depth(png::BitDepth::Eight);
+            let mut writer = enc.write_header().map_err(|e| e.to_string())?;
+            writer.write_image_data(&raw).map_err(|e| e.to_string())?;
+        }
+        Ok(out)
+    }
+
+    pub fn write_png(&self, path: &Path) -> Result<(), String> {
+        std::fs::write(path, self.png_bytes()?).map_err(|e| e.to_string())
+    }
+}
+
+pub fn png_to_rgb32(bytes: &[u8]) -> Result<(u32, u32, Vec<u32>), String> {
+    let mut dec = png::Decoder::new(Cursor::new(bytes));
+    dec.set_transformations(png::Transformations::EXPAND | png::Transformations::STRIP_16);
+    let mut reader = dec.read_info().map_err(|e| e.to_string())?;
+    let mut buf = vec![0; reader.output_buffer_size()];
+    let info = reader.next_frame(&mut buf).map_err(|e| e.to_string())?;
+    let w = info.width;
+    let h = info.height;
+    let mut out = Vec::with_capacity((w * h) as usize);
+    match info.color_type {
+        png::ColorType::Rgb => {
+            for c in buf[..info.buffer_size()].chunks(3) {
+                out.push(((c[0] as u32) << 16) | ((c[1] as u32) << 8) | c[2] as u32);
+            }
+        }
+        png::ColorType::Rgba => {
+            for c in buf[..info.buffer_size()].chunks(4) {
+                out.push(((c[0] as u32) << 16) | ((c[1] as u32) << 8) | c[2] as u32);
+            }
+        }
+        png::ColorType::Grayscale => {
+            for &c in &buf[..info.buffer_size()] {
+                let v = c as u32;
+                out.push((v << 16) | (v << 8) | v);
+            }
+        }
+        other => return Err(format!("PNG não suportado ({other:?})")),
+    }
+    Ok((w, h, out))
+}
+
+pub fn cor_graf_conhecida(nome: &str) -> bool {
+    matches!(
+        nome,
+        "normal"
+            | "preto"
+            | "vermelho"
+            | "verde"
+            | "amarelo"
+            | "azul"
+            | "magenta"
+            | "ciano"
+            | "branco"
+    )
+}
+
+fn plot_idx(idx: &mut [u8], w: u32, h: u32, x: i32, y: i32, cor: u8) {
+    if x < 0 || y < 0 {
+        return;
+    }
+    let x = x as u32;
+    let y = y as u32;
+    if x >= w || y >= h {
+        return;
+    }
+    idx[(y * w + x) as usize] = cor;
+}
+
+fn linha_idx(idx: &mut [u8], w: u32, h: u32, x0: i32, y0: i32, x1: i32, y1: i32, cor: u8) {
+    let mut x = x0;
+    let mut y = y0;
+    let dx = (x1 - x0).abs();
+    let sx = if x0 < x1 { 1 } else { -1 };
+    let dy = -(y1 - y0).abs();
+    let sy = if y0 < y1 { 1 } else { -1 };
+    let mut err = dx + dy;
+    loop {
+        plot_idx(idx, w, h, x, y, cor);
+        if x == x1 && y == y1 {
+            break;
+        }
+        let e2 = 2 * err;
+        if e2 >= dy {
+            err += dy;
+            x += sx;
+        }
+        if e2 <= dx {
+            err += dx;
+            y += sy;
+        }
+    }
+}
+
+fn circulo_idx(idx: &mut [u8], w: u32, h: u32, cx: i32, cy: i32, r: i32, cor: u8) {
+    if r < 0 {
+        return;
+    }
+    if r == 0 {
+        plot_idx(idx, w, h, cx, cy, cor);
+        return;
+    }
+    let mut x = r;
+    let mut y = 0;
+    let mut err = 1 - r;
+    while x >= y {
+        plot_idx(idx, w, h, cx + x, cy + y, cor);
+        plot_idx(idx, w, h, cx + y, cy + x, cor);
+        plot_idx(idx, w, h, cx - y, cy + x, cor);
+        plot_idx(idx, w, h, cx - x, cy + y, cor);
+        plot_idx(idx, w, h, cx - x, cy - y, cor);
+        plot_idx(idx, w, h, cx - y, cy - x, cor);
+        plot_idx(idx, w, h, cx + y, cy - x, cor);
+        plot_idx(idx, w, h, cx + x, cy - y, cor);
+        y += 1;
+        if err < 0 {
+            err += 2 * y + 1;
+        } else {
+            x -= 1;
+            err += 2 * (y - x) + 1;
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn diagonal_paints_and_png_roundtrip() {
+        let t = TelaGrafica {
+            id: 1,
+            largura: 16,
+            altura: 16,
+            fundo: "branco".into(),
+            ops: vec![OpGraf::Linha {
+                x1: 0,
+                y1: 0,
+                x2: 15,
+                y2: 15,
+                cor: "azul".into(),
+            }],
+        };
+        let r = t.raster();
+        assert_eq!(r.pixel(0, 0), Some("azul"));
+        assert_eq!(r.pixel(15, 15), Some("azul"));
+        assert_eq!(r.pixel(15, 0), Some("branco"));
+        let bytes = r.png_bytes().unwrap();
+        let (w, h, px) = png_to_rgb32(&bytes).unwrap();
+        assert_eq!((w, h), (16, 16));
+        assert_eq!(px.len(), 256);
+        assert_eq!(px[0], 0x003366CC);
+    }
+}

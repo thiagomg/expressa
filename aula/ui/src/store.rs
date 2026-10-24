@@ -150,10 +150,7 @@ fn walk(dir: &Path, root: &Path, out: &mut Vec<TreeEntry>) -> Result<(), String>
             .to_string_lossy()
             .replace('\\', "/");
         let is_dir = path.is_dir();
-        out.push(TreeEntry {
-            path: rel,
-            is_dir,
-        });
+        out.push(TreeEntry { path: rel, is_dir });
         if is_dir {
             walk(&path, root, out)?;
         }
@@ -170,9 +167,9 @@ fn local_file(root: &Path, rel: &str) -> Result<PathBuf, String> {
     // A leading slash is a root (`/etc`, `\Windows`). `C:foo` has a drive
     // prefix and is not absolute, but it still leaves the project folder.
     if rel_path.is_absolute()
-        || rel_path.components().any(|c| {
-            matches!(c, Component::Prefix(_) | Component::RootDir)
-        })
+        || rel_path
+            .components()
+            .any(|c| matches!(c, Component::Prefix(_) | Component::RootDir))
     {
         return Err("caminho absoluto não é permitido".into());
     }
@@ -213,7 +210,11 @@ mod tests {
         assert!(local_file(root, "/etc/passwd").is_err());
         assert!(local_file(root, r"C:\Windows\notepad.exe").is_err());
         assert!(local_file(root, "C:segredo.lep").is_err());
-        assert!(local_file(root, "lib/../mat.lep").unwrap().ends_with("mat.lep"));
+        assert!(
+            local_file(root, "lib/../mat.lep")
+                .unwrap()
+                .ends_with("mat.lep")
+        );
         assert!(local_file(root, "").is_err());
     }
 

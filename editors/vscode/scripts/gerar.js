@@ -83,6 +83,7 @@ function readDocs() {
     'matriz.lep': 'matriz',
     'arquivo.lep': 'arquivo',
     'cartesiano.lep': 'cartesiano',
+    'graf.lep': 'graf',
   };
   const sections = {};
   for (const [f, module] of Object.entries(files)) {

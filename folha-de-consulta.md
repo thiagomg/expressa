@@ -269,6 +269,18 @@ c.cart::adicione(g)
 c.cart::mostre()                 // mesma janela a cada mostre; não espera
 ```
 
+```text
+graf = importe "graf"
+g = graf::nova(320, 200)         // pixels; (0,0) canto superior esquerdo
+g.graf::cor(:azul)
+g.graf::linha(10, 10, 310, 190)
+g.graf::circulo(160, 100, 40)
+g.graf::mostre()                 // janela irmã; o próximo mostre atualiza
+g.graf::apague()                // zera o desenho
+g.graf::salve("casa.png")
+escreva(g.graf::pixel(10, 10))
+```
+
 Caminhos relativos: pasta do `.lep`, não a pasta de onde você chamou `expressa`.
 
 ---

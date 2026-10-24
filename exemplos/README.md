@@ -25,6 +25,7 @@ Pasta = para que o arquivo existe. Depois do tutorial: `linguagem/` → `texto/`
 | `unix/` | `cat` / `grep` / `wc` |
 | `jogos/` | Termo, Forca, Conway, adivinhe o número, desenhos do bicho |
 | `lib/` | o que outro exemplo importa |
+| `graf/` | tela de pixels (`importe "graf"`) |
 
 ### `linguagem/`
 
@@ -62,6 +63,15 @@ Pasta = para que o arquivo existe. Depois do tutorial: `linguagem/` → `texto/`
 | `frutas.lep` | matriz + tabela |
 
 `diario.lep` e `contatos.lep` gravam em `programas/saida/` (ignorada pelo git).
+
+### `graf/`
+
+Tela de pixels (`importe "graf"`). Rode no terminal ou no Aula (F5): abre uma janela e grava um PNG ao lado do arquivo.
+
+| Arquivo | O que mostra |
+|---------|----------------|
+| `linha.lep` | linha, círculo, `mostre`, `salve` |
+| `casa.lep` | casinha e sol (`cor`, `linha`, `circulo`, `mat::seno`) |
 
 ### `unix/`
 

@@ -8,8 +8,8 @@ use std::path::{Path, PathBuf};
 use std::sync::mpsc::{Receiver, Sender, SyncSender};
 
 use expressa::runtime::{
-    ChannelDebugger, CartesianoHost, DebugHook, DebugPaused, FolhaPronta, LeiaHost, StopHook,
-    run_with_hosts,
+    CartesianoHost, ChannelDebugger, DebugHook, DebugPaused, FolhaPronta, GrafHost, LeiaHost,
+    StopHook, TelaGrafica, run_with_hosts,
 };
 
 use crate::store::Files;
@@ -23,6 +23,7 @@ pub enum ExecEvent {
     Stderr(String),
     Leia(String),
     Folha(FolhaPronta),
+    TelaGraf(TelaGrafica),
     Paused(DebugPaused),
     Finished(Finished),
 }
@@ -202,6 +203,18 @@ impl CartesianoHost for ChannelCartesiano {
     }
 }
 
+struct ChannelGraf {
+    tx: SyncSender<ExecEvent>,
+}
+
+impl GrafHost for ChannelGraf {
+    fn mostre(&mut self, tela: TelaGrafica) -> Result<(), String> {
+        self.tx
+            .send(ExecEvent::TelaGraf(tela))
+            .map_err(|_| "IDE fechada".to_string())
+    }
+}
+
 struct ChannelOut {
     tx: SyncSender<ExecEvent>,
     stderr: bool,
@@ -299,6 +312,9 @@ pub fn spawn(
         let mut cart = ChannelCartesiano {
             tx: event_tx.clone(),
         };
+        let mut graf = ChannelGraf {
+            tx: event_tx.clone(),
+        };
         let mut out = ChannelOut {
             tx: event_tx.clone(),
             stderr: false,
@@ -327,6 +343,7 @@ pub fn spawn(
             &mut err,
             &mut host,
             Some(&mut cart),
+            Some(&mut graf),
             &args,
         );
         let finished = match result {

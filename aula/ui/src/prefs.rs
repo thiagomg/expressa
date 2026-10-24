@@ -101,9 +101,7 @@ pub fn expand_tilde(path: &str) -> PathBuf {
     if path == "~" {
         return home_dir().unwrap_or_else(|| PathBuf::from("~"));
     }
-    let rest = path
-        .strip_prefix("~/")
-        .or_else(|| path.strip_prefix("~\\"));
+    let rest = path.strip_prefix("~/").or_else(|| path.strip_prefix("~\\"));
     if let Some(rest) = rest {
         if let Some(home) = home_dir() {
             return home.join(rest);
@@ -183,7 +181,8 @@ impl ThemeCss {
     }
 
     pub fn apply(&self, dark: bool) {
-        self.0.load_from_data(if dark { DARK_CSS } else { LIGHT_CSS });
+        self.0
+            .load_from_data(if dark { DARK_CSS } else { LIGHT_CSS });
     }
 }
 

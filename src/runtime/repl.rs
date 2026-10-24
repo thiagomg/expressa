@@ -39,6 +39,7 @@ impl<'a> ReplSession<'a> {
             None,
             None,
             true,
+            None,
             &[],
         );
         let env = Env::child(&vm.builtins_env(), FrameKind::Module);

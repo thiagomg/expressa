@@ -8,6 +8,7 @@ mod docs;
 mod editing;
 mod exec;
 mod indent;
+mod janela_graf;
 mod lang;
 mod prefs;
 mod rpc;
@@ -19,14 +20,13 @@ use std::path::{Path, PathBuf};
 use std::rc::{Rc, Weak};
 
 use gtk::gdk::Key;
+use gtk::gio::{self, prelude::*};
 use gtk::glib;
 use gtk::glib::prelude::*;
-use gtk::gio::{self, prelude::*};
 use gtk::prelude::*;
 use gtk::{
     Application, ApplicationWindow, Box as GtkBox, Button, CellRendererText, Entry, Label,
-    Orientation, Paned, PolicyType, Revealer, ScrolledWindow, TreeStore, TreeView,
-    TreeViewColumn,
+    Orientation, Paned, PolicyType, Revealer, ScrolledWindow, TreeStore, TreeView, TreeViewColumn,
 };
 use sourceview5::prelude::*;
 use sourceview5::{LanguageManager, SearchSettings, StyleSchemeManager};
@@ -65,6 +65,7 @@ struct Ui {
     file_cache: RefCell<HashMap<String, Option<String>>>,
     console: Rc<Console>,
     graficos: Rc<cartesiano::Painel>,
+    telas_graf: Rc<janela_graf::Painel>,
     args_entry: Entry,
     search_settings: SearchSettings,
     search_entry: Entry,
@@ -185,6 +186,7 @@ fn build_ui(app: &Application) {
     let console = Rc::new(Console::new());
     let graficos = cartesiano::Painel::new();
     graficos.set_application(app);
+    let telas_graf = janela_graf::Painel::new();
     let args_entry = Entry::builder()
         .placeholder_text("argumentos (ex.: Thiago --ajuda)")
         .hexpand(true)
@@ -219,6 +221,7 @@ fn build_ui(app: &Application) {
         file_cache: RefCell::new(HashMap::new()),
         console,
         graficos,
+        telas_graf,
         args_entry,
         search_settings,
         search_entry,
@@ -493,9 +496,7 @@ fn build_ui(app: &Application) {
             g.set_state(gtk::EventSequenceState::Claimed);
         });
         right.connect_released(move |_, _, x, y| {
-            let (tx, ty) = scroll
-                .translate_coordinates(&tree, x, y)
-                .unwrap_or((x, y));
+            let (tx, ty) = scroll.translate_coordinates(&tree, x, y).unwrap_or((x, y));
             tree_popup(&ui_t, tx, ty);
         });
         file_scroll.add_controller(right);
@@ -544,7 +545,9 @@ fn build_ui(app: &Application) {
     {
         let ui_p = Rc::clone(&ui);
         glib::timeout_add_local_once(std::time::Duration::from_millis(250), move || {
-            // No saved folder yet: open a writable copy of the shipped examples.
+            // Merge new shipped examples into Documents without touching
+            // files the student already edited (first launch and upgrades).
+            let _ = sync_shipped_exemplos();
             let first = ui_p.borrow().prefs.pasta.trim().is_empty();
             let opened = if first && open_shipped_exemplos(&ui_p) {
                 true
@@ -600,11 +603,16 @@ fn encerrar(ui: &UiRc) {
 }
 
 fn fechar_janelas_filhas(ui: &UiRc) {
-    let (graficos, ajuda) = {
+    let (graficos, telas_graf, ajuda) = {
         let u = ui.borrow();
-        (Rc::clone(&u.graficos), u.ajuda_win.borrow_mut().take())
+        (
+            Rc::clone(&u.graficos),
+            Rc::clone(&u.telas_graf),
+            u.ajuda_win.borrow_mut().take(),
+        )
     };
     graficos.fechar_janela_destacada();
+    telas_graf.fechar_todas();
     if let Some(w) = ajuda {
         w.close();
     }
@@ -765,7 +773,9 @@ fn install_menubar(
 
     {
         let pane = file_scroll.clone();
-        add_win_toggle(win, "mostrar-arquivos", true, move |on| pane.set_visible(on));
+        add_win_toggle(win, "mostrar-arquivos", true, move |on| {
+            pane.set_visible(on)
+        });
     }
     {
         let pane = debug_panel.clone();
@@ -794,7 +804,11 @@ fn install_menubar(
     let arquivo = gio::Menu::new();
     arquivo.append_item(&menu_item("_Novo", "win.novo", Some("<Primary>n")));
     arquivo.append_item(&menu_item("_Salvar", "win.salvar", Some("<Primary>s")));
-    arquivo.append_item(&menu_item("_Fechar aba", "win.fechar-aba", Some("<Primary>w")));
+    arquivo.append_item(&menu_item(
+        "_Fechar aba",
+        "win.fechar-aba",
+        Some("<Primary>w"),
+    ));
     let projeto = gio::Menu::new();
     projeto.append_item(&menu_item("_Pasta…", "win.pasta", None));
     projeto.append_item(&menu_item("Se_rvidor…", "win.servidor", None));
@@ -816,11 +830,7 @@ fn install_menubar(
     debug.append_item(&menu_item("Pon_to de parada", "win.ponto", Some("F9")));
 
     let ver = gio::Menu::new();
-    ver.append_item(&menu_item(
-        "_Arquivos",
-        "win.mostrar-arquivos",
-        Some("F7"),
-    ));
+    ver.append_item(&menu_item("_Arquivos", "win.mostrar-arquivos", Some("F7")));
     ver.append_item(&menu_item("_Painel", "win.mostrar-painel", Some("F8")));
     ver.append_item(&menu_item("_Buscar", "win.buscar", Some("<Primary>f")));
     let aparencia = gio::Menu::new();
@@ -939,7 +949,7 @@ fn bundled_exemplos_dir() -> Option<PathBuf> {
 }
 
 /// A folder the user can edit. Documents first; AppData if that is not writable.
-fn writable_exemplos_dir() -> std::io::Result<PathBuf> {
+fn writable_exemplos_candidates() -> Vec<PathBuf> {
     let mut candidates = Vec::new();
     if let Some(docs) = glib::user_special_dir(glib::UserDirectory::Documents) {
         if !docs.as_os_str().is_empty() {
@@ -947,8 +957,12 @@ fn writable_exemplos_dir() -> std::io::Result<PathBuf> {
         }
     }
     candidates.push(glib::user_data_dir().join("expressa-aula").join("exemplos"));
+    candidates
+}
+
+fn writable_exemplos_dir() -> std::io::Result<PathBuf> {
     let mut last_err = std::io::Error::other("nenhuma pasta gravavel");
-    for dir in candidates {
+    for dir in writable_exemplos_candidates() {
         if let Err(e) = probe_writable(&dir) {
             last_err = e;
             continue;
@@ -956,6 +970,33 @@ fn writable_exemplos_dir() -> std::io::Result<PathBuf> {
         return Ok(dir);
     }
     Err(last_err)
+}
+
+fn is_shipped_exemplos_dest(path: &std::path::Path) -> bool {
+    writable_exemplos_candidates()
+        .iter()
+        .any(|c| paths_equal(c, path))
+}
+
+fn paths_equal(a: &std::path::Path, b: &std::path::Path) -> bool {
+    match (a.canonicalize(), b.canonicalize()) {
+        (Ok(x), Ok(y)) => x == y,
+        _ => a == b,
+    }
+}
+
+/// Add new shipped examples to the student's Documents copy.
+/// Files that already exist are left as the student edited them.
+fn sync_shipped_exemplos() -> std::io::Result<PathBuf> {
+    let src = bundled_exemplos_dir().ok_or_else(|| {
+        std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            "exemplos empacotados não encontrados",
+        )
+    })?;
+    let dst = writable_exemplos_dir()?;
+    copy_missing(&src, &dst)?;
+    Ok(dst)
 }
 
 fn probe_writable(dir: &std::path::Path) -> std::io::Result<()> {
@@ -1945,8 +1986,10 @@ fn executar(ui: &UiRc, debug: bool) {
         .collect();
     let console = Rc::clone(&ui.borrow().console);
     let graficos = Rc::clone(&ui.borrow().graficos);
+    let telas_graf = Rc::clone(&ui.borrow().telas_graf);
     console.clear();
     graficos.limpar();
+    ui.borrow().telas_graf.limpar();
     clear_debug_views(ui);
     if let Some(d) = doc.diag.borrow().as_ref() {
         set_status(
@@ -2003,6 +2046,9 @@ fn executar(ui: &UiRc, debug: bool) {
                 }
                 Ok(ExecEvent::Folha(folha)) => {
                     graficos.mostrar(folha);
+                }
+                Ok(ExecEvent::TelaGraf(tela)) => {
+                    telas_graf.mostrar(tela);
                 }
                 Ok(ExecEvent::Finished(f)) => {
                     console.cancel_input();
@@ -2067,20 +2113,13 @@ fn executar(ui: &UiRc, debug: bool) {
 
 /// First launch: copy the shipped examples into a writable folder and open it.
 fn open_shipped_exemplos(ui: &UiRc) -> bool {
-    let Some(src) = bundled_exemplos_dir() else {
-        return false;
-    };
-    let dst = match writable_exemplos_dir() {
+    let dst = match sync_shipped_exemplos() {
         Ok(dir) => dir,
         Err(e) => {
             set_status(ui, &format!("exemplos: {e}"));
             return false;
         }
     };
-    if let Err(e) = copy_missing(&src, &dst) {
-        set_status(ui, &format!("exemplos: {e}"));
-        return false;
-    }
     open_local_project(ui, dst.clone());
     let opened = matches!(&ui.borrow().files, Files::Local(_));
     if opened {
@@ -2130,9 +2169,14 @@ fn open_local_project(ui: &UiRc, path: PathBuf) {
             return;
         }
     };
-    let same = {
-        matches!(&ui.borrow().files, Files::Local(cur) if cur == &path)
-    };
+    if is_shipped_exemplos_dest(&path) {
+        if let Some(src) = bundled_exemplos_dir() {
+            if let Err(e) = copy_missing(&src, &path) {
+                set_status(ui, &format!("exemplos: {e}"));
+            }
+        }
+    }
+    let same = { matches!(&ui.borrow().files, Files::Local(cur) if cur == &path) };
     if same {
         refresh_tree(ui);
         return;
@@ -2308,9 +2352,7 @@ fn perguntar_servidor(
     v.set_margin_end(16);
     v.set_margin_top(16);
     v.set_margin_bottom(16);
-    let info = Label::new(Some(
-        "Os arquivos ficam em aula-data/aluno nesse servidor.",
-    ));
+    let info = Label::new(Some("Os arquivos ficam em aula-data/aluno nesse servidor."));
     info.set_wrap(true);
     info.set_xalign(0.0);
     let url_entry = Entry::builder().text(url).hexpand(true).build();
@@ -2514,9 +2556,7 @@ fn tree_popup(ui: &UiRc, x: f64, y: f64) {
     }
     let (rel, is_dir) = selected_tree_entry(ui);
     let window = ui.borrow().window.clone();
-    let (px, py) = tree
-        .translate_coordinates(&window, x, y)
-        .unwrap_or((x, y));
+    let (px, py) = tree.translate_coordinates(&window, x, y).unwrap_or((x, y));
     let pop = gtk::Popover::new();
     pop.add_css_class("menu");
     pop.set_parent(&window);
@@ -2836,10 +2876,20 @@ mod exemplos_copy {
             "editado"
         );
         std::fs::write(src.join("linguagem").join("novo.lep"), "x").unwrap();
+        std::fs::create_dir_all(src.join("jogos")).unwrap();
+        std::fs::write(src.join("jogos").join("termo.lep"), "jogo").unwrap();
         copy_missing(&src, &dst).unwrap();
+        assert_eq!(
+            std::fs::read_to_string(dst.join("linguagem").join("media.lep")).unwrap(),
+            "editado"
+        );
         assert_eq!(
             std::fs::read_to_string(dst.join("linguagem").join("novo.lep")).unwrap(),
             "x"
+        );
+        assert_eq!(
+            std::fs::read_to_string(dst.join("jogos").join("termo.lep")).unwrap(),
+            "jogo"
         );
         let _ = std::fs::remove_dir_all(root);
     }

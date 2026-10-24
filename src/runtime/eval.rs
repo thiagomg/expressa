@@ -12,6 +12,7 @@ use crate::parser::{
 };
 
 use super::cartesiano_host::{CartesianoHost, CliCartesianoHost};
+use super::graf_host::{CliGrafHost, GrafHost};
 use super::debug::{DebugAction, DebugCtx, DebugHook, NoopHook};
 use super::env::{AssignError, Env, FrameKind};
 use super::error::{CallFrame, EvalError, RuntimeError};
@@ -71,6 +72,8 @@ pub(crate) struct Vm<'a, 'c> {
     pub(crate) leia_host: Option<&'a mut dyn LeiaHost>,
     pub(crate) cartesiano_host: Option<&'c mut dyn CartesianoHost>,
     pub(crate) cli_cart: CliCartesianoHost,
+    pub(crate) graf_host: Option<&'c mut dyn GrafHost>,
+    pub(crate) cli_graf: CliGrafHost,
     pub(crate) abrir_cartesiano: bool,
     pub(crate) numero_locale: NumeroLocale,
     pub(crate) numero_aritmetica: NumeroAritmetica,
@@ -108,6 +111,7 @@ pub fn run_source_args(source: &str, file: &str, args: &[String]) -> Result<i32,
         None,
         None,
         true,
+        None,
         args,
     )
 }
@@ -142,6 +146,7 @@ pub fn run_source_marcador_args(
         Some(&mut host),
         None,
         true,
+        None,
         args,
     )
 }
@@ -166,6 +171,7 @@ pub fn debug_source_args(source: &str, file: &str, args: &[String]) -> Result<i3
         None,
         None,
         true,
+        None,
         args,
     )
 }
@@ -271,11 +277,12 @@ pub fn run_with_hook(
         err,
         leia_host,
         None,
+        None,
         script_args,
     )
 }
 
-pub fn run_with_hosts(
+pub fn run_with_hosts<'c>(
     source: &str,
     file: &str,
     hook: Box<dyn DebugHook>,
@@ -284,7 +291,8 @@ pub fn run_with_hosts(
     out: &mut dyn Write,
     err: &mut dyn Write,
     leia_host: &mut dyn LeiaHost,
-    cartesiano_host: Option<&mut dyn CartesianoHost>,
+    cartesiano_host: Option<&'c mut dyn CartesianoHost>,
+    graf_host: Option<&'c mut dyn GrafHost>,
     script_args: &[String],
 ) -> Result<i32, RuntimeError> {
     let mut dummy_in = io::Cursor::new("");
@@ -300,6 +308,7 @@ pub fn run_with_hosts(
         Some(leia_host),
         cartesiano_host,
         false,
+        graf_host,
         script_args,
     )
 }
@@ -328,6 +337,7 @@ pub(crate) fn run_with<'a>(
         leia_host,
         None,
         false,
+        None,
         script_args,
     )
 }
@@ -344,6 +354,7 @@ pub(crate) fn run_with_io<'a, 'c>(
     leia_host: Option<&'a mut dyn LeiaHost>,
     cartesiano_host: Option<&'c mut dyn CartesianoHost>,
     abrir_cartesiano: bool,
+    graf_host: Option<&'c mut dyn GrafHost>,
     script_args: &[String],
 ) -> Result<i32, RuntimeError> {
     let program = parse(source).map_err(|e| RuntimeError {
@@ -364,6 +375,7 @@ pub(crate) fn run_with_io<'a, 'c>(
         leia_host,
         cartesiano_host,
         abrir_cartesiano,
+        graf_host,
         script_args,
     );
     match vm.run(&program) {
@@ -404,6 +416,7 @@ impl<'a, 'c> Vm<'a, 'c> {
         leia_host: Option<&'a mut dyn LeiaHost>,
         cartesiano_host: Option<&'c mut dyn CartesianoHost>,
         abrir_cartesiano: bool,
+        graf_host: Option<&'c mut dyn GrafHost>,
         script_args: &[String],
     ) -> Self {
         let builtins = Env::new(FrameKind::Builtins, None);
@@ -431,6 +444,8 @@ impl<'a, 'c> Vm<'a, 'c> {
             leia_host,
             cartesiano_host,
             cli_cart: CliCartesianoHost::new(),
+            graf_host,
+            cli_graf: CliGrafHost::default(),
             abrir_cartesiano,
             numero_locale: default_numero_locale(),
             numero_aritmetica: default_numero_aritmetica(),
@@ -3275,9 +3290,14 @@ leia_arquivo("../secret.txt")
         let err = run_to_string(src, main.to_str().unwrap()).unwrap_err();
         assert!(err.file.ends_with("lib/m.lep"), "{err}");
         assert_eq!(err.span.line, 2);
-        // The call site stays in the caller's file.
+        // Innermost frame is the imported function; the caller is below.
         assert!(
-            err.stack.last().unwrap().file.ends_with("main.lep"),
+            err.stack.last().unwrap().file.ends_with("lib/m.lep"),
+            "{:?}",
+            err.stack
+        );
+        assert!(
+            err.stack[0].file.ends_with("main.lep"),
             "{:?}",
             err.stack
         );

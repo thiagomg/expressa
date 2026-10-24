@@ -46,6 +46,7 @@
   "modules": [
     "arquivo",
     "cartesiano",
+    "graf",
     "mat",
     "matriz",
     "tela"
@@ -937,7 +938,110 @@
       "module": "cartesiano",
       "kind": "funcao",
       "signatures": [
-        "mostre(documento)"
+        "mostre(documento)",
+        "mostre(g)"
+      ],
+      "summary": "Abre ou atualiza a janela deste documento e devolve o foco. Não espera fechar.",
+      "doc": "Abre ou atualiza a janela deste documento e devolve o foco. Não espera fechar.\n\nO primeiro mostre abre; os seguintes só atualizam a mesma janela. Folha vazia é erro.\n\nExemplo: c.mostre()"
+    },
+    {
+      "name": "nova",
+      "aliases": [],
+      "module": "graf",
+      "kind": "funcao",
+      "signatures": [
+        "nova(largura, altura)"
+      ],
+      "summary": "Tela de pixels. Ainda não abre a janela.",
+      "doc": "Tela de pixels. Ainda não abre a janela.\n\nlargura e altura são inteiros de 1 a 2048. Origem no canto superior\nesquerdo, y para baixo, (0, 0) no primeiro pixel.\n\nExemplo: g = nova(320, 200)"
+    },
+    {
+      "name": "cor",
+      "aliases": [],
+      "module": "graf",
+      "kind": "funcao",
+      "signatures": [
+        "cor(g, cor)"
+      ],
+      "summary": "Caneta atual. Cores: as da tela (azul, vermelho, …). Padrão: preto.",
+      "doc": "Caneta atual. Cores: as da tela (azul, vermelho, …). Padrão: preto.\n\nExemplo: g.cor(:azul)"
+    },
+    {
+      "name": "linha",
+      "aliases": [],
+      "module": "graf",
+      "kind": "funcao",
+      "signatures": [
+        "linha(g, x1, y1, x2, y2)"
+      ],
+      "summary": "Reta da caneta. Pixels fora da tela são recortados.",
+      "doc": "Reta da caneta. Pixels fora da tela são recortados.\n\nExemplo: g.linha(10, 10, 310, 190)"
+    },
+    {
+      "name": "circulo",
+      "aliases": [
+        "círculo"
+      ],
+      "module": "graf",
+      "kind": "funcao",
+      "signatures": [
+        "circulo(g, x, y, r)"
+      ],
+      "summary": "Circunferência (contorno). Raio ≥ 0.",
+      "doc": "Circunferência (contorno). Raio ≥ 0.\n\nExemplo: g.circulo(160, 100, 40)"
+    },
+    {
+      "name": "ponto",
+      "aliases": [],
+      "module": "graf",
+      "kind": "funcao",
+      "signatures": [
+        "ponto(g, x, y)"
+      ],
+      "summary": "Um pixel da caneta. Fora da tela, ignora.",
+      "doc": "Um pixel da caneta. Fora da tela, ignora.\n\nExemplo: g.ponto(5, 5)"
+    },
+    {
+      "name": "apague",
+      "aliases": [],
+      "module": "graf",
+      "kind": "funcao",
+      "signatures": [
+        "apague(g)"
+      ],
+      "summary": "Apaga o desenho. O fundo continua branco.",
+      "doc": "Apaga o desenho. O fundo continua branco.\n\nExemplo: g.apague()"
+    },
+    {
+      "name": "pixel",
+      "aliases": [],
+      "module": "graf",
+      "kind": "funcao",
+      "signatures": [
+        "pixel(g, x, y)"
+      ],
+      "summary": "Cor do pixel (texto). Fora da tela é erro. Rasteriza se precisar.",
+      "doc": "Cor do pixel (texto). Fora da tela é erro. Rasteriza se precisar.\n\nExemplo: escreva(g.pixel(10, 10))"
+    },
+    {
+      "name": "salve",
+      "aliases": [],
+      "module": "graf",
+      "kind": "funcao",
+      "signatures": [
+        "salve(g, caminho)"
+      ],
+      "summary": "Grava um PNG. Não precisa de janela. Caminho relativo ao .lep.",
+      "doc": "Grava um PNG. Não precisa de janela. Caminho relativo ao .lep.\n\nExemplo: g.salve(\"casa.png\")"
+    },
+    {
+      "name": "mostre",
+      "aliases": [],
+      "module": "graf",
+      "kind": "funcao",
+      "signatures": [
+        "mostre(documento)",
+        "mostre(g)"
       ],
       "summary": "Abre ou atualiza a janela deste documento e devolve o foco. Não espera fechar.",
       "doc": "Abre ou atualiza a janela deste documento e devolve o foco. Não espera fechar.\n\nO primeiro mostre abre; os seguintes só atualizam a mesma janela. Folha vazia é erro.\n\nExemplo: c.mostre()"

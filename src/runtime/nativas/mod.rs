@@ -11,6 +11,7 @@ use super::value::{Value, format_numero};
 
 mod arquivo;
 mod cartesiano;
+mod graf;
 mod mat;
 mod matriz;
 mod nucleo;
@@ -337,6 +338,42 @@ pub const NATIVAS: &[Nativa] = &[
         names: &["mostre"],
         module: Some("cartesiano"),
     },
+    Nativa {
+        names: &["nova"],
+        module: Some("graf"),
+    },
+    Nativa {
+        names: &["cor"],
+        module: Some("graf"),
+    },
+    Nativa {
+        names: &["linha"],
+        module: Some("graf"),
+    },
+    Nativa {
+        names: &["circulo", "círculo"],
+        module: Some("graf"),
+    },
+    Nativa {
+        names: &["ponto"],
+        module: Some("graf"),
+    },
+    Nativa {
+        names: &["apague"],
+        module: Some("graf"),
+    },
+    Nativa {
+        names: &["pixel"],
+        module: Some("graf"),
+    },
+    Nativa {
+        names: &["salve"],
+        module: Some("graf"),
+    },
+    Nativa {
+        names: &["mostre"],
+        module: Some("graf"),
+    },
 ];
 
 pub fn bind_nucleo(env: &Rc<RefCell<Env>>) {
@@ -447,6 +484,7 @@ impl Vm<'_, '_> {
             "separe" => self.bi_separe(args, span),
             "junte" => self.bi_junte(args, span, env),
             "limpe" => self.bi_limpe(args, span),
+            "apague" => self.bi_graf_limpe(args, span),
             "leia_arquivo" => self.bi_leia_arquivo(args, span),
             "salve_arquivo" => self.bi_salve_arquivo(args, span),
             "adicione_arquivo" => self.bi_adicione_arquivo(args, span),
@@ -457,7 +495,20 @@ impl Vm<'_, '_> {
             "eixos" => self.bi_eixos(args, span),
             "plotar" => self.bi_plotar(args, span, env),
             "adicione" => self.bi_adicione(args, span),
-            "mostre" => self.bi_mostre(args, span),
+            "nova" => self.bi_graf_nova(args, span),
+            "cor" => self.bi_graf_cor(args, span),
+            "linha" => self.bi_graf_linha(args, span),
+            "circulo" | "círculo" => self.bi_graf_circulo(args, span),
+            "ponto" => self.bi_graf_ponto(args, span),
+            "pixel" => self.bi_graf_pixel(args, span),
+            "salve" => self.bi_graf_salve(args, span),
+            "mostre" => {
+                if !args.is_empty() && graf::is_graf(&args[0]) {
+                    self.bi_graf_mostre(args, span)
+                } else {
+                    self.bi_mostre(args, span)
+                }
+            }
             "mapa" => self.bi_mapa(args, span),
             "conjunto" => self.bi_conjunto(args, span),
             other => Err(self.err(format!("função nativa desconhecida: {other}"), span)),

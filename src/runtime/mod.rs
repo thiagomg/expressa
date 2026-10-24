@@ -3,6 +3,8 @@ mod debug;
 mod env;
 mod error;
 mod eval;
+mod graf;
+mod graf_host;
 mod folha;
 mod formate;
 mod leia;
@@ -19,6 +21,8 @@ pub use debug::{
 };
 pub use error::{CallFrame, RuntimeError};
 pub use cartesiano_host::{CapturaCartesiano, CartesianoHost, CliCartesianoHost, NullCartesiano};
+pub use graf::{OpGraf, TelaGrafica};
+pub use graf_host::{CapturaGraf, GrafHost, NullGraf};
 pub use eval::{
     debug_source, debug_source_args, run_source, run_source_args, run_source_marcador,
     run_source_marcador_args, run_to_string, run_to_string_with, run_to_strings_with,

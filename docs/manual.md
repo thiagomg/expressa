@@ -505,6 +505,21 @@ c.cart::mostre()
 
 `adicione` copia o gráfico (congelado). O próximo `mostre` do mesmo `c` não abre outra janela. Dois `documento()` são duas janelas. Cores: as da `tela`. `tipo(g)` é `"mapa"`. Na Aula aparece o painel **Gráficos** (botão Destacar). No terminal, `expressa-grafico` (ou `expressa --grafico`).
 
+## `importe "graf"`
+
+Tela de pixels (MSX SCREEN 2): um mapa por janela, comandos `linha` / `circulo` / `ponto`, depois `mostre` ou `salve`.
+
+```
+graf = importe "graf"
+g = graf::nova(320, 200)
+g.graf::cor(:azul)
+g.graf::linha(10, 10, 310, 190)
+g.graf::mostre()
+g.graf::salve("casa.png")
+```
+
+`(0, 0)` é o canto superior esquerdo; y cresce para baixo. Cada `nova()` é uma janela; o `mostre` da mesma instância só atualiza. Na Aula a janela é irmã (não entra no painel Gráficos). `pixel(g, x, y)` devolve a cor daquele ponto.
+
 ### `documento()`
 
 Mapa-folha. Ainda não abre janela.

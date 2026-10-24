@@ -436,6 +436,7 @@ c.mostre()
             None,
             Some(&mut cap),
             false,
+            None,
             &[],
         )
         .unwrap();
@@ -479,6 +480,7 @@ c2.mostre()
             None,
             Some(&mut cap),
             false,
+            None,
             &[],
         )
         .unwrap();
