@@ -1,35 +1,31 @@
 # Expressa Aula
 
-Classroom editor services for Expressa. **Texted is a separate project and is not used here.**
+IDE integrada para ser usada por alunos
 
-| Crate | Role |
-|-------|------|
-| `expressa` (repo root) | Language: lexer, parser, runner |
-| `expressa-aula-proto` | gRPC: `Turma` (files) |
-| `expressa-aula-server` | File repository: student folders only, runs nothing |
-| `expressa-aula` (`aula/ui`) | GTK editor: lista, código, Executar (F5) / Depurar (F6) in-process |
+| Crate | Função |
+|-------|--------|
+| `expressa` (raiz do repositório) | Linguagem: analisador léxico, analisador sintático, executor |
+| `expressa-aula-proto` | protobuf do gRPC |
+| `expressa-aula-server` | Repositório de arquivos: diretórios dos estudantes e local |
+| `expressa-aula` (`aula/ui`) | editor de texto: lista, Executar (F5) / Depurar (F6) no próprio processo |
 
-## Why this repo, not Texted
-
-The language still changes often (`raiz`, debugger, sandbox). Aula must call `expressa::runtime` in the same commit. A second Git repo would lag. Texted stays a markdown product.
-
-## Layout on disk
+## Layout no disco
 
 ```text
 --root /var/expressa-aula
-  local/           # loopback / home
+  local/           # loopback / casa
   ana/
     bhaskara.lep
   bruno/
 ```
 
-## Running programs
+## Execução dos programas
 
-The editor runs and debugs programs itself; the server only stores files. On Executar/Depurar the editor copies the whole project into `~/.cache/expressa-aula/{projeto}/` (`$XDG_CACHE_HOME` if set), writes the editor text over the open file, and runs there. When the program ends, files that are new or changed (the source that ran, `salve_arquivo`, `salve_csv`, …) are sent back to the server.
+O editor executa e depura os programas; o servidor só guarda arquivos. Em Executar/Depurar o editor copia o projeto inteiro para `~/.cache/expressa-aula/{projeto}/` (`$XDG_CACHE_HOME` se estiver definido), grava o texto do editor por cima do arquivo aberto e roda ali. Quando o programa termina, arquivos novos ou alterados (o fonte que rodou, `salve_arquivo`, `salve_csv`, …) voltam para o servidor.
 
-Runs cannot read or write outside the project folder (`..`, absolute paths). There is no time limit, so games and other endless loops (`exemplos/jogos/conway_jogo_da_vida.lep`) keep running until **Parar**. The output pane keeps the last 5000 lines; after `cls()`/`casa()` it behaves like a terminal (each line overwrites the previous frame).
+A execução não lê nem grava fora da pasta do projeto (`..`, caminhos absolutos). Não há limite de tempo: jogos e outros laços infinitos (`exemplos/jogos/conway_jogo_da_vida.lep`) continuam até **Parar**. O painel de saída guarda as últimas 5000 linhas; depois de `cls()`/`casa()` funciona como um terminal (cada linha substitui o quadro anterior).
 
-## Run the server
+## Subir o servidor
 
 ```bash
 # servidor (se já não estiver no ar, o editor tenta iniciá-lo)
@@ -38,6 +34,8 @@ cargo run -p expressa-aula-server -- --root ./aula-data --bind 127.0.0.1:50051
 # editor
 cargo run -p expressa-aula
 ```
+
+Na primeira abertura (e de novo depois de atualizar o pacote) o editor copia os exemplos empacotados para `Documentos/Expressa Aula/exemplos` (ou `~/Documentos/…` no Linux). Arquivos novos entram na pasta; o que o aluno já tiver ali não é substituído.
 
 Os comandos ficam no menu do topo (**Arquivo**, **Executar**, **Depurar**, **Ver**, **Ajuda**), cada um com o atalho à direita. **Arquivo → Sair** (Ctrl+Q) fecha o editor (com pergunta se houver alterações). F5 executa a aba atual, **F6 depura**, F7 mostra/oculta arquivos, F8 o painel do depurador, F9 (ou clique no número da linha) ponto de parada, F10 próximo, F11 entrar, Shift+F11 sair, Ctrl+S salva. O caminho do projeto aparece à direita da barra de baixo. `mostre()` do módulo `cartesiano` abre o painel **Gráficos** (Destacar vira janela irmã e fica assim até Acoplar ou fechar). O desenho ocupa o retângulo que o painel ou a janela lhe dão, como o `expressa-grafico`.
 
@@ -63,4 +61,4 @@ No depurador: a linha atual fica amarela, no arquivo certo (abre o módulo impor
 expressa --marcador-leia arquivo.lep
 ```
 
-Home use: bind loopback, student name `local`. Lab: one server on the teacher PC; GTK clients talk RPC.
+Em casa: o servidor escuta no loopback, aluno `local`. Na sala: um servidor no computador do professor; os clientes GTK falam por RPC.
