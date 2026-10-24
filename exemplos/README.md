@@ -23,7 +23,7 @@ Pasta = para que o arquivo existe. Depois do tutorial: `linguagem/` → `texto/`
 | `programas/` | mini app de ponta a ponta |
 | `escola/` | conta de caderno (ensino médio) |
 | `unix/` | `cat` / `grep` / `wc` |
-| `jogos/` | Termo, Forca, Conway, adivinhe o número, desenhos do bicho |
+| `jogos/` | Termo, Forca, Conway, adivinhe o número, tartaruga |
 | `lib/` | o que outro exemplo importa |
 | `tela_grafica/` | tela de pixels (`importe "tela_grafica"`) |
 
@@ -39,7 +39,7 @@ Pasta = para que o arquivo existe. Depois do tutorial: `linguagem/` → `texto/`
 | `closures.lep` | função que devolve função |
 | `usa_matematica.lep` | `importe "../lib/matematica"` com e sem namespace |
 
-`lib/matematica.lep` é a biblioteca (`soma`, `media`, `potencia`, …).
+`lib/matematica.lep` é a biblioteca (`soma`, `media`, `potencia`, …). `lib/tartaruga.lep` é a tartaruga Logo (`ande`, `vire`, `mostre`), em cima de `tela_grafica`.
 
 ### `texto/`
 
@@ -72,6 +72,19 @@ Tela de pixels (`importe "tela_grafica"`). Rode no terminal ou no Aula (F5): abr
 |---------|----------------|
 | `linha.lep` | linha, círculo, `mostre`, `salve` |
 | `casa.lep` | casinha e sol (`cor`, `linha`, `circulo`, `mat::seno`) |
+
+### `jogos/`
+
+| Arquivo | O que mostra |
+|---------|----------------|
+| `adivinhe_o_numero.lep` | adivinhe o número |
+| `conway_jogo_da_vida.lep` | Jogo da Vida |
+| `forca.lep` | Forca |
+| `termo.lep` | Termo |
+| `tartaruga_quadrado.lep` | Logo: `ande` + `vire(90)` (`importe "../lib/tartaruga"`) |
+| `tartaruga_estrela.lep` | Logo: estrela de cinco pontas (`vire(144)`) |
+
+Ângulo 0 olha para cima; `vire` é para a direita; casa no centro da tela.
 
 ### `unix/`
 

@@ -1,0 +1,121 @@
+/// Tartaruga Logo: anda, vira e desenha na tela de pixels.
+///
+/// Ângulo 0 olha para cima. vire é para a direita (sentido horário).
+/// A origem (casa) fica no centro da tela.
+
+_mat = importe "mat"
+_tela = importe "tela_grafica"
+
+/// Tela 400×400, caneta abaixada, olhando para cima.
+nova = função()
+inicio
+    nova_tamanho(400, 400)
+fim
+
+/// Tela largura×altura. Centro é a casa.
+nova_tamanho = função(largura, altura)
+inicio
+    g = _tela::nova(largura, altura)
+    mapa([
+        :tela -> g,
+        :largura -> largura,
+        :altura -> altura,
+        :x -> largura / 2,
+        :y -> altura / 2,
+        :angulo -> 0,
+        :baixo -> verdadeiro,
+        :cor -> "preto",
+    ])
+fim
+
+/// Anda n pixels na direção atual. Com a caneta abaixada, traça a reta.
+ande = função(t, n)
+inicio
+    a = _mat::radianos(t:angulo)
+    x2 = t:x + n * _mat::seno(a)
+    y2 = t:y - n * _mat::cosseno(a)
+    se t:baixo
+    inicio
+        g = t:tela
+        g._tela::cor(t:cor)
+        g._tela::linha(t:x, t:y, x2, y2)
+    fim
+    t:x = x2
+    t:y = y2
+    t
+fim
+
+/// Vira graus para a direita.
+vire = função(t, graus)
+inicio
+    t:angulo = t:angulo + graus
+    t
+fim
+
+/// Vira graus para a esquerda.
+vire_esquerda = função(t, graus)
+inicio
+    t:angulo = t:angulo - graus
+    t
+fim
+
+/// Levanta a caneta: ande não desenha.
+subir = função(t)
+inicio
+    t:baixo = falso
+    t
+fim
+
+/// Abaixa a caneta: ande desenha.
+baixar = função(t)
+inicio
+    t:baixo = verdadeiro
+    t
+fim
+
+/// Cor da caneta (as mesmas da tela: :azul, :vermelho, …).
+cor = função(t, c)
+inicio
+    t:cor = c
+    t
+fim
+
+/// Olha para graus (0 = cima, 90 = direita).
+olhe = função(t, graus)
+inicio
+    t:angulo = graus
+    t
+fim
+
+/// Volta ao centro, olhando para cima. Não apaga o desenho.
+casa = função(t)
+inicio
+    t:x = t:largura / 2
+    t:y = t:altura / 2
+    t:angulo = 0
+    t
+fim
+
+/// Apaga o desenho. A tartaruga fica onde está.
+apague = função(t)
+inicio
+    g = t:tela
+    g._tela::apague()
+    t
+fim
+
+/// Abre ou atualiza a janela.
+mostre = função(t)
+inicio
+    g = t:tela
+    g._tela::mostre()
+    t
+fim
+
+/// Grava um PNG. Caminho relativo ao .lep.
+salve = função(t, caminho)
+inicio
+    g = t:tela
+    g._tela::salve(caminho)
+    t
+fim

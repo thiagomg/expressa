@@ -556,6 +556,9 @@ impl Vm<'_, '_> {
         let mut rows: Vec<(String, Value)> = Vec::new();
         let mut names = HashSet::new();
         for (name, value) in Env::visible_bindings(env) {
+            if name.starts_with('_') {
+                continue;
+            }
             if let Some(entry) = catalog_entry(&name, &value) {
                 names.insert(name.clone());
                 rows.push((name, entry));
@@ -687,6 +690,9 @@ fn catalog_value_row(name: &str, value: &Value) -> Value {
 fn catalog_frame(env: &Env, modulo: &str) -> Value {
     let mut rows = Vec::new();
     for (name, value) in env.bindings_sorted() {
+        if name.starts_with('_') {
+            continue;
+        }
         match &value {
             Value::Builtin(canon) => rows.push(catalog_row(
                 &name,
@@ -740,11 +746,12 @@ fn first_paragraph(doc: &str) -> &str {
 fn module_member_names(env: &Env) -> String {
     env.bindings_sorted()
         .into_iter()
-        .filter(|(_, v)| {
-            matches!(
-                v,
-                Value::Builtin(_) | Value::Funcao(_) | Value::Numero(_) | Value::Texto(_)
-            )
+        .filter(|(k, v)| {
+            !k.starts_with('_')
+                && matches!(
+                    v,
+                    Value::Builtin(_) | Value::Funcao(_) | Value::Numero(_) | Value::Texto(_)
+                )
         })
         .map(|(k, _)| k)
         .collect::<Vec<_>>()

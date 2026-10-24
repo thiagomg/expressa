@@ -2184,6 +2184,71 @@ mod tests {
     }
 
     #[test]
+    fn tartaruga_anda_para_cima_e_pinta() {
+        let src = r#"
+tartaruga = importe "../lib/tartaruga"
+tela_grafica = importe "tela_grafica"
+t = tartaruga::nova_tamanho(20, 20)
+t.tartaruga::cor(:azul)
+t.tartaruga::ande(5)
+g = t:tela
+escreva(g.tela_grafica::pixel(10, 10))
+escreva(g.tela_grafica::pixel(10, 5))
+escreva(g.tela_grafica::pixel(11, 10))
+escreva(t:x)
+escreva(t:y)
+"#;
+        let out = run_to_string(src, "exemplos/jogos/t.lep").unwrap_or_else(|e| panic!("{e}"));
+        assert_eq!(out, "azul\nazul\nbranco\n10\n5\n");
+    }
+
+    #[test]
+    fn tartaruga_subir_nao_pinta_e_olhe_direita() {
+        let src = r#"
+tartaruga = importe "../lib/tartaruga"
+tela_grafica = importe "tela_grafica"
+t = tartaruga::nova_tamanho(20, 20)
+g = t:tela
+t.tartaruga::subir()
+t.tartaruga::ande(5)
+escreva(g.tela_grafica::pixel(10, 10))
+escreva(g.tela_grafica::pixel(10, 5))
+t.tartaruga::casa()
+t.tartaruga::baixar()
+t.tartaruga::cor(:vermelho)
+t.tartaruga::olhe(90)
+t.tartaruga::ande(5)
+escreva(g.tela_grafica::pixel(15, 10))
+escreva(g.tela_grafica::pixel(10, 9))
+"#;
+        let out = run_to_string(src, "exemplos/jogos/t.lep").unwrap_or_else(|e| panic!("{e}"));
+        assert_eq!(out, "branco\nbranco\nvermelho\nbranco\n");
+    }
+
+    #[test]
+    fn tartaruga_catalogo_esconde_imports_internos() {
+        let src = r#"
+ache = funcao(lista, nome)
+inicio
+    para item em lista
+    inicio
+        se item:nome == nome
+        inicio
+            retorne verdadeiro
+        fim
+    fim
+    falso
+fim
+tartaruga = importe "../lib/tartaruga"
+membros = catalogo(tartaruga)
+escreva(ache(membros, "ande"))
+escreva(ache(membros, "_mat"))
+"#;
+        let out = run_to_string(src, "exemplos/jogos/t.lep").unwrap_or_else(|e| panic!("{e}"));
+        assert_eq!(out, "verdadeiro\nfalso\n");
+    }
+
+    #[test]
     fn erros_example_does_not_crash() {
         let src = include_str!("../../exemplos/linguagem/erros.lep");
         let out = run_to_string(src, "exemplos/linguagem/erros.lep").unwrap();
