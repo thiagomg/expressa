@@ -52,9 +52,15 @@ fn try_main() -> Result<(), Box<dyn std::error::Error>> {
              expressa --ast <arquivo.lep>\n  \
              expressa --marcador-leia <arquivo.lep> [args…]\n  \
              expressa --grafico <arquivo.cart>\n  \
+             expressa --instalar-exemplos\n  \
              expressa --numeros pt|en [arquivo.lep] [args…]\n  \
              expressa --aritmetica decimal|float [arquivo.lep] [args…]"
         );
+        return Ok(());
+    }
+    if args[0] == "--instalar-exemplos" {
+        let dest = expressa::exemplos::instalar()?;
+        println!("exemplos em {}", dest.display());
         return Ok(());
     }
     if args[0] == "--grafico" {

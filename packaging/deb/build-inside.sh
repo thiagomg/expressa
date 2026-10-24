@@ -168,6 +168,9 @@ cat > "$ROOT/DEBIAN/postinst" <<'EOF'
 #!/bin/sh
 set -e
 if [ "$1" = configure ]; then
+    if [ -n "${SUDO_USER:-}" ] && [ "$SUDO_USER" != root ]; then
+        su -s /bin/sh - "$SUDO_USER" -c "/usr/bin/expressa --instalar-exemplos" >/dev/null 2>&1 || true
+    fi
     if command -v update-desktop-database >/dev/null 2>&1; then
         update-desktop-database -q /usr/share/applications || true
     fi

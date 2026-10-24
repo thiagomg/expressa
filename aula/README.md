@@ -35,7 +35,7 @@ cargo run -p expressa-aula-server -- --root ./aula-data --bind 127.0.0.1:50051
 cargo run -p expressa-aula
 ```
 
-Na primeira abertura (e de novo depois de atualizar o pacote) o editor copia os exemplos empacotados para `Documentos/Expressa Aula/exemplos` (ou `~/Documentos/…` no Linux). Arquivos novos entram na pasta; o que o aluno já tiver ali não é substituído.
+O instalador (Windows e `.deb`) copia os exemplos para `Documentos/Expressa Aula/exemplos`. Arquivos novos do pacote entram na pasta; o que o aluno já tiver ali não é substituído. O editor não copia de novo ao abrir. No Linux, `expressa --instalar-exemplos` faz a mesma cópia (o `postinst` chama isso para o usuário que instalou).
 
 Na primeira abertura aparece **Bem-vindo ao Expressa**, com um botão para o binário `expressa-tutorial`. **Ajuda → Tutoriais** abre a mesma janela depois.
 

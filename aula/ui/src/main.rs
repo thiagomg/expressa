@@ -549,9 +549,6 @@ fn build_ui(app: &Application) {
             let start = Rc::new({
                 let ui = Rc::clone(&ui_p);
                 move || {
-                    // Merge new shipped examples into Documents without touching
-                    // files the student already edited (first launch and upgrades).
-                    let _ = sync_shipped_exemplos();
                     let first = ui.borrow().prefs.pasta.trim().is_empty();
                     let opened = if first && open_shipped_exemplos(&ui) {
                         true
@@ -958,100 +955,24 @@ fn install_css() {
     }
 }
 
-/// Examples shipped beside the exe, the Debian share dir, or the repo copy.
-fn bundled_exemplos_dir() -> Option<PathBuf> {
-    if let Ok(exe) = std::env::current_exe() {
-        if let Some(dir) = exe.parent() {
-            let bundled = dir.join("exemplos");
-            if bundled.join("linguagem").is_dir() {
-                return Some(bundled);
-            }
-        }
-    }
-    let share = PathBuf::from("/usr/share/expressa/exemplos");
-    if share.join("linguagem").is_dir() {
-        return Some(share);
-    }
-    let dev = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../exemplos");
-    dev.join("linguagem").is_dir().then_some(dev)
-}
-
-/// A folder the user can edit. Documents first; AppData if that is not writable.
-fn writable_exemplos_candidates() -> Vec<PathBuf> {
+/// Documents copy created by the installer, if it already exists.
+fn existing_exemplos_dir() -> Option<PathBuf> {
     let mut candidates = Vec::new();
+    if let Some(d) = expressa::exemplos::dest_dir() {
+        candidates.push(d);
+    }
     if let Some(docs) = glib::user_special_dir(glib::UserDirectory::Documents) {
         if !docs.as_os_str().is_empty() {
             candidates.push(docs.join("Expressa Aula").join("exemplos"));
         }
     }
     candidates.push(glib::user_data_dir().join("expressa-aula").join("exemplos"));
-    candidates
-}
-
-fn writable_exemplos_dir() -> std::io::Result<PathBuf> {
-    let mut last_err = std::io::Error::other("nenhuma pasta gravavel");
-    for dir in writable_exemplos_candidates() {
-        if let Err(e) = probe_writable(&dir) {
-            last_err = e;
-            continue;
-        }
-        return Ok(dir);
-    }
-    Err(last_err)
-}
-
-fn is_shipped_exemplos_dest(path: &std::path::Path) -> bool {
-    writable_exemplos_candidates()
-        .iter()
-        .any(|c| paths_equal(c, path))
-}
-
-fn paths_equal(a: &std::path::Path, b: &std::path::Path) -> bool {
-    match (a.canonicalize(), b.canonicalize()) {
-        (Ok(x), Ok(y)) => x == y,
-        _ => a == b,
-    }
-}
-
-/// Add new shipped examples to the student's Documents copy.
-/// Files that already exist are left as the student edited them.
-fn sync_shipped_exemplos() -> std::io::Result<PathBuf> {
-    let src = bundled_exemplos_dir().ok_or_else(|| {
-        std::io::Error::new(
-            std::io::ErrorKind::NotFound,
-            "exemplos empacotados não encontrados",
-        )
-    })?;
-    let dst = writable_exemplos_dir()?;
-    copy_missing(&src, &dst)?;
-    Ok(dst)
-}
-
-fn probe_writable(dir: &std::path::Path) -> std::io::Result<()> {
-    std::fs::create_dir_all(dir)?;
-    let probe = dir.join(".expressa-grava");
-    std::fs::write(&probe, b"ok")?;
-    let _ = std::fs::remove_file(&probe);
-    Ok(())
-}
-
-/// Copy files that are not already at `dst`. Existing files stay as the user left them.
-fn copy_missing(src: &std::path::Path, dst: &std::path::Path) -> std::io::Result<()> {
-    std::fs::create_dir_all(dst)?;
-    for entry in std::fs::read_dir(src)? {
-        let entry = entry?;
-        let kind = entry.file_type()?;
-        if kind.is_symlink() {
-            continue;
-        }
-        let to = dst.join(entry.file_name());
-        if kind.is_dir() {
-            copy_missing(&entry.path(), &to)?;
-        } else if kind.is_file() && !to.exists() {
-            std::fs::copy(entry.path(), &to)?;
+    for dir in candidates {
+        if dir.join("linguagem").is_dir() {
+            return Some(dir);
         }
     }
-    Ok(())
+    None
 }
 
 fn data_dir() -> PathBuf {
@@ -2139,14 +2060,10 @@ fn executar(ui: &UiRc, debug: bool) {
 
 // ── Project and file tree ──────────────────────────────────────────────────
 
-/// First launch: copy the shipped examples into a writable folder and open it.
+/// First launch: open the Documents copy if the installer already put it there.
 fn open_shipped_exemplos(ui: &UiRc) -> bool {
-    let dst = match sync_shipped_exemplos() {
-        Ok(dir) => dir,
-        Err(e) => {
-            set_status(ui, &format!("exemplos: {e}"));
-            return false;
-        }
+    let Some(dst) = existing_exemplos_dir() else {
+        return false;
     };
     open_local_project(ui, dst.clone());
     let opened = matches!(&ui.borrow().files, Files::Local(_));
@@ -2197,13 +2114,6 @@ fn open_local_project(ui: &UiRc, path: PathBuf) {
             return;
         }
     };
-    if is_shipped_exemplos_dest(&path) {
-        if let Some(src) = bundled_exemplos_dir() {
-            if let Err(e) = copy_missing(&src, &path) {
-                set_status(ui, &format!("exemplos: {e}"));
-            }
-        }
-    }
     let same = { matches!(&ui.borrow().files, Files::Local(cur) if cur == &path) };
     if same {
         refresh_tree(ui);
@@ -2875,51 +2785,6 @@ fn search_replace_all(ui: &UiRc) {
     match d.search.replace_all(&repl) {
         Ok(()) => set_status(ui, "substituições feitas"),
         Err(e) => set_status(ui, &format!("substituir: {e}")),
-    }
-}
-
-#[cfg(test)]
-mod exemplos_copy {
-    use super::copy_missing;
-
-    #[test]
-    fn copy_missing_keeps_edits_and_adds_new_files() {
-        let root = std::env::temp_dir().join(format!(
-            "expressa-exemplos-{}-{}",
-            std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
-        ));
-        let src = root.join("src");
-        let dst = root.join("dst");
-        std::fs::create_dir_all(src.join("linguagem")).unwrap();
-        std::fs::write(src.join("linguagem").join("media.lep"), "novo").unwrap();
-        std::fs::create_dir_all(dst.join("linguagem")).unwrap();
-        std::fs::write(dst.join("linguagem").join("media.lep"), "editado").unwrap();
-        copy_missing(&src, &dst).unwrap();
-        assert_eq!(
-            std::fs::read_to_string(dst.join("linguagem").join("media.lep")).unwrap(),
-            "editado"
-        );
-        std::fs::write(src.join("linguagem").join("novo.lep"), "x").unwrap();
-        std::fs::create_dir_all(src.join("jogos")).unwrap();
-        std::fs::write(src.join("jogos").join("termo.lep"), "jogo").unwrap();
-        copy_missing(&src, &dst).unwrap();
-        assert_eq!(
-            std::fs::read_to_string(dst.join("linguagem").join("media.lep")).unwrap(),
-            "editado"
-        );
-        assert_eq!(
-            std::fs::read_to_string(dst.join("linguagem").join("novo.lep")).unwrap(),
-            "x"
-        );
-        assert_eq!(
-            std::fs::read_to_string(dst.join("jogos").join("termo.lep")).unwrap(),
-            "jogo"
-        );
-        let _ = std::fs::remove_dir_all(root);
     }
 }
 
