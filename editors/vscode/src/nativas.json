@@ -158,7 +158,7 @@
         "formate(modelo, valor)"
       ],
       "summary": "Monta um texto: {} valor, {:<n} esquerda, {:>n} direita, {:^n} centro.",
-      "doc": "Monta um texto: {} valor, {:<n} esquerda, {:>n} direita, {:^n} centro.\n\nCada {} (ou {1}, {2}, …) é substituído pelo valor correspondente.\nSem < > ^, texto encosta à esquerda e número à direita: {:8}.\nSe o valor já é mais largo que n, entra inteiro. {1} é o primeiro valor.\n{{ e }} escrevem { e }. Números seguem o formato atual.\n\nExemplo: formate(\"{:<8} {:>5}\", \"Ana\", 10)"
+      "doc": "Monta um texto: {} valor, {:<n} esquerda, {:>n} direita, {:^n} centro.\n\nCada {} (ou {1}, {2}, …) é substituído pelo valor correspondente.\nSem < > ^, texto encosta à esquerda e número à direita: {:8}.\nSe o valor já é mais largo que n, entra inteiro. {1} é o primeiro valor.\n{{ e }} escrevem { e }. Números seguem o formato atual.\nMapa com :_como_texto (função de um argumento que devolve texto) usa essa função.\n\nExemplo: formate(\"{:<8} {:>5}\", \"Ana\", 10)"
     },
     {
       "name": "avaliar",

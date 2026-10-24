@@ -277,6 +277,8 @@ formato("float")
 formate("{:<8} {:>5}", "Ana", 10)
 ```
 
+Um mapa pode definir `:_como_texto` (função de um argumento que devolve texto). `formate`, `escreva` e o `+` com texto chamam essa função. Sem o campo, o mapa continua `mapa{…}`. A função é do aluno (`como_texto = função(fr) { … }`; `fr:_como_texto = como_texto`); não é nativa.
+
 ### `avaliar(texto)`
 
 executa o texto como Expressa no escopo atual e devolve o último valor. Erro de sintaxe ou de execução vai em `se_falhar`.

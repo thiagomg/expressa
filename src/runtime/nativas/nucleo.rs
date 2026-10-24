@@ -11,28 +11,34 @@ use super::super::eval::Vm;
 use super::super::numero::NumeroAritmetica;
 use super::super::value::{MapKey, NumeroLocale, Value, conjunto_insert};
 use super::{
-    builtin_args, builtin_doc_summary, builtin_modulo, lookup_ficha, sem_acento, value_as_texto,
+    builtin_args, builtin_doc_summary, builtin_modulo, lookup_ficha, sem_acento,
 };
 
 impl Vm<'_, '_> {
-    pub(crate) fn bi_escreva(&mut self, args: &[Value], _span: Span) -> Result<Value, EvalError> {
+    pub(crate) fn bi_escreva(
+        &mut self,
+        args: &[Value],
+        span: Span,
+        env: &Rc<RefCell<Env>>,
+    ) -> Result<Value, EvalError> {
         let mut first = true;
         for arg in args {
             if !first {
-                write!(self.out, " ").map_err(|e| self.io_err(e, _span))?;
+                write!(self.out, " ").map_err(|e| self.io_err(e, span))?;
             }
             first = false;
-            write!(self.out, "{}", arg.format_with(self.numero_locale))
-                .map_err(|e| self.io_err(e, _span))?;
+            let text = self.como_texto_de(arg, span, env)?;
+            write!(self.out, "{text}").map_err(|e| self.io_err(e, span))?;
         }
-        writeln!(self.out).map_err(|e| self.io_err(e, _span))?;
-        self.out.flush().map_err(|e| self.io_err(e, _span))?;
+        writeln!(self.out).map_err(|e| self.io_err(e, span))?;
+        self.out.flush().map_err(|e| self.io_err(e, span))?;
         Ok(Value::Nada)
     }
     pub(crate) fn bi_escreva_erro(
         &mut self,
         args: &[Value],
         span: Span,
+        env: &Rc<RefCell<Env>>,
     ) -> Result<Value, EvalError> {
         let mut first = true;
         for arg in args {
@@ -40,8 +46,8 @@ impl Vm<'_, '_> {
                 write!(self.err, " ").map_err(|e| self.io_err(e, span))?;
             }
             first = false;
-            write!(self.err, "{}", arg.format_with(self.numero_locale))
-                .map_err(|e| self.io_err(e, span))?;
+            let text = self.como_texto_de(arg, span, env)?;
+            write!(self.err, "{text}").map_err(|e| self.io_err(e, span))?;
         }
         writeln!(self.err).map_err(|e| self.io_err(e, span))?;
         self.err.flush().map_err(|e| self.io_err(e, span))?;
@@ -175,12 +181,22 @@ impl Vm<'_, '_> {
             span,
         ))
     }
-    pub(crate) fn bi_formate(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
+    pub(crate) fn bi_formate(
+        &mut self,
+        args: &[Value],
+        span: Span,
+        env: &Rc<RefCell<Env>>,
+    ) -> Result<Value, EvalError> {
         if args.is_empty() {
             return Err(self.err("formate() espera um modelo (texto) e os valores", span));
         }
         let modelo = self.expect_texto(&args[0], span)?;
-        let text = super::super::formate::formate(&modelo, &args[1..], self.numero_locale)
+        let valores = &args[1..];
+        let mut texts = Vec::with_capacity(valores.len());
+        for v in valores {
+            texts.push(self.como_texto_de(v, span, env)?);
+        }
+        let text = super::super::formate::formate_with(&modelo, valores, &texts)
             .map_err(|msg| self.err(msg, span))?;
         Ok(Value::Texto(text))
     }
@@ -414,13 +430,18 @@ impl Vm<'_, '_> {
         };
         Ok(Value::lista(parts))
     }
-    pub(crate) fn bi_junte(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
+    pub(crate) fn bi_junte(
+        &mut self,
+        args: &[Value],
+        span: Span,
+        env: &Rc<RefCell<Env>>,
+    ) -> Result<Value, EvalError> {
         self.expect_arity(args, 2, span)?;
         let xs = self.expect_lista(&args[0], span)?;
         let sep = self.expect_texto(&args[1], span)?;
         let mut parts = Vec::new();
         for v in xs.borrow().iter() {
-            parts.push(value_as_texto(v, self.numero_locale));
+            parts.push(self.como_texto_de(v, span, env)?);
         }
         Ok(Value::Texto(parts.join(&sep)))
     }

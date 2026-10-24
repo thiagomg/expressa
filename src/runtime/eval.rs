@@ -80,6 +80,8 @@ pub(crate) struct Vm<'a, 'c> {
     protected: u32,
     /// The debugger already saw the runtime error now unwinding.
     error_reported: bool,
+    /// Map identities currently inside `:_como_texto` (recursion guard).
+    como_texto_guard: HashSet<usize>,
 }
 
 fn script_args_value(args: &[String]) -> Value {
@@ -435,6 +437,7 @@ impl<'a, 'c> Vm<'a, 'c> {
             rng: Rng::new(),
             protected: 0,
             error_reported: false,
+            como_texto_guard: HashSet::new(),
         }
     }
 
@@ -1016,17 +1019,18 @@ impl<'a, 'c> Vm<'a, 'c> {
             _ => {
                 let l = self.eval_expr(left, env)?;
                 let r = self.eval_expr(right, env)?;
-                self.apply_binary(&l, op, &r, span)
+                self.apply_binary(&l, op, &r, span, env)
             }
         }
     }
 
     fn apply_binary(
-        &self,
+        &mut self,
         l: &Value,
         op: BinaryOp,
         r: &Value,
         span: Span,
+        env: &Rc<RefCell<Env>>,
     ) -> Result<Value, EvalError> {
         match op {
             BinaryOp::Add => match (l, r) {
@@ -1063,8 +1067,8 @@ impl<'a, 'c> Vm<'a, 'c> {
                 (Value::Matriz(_), Value::Matriz(_)) => self.matriz_add(l, r, span, 1.0),
                 (Value::Texto(_), _) | (_, Value::Texto(_)) => Ok(Value::Texto(format!(
                     "{}{}",
-                    self.format_value(l),
-                    self.format_value(r)
+                    self.como_texto_de(l, span, env)?,
+                    self.como_texto_de(r, span, env)?
                 ))),
                 _ => Err(self.err(
                     format!(
@@ -1931,6 +1935,57 @@ impl Vm<'_, '_> {
     pub(crate) fn format_value(&self, v: &Value) -> String {
         v.format_with(self.numero_locale)
     }
+
+    /// Text for `escreva` / `formate` / `+`. A mapa with `:_como_texto`
+    /// (a function of one argument) supplies its own text.
+    pub(crate) fn como_texto_de(
+        &mut self,
+        v: &Value,
+        span: Span,
+        env: &Rc<RefCell<Env>>,
+    ) -> Result<String, EvalError> {
+        let Value::Mapa(xs) = v else {
+            return Ok(self.format_value(v));
+        };
+        let hook = {
+            let key = MapKey::Texto("_como_texto".into());
+            xs.borrow()
+                .iter()
+                .find(|(k, _)| *k == key)
+                .map(|(_, v)| v.clone())
+        };
+        let Some(hook) = hook else {
+            return Ok(self.format_value(v));
+        };
+        if !matches!(hook, Value::Funcao(_) | Value::Builtin(_)) {
+            return Err(self.err(
+                format!(
+                    ":_como_texto deve ser uma função, encontrado {}",
+                    hook.type_name()
+                ),
+                span,
+            ));
+        }
+        let ptr = Rc::as_ptr(xs) as usize;
+        if !self.como_texto_guard.insert(ptr) {
+            return Err(self.err(
+                ":_como_texto não pode formatar o mesmo mapa de novo",
+                span,
+            ));
+        }
+        let result = self.call_value(&hook, std::slice::from_ref(v), span, "como_texto", env);
+        self.como_texto_guard.remove(&ptr);
+        match result? {
+            Value::Texto(s) => Ok(s),
+            other => Err(self.err(
+                format!(
+                    ":_como_texto deve devolver texto, encontrado {}",
+                    other.type_name()
+                ),
+                span,
+            )),
+        }
+    }
 }
 
 #[cfg(test)]
@@ -2096,10 +2151,21 @@ mod tests {
                 "exemplos/escola/seno_cosseno.lep",
                 include_str!("../../exemplos/escola/seno_cosseno.lep"),
             ),
+            (
+                "exemplos/escola/calc_fracoes.lep",
+                include_str!("../../exemplos/escola/calc_fracoes.lep"),
+            ),
         ];
         for (file, src) in examples {
             run_to_string(src, file).unwrap_or_else(|e| panic!("{file} failed: {e}"));
         }
+    }
+
+    #[test]
+    fn calc_fracoes_prints_with_como_texto() {
+        let src = include_str!("../../exemplos/escola/calc_fracoes.lep");
+        let out = run_to_string(src, "exemplos/escola/calc_fracoes.lep").unwrap();
+        assert!(out.contains("1/4 + 1/4 = 1/2"), "{out}");
     }
 
     #[test]
@@ -2524,6 +2590,55 @@ a[1] = 99
 escreva(a[1])
 "#;
         assert_eq!(run(src), "10\n[20, 30]\n99\n");
+    }
+
+    #[test]
+    fn como_texto_uses_map_hook() {
+        let src = r#"
+como_texto = funcao(fr) { formate("{}/{}", fr:numerador, fr:denominador) }
+fr = mapa([:numerador -> 1, :denominador -> 4])
+fr:_como_texto = como_texto
+escreva(formate("{}", fr))
+escreva(fr)
+escreva("x" + fr)
+escreva(fr.como_texto())
+"#;
+        assert_eq!(run(src), "1/4\n1/4\nx1/4\n1/4\n");
+    }
+
+    #[test]
+    fn como_texto_without_hook_keeps_mapa() {
+        let out = run(r#"escreva(mapa([:a -> 1]))"#);
+        assert!(out.contains("mapa"), "{out}");
+        assert!(out.contains("a"), "{out}");
+    }
+
+    #[test]
+    fn como_texto_recursion_is_an_error() {
+        let err = run_to_string(
+            "fr = mapa([:n -> 1])\nfr:_como_texto = funcao(x) { formate(\"{}\", x) }\nescreva(fr)\n",
+            "t.lep",
+        )
+        .unwrap_err();
+        assert!(
+            err.message.contains("mesmo mapa"),
+            "{}",
+            err.message
+        );
+    }
+
+    #[test]
+    fn como_texto_must_return_text() {
+        let err = run_to_string(
+            "fr = mapa([])\nfr:_como_texto = funcao(x) { 1 }\nescreva(fr)\n",
+            "t.lep",
+        )
+        .unwrap_err();
+        assert!(
+            err.message.contains("devolver texto"),
+            "{}",
+            err.message
+        );
     }
 
     #[test]

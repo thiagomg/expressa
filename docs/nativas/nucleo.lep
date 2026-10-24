@@ -99,6 +99,7 @@ formato = funcao(padrao) { 0 }
 /// Sem < > ^, texto encosta à esquerda e número à direita: {:8}.
 /// Se o valor já é mais largo que n, entra inteiro. {1} é o primeiro valor.
 /// {{ e }} escrevem { e }. Números seguem o formato atual.
+/// Mapa com :_como_texto (função de um argumento que devolve texto) usa essa função.
 ///
 /// Exemplo: formate("{:<8} {:>5}", "Ana", 10)
 formate = funcao(modelo) { 0 }

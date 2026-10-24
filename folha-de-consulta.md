@@ -166,6 +166,7 @@ procurar([10, 20, 30], 20)     // 2
 separe("a,b,c", ",")           // ["a", "b", "c"]
 junte(["a", "b"], " - ")
 formate("{:<8} {:>5}", "Ana", 10)  // colunas: < esquerda  > direita  ^ centro
+                                   // mapa: campo :_como_texto (função) vira o {}
 
 :nome                          // o texto "nome"
 p = :nome -> "Ana"

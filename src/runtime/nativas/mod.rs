@@ -7,7 +7,7 @@ use crate::lexer::Span;
 use super::env::{Env, FrameKind};
 use super::error::EvalError;
 use super::eval::Vm;
-use super::value::{NumeroLocale, Value, format_numero};
+use super::value::{Value, format_numero};
 
 mod arquivo;
 mod cartesiano;
@@ -382,8 +382,8 @@ impl Vm<'_, '_> {
         env: &Rc<RefCell<Env>>,
     ) -> Result<Value, EvalError> {
         match name {
-            "escreva" => self.bi_escreva(args, span),
-            "escreva_erro" => self.bi_escreva_erro(args, span),
+            "escreva" => self.bi_escreva(args, span, env),
+            "escreva_erro" => self.bi_escreva_erro(args, span, env),
             "sair" => self.bi_sair(args, span),
             "cls" | "limpe_tela" => self.bi_cls(args, span),
             "casa" => self.bi_casa(args, span),
@@ -429,7 +429,7 @@ impl Vm<'_, '_> {
             "ncolunas" => self.bi_ncolunas(args, span),
             "numero" | "número" => self.bi_numero(args, span),
             "formato" => self.bi_formato(args, span),
-            "formate" => self.bi_formate(args, span),
+            "formate" => self.bi_formate(args, span, env),
             "avaliar" => self.bi_avaliar(args, span, env),
             "catalogo" | "catálogo" => self.bi_catalogo(args, span, env),
             "ajuda" => self.bi_ajuda(args, span),
@@ -445,7 +445,7 @@ impl Vm<'_, '_> {
             "substitua" => self.bi_substitua(args, span),
             "procurar" => self.bi_procurar(args, span),
             "separe" => self.bi_separe(args, span),
-            "junte" => self.bi_junte(args, span),
+            "junte" => self.bi_junte(args, span, env),
             "limpe" => self.bi_limpe(args, span),
             "leia_arquivo" => self.bi_leia_arquivo(args, span),
             "salve_arquivo" => self.bi_salve_arquivo(args, span),
@@ -521,14 +521,6 @@ pub(crate) fn builtin_doc_summary(name: &str) -> String {
     lookup_builtin_doc(name)
         .map(|d| d.summary.clone())
         .unwrap_or_default()
-}
-
-pub(super) fn value_as_texto(v: &Value, loc: NumeroLocale) -> String {
-    match v {
-        Value::Texto(s) => s.clone(),
-        Value::Numero(n) => loc.format(*n),
-        other => other.to_string(),
-    }
 }
 
 pub(super) fn csv_cell(v: &Value) -> String {

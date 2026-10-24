@@ -15,7 +15,17 @@ enum Indexing {
     Manual,
 }
 
+#[cfg(test)]
 pub(crate) fn formate(template: &str, args: &[Value], loc: NumeroLocale) -> Result<String, String> {
+    let texts: Vec<String> = args.iter().map(|v| v.format_with(loc)).collect();
+    formate_with(template, args, &texts)
+}
+
+pub(crate) fn formate_with(
+    template: &str,
+    args: &[Value],
+    texts: &[String],
+) -> Result<String, String> {
     let chars: Vec<char> = template.chars().collect();
     let mut i = 0;
     let mut out = String::new();
@@ -45,7 +55,7 @@ pub(crate) fn formate(template: &str, args: &[Value], loc: NumeroLocale) -> Resu
                 let inner: String = chars[spec_start..i].iter().collect();
                 i += 1; // skip '}'
                 let (idx, piece) =
-                    render_placeholder(&inner, args, loc, &mut auto_next, &mut indexing)?;
+                    render_placeholder(&inner, args, texts, &mut auto_next, &mut indexing)?;
                 if idx >= args.len() {
                     return Err(format!(
                         "índice {} fora do intervalo (há {} valor(es))",
@@ -83,7 +93,7 @@ pub(crate) fn formate(template: &str, args: &[Value], loc: NumeroLocale) -> Resu
 fn render_placeholder(
     inner: &str,
     args: &[Value],
-    loc: NumeroLocale,
+    texts: &[String],
     auto_next: &mut usize,
     indexing: &mut Option<Indexing>,
 ) -> Result<(usize, String), String> {
@@ -118,10 +128,10 @@ fn render_placeholder(
     }
 
     let value = &args[idx];
-    let text = value.format_with(loc);
+    let text = texts.get(idx).map(String::as_str).unwrap_or("");
     let formatted = match spec_part {
-        None | Some("") => text,
-        Some(spec) => apply_spec(spec, &text, value)?,
+        None | Some("") => text.to_string(),
+        Some(spec) => apply_spec(spec, text, value)?,
     };
     Ok((idx, formatted))
 }
