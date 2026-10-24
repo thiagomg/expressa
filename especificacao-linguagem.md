@@ -347,6 +347,7 @@ separe("a,b,c", ",")
 junte(["a", "b"], " - ")
 limpe(nome)
 formate("{:<8} {:>5}", "Ana", 10)   // < esquerda  > direita  ^ centro
+                               // mapa com :_como_texto (função de 1 arg → texto) usa essa função
 nome[1]
 nome[1..5]
 ```
