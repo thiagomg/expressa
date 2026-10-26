@@ -4,9 +4,13 @@ use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::rc::Rc;
 
+use gtk::gdk;
 use gtk::glib;
 use gtk::prelude::*;
-use gtk::{Align, ApplicationWindow, Box as GtkBox, Button, Label, Orientation, Window};
+use gtk::{
+    Align, ApplicationWindow, Box as GtkBox, Button, CenterBox, CssProvider, Label, Orientation,
+    Overlay,
+};
 
 pub fn spawn_tutorial() -> Result<(), String> {
     let mut cmd = tutorial_command()?;
@@ -44,25 +48,23 @@ fn tutorial_command() -> Result<Command, String> {
     Ok(Command::new(path))
 }
 
-/// First-launch welcome. `on_done` runs after the window is gone (Começar,
-/// Abrir tutoriais, Esc or the close button). Not modal: a modal grab plus
-/// the folder picker in `close-request` froze the whole IDE.
+/// First-launch welcome as an overlay on the Aula window (not a second
+/// toplevel). Extra windows were grabbing focus and freezing the IDE.
 pub fn mostrar_boas_vindas(parent: &ApplicationWindow, on_done: impl Fn() + 'static) {
-    let win = Window::builder()
-        .title("Bem-vindo ao Expressa")
-        .default_width(480)
-        .default_height(300)
-        .modal(false)
-        .transient_for(parent)
-        .destroy_with_parent(true)
-        .resizable(false)
-        .build();
+    install_css();
+    let overlay = Overlay::new();
+    overlay.set_hexpand(true);
+    overlay.set_vexpand(true);
+    if let Some(child) = parent.child() {
+        parent.set_child(None::<&gtk::Widget>);
+        overlay.set_child(Some(&child));
+    }
+    parent.set_child(Some(&overlay));
 
-    let col = GtkBox::new(Orientation::Vertical, 16);
-    col.set_margin_top(28);
-    col.set_margin_bottom(24);
-    col.set_margin_start(28);
-    col.set_margin_end(28);
+    let cartao = GtkBox::new(Orientation::Vertical, 16);
+    cartao.add_css_class("boas-vindas-cartao");
+    cartao.set_halign(Align::Center);
+    cartao.set_valign(Align::Center);
 
     let titulo = Label::new(Some("Bem-vindo ao Expressa"));
     titulo.add_css_class("title-2");
@@ -84,25 +86,49 @@ pub fn mostrar_boas_vindas(parent: &ApplicationWindow, on_done: impl Fn() + 'sta
     let botoes = GtkBox::new(Orientation::Horizontal, 8);
     botoes.set_halign(Align::End);
     botoes.set_hexpand(true);
-
     let tut = Button::with_label("Abrir tutoriais");
     tut.add_css_class("suggested-action");
     let comecar = Button::with_label("Começar");
+    botoes.append(&tut);
+    botoes.append(&comecar);
+    cartao.append(&titulo);
+    cartao.append(&texto);
+    cartao.append(&erro);
+    cartao.append(&botoes);
+
+    let fundo = CenterBox::new();
+    fundo.set_orientation(Orientation::Vertical);
+    fundo.set_halign(Align::Fill);
+    fundo.set_valign(Align::Fill);
+    fundo.set_hexpand(true);
+    fundo.set_vexpand(true);
+    fundo.add_css_class("boas-vindas-fundo");
+    fundo.set_center_widget(Some(&cartao));
+    let eat = gtk::GestureClick::new();
+    eat.connect_pressed(|g, _, _, _| {
+        g.set_state(gtk::EventSequenceState::Claimed);
+    });
+    fundo.add_controller(eat);
+    overlay.add_overlay(&fundo);
 
     let on_done = Rc::new(on_done);
     let finished = Rc::new(std::cell::Cell::new(false));
-    let finish = Rc::new({
+    let dismiss = Rc::new({
+        let fundo = fundo.clone();
+        let overlay = overlay.clone();
         let on_done = Rc::clone(&on_done);
         let finished = Rc::clone(&finished);
         move || {
-            if !finished.replace(true) {
-                on_done();
+            if finished.replace(true) {
+                return;
             }
+            overlay.remove_overlay(&fundo);
+            let on_done = Rc::clone(&on_done);
+            glib::idle_add_local_once(move || on_done());
         }
     });
-
     tut.connect_clicked({
-        let win = win.clone();
+        let dismiss = Rc::clone(&dismiss);
         let erro = erro.clone();
         move |_| {
             if let Err(e) = spawn_tutorial() {
@@ -110,43 +136,51 @@ pub fn mostrar_boas_vindas(parent: &ApplicationWindow, on_done: impl Fn() + 'sta
                 erro.set_visible(true);
                 return;
             }
-            win.close();
+            dismiss();
         }
     });
     comecar.connect_clicked({
-        let win = win.clone();
-        move |_| {
-            win.close();
-        }
+        let dismiss = Rc::clone(&dismiss);
+        move |_| dismiss()
     });
     let esc = gtk::EventControllerKey::new();
     esc.connect_key_pressed({
-        let win = win.clone();
+        let dismiss = Rc::clone(&dismiss);
         move |_, key, _, _| {
             if key == gtk::gdk::Key::Escape {
-                win.close();
+                dismiss();
                 glib::Propagation::Stop
             } else {
                 glib::Propagation::Proceed
             }
         }
     });
-    win.add_controller(esc);
-    win.connect_close_request({
-        let finish = Rc::clone(&finish);
-        move |_| {
-            let finish = Rc::clone(&finish);
-            glib::idle_add_local_once(move || finish());
-            glib::Propagation::Proceed
-        }
-    });
+    fundo.set_focusable(true);
+    fundo.add_controller(esc);
+    fundo.grab_focus();
+}
 
-    botoes.append(&tut);
-    botoes.append(&comecar);
-    col.append(&titulo);
-    col.append(&texto);
-    col.append(&erro);
-    col.append(&botoes);
-    win.set_child(Some(&col));
-    win.present();
+fn install_css() {
+    let css = CssProvider::new();
+    css.load_from_data(
+        r#"
+.boas-vindas-fundo {
+    background-color: rgba(0, 0, 0, 0.45);
+}
+.boas-vindas-cartao {
+    background-color: @theme_bg_color;
+    color: @theme_fg_color;
+    padding: 28px;
+    border-radius: 12px;
+    min-width: 440px;
+}
+        "#,
+    );
+    if let Some(display) = gdk::Display::default() {
+        gtk::style_context_add_provider_for_display(
+            &display,
+            &css,
+            gtk::STYLE_PROVIDER_PRIORITY_APPLICATION,
+        );
+    }
 }
