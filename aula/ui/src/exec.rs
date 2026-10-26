@@ -8,8 +8,8 @@ use std::path::{Path, PathBuf};
 use std::sync::mpsc::{Receiver, Sender, SyncSender};
 
 use expressa::runtime::{
-    CartesianoHost, ChannelDebugger, DebugHook, DebugPaused, FolhaPronta, GrafHost, LeiaHost,
-    StopHook, TelaGrafica, run_with_hosts,
+    run_with_hosts, CartesianoHost, ChannelDebugger, DebugHook, DebugPaused, FolhaPronta, GrafHost,
+    LeiaHost, StopHook, TelaGrafica,
 };
 
 use crate::store::Files;
@@ -95,9 +95,9 @@ impl Workspace {
                 std::fs::create_dir_all(&local).map_err(|e| e.to_string())?;
                 continue;
             }
-            let source = files.read_file(project, &entry.path)?;
-            write_file(&local, &source)?;
-            snapshot.insert(entry.path, source);
+            if let Some(source) = copy_project_file(files, project, &entry.path, &local)? {
+                snapshot.insert(entry.path, source);
+            }
         }
         Ok(Self { dir, snapshot })
     }
@@ -123,13 +123,27 @@ impl Workspace {
         let mut sent = 0;
         for path in paths {
             let rel = self.relative(&path);
-            // The repository holds text; skip anything that is not UTF-8.
-            let Ok(source) = std::fs::read_to_string(&path) else {
-                continue;
-            };
-            if self.snapshot.get(&rel) != Some(&source) {
-                files.write_file(project, &rel, &source)?;
-                sent += 1;
+            let bytes = std::fs::read(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+            match String::from_utf8(bytes) {
+                Ok(source) => {
+                    if self.snapshot.get(&rel) != Some(&source) {
+                        files.write_file(project, &rel, &source)?;
+                        sent += 1;
+                    }
+                }
+                Err(err) => {
+                    // PNG and other binaries are not in the text snapshot.
+                    // A remote project has no byte API, so leave them there.
+                    if files.is_remote() {
+                        continue;
+                    }
+                    let bytes = err.into_bytes();
+                    let same = files.read_bytes(project, &rel).ok().as_ref() == Some(&bytes);
+                    if !same {
+                        files.write_bytes(project, &rel, &bytes)?;
+                        sent += 1;
+                    }
+                }
             }
         }
         Ok(sent)
@@ -158,11 +172,40 @@ pub fn same_project_path(a: &str, b: &str) -> bool {
     a.replace('\\', "/") == b.replace('\\', "/")
 }
 
-fn write_file(path: &Path, source: &str) -> Result<(), String> {
+/// Copy one project file into the cache. Text is returned for the snapshot.
+/// A PNG (or anything else that is not UTF-8) is copied as bytes and omitted
+/// from the snapshot. On a remote project the file API is text-only, so a
+/// binary file is skipped instead of failing the whole run.
+fn copy_project_file(
+    files: &Files,
+    project: &str,
+    rel: &str,
+    dest: &Path,
+) -> Result<Option<String>, String> {
+    if !files.is_remote() {
+        let bytes = files.read_bytes(project, rel)?;
+        write_bytes(dest, &bytes)?;
+        return Ok(String::from_utf8(bytes).ok());
+    }
+    match files.read_file(project, rel) {
+        Ok(source) => {
+            write_file(dest, &source)?;
+            Ok(Some(source))
+        }
+        Err(e) if e.contains("valid UTF-8") => Ok(None),
+        Err(e) => Err(e),
+    }
+}
+
+fn write_bytes(path: &Path, bytes: &[u8]) -> Result<(), String> {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
-    std::fs::write(path, source).map_err(|e| format!("{}: {e}", path.display()))
+    std::fs::write(path, bytes).map_err(|e| format!("{}: {e}", path.display()))
+}
+
+fn write_file(path: &Path, source: &str) -> Result<(), String> {
+    write_bytes(path, source.as_bytes())
 }
 
 fn walk(dir: &Path, out: &mut Vec<PathBuf>) -> io::Result<()> {
@@ -421,5 +464,29 @@ mod tests {
         ));
         assert!(same_project_path(r"jogos\forca.lep", "jogos/forca.lep"));
         assert!(!same_project_path("jogos/forca.lep", "jogos/termo.lep"));
+    }
+
+    #[test]
+    fn download_copies_a_png_without_failing() {
+        let root = std::env::temp_dir().join(format!("expressa-png-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(root.join("tela_grafica")).unwrap();
+        std::fs::create_dir_all(root.join("jogos")).unwrap();
+        std::fs::write(root.join("jogos/estrela.lep"), "escreva(1)\n").unwrap();
+        let png = [0xff, 0xd8, 0x00, 0xff];
+        std::fs::write(root.join("tela_grafica/casa.png"), png).unwrap();
+        let files = Files::Local(root.clone());
+        let name = format!("png{}", std::process::id());
+        let ws = Workspace::download(&files, &name).unwrap();
+        assert_eq!(
+            std::fs::read_to_string(ws.dir.join("jogos/estrela.lep")).unwrap(),
+            "escreva(1)\n"
+        );
+        assert_eq!(
+            std::fs::read(ws.dir.join("tela_grafica/casa.png")).unwrap(),
+            png
+        );
+        let _ = std::fs::remove_dir_all(&ws.dir);
+        let _ = std::fs::remove_dir_all(&root);
     }
 }

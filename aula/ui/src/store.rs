@@ -47,6 +47,32 @@ impl Files {
         }
     }
 
+    /// Raw bytes of a local file. Remote projects only carry text.
+    pub fn read_bytes(&self, _student: &str, path: &str) -> Result<Vec<u8>, String> {
+        match self {
+            Files::Local(root) => {
+                let path = local_file(root, path)?;
+                std::fs::read(&path).map_err(|e| format!("{}: {e}", path.display()))
+            }
+            Files::None => Err("escolha uma pasta para o projeto".into()),
+            Files::Remote(_) => Err("arquivo binário no servidor não é suportado".into()),
+        }
+    }
+
+    pub fn write_bytes(&self, _student: &str, path: &str, bytes: &[u8]) -> Result<(), String> {
+        match self {
+            Files::Local(root) => {
+                let path = local_file(root, path)?;
+                if let Some(parent) = path.parent() {
+                    std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+                }
+                std::fs::write(&path, bytes).map_err(|e| format!("{}: {e}", path.display()))
+            }
+            Files::None => Err("escolha uma pasta para o projeto".into()),
+            Files::Remote(_) => Err("arquivo binário no servidor não é suportado".into()),
+        }
+    }
+
     pub fn write_file(&self, student: &str, path: &str, source: &str) -> Result<(), String> {
         match self {
             Files::None => Err("escolha uma pasta para o projeto".into()),
