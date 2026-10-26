@@ -44,19 +44,19 @@ fn tutorial_command() -> Result<Command, String> {
     Ok(Command::new(path))
 }
 
-/// First-launch welcome. `on_done` runs when the student clicks Começar
-/// (or closes the window).
+/// First-launch welcome. `on_done` runs after the window is gone (Começar,
+/// Abrir tutoriais, Esc or the close button). Not modal: a modal grab plus
+/// the folder picker in `close-request` froze the whole IDE.
 pub fn mostrar_boas_vindas(parent: &ApplicationWindow, on_done: impl Fn() + 'static) {
     let win = Window::builder()
         .title("Bem-vindo ao Expressa")
         .default_width(480)
-        .default_height(280)
-        .modal(true)
+        .default_height(300)
+        .modal(false)
+        .transient_for(parent)
+        .destroy_with_parent(true)
+        .resizable(false)
         .build();
-    if let Some(app) = parent.application() {
-        win.set_application(Some(&app));
-    }
-    win.set_transient_for(Some(parent));
 
     let col = GtkBox::new(Orientation::Vertical, 16);
     col.set_margin_top(28);
@@ -75,6 +75,12 @@ pub fn mostrar_boas_vindas(parent: &ApplicationWindow, on_done: impl Fn() + 'sta
     texto.set_xalign(0.0);
     texto.set_max_width_chars(52);
 
+    let erro = Label::new(None);
+    erro.add_css_class("error");
+    erro.set_wrap(true);
+    erro.set_xalign(0.0);
+    erro.set_visible(false);
+
     let botoes = GtkBox::new(Orientation::Horizontal, 8);
     botoes.set_halign(Align::End);
     botoes.set_hexpand(true);
@@ -82,17 +88,6 @@ pub fn mostrar_boas_vindas(parent: &ApplicationWindow, on_done: impl Fn() + 'sta
     let tut = Button::with_label("Abrir tutoriais");
     tut.add_css_class("suggested-action");
     let comecar = Button::with_label("Começar");
-
-    tut.connect_clicked({
-        let win = win.clone();
-        move |_| {
-            if let Err(e) = spawn_tutorial() {
-                eprintln!("{e}");
-                return;
-            }
-            win.close();
-        }
-    });
 
     let on_done = Rc::new(on_done);
     let finished = Rc::new(std::cell::Cell::new(false));
@@ -105,16 +100,43 @@ pub fn mostrar_boas_vindas(parent: &ApplicationWindow, on_done: impl Fn() + 'sta
             }
         }
     });
+
+    tut.connect_clicked({
+        let win = win.clone();
+        let erro = erro.clone();
+        move |_| {
+            if let Err(e) = spawn_tutorial() {
+                erro.set_text(&e);
+                erro.set_visible(true);
+                return;
+            }
+            win.close();
+        }
+    });
     comecar.connect_clicked({
         let win = win.clone();
         move |_| {
             win.close();
         }
     });
+    let esc = gtk::EventControllerKey::new();
+    esc.connect_key_pressed({
+        let win = win.clone();
+        move |_, key, _, _| {
+            if key == gtk::gdk::Key::Escape {
+                win.close();
+                glib::Propagation::Stop
+            } else {
+                glib::Propagation::Proceed
+            }
+        }
+    });
+    win.add_controller(esc);
     win.connect_close_request({
         let finish = Rc::clone(&finish);
         move |_| {
-            finish();
+            let finish = Rc::clone(&finish);
+            glib::idle_add_local_once(move || finish());
             glib::Propagation::Proceed
         }
     });
@@ -123,6 +145,7 @@ pub fn mostrar_boas_vindas(parent: &ApplicationWindow, on_done: impl Fn() + 'sta
     botoes.append(&comecar);
     col.append(&titulo);
     col.append(&texto);
+    col.append(&erro);
     col.append(&botoes);
     win.set_child(Some(&col));
     win.present();
