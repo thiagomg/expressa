@@ -558,46 +558,25 @@ fn build_ui(app: &Application) {
     {
         let ui_p = Rc::clone(&ui);
         glib::timeout_add_local_once(std::time::Duration::from_millis(250), move || {
-            let start = Rc::new({
-                let ui = Rc::clone(&ui_p);
-                move || {
-                    let pasta = ui.borrow().prefs.pasta.clone();
-                    let pasta_path = expand_tilde(&pasta);
-                    let opened = if !pasta.is_empty() && pasta_path.is_dir() {
-                        open_local_project(&ui, pasta_path);
-                        true
-                    } else if open_shipped_exemplos(&ui) {
-                        true
-                    } else {
-                        choose_local_folder(&ui)
-                    };
-                    schedule_raise();
-                    if !opened {
-                        set_status(&ui, "escolha uma pasta para o projeto");
-                    }
-                    if !lang_ok {
-                        set_status(
-                            &ui,
-                            "aviso: gramática Expressa não carregou; o texto fica sem cores",
-                        );
-                    }
-                }
-            });
-            let viu = ui_p.borrow().prefs.viu_boas_vindas;
-            if viu {
-                start();
+            let pasta = ui_p.borrow().prefs.pasta.clone();
+            let pasta_path = expand_tilde(&pasta);
+            let opened = if !pasta.is_empty() && pasta_path.is_dir() {
+                open_local_project(&ui_p, pasta_path);
+                true
+            } else if open_shipped_exemplos(&ui_p) {
+                true
             } else {
-                let window = ui_p.borrow().window.clone();
-                let ui_w = Rc::clone(&ui_p);
-                let start = Rc::clone(&start);
-                tutoriais::mostrar_boas_vindas(&window, move || {
-                    {
-                        let mut u = ui_w.borrow_mut();
-                        u.prefs.viu_boas_vindas = true;
-                        u.prefs.save();
-                    }
-                    start();
-                });
+                choose_local_folder(&ui_p)
+            };
+            schedule_raise();
+            if !opened {
+                set_status(&ui_p, "escolha uma pasta para o projeto");
+            }
+            if !lang_ok {
+                set_status(
+                    &ui_p,
+                    "aviso: gramática Expressa não carregou; o texto fica sem cores",
+                );
             }
         });
     }

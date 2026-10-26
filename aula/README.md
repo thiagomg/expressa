@@ -37,7 +37,7 @@ cargo run -p expressa-aula
 
 O instalador (Windows e `.deb`) copia os exemplos para `Documentos/Expressa Aula/exemplos`. Arquivos novos do pacote entram na pasta; o que o aluno já tiver ali não é substituído. O editor não copia de novo ao abrir. No Linux, `expressa --instalar-exemplos` faz a mesma cópia (o `postinst` chama isso para o usuário que instalou).
 
-Na primeira abertura aparece **Bem-vindo ao Expressa**, com um botão para o binário `expressa-tutorial`. **Ajuda → Tutoriais** abre a mesma janela depois. A Aula reabre a última pasta e o último arquivo. A barra de baixo mostra `linha:coluna`. **Ver → Ir para linha** (Ctrl+G) salta para um número.
+**Ajuda → Tutoriais** abre o binário `expressa-tutorial`. A Aula reabre a última pasta e o último arquivo. A barra de baixo mostra `linha:coluna`. **Ver → Ir para linha** (Ctrl+G) salta para um número.
 
 Os comandos ficam no menu do topo (**Arquivo**, **Executar**, **Depurar**, **Ver**, **Ajuda**), cada um com o atalho à direita. **Arquivo → Sair** (Ctrl+Q) fecha o editor (com pergunta se houver alterações). F5 executa a aba atual, **F6 depura**, F7 mostra/oculta arquivos, F8 o painel do depurador, F9 (ou clique no número da linha) ponto de parada, F10 próximo, F11 entrar, Shift+F11 sair, Ctrl+S salva. O caminho do projeto aparece à direita da barra de baixo. `mostre()` do módulo `cartesiano` abre o painel **Gráficos** (Destacar vira janela irmã e fica assim até Acoplar ou fechar). `mostre()` de `tela_grafica` abre uma janela irmã por `nova()`. O desenho ocupa o retângulo que o painel ou a janela lhe dão, como o `expressa-grafico`.
 
