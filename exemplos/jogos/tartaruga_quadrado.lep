@@ -3,6 +3,7 @@
 tartaruga = importe "../lib/tartaruga"
 
 t = tartaruga::nova()
+t.tartaruga::velocidade(0.02)
 t.tartaruga::cor(:azul)
 repita 4 vezes
 inicio

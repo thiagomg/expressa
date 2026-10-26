@@ -2242,10 +2242,32 @@ fim
 tartaruga = importe "../lib/tartaruga"
 membros = catalogo(tartaruga)
 escreva(ache(membros, "ande"))
+escreva(ache(membros, "velocidade"))
 escreva(ache(membros, "_mat"))
+escreva(ache(membros, "_ande"))
 "#;
         let out = run_to_string(src, "exemplos/jogos/t.lep").unwrap_or_else(|e| panic!("{e}"));
-        assert_eq!(out, "verdadeiro\nfalso\n");
+        assert_eq!(out, "verdadeiro\nverdadeiro\nfalso\nfalso\n");
+    }
+
+    #[test]
+    fn tartaruga_devagar_termina_no_mesmo_ponto() {
+        let src = r#"
+tartaruga = importe "../lib/tartaruga"
+tela_grafica = importe "tela_grafica"
+t = tartaruga::nova_tamanho(20, 20)
+t.tartaruga::cor(:azul)
+t.tartaruga::velocidade(0.001)
+t:passo = 2
+t.tartaruga::ande(6)
+g = t:tela
+escreva(g.tela_grafica::pixel(10, 10))
+escreva(g.tela_grafica::pixel(10, 4))
+escreva(g.tela_grafica::pixel(11, 10))
+escreva(t:y)
+"#;
+        let out = run_to_string(src, "exemplos/jogos/t.lep").unwrap_or_else(|e| panic!("{e}"));
+        assert_eq!(out, "azul\nazul\nbranco\n4\n");
     }
 
     #[test]

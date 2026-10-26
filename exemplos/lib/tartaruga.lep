@@ -2,6 +2,9 @@
 ///
 /// Ângulo 0 olha para cima. vire é para a direita (sentido horário).
 /// A origem (casa) fica no centro da tela.
+///
+/// velocidade(t, segundos) faz cada pedaço do traço aparecer na hora.
+/// 0 desenha tudo de uma vez. Exemplo: velocidade(t, 0.02).
 
 _mat = importe "mat"
 _tela = importe "tela_grafica"
@@ -25,11 +28,24 @@ inicio
         :angulo -> 0,
         :baixo -> verdadeiro,
         :cor -> "preto",
+        :pausa -> 0,
+        :passo -> 8,
     ])
 fim
 
-/// Anda n pixels na direção atual. Com a caneta abaixada, traça a reta.
-ande = função(t, n)
+/// Segundos entre um pedaço e o próximo. 0 desenha a reta inteira de uma vez.
+velocidade = função(t, segundos)
+inicio
+    se segundos < 0
+    inicio
+        segundos = 0
+    fim
+    t:pausa = segundos
+    t
+fim
+
+/// Um deslocamento só, sem espera.
+_ande = função(t, n)
 inicio
     a = _mat::radianos(t:angulo)
     x2 = t:x + n * _mat::seno(a)
@@ -42,6 +58,58 @@ inicio
     fim
     t:x = x2
     t:y = y2
+    t
+fim
+
+/// Anda n pixels na direção atual. Com a caneta abaixada, traça a reta.
+/// Com velocidade > 0, o traço aparece aos poucos.
+ande = função(t, n)
+inicio
+    se t:pausa <= 0
+    inicio
+        _ande(t, n)
+    fim
+    senao
+    inicio
+        se t:baixo == falso
+        inicio
+            _ande(t, n)
+        fim
+        senao
+        inicio
+            _ande_devagar(t, n)
+        fim
+    fim
+    t
+fim
+
+_ande_devagar = função(t, n)
+inicio
+    sinal = 1
+    falta = n
+    se n < 0
+    inicio
+        sinal = -1
+        falta = -n
+    fim
+    passo = t:passo
+    se passo <= 0
+    inicio
+        passo = falta
+    fim
+    enquanto falta > 0
+    inicio
+        d = passo
+        se d > falta
+        inicio
+            d = falta
+        fim
+        _ande(t, d * sinal)
+        g = t:tela
+        g._tela::mostre()
+        durma(t:pausa)
+        falta = falta - d
+    fim
     t
 fim
 
