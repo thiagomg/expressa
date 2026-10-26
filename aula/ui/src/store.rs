@@ -111,13 +111,51 @@ pub fn valid_aluno(name: &str) -> bool {
             .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
 }
 
+/// Home or the filesystem root. Listing either walks hundreds of thousands
+/// of files on the GTK thread and the window stops taking input.
+pub fn pasta_larga(path: &Path) -> bool {
+    if path.as_os_str().is_empty() {
+        return false;
+    }
+    if path == Path::new("/") || path == Path::new("\\") {
+        return true;
+    }
+    let Some(home) = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")) else {
+        return false;
+    };
+    let home = Path::new(&home);
+    if path == home {
+        return true;
+    }
+    match (path.canonicalize(), home.canonicalize()) {
+        (Ok(path), Ok(home)) => path == home || path == Path::new("/"),
+        _ => false,
+    }
+}
+
+const MAX_TREE_ENTRIES: usize = 20_000;
+
 fn list_local(root: &Path) -> Result<Vec<TreeEntry>, String> {
     let root = root
         .canonicalize()
         .map_err(|e| format!("{}: {e}", root.display()))?;
+    if pasta_larga(&root) {
+        return Err("escolha uma pasta do projeto, não a pasta pessoal".into());
+    }
     let mut out = Vec::new();
     walk(&root, &root, &mut out)?;
     Ok(out)
+}
+
+fn skip_name(name: &std::ffi::OsStr) -> bool {
+    let Some(s) = name.to_str() else {
+        return true;
+    };
+    s.starts_with('.')
+        || matches!(
+            s,
+            "target" | "node_modules" | "dist" | "__pycache__" | "build"
+        )
 }
 
 fn walk(dir: &Path, root: &Path, out: &mut Vec<TreeEntry>) -> Result<(), String> {
@@ -126,8 +164,8 @@ fn walk(dir: &Path, root: &Path, out: &mut Vec<TreeEntry>) -> Result<(), String>
         .collect::<Result<Vec<_>, _>>()
         .map_err(|e| e.to_string())?;
     entries.sort_by(|a, b| {
-        let a_dir = a.path().is_dir();
-        let b_dir = b.path().is_dir();
+        let a_dir = a.file_type().map(|t| t.is_dir()).unwrap_or(false);
+        let b_dir = b.file_type().map(|t| t.is_dir()).unwrap_or(false);
         match (a_dir, b_dir) {
             (true, false) => std::cmp::Ordering::Less,
             (false, true) => std::cmp::Ordering::Greater,
@@ -135,21 +173,28 @@ fn walk(dir: &Path, root: &Path, out: &mut Vec<TreeEntry>) -> Result<(), String>
         }
     });
     for entry in entries {
+        if skip_name(&entry.file_name()) {
+            continue;
+        }
+        let Ok(kind) = entry.file_type() else {
+            continue;
+        };
+        if kind.is_symlink() {
+            continue;
+        }
         let path = entry.path();
         if !path.starts_with(root) {
             continue;
-        }
-        if let Ok(real) = path.canonicalize() {
-            if !real.starts_with(root) {
-                continue;
-            }
         }
         let rel = path
             .strip_prefix(root)
             .unwrap_or(&path)
             .to_string_lossy()
             .replace('\\', "/");
-        let is_dir = path.is_dir();
+        let is_dir = kind.is_dir();
+        if out.len() >= MAX_TREE_ENTRIES {
+            return Err("pasta grande demais para ser um projeto".into());
+        }
         out.push(TreeEntry { path: rel, is_dir });
         if is_dir {
             walk(&path, root, out)?;
@@ -216,6 +261,43 @@ mod tests {
                 .ends_with("mat.lep")
         );
         assert!(local_file(root, "").is_err());
+    }
+
+    #[test]
+    fn pasta_larga_is_home_or_root_only() {
+        assert!(pasta_larga(Path::new("/")));
+        let home = home_for_test();
+        assert!(pasta_larga(&home));
+        assert!(!pasta_larga(&home.join("src")));
+        assert!(!pasta_larga(Path::new("")));
+    }
+
+    fn home_for_test() -> PathBuf {
+        std::env::var_os("HOME")
+            .or_else(|| std::env::var_os("USERPROFILE"))
+            .map(PathBuf::from)
+            .unwrap_or_else(|| PathBuf::from("/home/thiago"))
+    }
+
+    #[test]
+    fn list_local_skips_hidden_and_build_dirs() {
+        let root = std::env::temp_dir().join(format!("expressa-tree-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(root.join("src")).unwrap();
+        std::fs::create_dir_all(root.join(".git")).unwrap();
+        std::fs::create_dir_all(root.join("target")).unwrap();
+        std::fs::write(root.join("src/ola.lep"), "escreva(1)\n").unwrap();
+        std::fs::write(root.join(".git/config"), "x\n").unwrap();
+        std::fs::write(root.join("target/a.o"), "x\n").unwrap();
+        let files = Files::Local(root.clone());
+        let tree = files.list_tree("").unwrap();
+        let paths: Vec<_> = tree.iter().map(|e| e.path.as_str()).collect();
+        assert!(paths.contains(&"src"));
+        assert!(paths.iter().any(|p| p.ends_with("ola.lep")));
+        assert!(!paths
+            .iter()
+            .any(|p| p.contains(".git") || p.contains("target")));
+        let _ = std::fs::remove_dir_all(&root);
     }
 
     #[test]

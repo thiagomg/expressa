@@ -560,15 +560,29 @@ fn build_ui(app: &Application) {
         glib::timeout_add_local_once(std::time::Duration::from_millis(250), move || {
             let pasta = ui_p.borrow().prefs.pasta.clone();
             let pasta_path = expand_tilde(&pasta);
-            let opened = if !pasta.is_empty() && pasta_path.is_dir() {
-                open_local_project(&ui_p, pasta_path);
-                true
-            } else {
-                open_shipped_exemplos(&ui_p)
-            };
+            let opened =
+                if !pasta.is_empty() && pasta_path.is_dir() && !store::pasta_larga(&pasta_path) {
+                    open_local_project(&ui_p, pasta_path);
+                    true
+                } else {
+                    if store::pasta_larga(&pasta_path) {
+                        {
+                            let mut u = ui_p.borrow_mut();
+                            u.prefs.pasta.clear();
+                            u.prefs.save();
+                        }
+                        set_project_path(&ui_p, "", None);
+                    }
+                    if open_shipped_exemplos(&ui_p) {
+                        true
+                    } else {
+                        choose_local_folder(&ui_p);
+                        false
+                    }
+                };
             schedule_raise();
             if !opened {
-                set_status(&ui_p, "Arquivo → Pasta do projeto para começar");
+                set_status(&ui_p, "escolha a pasta do projeto");
             }
             if !lang_ok {
                 set_status(
@@ -2140,6 +2154,11 @@ fn open_local_project(ui: &UiRc, path: PathBuf) {
             return;
         }
     };
+    if store::pasta_larga(&path) {
+        set_status(ui, "escolha a pasta do projeto, não a pasta pessoal");
+        choose_local_folder(ui);
+        return;
+    }
     let same = { matches!(&ui.borrow().files, Files::Local(cur) if cur == &path) };
     if same {
         refresh_tree(ui);
@@ -2274,43 +2293,33 @@ fn normalize_url(url: &str) -> String {
     }
 }
 
-/// Folder picker. `start` is preselected when it is an existing directory.
-/// Must not run a nested `MainLoop`: the xdg portal never answers that loop
-/// and the whole Aula window stops taking input.
+/// Folder picker. `FileChooserNative` never maps a window on this desktop, and
+/// with `modal` the editor then ignores the mouse and the keyboard. `GtkFileDialog`
+/// asks the portal without a nested main loop and does show a window.
 fn pick_folder(
     parent: &impl IsA<gtk::Window>,
     start: &str,
     done: impl FnOnce(Option<PathBuf>) + 'static,
 ) {
-    let dialog = gtk::FileChooserNative::builder()
-        .title("Pasta do projeto")
-        .transient_for(parent)
-        .modal(true)
-        .action(gtk::FileChooserAction::SelectFolder)
-        .accept_label("Abrir")
-        .cancel_label("Cancelar")
-        .build();
+    let dialog = gtk::FileDialog::new();
+    dialog.set_title("Pasta do projeto");
+    dialog.set_accept_label(Some("Abrir"));
+    // Modal would freeze the editor again if the portal window failed to map.
+    dialog.set_modal(false);
     let start_path = expand_tilde(start);
-    if start_path.is_dir() {
-        let _ = dialog.set_current_folder(Some(&gtk::gio::File::for_path(&start_path)));
+    if start_path.is_dir() && !store::pasta_larga(&start_path) {
+        dialog.set_initial_folder(Some(&gtk::gio::File::for_path(&start_path)));
     }
-    let dialog = Rc::new(dialog);
-    let done = RefCell::new(Some(done));
-    dialog.connect_response({
-        let dialog = Rc::clone(&dialog);
-        move |_, resp| {
-            let path = if resp == gtk::ResponseType::Accept {
-                dialog.file().and_then(|f| f.path())
-            } else {
-                None
-            };
-            dialog.destroy();
-            if let Some(done) = done.borrow_mut().take() {
-                done(path);
-            }
-        }
-    });
-    dialog.show();
+    let dialog_keep = dialog.clone();
+    dialog.select_folder(
+        Some(parent),
+        None::<&gtk::gio::Cancellable>,
+        move |result| {
+            let _keep = dialog_keep;
+            let path = result.ok().and_then(|file| file.path());
+            done(path);
+        },
+    );
 }
 
 fn perguntar_servidor(
