@@ -39,7 +39,7 @@ Pasta = para que o arquivo existe. Depois do tutorial: `linguagem/` → `texto/`
 | `closures.lep` | função que devolve função |
 | `usa_matematica.lep` | `importe "../lib/matematica"` com e sem namespace |
 
-`lib/matematica.lep` é a biblioteca (`soma`, `media`, `potencia`, …). `lib/tartaruga.lep` é a tartaruga Logo (`ande`, `vire`, `mostre`, `velocidade`), em cima de `tela_grafica`. `velocidade(t, 0.02)` mostra o traço aos poucos.
+`lib/matematica.lep` é a biblioteca (`soma`, `media`, `potencia`, …). `lib/tartaruga.lep` é a tartaruga Logo (`ande`, `vire`, `mostre`, `velocidade`), em cima de `tela_grafica`. `velocidade(t, 0.02)` mostra o traço aos poucos, com um triângulo verde no lugar da tartaruga.
 
 ### `texto/`
 

@@ -3,8 +3,9 @@
 /// Ângulo 0 olha para cima. vire é para a direita (sentido horário).
 /// A origem (casa) fica no centro da tela.
 ///
-/// velocidade(t, segundos) faz cada pedaço do traço aparecer na hora.
-/// 0 desenha tudo de uma vez. Exemplo: velocidade(t, 0.02).
+/// velocidade(t, segundos) faz cada pedaço do traço aparecer na hora,
+/// com um triângulo verde no lugar da tartaruga. 0 desenha tudo de uma vez.
+/// Exemplo: velocidade(t, 0.02).
 
 _mat = importe "mat"
 _tela = importe "tela_grafica"
@@ -30,6 +31,7 @@ inicio
         :cor -> "preto",
         :pausa -> 0,
         :passo -> 8,
+        :marca -> 0,
     ])
 fim
 
@@ -41,6 +43,60 @@ inicio
         segundos = 0
     fim
     t:pausa = segundos
+    se segundos > 0
+    inicio
+        _desenha(t)
+        g = t:tela
+        g._tela::mostre()
+    fim
+    t
+fim
+
+/// Tira o triângulo da lista de traços. O desenho da caneta fica.
+_esconde = função(t)
+inicio
+    se t:marca > 0
+    inicio
+        g = t:tela
+        n = tamanho(g:ops)
+        se n >= t:marca
+        inicio
+            g:ops = remova(g:ops, n - t:marca + 1, n)
+        fim
+        t:marca = 0
+    fim
+    t
+fim
+
+/// Triângulo verde apontando para onde a tartaruga olha.
+_desenha = função(t)
+inicio
+    _esconde(t)
+    g = t:tela
+    a = _mat::radianos(t:angulo)
+    s = _mat::seno(a)
+    c = _mat::cosseno(a)
+    x1 = t:x + 16 * s
+    y1 = t:y - 16 * c
+    x2 = t:x - 9 * s + 8 * c
+    y2 = t:y + 9 * c + 8 * s
+    x3 = t:x - 9 * s - 8 * c
+    y3 = t:y + 9 * c - 8 * s
+    g._tela::cor(:verde)
+    g._tela::linha(x1, y1, x2, y2)
+    g._tela::linha(x2, y2, x3, y3)
+    g._tela::linha(x3, y3, x1, y1)
+    g._tela::cor(t:cor)
+    t:marca = 3
+    t
+fim
+
+_mostra_passo = função(t)
+inicio
+    _desenha(t)
+    g = t:tela
+    g._tela::mostre()
+    durma(t:pausa)
     t
 fim
 
@@ -71,14 +127,7 @@ inicio
     fim
     senao
     inicio
-        se t:baixo == falso
-        inicio
-            _ande(t, n)
-        fim
-        senao
-        inicio
-            _ande_devagar(t, n)
-        fim
+        _ande_devagar(t, n)
     fim
     t
 fim
@@ -104,10 +153,9 @@ inicio
         inicio
             d = falta
         fim
+        _esconde(t)
         _ande(t, d * sinal)
-        g = t:tela
-        g._tela::mostre()
-        durma(t:pausa)
+        _mostra_passo(t)
         falta = falta - d
     fim
     t
@@ -117,6 +165,10 @@ fim
 vire = função(t, graus)
 inicio
     t:angulo = t:angulo + graus
+    se t:pausa > 0
+    inicio
+        _mostra_passo(t)
+    fim
     t
 fim
 
@@ -124,6 +176,10 @@ fim
 vire_esquerda = função(t, graus)
 inicio
     t:angulo = t:angulo - graus
+    se t:pausa > 0
+    inicio
+        _mostra_passo(t)
+    fim
     t
 fim
 
@@ -152,6 +208,10 @@ fim
 olhe = função(t, graus)
 inicio
     t:angulo = graus
+    se t:pausa > 0
+    inicio
+        _mostra_passo(t)
+    fim
     t
 fim
 
@@ -161,6 +221,10 @@ inicio
     t:x = t:largura / 2
     t:y = t:altura / 2
     t:angulo = 0
+    se t:pausa > 0
+    inicio
+        _mostra_passo(t)
+    fim
     t
 fim
 
@@ -169,6 +233,11 @@ apague = função(t)
 inicio
     g = t:tela
     g._tela::apague()
+    t:marca = 0
+    se t:pausa > 0
+    inicio
+        _mostra_passo(t)
+    fim
     t
 fim
 
@@ -183,7 +252,13 @@ fim
 /// Grava um PNG. Caminho relativo ao .lep.
 salve = função(t, caminho)
 inicio
+    tinha = t:marca
+    _esconde(t)
     g = t:tela
     g._tela::salve(caminho)
+    se tinha > 0
+    inicio
+        _desenha(t)
+    fim
     t
 fim
