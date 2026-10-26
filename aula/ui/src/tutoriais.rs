@@ -83,9 +83,14 @@ pub fn mostrar_boas_vindas(parent: &ApplicationWindow, on_done: impl Fn() + 'sta
     tut.add_css_class("suggested-action");
     let comecar = Button::with_label("Começar");
 
-    tut.connect_clicked(|_| {
-        if let Err(e) = spawn_tutorial() {
-            eprintln!("{e}");
+    tut.connect_clicked({
+        let win = win.clone();
+        move |_| {
+            if let Err(e) = spawn_tutorial() {
+                eprintln!("{e}");
+                return;
+            }
+            win.close();
         }
     });
 

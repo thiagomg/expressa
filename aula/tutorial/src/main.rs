@@ -6,6 +6,7 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
 use gtk::gdk;
+use gtk::glib;
 use gtk::pango;
 use gtk::prelude::*;
 use gtk::{
@@ -101,14 +102,13 @@ fn book_page(src: &str) -> gtk::Widget {
     let list = ListBox::new();
     list.set_selection_mode(SelectionMode::Single);
     list.add_css_class("navigation-sidebar");
-    for (i, ch) in chapters.iter().enumerate() {
+    for ch in chapters.iter() {
         let lab = Label::new(Some(&ch.title));
         lab.set_xalign(0.0);
         lab.set_wrap(true);
         lab.set_wrap_mode(pango::WrapMode::WordChar);
         let row = ListBoxRow::new();
         row.set_child(Some(&lab));
-        row.set_widget_name(&i.to_string());
         list.append(&row);
     }
 
@@ -140,23 +140,39 @@ fn book_page(src: &str) -> gtk::Widget {
 
     let marks = Rc::new(marks);
     let chapters_idx: Vec<usize> = chapters.iter().map(|c| c.index).collect();
-    list.connect_row_selected({
-        let buffer = buffer.clone();
+    list.set_activate_on_single_click(true);
+    let ir = Rc::new({
         let view = view.clone();
         let marks = Rc::clone(&marks);
+        let chapters_idx = chapters_idx.clone();
+        move |row: &ListBoxRow| {
+            let i = row.index();
+            if i < 0 {
+                return;
+            }
+            let Some(&block_i) = chapters_idx.get(i as usize) else {
+                return;
+            };
+            let Some(mark) = marks.get(block_i).cloned() else {
+                return;
+            };
+            let view = view.clone();
+            glib::idle_add_local_once(move || {
+                view.scroll_to_mark(&mark, 0.0, true, 0.0, 0.0);
+            });
+        }
+    });
+    list.connect_row_selected({
+        let ir = Rc::clone(&ir);
         move |_, row| {
-            let Some(row) = row else { return };
-            let Ok(i) = row.widget_name().parse::<usize>() else {
-                return;
-            };
-            let Some(&block_i) = chapters_idx.get(i) else {
-                return;
-            };
-            if let Some(mark) = marks.get(block_i) {
-                let iter = buffer.iter_at_mark(mark);
-                view.scroll_to_iter(&mut iter.clone(), 0.0, true, 0.0, 0.0);
+            if let Some(row) = row {
+                ir(row);
             }
         }
+    });
+    list.connect_row_activated({
+        let ir = Rc::clone(&ir);
+        move |_, row| ir(row)
     });
 
     let paned = Paned::new(Orientation::Horizontal);
