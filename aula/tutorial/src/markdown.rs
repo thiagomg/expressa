@@ -39,6 +39,13 @@ pub fn chapters(blocks: &[Block]) -> Vec<Chapter> {
         .collect()
 }
 
+/// Blocks of chapter `i`, until the next chapter (or the end).
+pub fn chapter_span(chapters: &[Chapter], i: usize, nblocks: usize) -> std::ops::Range<usize> {
+    let start = chapters.get(i).map(|c| c.index).unwrap_or(0);
+    let end = chapters.get(i + 1).map(|c| c.index).unwrap_or(nblocks);
+    start.min(nblocks)..end.min(nblocks)
+}
+
 pub fn parse(src: &str) -> Vec<Block> {
     let mut out = Vec::new();
     let lines: Vec<&str> = src.lines().collect();
@@ -309,5 +316,18 @@ mod tests {
         assert!(chapters(&a).len() >= 8);
         assert!(chapters(&b).len() >= 8);
         assert!(a.iter().any(|x| matches!(x, Block::Code { .. })));
+    }
+
+    #[test]
+    fn chapter_span_cuts_at_next_heading() {
+        let b = parse("# A\n\ntexto\n\n## B\n\nmais\n");
+        let ch = chapters(&b);
+        assert_eq!(ch.len(), 2);
+        let a = chapter_span(&ch, 0, b.len());
+        let c = chapter_span(&ch, 1, b.len());
+        assert!(a.end <= c.start);
+        assert!(matches!(&b[a.start], Block::Heading { text, .. } if text == "A"));
+        assert!(matches!(&b[c.start], Block::Heading { text, .. } if text == "B"));
+        assert!(!c.is_empty());
     }
 }

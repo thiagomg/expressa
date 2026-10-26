@@ -6,7 +6,6 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
 use gtk::gdk;
-use gtk::glib;
 use gtk::pango;
 use gtk::prelude::*;
 use gtk::{
@@ -21,7 +20,10 @@ const BASICO: &str = include_str!("../../../tutorial/basico.md");
 const AVANCADO: &str = include_str!("../../../tutorial/avancado.md");
 
 fn main() {
-    let app = Application::builder().application_id(APP_ID).build();
+    let app = Application::builder()
+        .application_id(APP_ID)
+        .flags(gtk::gio::ApplicationFlags::NON_UNIQUE)
+        .build();
     app.connect_activate(build_ui);
     app.run();
 }
@@ -41,11 +43,15 @@ fn build_ui(app: &Application) {
     ];
 
     let outer = GtkBox::new(Orientation::Vertical, 0);
+    outer.set_hexpand(true);
+    outer.set_vexpand(true);
     let tabs = gtk::Notebook::new();
     tabs.set_hexpand(true);
     tabs.set_vexpand(true);
     for (title, src) in books {
         let page = book_page(&src);
+        page.set_hexpand(true);
+        page.set_vexpand(true);
         let lab = Label::new(Some(title));
         tabs.append_page(&page, Some(&lab));
     }
@@ -96,12 +102,14 @@ fn tutorial_dir() -> Option<PathBuf> {
 }
 
 fn book_page(src: &str) -> gtk::Widget {
-    let blocks = markdown::parse(src);
+    let blocks = Rc::new(markdown::parse(src));
     let chapters = markdown::chapters(&blocks);
 
     let list = ListBox::new();
     list.set_selection_mode(SelectionMode::Single);
+    list.set_activate_on_single_click(true);
     list.add_css_class("navigation-sidebar");
+    list.set_vexpand(true);
     for ch in chapters.iter() {
         let lab = Label::new(Some(&ch.title));
         lab.set_xalign(0.0);
@@ -114,13 +122,14 @@ fn book_page(src: &str) -> gtk::Widget {
 
     let list_scroll = ScrolledWindow::builder()
         .hscrollbar_policy(PolicyType::Never)
-        .min_content_width(200)
+        .vscrollbar_policy(PolicyType::Automatic)
+        .min_content_width(220)
+        .vexpand(true)
         .child(&list)
         .build();
 
     let buffer = TextBuffer::new(None);
     install_tags(&buffer);
-    let marks = fill_buffer(&buffer, &blocks);
 
     let view = TextView::with_buffer(&buffer);
     view.set_editable(false);
@@ -130,57 +139,66 @@ fn book_page(src: &str) -> gtk::Widget {
     view.set_right_margin(18);
     view.set_top_margin(14);
     view.set_bottom_margin(24);
+    view.set_hexpand(true);
+    view.set_vexpand(true);
     view.add_css_class("tutorial-body");
     let body = ScrolledWindow::builder()
         .hscrollbar_policy(PolicyType::Never)
+        .vscrollbar_policy(PolicyType::Automatic)
         .vexpand(true)
         .hexpand(true)
         .child(&view)
         .build();
 
-    let marks = Rc::new(marks);
-    let chapters_idx: Vec<usize> = chapters.iter().map(|c| c.index).collect();
-    list.set_activate_on_single_click(true);
-    let ir = Rc::new({
-        let view = view.clone();
-        let marks = Rc::clone(&marks);
-        let chapters_idx = chapters_idx.clone();
-        move |row: &ListBoxRow| {
-            let i = row.index();
-            if i < 0 {
-                return;
-            }
-            let Some(&block_i) = chapters_idx.get(i as usize) else {
-                return;
+    let chapters = Rc::new(chapters);
+    let show = {
+        let buffer = buffer.clone();
+        let blocks = Rc::clone(&blocks);
+        let chapters = Rc::clone(&chapters);
+        move |i: usize| {
+            let span = markdown::chapter_span(&chapters, i, blocks.len());
+            let slice = if span.is_empty() {
+                blocks.as_slice()
+            } else {
+                &blocks[span]
             };
-            let Some(mark) = marks.get(block_i).cloned() else {
-                return;
-            };
-            let view = view.clone();
-            glib::idle_add_local_once(move || {
-                view.scroll_to_mark(&mark, 0.0, true, 0.0, 0.0);
-            });
+            buffer.set_text("");
+            fill_buffer(&buffer, slice);
         }
-    });
+    };
+    show(0);
     list.connect_row_selected({
-        let ir = Rc::clone(&ir);
+        let show = show.clone();
         move |_, row| {
-            if let Some(row) = row {
-                ir(row);
+            let Some(row) = row else { return };
+            let i = row.index();
+            if i >= 0 {
+                show(i as usize);
             }
         }
     });
     list.connect_row_activated({
-        let ir = Rc::clone(&ir);
-        move |_, row| ir(row)
+        let show = show.clone();
+        move |_, row| {
+            let i = row.index();
+            if i >= 0 {
+                show(i as usize);
+            }
+        }
     });
+    if let Some(row) = list.row_at_index(0) {
+        list.select_row(Some(&row));
+    }
 
     let paned = Paned::new(Orientation::Horizontal);
+    paned.set_hexpand(true);
+    paned.set_vexpand(true);
     paned.set_start_child(Some(&list_scroll));
     paned.set_end_child(Some(&body));
     paned.set_resize_start_child(false);
-    paned.set_shrink_start_child(false);
-    paned.set_position(240);
+    paned.set_shrink_start_child(true);
+    paned.set_resize_end_child(true);
+    paned.set_position(260);
     paned.upcast()
 }
 
@@ -239,12 +257,8 @@ fn install_tags(buffer: &TextBuffer) {
     });
 }
 
-fn fill_buffer(buffer: &TextBuffer, blocks: &[Block]) -> Vec<gtk::TextMark> {
-    let mut marks = Vec::with_capacity(blocks.len());
-    for (i, block) in blocks.iter().enumerate() {
-        let start = buffer.end_iter();
-        let mark = buffer.create_mark(Some(&format!("b{i}")), &start, true);
-        marks.push(mark);
+fn fill_buffer(buffer: &TextBuffer, blocks: &[Block]) {
+    for block in blocks {
         match block {
             Block::Heading { level, text } => {
                 let tag = match level {
@@ -260,16 +274,18 @@ fn fill_buffer(buffer: &TextBuffer, blocks: &[Block]) -> Vec<gtk::TextMark> {
                 buffer.insert(&mut buffer.end_iter(), "\n\n");
             }
             Block::Quote(xs) => {
-                let a = buffer.end_iter();
+                let start = buffer.end_iter().offset();
                 insert_inlines(buffer, xs);
-                let mut b = buffer.end_iter();
+                let a = buffer.iter_at_offset(start);
+                let b = buffer.end_iter();
                 buffer.apply_tag_by_name("quote", &a, &b);
-                buffer.insert(&mut b, "\n\n");
+                buffer.insert(&mut buffer.end_iter(), "\n\n");
             }
             Block::Code { text, .. } => {
-                let a = buffer.end_iter();
+                let start = buffer.end_iter().offset();
                 buffer.insert(&mut buffer.end_iter(), text);
                 buffer.insert(&mut buffer.end_iter(), "\n");
+                let a = buffer.iter_at_offset(start);
                 let b = buffer.end_iter();
                 buffer.apply_tag_by_name("codeblock", &a, &b);
                 buffer.insert(&mut buffer.end_iter(), "\n");
@@ -307,12 +323,12 @@ fn fill_buffer(buffer: &TextBuffer, blocks: &[Block]) -> Vec<gtk::TextMark> {
             }
         }
     }
-    marks
 }
 
 fn insert_tagged(buffer: &TextBuffer, text: &str, tag: &str) {
-    let a = buffer.end_iter();
+    let start = buffer.end_iter().offset();
     buffer.insert(&mut buffer.end_iter(), text);
+    let a = buffer.iter_at_offset(start);
     let b = buffer.end_iter();
     buffer.apply_tag_by_name(tag, &a, &b);
 }
@@ -332,10 +348,15 @@ fn install_css() {
     let css = CssProvider::new();
     css.load_from_data(
         r#"
-window { background: #fafafa; }
-textview.tutorial-body {
+window {
+    background: #fafafa;
+    color: #222;
+}
+textview.tutorial-body,
+textview.tutorial-body text {
     font-size: 12pt;
     background: #fafafa;
+    color: #222;
 }
         "#,
     );
