@@ -181,6 +181,12 @@
       <keyword>adicione_arquivo</keyword>
       <keyword>leia_csv</keyword>
       <keyword>salve_csv</keyword>
+      <keyword>imagem</keyword>
+      <keyword>carregue</keyword>
+      <keyword>rotacione</keyword>
+      <keyword>escala</keyword>
+      <keyword>largura</keyword>
+      <keyword>altura</keyword>
       <keyword>documento</keyword>
       <keyword>grafico</keyword>
       <keyword>eixos</keyword>

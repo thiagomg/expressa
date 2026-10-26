@@ -26,9 +26,9 @@ Todo bloco (`inicio`/`fim` ou `{`/`}`) é uma expressão e retorna o valor da ú
 | `texto`  | `"olá"`, `"123"`                  |
 | `bool`   | `verdadeiro`, `falso`             |
 
-Tipos compostos: **lista**, **par**, **mapa**, **conjunto** e **matriz**.
+Tipos compostos: **lista**, **par**, **mapa**, **conjunto**, **matriz** e **imagem**.
 
-`tipo(valor)` devolve o nome do tipo como texto (`"numero"`, `"texto"`, `"bool"`, `"lista"`, `"par"`, `"mapa"`, `"conjunto"`, `"matriz"`, `"funcao"`, `"modulo"`, `"nada"`). Os nomes são os mesmos das mensagens de erro (sem acento). `escreva` e funções do aluno são `"funcao"`. `tipos()` lista esses nomes.
+`tipo(valor)` devolve o nome do tipo como texto (`"numero"`, `"texto"`, `"bool"`, `"lista"`, `"par"`, `"mapa"`, `"conjunto"`, `"matriz"`, `"imagem"`, `"funcao"`, `"modulo"`, `"nada"`). Os nomes são os mesmos das mensagens de erro (sem acento). `escreva` e funções do aluno são `"funcao"`. `tipos()` lista esses nomes.
 
 ---
 
@@ -401,7 +401,9 @@ Com `importe "tela"`: `cls()` (também `limpe_tela()`) limpa a tela; `casa()` ma
 
 Com `importe "cartesiano"`: `documento()` é a identidade da janela (um mapa `:graficos`). `grafico()` é um plano xy (`:xmin`… e `:curvas`). `eixos(g, xmin, xmax, ymin, ymax)` grava os limites (y para cima). `plotar(g, função, cor)` amostra ~400 pontos de xmin a xmax; y não finito vira um furo na linha. Cores: as da `tela`. `adicione(c, g)` copia o gráfico para a folha (congela). `mostre(c)` abre ou atualiza a janela daquele documento e traz o foco; não espera fechar. Folha vazia é erro. Dois `documento()` são duas janelas. `tipo(g)` continua `"mapa"`. Sem display, `mostre` falha (`se_falhar`). O CLI abre `expressa-grafico` (ou `expressa --grafico`). Na Aula o painel Gráficos (Destacar vira janela irmã).
 
-Com `importe "tela_grafica"`: `nova(largura, altura)` é uma tela de pixels (mapa `:largura`, `:altura`, `:cor`, `:fundo`, `:ops`). Origem no canto superior esquerdo, y para baixo, (0,0) no primeiro pixel. Inteiros 1…2048. `cor`, `linha`, `circulo`, `ponto`, `apague` acumulam ou limpam comandos. `pixel(g, x, y)` devolve o nome da cor (fora da tela é erro). `salve(g, "a.png")` grava PNG sem janela. `mostre(g)` abre ou atualiza a janela daquela instância (não acopla na Aula). Cada `nova()` é uma janela. `tipo(g)` continua `"mapa"`. Cores: as da `tela`.
+Com `importe "tela_grafica"`: `nova(largura, altura)` é uma tela de pixels (mapa `:largura`, `:altura`, `:cor`, `:fundo`, `:ops`). Origem no canto superior esquerdo, y para baixo, (0,0) no primeiro pixel. Inteiros 1…2048. `cor`, `linha`, `circulo`, `ponto`, `apague` acumulam ou limpam comandos. `imagem(g, caminho|img, x, y, angulo)` carimba pixels (o PNG é lido uma vez). `pixel(g, x, y)` devolve o nome da cor (fora da tela é erro). `salve(g, "a.png")` grava PNG sem janela. `mostre(g)` abre ou atualiza a janela daquela instância (não acopla na Aula). Cada `nova()` é uma janela. `tipo(g)` continua `"mapa"`. Cores: as da `tela`.
+
+Com `importe "imagem"`: `carregue("a.png")` lê um PNG e devolve um valor `tipo` `"imagem"` (pixels em memória, até 2048×2048). `salve(img, "b.png")` grava PNG com transparência. `rotacione(img, graus)` gira no sentido horário e devolve uma imagem nova (90/180/270 são exatos). `escala(img, fator)` ou `escala(img, fx, fy)` redimensiona (vizinho mais próximo). `largura(img)` e `altura(img)` são o tamanho em pixels.
 
 ```text
 se nome == ""

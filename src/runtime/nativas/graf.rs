@@ -4,10 +4,9 @@ use std::rc::Rc;
 use crate::lexer::Span;
 use crate::runtime::error::EvalError;
 use crate::runtime::eval::Vm;
-use crate::runtime::graf::{
-    ALTURA_MAX, LARGURA_MAX, OpGraf, TelaGrafica, cor_graf_conhecida,
-};
+use crate::runtime::graf::{ALTURA_MAX, LARGURA_MAX, OpGraf, TelaGrafica, cor_graf_conhecida};
 use crate::runtime::graf_host::GrafHost;
+use crate::runtime::imagem::{self, Imagem};
 use crate::runtime::value::{MapKey, Value};
 
 impl Vm<'_, '_> {
@@ -16,7 +15,10 @@ impl Vm<'_, '_> {
         let largura = self.expect_graf_dim(&args[0], "largura", span)?;
         let altura = self.expect_graf_dim(&args[1], "altura", span)?;
         Ok(Value::mapa(vec![
-            (MapKey::Texto("largura".into()), Value::Numero(largura.into())),
+            (
+                MapKey::Texto("largura".into()),
+                Value::Numero(largura.into()),
+            ),
             (MapKey::Texto("altura".into()), Value::Numero(altura.into())),
             (MapKey::Texto("cor".into()), Value::Texto("preto".into())),
             (MapKey::Texto("fundo".into()), Value::Texto("branco".into())),
@@ -45,10 +47,22 @@ impl Vm<'_, '_> {
             &mapa,
             Value::mapa(vec![
                 (MapKey::Texto("tipo".into()), Value::Texto("linha".into())),
-                (MapKey::Texto("x1".into()), Value::Numero((x1 as f64).into())),
-                (MapKey::Texto("y1".into()), Value::Numero((y1 as f64).into())),
-                (MapKey::Texto("x2".into()), Value::Numero((x2 as f64).into())),
-                (MapKey::Texto("y2".into()), Value::Numero((y2 as f64).into())),
+                (
+                    MapKey::Texto("x1".into()),
+                    Value::Numero((x1 as f64).into()),
+                ),
+                (
+                    MapKey::Texto("y1".into()),
+                    Value::Numero((y1 as f64).into()),
+                ),
+                (
+                    MapKey::Texto("x2".into()),
+                    Value::Numero((x2 as f64).into()),
+                ),
+                (
+                    MapKey::Texto("y2".into()),
+                    Value::Numero((y2 as f64).into()),
+                ),
                 (MapKey::Texto("cor".into()), Value::Texto(cor)),
             ]),
         );
@@ -105,30 +119,29 @@ impl Vm<'_, '_> {
         args: &[Value],
         span: Span,
     ) -> Result<Value, EvalError> {
-        self.expect_arity(args, 5, span)?;
+        if args.len() != 4 && args.len() != 5 {
+            return Err(self.err(
+                format!("esperado 4 ou 5 argumento(s), recebeu {}", args.len()),
+                span,
+            ));
+        }
         let mapa = expect_graf(&args[0], span, self)?;
-        let caminho = self.expect_texto(&args[1], span)?;
+        let figura = figura_de(&args[1], span, self)?;
         let x = self.expect_px(&args[2], span)?;
         let y = self.expect_px(&args[3], span)?;
-        let angulo = self.expect_f64(&args[4], span)?;
+        let angulo = if args.len() == 5 {
+            self.expect_f64(&args[4], span)?
+        } else {
+            0.0
+        };
         if !angulo.is_finite() {
             return Err(self.err("ângulo da imagem deve ser um número finito", span));
         }
-        let path = self.resolve_data_path(&caminho, span)?;
-        crate::runtime::graf::png_rgba(&path).map_err(|e| {
-            self.err(
-                format!("não foi possível ler '{}': {e}", path.display()),
-                span,
-            )
-        })?;
         push_op(
             &mapa,
             Value::mapa(vec![
                 (MapKey::Texto("tipo".into()), Value::Texto("imagem".into())),
-                (
-                    MapKey::Texto("caminho".into()),
-                    Value::Texto(path.display().to_string()),
-                ),
+                (MapKey::Texto("figura".into()), Value::Imagem(figura)),
                 (MapKey::Texto("x".into()), Value::Numero((x as f64).into())),
                 (MapKey::Texto("y".into()), Value::Numero((y as f64).into())),
                 (MapKey::Texto("angulo".into()), Value::Numero(angulo.into())),
@@ -182,15 +195,17 @@ impl Vm<'_, '_> {
         Ok(args[0].clone())
     }
 
-    pub(crate) fn bi_graf_mostre(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
+    pub(crate) fn bi_graf_mostre(
+        &mut self,
+        args: &[Value],
+        span: Span,
+    ) -> Result<Value, EvalError> {
         self.expect_arity(args, 1, span)?;
         let tela = tela_de(&args[0], span, self)?;
         if let Some(host) = self.graf_host.as_mut() {
             host.mostre(tela).map_err(|e| self.err(e, span))?;
         } else if self.abrir_cartesiano {
-            self.cli_graf
-                .mostre(tela)
-                .map_err(|e| self.err(e, span))?;
+            self.cli_graf.mostre(tela).map_err(|e| self.err(e, span))?;
         }
         Ok(args[0].clone())
     }
@@ -198,10 +213,7 @@ impl Vm<'_, '_> {
     fn expect_graf_dim(&self, v: &Value, nome: &str, span: Span) -> Result<u32, EvalError> {
         let n = self.expect_f64(v, span)?;
         if !n.is_finite() || n < 1.0 || n.fract() != 0.0 {
-            return Err(self.err(
-                format!("{nome} deve ser um inteiro ≥ 1"),
-                span,
-            ));
+            return Err(self.err(format!("{nome} deve ser um inteiro ≥ 1"), span));
         }
         let n = n as u32;
         let max = if nome == "largura" {
@@ -238,15 +250,9 @@ fn expect_graf(
 ) -> Result<Rc<RefCell<Vec<(MapKey, Value)>>>, EvalError> {
     match v {
         Value::Mapa(xs) if is_graf(v) => Ok(Rc::clone(xs)),
-        Value::Mapa(_) => Err(vm.err(
-            "não é uma tela gráfica (tela_grafica::nova())",
-            span,
-        )),
+        Value::Mapa(_) => Err(vm.err("não é uma tela gráfica (tela_grafica::nova())", span)),
         other => Err(vm.err(
-            format!(
-                "esperada tela gráfica, encontrado {}",
-                other.type_name()
-            ),
+            format!("esperada tela gráfica, encontrado {}", other.type_name()),
             span,
         )),
     }
@@ -257,8 +263,10 @@ fn tela_de(v: &Value, span: Span, vm: &Vm<'_, '_>) -> Result<TelaGrafica, EvalEr
     let Value::Mapa(xs) = v else {
         unreachable!();
     };
-    let largura = get_u32(&mapa, "largura").ok_or_else(|| vm.err("tela gráfica sem :largura", span))?;
-    let altura = get_u32(&mapa, "altura").ok_or_else(|| vm.err("tela gráfica sem :altura", span))?;
+    let largura =
+        get_u32(&mapa, "largura").ok_or_else(|| vm.err("tela gráfica sem :largura", span))?;
+    let altura =
+        get_u32(&mapa, "altura").ok_or_else(|| vm.err("tela gráfica sem :altura", span))?;
     let fundo = get_texto(&mapa, "fundo").unwrap_or_else(|| "branco".into());
     let ops_v = get_lista(&mapa, "ops").ok_or_else(|| vm.err("tela gráfica sem :ops", span))?;
     let mut ops = Vec::new();
@@ -302,13 +310,20 @@ fn op_de(v: &Value, span: Span, vm: &Vm<'_, '_>) -> Result<OpGraf, EvalError> {
             r: get_i32(xs, "r").unwrap_or(0),
             cor,
         }),
-        "imagem" => Ok(OpGraf::Imagem {
-            x: get_i32(xs, "x").unwrap_or(0),
-            y: get_i32(xs, "y").unwrap_or(0),
-            angulo: get_f64(xs, "angulo").unwrap_or(0.0),
-            caminho: get_texto(xs, "caminho").unwrap_or_default(),
-        }),
-        other => Err(vm.err(format!("comando de tela gráfica desconhecido ({other})"), span)),
+        "imagem" => {
+            let figura = get_imagem(xs, "figura")
+                .ok_or_else(|| vm.err("comando de imagem sem :figura", span))?;
+            Ok(OpGraf::Imagem {
+                x: get_i32(xs, "x").unwrap_or(0),
+                y: get_i32(xs, "y").unwrap_or(0),
+                angulo: get_f64(xs, "angulo").unwrap_or(0.0),
+                figura,
+            })
+        }
+        other => Err(vm.err(
+            format!("comando de tela gráfica desconhecido ({other})"),
+            span,
+        )),
     }
 }
 
@@ -345,15 +360,60 @@ fn get_lista(
     chave: &str,
 ) -> Option<Rc<RefCell<Vec<Value>>>> {
     let k = MapKey::Texto(chave.into());
-    match mapa.borrow().iter().find(|(kk, _)| *kk == k).map(|(_, v)| v) {
+    match mapa
+        .borrow()
+        .iter()
+        .find(|(kk, _)| *kk == k)
+        .map(|(_, v)| v)
+    {
         Some(Value::Lista(xs)) => Some(Rc::clone(xs)),
+        _ => None,
+    }
+}
+
+fn figura_de(v: &Value, span: Span, vm: &Vm<'_, '_>) -> Result<Imagem, EvalError> {
+    match v {
+        Value::Imagem(img) => Ok(img.clone()),
+        Value::Texto(caminho) => {
+            let path = vm.resolve_data_path(caminho, span)?;
+            imagem::leia_png(&path).map_err(|e| {
+                vm.err(
+                    format!("não foi possível ler '{}': {e}", path.display()),
+                    span,
+                )
+            })
+        }
+        other => Err(vm.err(
+            format!(
+                "imagem espera um caminho ou uma imagem, encontrado {}",
+                other.type_name()
+            ),
+            span,
+        )),
+    }
+}
+
+fn get_imagem(mapa: &Rc<RefCell<Vec<(MapKey, Value)>>>, chave: &str) -> Option<Imagem> {
+    let k = MapKey::Texto(chave.into());
+    match mapa
+        .borrow()
+        .iter()
+        .find(|(kk, _)| *kk == k)
+        .map(|(_, v)| v)
+    {
+        Some(Value::Imagem(img)) => Some(img.clone()),
         _ => None,
     }
 }
 
 fn get_texto(mapa: &Rc<RefCell<Vec<(MapKey, Value)>>>, chave: &str) -> Option<String> {
     let k = MapKey::Texto(chave.into());
-    match mapa.borrow().iter().find(|(kk, _)| *kk == k).map(|(_, v)| v) {
+    match mapa
+        .borrow()
+        .iter()
+        .find(|(kk, _)| *kk == k)
+        .map(|(_, v)| v)
+    {
         Some(Value::Texto(s)) => Some(s.clone()),
         _ => None,
     }
@@ -361,7 +421,12 @@ fn get_texto(mapa: &Rc<RefCell<Vec<(MapKey, Value)>>>, chave: &str) -> Option<St
 
 fn get_u32(mapa: &Rc<RefCell<Vec<(MapKey, Value)>>>, chave: &str) -> Option<u32> {
     let k = MapKey::Texto(chave.into());
-    match mapa.borrow().iter().find(|(kk, _)| *kk == k).map(|(_, v)| v) {
+    match mapa
+        .borrow()
+        .iter()
+        .find(|(kk, _)| *kk == k)
+        .map(|(_, v)| v)
+    {
         Some(Value::Numero(n)) => {
             let f = n.to_f64();
             if f.is_finite() && f >= 1.0 {
@@ -376,7 +441,12 @@ fn get_u32(mapa: &Rc<RefCell<Vec<(MapKey, Value)>>>, chave: &str) -> Option<u32>
 
 fn get_f64(mapa: &Rc<RefCell<Vec<(MapKey, Value)>>>, chave: &str) -> Option<f64> {
     let k = MapKey::Texto(chave.into());
-    match mapa.borrow().iter().find(|(kk, _)| *kk == k).map(|(_, v)| v) {
+    match mapa
+        .borrow()
+        .iter()
+        .find(|(kk, _)| *kk == k)
+        .map(|(_, v)| v)
+    {
         Some(Value::Numero(n)) => {
             let f = n.to_f64();
             f.is_finite().then_some(f)
@@ -387,7 +457,12 @@ fn get_f64(mapa: &Rc<RefCell<Vec<(MapKey, Value)>>>, chave: &str) -> Option<f64>
 
 fn get_i32(mapa: &Rc<RefCell<Vec<(MapKey, Value)>>>, chave: &str) -> Option<i32> {
     let k = MapKey::Texto(chave.into());
-    match mapa.borrow().iter().find(|(kk, _)| *kk == k).map(|(_, v)| v) {
+    match mapa
+        .borrow()
+        .iter()
+        .find(|(kk, _)| *kk == k)
+        .map(|(_, v)| v)
+    {
         Some(Value::Numero(n)) => {
             let f = n.to_f64();
             if f.is_finite() {
@@ -411,9 +486,9 @@ fn set_texto(entries: &mut Vec<(MapKey, Value)>, chave: &str, s: String) {
 
 #[cfg(test)]
 mod tests {
+    use crate::runtime::NoopHook;
     use crate::runtime::eval::{run_to_string, run_with_io};
     use crate::runtime::graf_host::CapturaGraf;
-    use crate::runtime::NoopHook;
 
     fn run(src: &str) -> String {
         let src = format!("importe \"tela_grafica\"\n{src}");
@@ -431,21 +506,18 @@ mod tests {
     #[test]
     fn nova_e_mapa_e_pixel_do_fundo() {
         assert_eq!(
-            run(
-                r#"
+            run(r#"
 g = nova(16, 16)
 escreva(tipo(g))
 escreva(g.pixel(0, 0))
-"#
-            ),
+"#),
             "mapa\nbranco\n"
         );
     }
 
     #[test]
     fn linha_e_pixel_e_limpe() {
-        let out = run(
-            r#"
+        let out = run(r#"
 g = nova(16, 16)
 g.cor(:azul)
 g.linha(0, 0, 15, 15)
@@ -453,8 +525,7 @@ escreva(g.pixel(0, 0))
 escreva(g.pixel(15, 0))
 g.apague()
 escreva(g.pixel(0, 0))
-"#,
-        );
+"#);
         assert_eq!(out, "azul\nbranco\nbranco\n");
     }
 
@@ -546,6 +617,53 @@ b.mostre()
         run_to_string(&src, dir.join("t.lep").to_str().unwrap()).unwrap();
         let bytes = std::fs::read(&path).expect("png");
         assert!(bytes.starts_with(&[0x89, b'P', b'N', b'G']));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn imagem_guarda_pixels_e_nao_rele_o_arquivo() {
+        let dir = std::env::temp_dir().join(format!("expressa-graf-img-{}", std::process::id()));
+        let _ = std::fs::create_dir_all(&dir);
+        let mut raw = vec![0u8; 3 * 3 * 4];
+        raw[1 * 4] = 255;
+        raw[1 * 4 + 3] = 255;
+        let mut bytes = Vec::new();
+        {
+            let mut enc = png::Encoder::new(&mut bytes, 3, 3);
+            enc.set_color(png::ColorType::Rgba);
+            enc.set_depth(png::BitDepth::Eight);
+            enc.write_header().unwrap().write_image_data(&raw).unwrap();
+        }
+        std::fs::write(dir.join("sprite.png"), &bytes).unwrap();
+        let src = r#"
+importe "tela_grafica"
+g = nova(16, 16)
+g.imagem("sprite.png", 8, 8, 0)
+g.mostre()
+"#;
+        let mut cap = CapturaGraf::default();
+        let mut input = std::io::Cursor::new(String::new());
+        let mut out = Vec::new();
+        let mut err = Vec::new();
+        run_with_io(
+            src,
+            dir.join("t.lep").to_str().unwrap(),
+            Box::new(NoopHook),
+            &mut input,
+            &mut out,
+            &mut err,
+            None,
+            None,
+            None,
+            None,
+            false,
+            Some(&mut cap),
+            &[],
+        )
+        .unwrap();
+        std::fs::remove_file(dir.join("sprite.png")).unwrap();
+        let rgb = cap.telas[0].rgb32();
+        assert_eq!(rgb[(7 * 16 + 8) as usize], 0x00FF0000);
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

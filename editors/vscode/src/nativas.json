@@ -46,6 +46,7 @@
   "modules": [
     "arquivo",
     "cartesiano",
+    "imagem",
     "mat",
     "matriz",
     "tela",
@@ -206,7 +207,7 @@
         "tipo(valor)"
       ],
       "summary": "Quantidade de caracteres, itens, pares ou linhas.",
-      "doc": "Quantidade de caracteres, itens, pares ou linhas.\n\nNome do tipo do valor: numero, texto, bool, lista, par, mapa,\nconjunto, matriz, funcao, modulo ou nada.\n\nServe para uma função aceitar mais de um tipo (se tipo(x) == \"numero\").\nOs nomes são os mesmos das mensagens de erro (sem acento).\n\nExemplo: tipo(10)"
+      "doc": "Quantidade de caracteres, itens, pares ou linhas.\n\nNome do tipo do valor: numero, texto, bool, lista, par, mapa,\nconjunto, matriz, imagem, funcao, modulo ou nada.\n\nServe para uma função aceitar mais de um tipo (se tipo(x) == \"numero\").\nOs nomes são os mesmos das mensagens de erro (sem acento).\n\nExemplo: tipo(10)"
     },
     {
       "name": "tipos",
@@ -1007,10 +1008,12 @@
       "module": "tela_grafica",
       "kind": "funcao",
       "signatures": [
-        "imagem(g, caminho, x, y, angulo)"
+        "imagem(g, caminho, x, y, angulo)",
+        "imagem(g, img, x, y, angulo)",
+        "imagem(g, img, x, y)"
       ],
-      "summary": "Carimba um PNG (até 256×256) centrado em (x, y). angulo é em graus, no sentido horário; 0 deixa o topo da imagem para cima. Pixels transparentes não cobrem o desenho.",
-      "doc": "Carimba um PNG (até 256×256) centrado em (x, y).\nangulo é em graus, no sentido horário; 0 deixa o topo da imagem para cima.\nPixels transparentes não cobrem o desenho.\n\nExemplo: g.imagem(\"tartaruga.png\", 160, 100, 0)"
+      "summary": "Carimba uma imagem centrada em (x, y). O segundo argumento é um caminho PNG ou um valor de `importe \"imagem\"`. O arquivo é lido uma vez; os pixels ficam no comando. angulo é em graus, no sentido horário; 0 deixa o topo para cima. Pixels transparentes não cobrem o desenho.",
+      "doc": "Carimba uma imagem centrada em (x, y). O segundo argumento é um caminho\nPNG ou um valor de `importe \"imagem\"`. O arquivo é lido uma vez; os\npixels ficam no comando. angulo é em graus, no sentido horário; 0 deixa\no topo para cima. Pixels transparentes não cobrem o desenho.\n\nExemplo: g.imagem(img, 160, 100, 90)"
     },
     {
       "name": "apague",
@@ -1040,7 +1043,8 @@
       "module": "tela_grafica",
       "kind": "funcao",
       "signatures": [
-        "salve(g, caminho)"
+        "salve(g, caminho)",
+        "salve(img, caminho)"
       ],
       "summary": "Grava um PNG. Não precisa de janela. Caminho relativo ao .lep.",
       "doc": "Grava um PNG. Não precisa de janela. Caminho relativo ao .lep.\n\nExemplo: g.salve(\"casa.png\")"
@@ -1056,6 +1060,74 @@
       ],
       "summary": "Abre ou atualiza a janela deste documento e devolve o foco. Não espera fechar.",
       "doc": "Abre ou atualiza a janela deste documento e devolve o foco. Não espera fechar.\n\nO primeiro mostre abre; os seguintes só atualizam a mesma janela. Folha vazia é erro.\n\nExemplo: c.mostre()"
+    },
+    {
+      "name": "carregue",
+      "aliases": [],
+      "module": "imagem",
+      "kind": "funcao",
+      "signatures": [
+        "carregue(caminho)"
+      ],
+      "summary": "Lê um PNG (até 2048×2048). Devolve um valor do tipo imagem, em memória.",
+      "doc": "Lê um PNG (até 2048×2048). Devolve um valor do tipo imagem, em memória.\n\nCaminho relativo ao .lep. Pixels transparentes são preservados.\n\nExemplo: img = carregue(\"tartaruga.png\")"
+    },
+    {
+      "name": "salve",
+      "aliases": [],
+      "module": "imagem",
+      "kind": "funcao",
+      "signatures": [
+        "salve(g, caminho)",
+        "salve(img, caminho)"
+      ],
+      "summary": "Grava um PNG. Não precisa de janela. Caminho relativo ao .lep.",
+      "doc": "Grava um PNG. Não precisa de janela. Caminho relativo ao .lep.\n\nExemplo: g.salve(\"casa.png\")"
+    },
+    {
+      "name": "rotacione",
+      "aliases": [],
+      "module": "imagem",
+      "kind": "funcao",
+      "signatures": [
+        "rotacione(img, graus)"
+      ],
+      "summary": "Gira no sentido horário, em graus. 0 deixa o topo apontando para cima. 90, 180 e 270 são exatos. Devolve uma imagem nova; a original não muda.",
+      "doc": "Gira no sentido horário, em graus. 0 deixa o topo apontando para cima.\n90, 180 e 270 são exatos. Devolve uma imagem nova; a original não muda.\n\nExemplo: r = rotacione(img, 90)"
+    },
+    {
+      "name": "escala",
+      "aliases": [],
+      "module": "imagem",
+      "kind": "funcao",
+      "signatures": [
+        "escala(img, fator)",
+        "escala(img, fator_x, fator_y)"
+      ],
+      "summary": "Redimensiona. Fator 2 dobra; 0,5 reduz à metade. Vizinho mais próximo (bom para sprites). Devolve uma imagem nova.",
+      "doc": "Redimensiona. Fator 2 dobra; 0,5 reduz à metade. Vizinho mais próximo\n(bom para sprites). Devolve uma imagem nova.\n\nExemplo: d = escala(img, 2)"
+    },
+    {
+      "name": "largura",
+      "aliases": [],
+      "module": "imagem",
+      "kind": "funcao",
+      "signatures": [
+        "largura(img)"
+      ],
+      "summary": "Largura em pixels.",
+      "doc": "Largura em pixels.\n\nExemplo: escreva(largura(img))"
+    },
+    {
+      "name": "altura",
+      "aliases": [],
+      "module": "imagem",
+      "kind": "funcao",
+      "signatures": [
+        "altura(img)"
+      ],
+      "summary": "Altura em pixels.",
+      "doc": "Altura em pixels.\n\nExemplo: escreva(altura(img))"
     },
     {
       "name": "argumentos",

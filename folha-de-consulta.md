@@ -299,7 +299,7 @@ matriz = importe "matriz"      // alias: matriz::zeros, A.matriz::transposta()
 importe "./matriz"             // arquivo local se o nativo colidir
 ```
 
-Nativos: `matriz`, `arquivo`, `tela`, `mat`, `cartesiano`, `tela_grafica`. Nome nu sem `/` nem `.lep` procura o nativo; se existir também `matriz.lep` no mesmo diretório, `importe "matriz"` é erro.
+Nativos: `matriz`, `arquivo`, `tela`, `mat`, `cartesiano`, `tela_grafica`, `imagem`. Nome nu sem `/` nem `.lep` procura o nativo; se existir também `matriz.lep` no mesmo diretório, `importe "matriz"` é erro.
 
 ---
 
@@ -327,6 +327,7 @@ Módulos (`importe "…"`):
 | `arquivo` | `leia_arquivo` `salve_arquivo` `adicione_arquivo` `leia_csv` `salve_csv` |
 | `cartesiano` | `documento` `grafico` `eixos` `plotar` `adicione` `mostre` |
 | `tela_grafica` | `nova` `cor` `linha` `circulo` `ponto` `imagem` `apague` `pixel` `salve` `mostre` |
+| `imagem` | `carregue` `salve` `rotacione` `escala` `largura` `altura` |
 
 Nativas não podem ser reatribuídas (`escreva = 1` é erro).
 

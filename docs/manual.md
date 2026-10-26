@@ -150,7 +150,7 @@ importe "matematica"      // nomes soltos
 soma(10, 5)
 ```
 
-Nativos: `tela`, `mat`, `matriz`, `arquivo`, `cartesiano`, `tela_grafica`. Nome sem `/` nem `.lep` procura o nativo primeiro. `importe "./matriz"` força arquivo local.
+Nativos: `tela`, `mat`, `matriz`, `arquivo`, `cartesiano`, `tela_grafica`, `imagem`. Nome sem `/` nem `.lep` procura o nativo primeiro. `importe "./matriz"` força arquivo local.
 
 ---
 
@@ -519,6 +519,17 @@ g.tela_grafica::salve("casa.png")
 ```
 
 `(0, 0)` é o canto superior esquerdo; y cresce para baixo. Cada `nova()` é uma janela; o `mostre` da mesma instância só atualiza. Na Aula a janela é irmã (não entra no painel Gráficos). `pixel(g, x, y)` devolve a cor daquele ponto.
+
+## `importe "imagem"`
+
+PNG em memória: `carregue`, `salve`, `rotacione`, `escala`, `largura`, `altura`. `tipo(img)` é `"imagem"`. `tela_grafica::imagem` aceita o valor (ou um caminho, lido uma vez).
+
+```
+img = importe "imagem"
+figura = img::carregue("tartaruga.png")
+g.tela_grafica::imagem(figura, 160, 100, 90)
+figura.img::salve("copia.png")
+```
 
 ### `documento()`
 

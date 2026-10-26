@@ -758,6 +758,7 @@ mod tests {
             [
                 "arquivo",
                 "cartesiano",
+                "imagem",
                 "mat",
                 "matriz",
                 "tela",

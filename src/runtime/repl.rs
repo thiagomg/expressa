@@ -468,6 +468,7 @@ fn print_help_funcoes() {
         ("arquivo", r#"Módulo arquivo — importe "arquivo":"#),
         ("tela", r#"Módulo tela — importe "tela":"#),
         ("mat", r#"Módulo mat — importe "mat":"#),
+        ("imagem", r#"Módulo imagem — importe "imagem":"#),
     ] {
         println!("\n{title}\n");
         print_docs_for(Some(mod_name));

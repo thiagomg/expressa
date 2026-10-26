@@ -6,6 +6,7 @@ use crate::lexer::Span;
 use crate::parser::{Block, Param};
 
 use super::env::Env;
+use super::imagem::Imagem;
 use super::numero::Numero;
 
 pub use super::numero::parse_numero;
@@ -21,6 +22,7 @@ pub enum Value {
     Mapa(Rc<RefCell<Vec<(MapKey, Value)>>>),
     Conjunto(Rc<RefCell<Vec<MapKey>>>),
     Matriz(Rc<RefCell<Vec<Vec<f64>>>>),
+    Imagem(Imagem),
     Funcao(Rc<Closure>),
     Builtin(&'static str),
     Modulo(Rc<RefCell<Env>>),
@@ -123,23 +125,15 @@ impl Value {
                 format!("conjunto{{{}}}", inner.join(", "))
             }
             Value::Matriz(m) => format_matriz(&m.borrow(), loc),
+            Value::Imagem(img) => format!("<imagem {}x{}>", img.largura, img.altura),
             other => other.to_string(),
         }
     }
 
     /// Nomes que `tipo()` devolve e `tipos()` lista (iguais às mensagens de erro).
     pub const NOMES_DE_TIPO: &'static [&'static str] = &[
-        "numero",
-        "texto",
-        "bool",
-        "lista",
-        "par",
-        "mapa",
-        "conjunto",
-        "matriz",
-        "funcao",
-        "modulo",
-        "nada",
+        "numero", "texto", "bool", "lista", "par", "mapa", "conjunto", "matriz", "imagem",
+        "funcao", "modulo", "nada",
     ];
 
     pub fn type_name(&self) -> &'static str {
@@ -153,6 +147,7 @@ impl Value {
             Value::Mapa(_) => "mapa",
             Value::Conjunto(_) => "conjunto",
             Value::Matriz(_) => "matriz",
+            Value::Imagem(_) => "imagem",
             Value::Funcao(_) => "funcao",
             Value::Builtin(_) => "funcao",
             Value::Modulo(_) => "modulo",
@@ -176,6 +171,7 @@ impl PartialEq for Value {
                 a.len() == b.len() && a.iter().all(|k| b.contains(k))
             }
             (Value::Matriz(a), Value::Matriz(b)) => a.borrow()[..] == b.borrow()[..],
+            (Value::Imagem(a), Value::Imagem(b)) => a == b,
             (Value::Funcao(a), Value::Funcao(b)) => Rc::ptr_eq(a, b),
             (Value::Builtin(a), Value::Builtin(b)) => a == b,
             (Value::Modulo(a), Value::Modulo(b)) => Rc::ptr_eq(a, b),
@@ -239,6 +235,7 @@ impl fmt::Display for Value {
                 write!(f, "}}")
             }
             Value::Matriz(m) => write!(f, "{}", format_matriz(&m.borrow(), NumeroLocale::PtBr)),
+            Value::Imagem(img) => write!(f, "<imagem {}x{}>", img.largura, img.altura),
             Value::Funcao(c) => write!(f, "<funcao({})>", c.args_text()),
             Value::Builtin(name) => write!(f, "<funcao {name}>"),
             Value::Modulo(_) => write!(f, "<modulo>"),
@@ -499,11 +496,19 @@ mod tests {
         assert_eq!(Value::Bool(true).type_name(), "bool");
         assert_eq!(Value::lista(vec![]).type_name(), "lista");
         assert_eq!(
-            Value::Par(MapKey::Texto("n".into()), Box::new(Value::Numero(1.0.into()))).type_name(),
+            Value::Par(
+                MapKey::Texto("n".into()),
+                Box::new(Value::Numero(1.0.into()))
+            )
+            .type_name(),
             "par"
         );
         assert_eq!(Value::mapa(vec![]).type_name(), "mapa");
         assert_eq!(Value::conjunto(vec![]).type_name(), "conjunto");
+        assert_eq!(
+            Value::Imagem(Imagem::nova(1, 1, vec![0, 0, 0, 255]).unwrap()).type_name(),
+            "imagem"
+        );
         assert_eq!(Value::Builtin("escreva").type_name(), "funcao");
         for v in [
             Value::Nada,
@@ -536,7 +541,11 @@ mod tests {
             "[1, \"a\"]"
         );
         assert_eq!(
-            Value::Par(MapKey::Texto("n".into()), Box::new(Value::Numero(1.0.into()))).to_string(),
+            Value::Par(
+                MapKey::Texto("n".into()),
+                Box::new(Value::Numero(1.0.into()))
+            )
+            .to_string(),
             "\"n\" -> 1"
         );
         assert_eq!(
