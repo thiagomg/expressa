@@ -6,4 +6,4 @@ A tartaruga Logo é um exemplo, escrito em Expressa, não um módulo nativo. A b
 
 Chamadas: `nova`, `nova_tamanho`, `ande`, `vire`, `vire_esquerda`, `subir`, `baixar`, `cor`, `olhe`, `casa`, `apague`, `mostre`, `salve`, `velocidade`.
 
-`velocidade(t, segundos)` usa o `durma` que já existe. Cada pedaço de 8 pixels chama `mostre` e espera. `0` desenha a reta inteira de uma vez. Os jogos de exemplo usam `0.02`. Com velocidade maior que zero, um triângulo verde marca a tartaruga e gira com `vire`. Ele sai da lista de traços antes do próximo passo, então não mancha o desenho. `salve` também não grava o triângulo.
+`velocidade(t, segundos)` usa o `durma` que já existe. Cada pedaço de 8 pixels chama `mostre` e espera. `0` desenha a reta inteira de uma vez. Os jogos de exemplo usam `0.02`. Com velocidade maior que zero, `exemplos/lib/tartaruga.png` (32×32) é carimbado no lugar da tartaruga e gira com `vire`. A figura sai da lista de traços antes do próximo passo, então não mancha o desenho. `salve` também não grava a figura.

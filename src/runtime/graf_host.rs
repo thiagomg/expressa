@@ -59,8 +59,7 @@ impl CliGrafHost {
 impl GrafHost for CliGrafHost {
     fn mostre(&mut self, tela: TelaGrafica) -> Result<(), String> {
         let path = Self::path_for(tela.id);
-        tela.raster()
-            .write_png(&path)
+        tela.write_png(&path)
             .map_err(|e| format!("não gravou o graf: {e}"))?;
         let dead = match self.children.get_mut(&tela.id) {
             Some(child) => child.try_wait().ok().flatten().is_some(),

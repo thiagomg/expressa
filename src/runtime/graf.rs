@@ -25,6 +25,14 @@ pub enum OpGraf {
         r: i32,
         cor: String,
     },
+    /// PNG carimbado no centro `(x, y)`. `angulo` é em graus, no sentido
+    /// horário, com 0 apontando para cima (a imagem já nasce assim).
+    Imagem {
+        x: i32,
+        y: i32,
+        angulo: f64,
+        caminho: String,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -89,6 +97,7 @@ impl TelaGrafica {
                 OpGraf::Circulo { x, y, r, cor } => {
                     circulo_idx(&mut idx, w, h, *x, *y, *r, idx_cor(cor));
                 }
+                OpGraf::Imagem { .. } => {}
             }
         }
         Raster {
@@ -96,6 +105,35 @@ impl TelaGrafica {
             altura: h,
             idx,
         }
+    }
+
+    /// Palette drawing, then any `imagem` stamps in true color.
+    pub fn rgb32(&self) -> Vec<u32> {
+        let mut buf = self.raster().rgb32();
+        for op in &self.ops {
+            let OpGraf::Imagem {
+                x,
+                y,
+                angulo,
+                caminho,
+            } = op
+            else {
+                continue;
+            };
+            let Ok(sprite) = png_rgba(Path::new(caminho)) else {
+                continue;
+            };
+            carimbar(&mut buf, self.largura, self.altura, *x, *y, *angulo, &sprite);
+        }
+        buf
+    }
+
+    pub fn png_bytes(&self) -> Result<Vec<u8>, String> {
+        encode_png(self.largura, self.altura, &self.rgb32())
+    }
+
+    pub fn write_png(&self, path: &Path) -> Result<(), String> {
+        std::fs::write(path, self.png_bytes()?).map_err(|e| e.to_string())
     }
 }
 
@@ -130,28 +168,129 @@ impl Raster {
     }
 
     pub fn png_bytes(&self) -> Result<Vec<u8>, String> {
-        let w = self.largura;
-        let h = self.altura;
-        let rgb32 = self.rgb32();
-        let mut raw = Vec::with_capacity((w * h * 3) as usize);
-        for px in rgb32 {
-            raw.push(((px >> 16) & 0xff) as u8);
-            raw.push(((px >> 8) & 0xff) as u8);
-            raw.push((px & 0xff) as u8);
-        }
-        let mut out = Vec::new();
-        {
-            let mut enc = png::Encoder::new(&mut out, w, h);
-            enc.set_color(png::ColorType::Rgb);
-            enc.set_depth(png::BitDepth::Eight);
-            let mut writer = enc.write_header().map_err(|e| e.to_string())?;
-            writer.write_image_data(&raw).map_err(|e| e.to_string())?;
-        }
-        Ok(out)
+        encode_png(self.largura, self.altura, &self.rgb32())
     }
 
     pub fn write_png(&self, path: &Path) -> Result<(), String> {
         std::fs::write(path, self.png_bytes()?).map_err(|e| e.to_string())
+    }
+}
+
+pub struct PngRgba {
+    pub largura: u32,
+    pub altura: u32,
+    pub px: Vec<u8>,
+}
+
+fn encode_png(w: u32, h: u32, rgb32: &[u32]) -> Result<Vec<u8>, String> {
+    let mut raw = Vec::with_capacity((w * h * 3) as usize);
+    for px in rgb32 {
+        raw.push(((px >> 16) & 0xff) as u8);
+        raw.push(((px >> 8) & 0xff) as u8);
+        raw.push((px & 0xff) as u8);
+    }
+    let mut out = Vec::new();
+    {
+        let mut enc = png::Encoder::new(&mut out, w, h);
+        enc.set_color(png::ColorType::Rgb);
+        enc.set_depth(png::BitDepth::Eight);
+        let mut writer = enc.write_header().map_err(|e| e.to_string())?;
+        writer.write_image_data(&raw).map_err(|e| e.to_string())?;
+    }
+    Ok(out)
+}
+
+/// RGBA PNG. Alpha 0 is transparent. Larger than 256×256 is refused.
+pub fn png_rgba(path: &Path) -> Result<PngRgba, String> {
+    let bytes = std::fs::read(path).map_err(|e| e.to_string())?;
+    let mut dec = png::Decoder::new(Cursor::new(bytes));
+    dec.set_transformations(png::Transformations::EXPAND | png::Transformations::STRIP_16);
+    let mut reader = dec.read_info().map_err(|e| e.to_string())?;
+    let mut buf = vec![0; reader.output_buffer_size()];
+    let info = reader.next_frame(&mut buf).map_err(|e| e.to_string())?;
+    if info.width > 256 || info.height > 256 || info.width == 0 || info.height == 0 {
+        return Err(format!(
+            "imagem deve ter entre 1×1 e 256×256 (tem {}×{})",
+            info.width, info.height
+        ));
+    }
+    let src = &buf[..info.buffer_size()];
+    let mut px = Vec::with_capacity((info.width * info.height * 4) as usize);
+    match info.color_type {
+        png::ColorType::Rgba => px.extend_from_slice(src),
+        png::ColorType::Rgb => {
+            for c in src.chunks(3) {
+                px.extend_from_slice(&[c[0], c[1], c[2], 255]);
+            }
+        }
+        png::ColorType::Grayscale => {
+            for &c in src {
+                px.extend_from_slice(&[c, c, c, 255]);
+            }
+        }
+        png::ColorType::GrayscaleAlpha => {
+            for c in src.chunks(2) {
+                px.extend_from_slice(&[c[0], c[0], c[0], c[1]]);
+            }
+        }
+        other => return Err(format!("PNG não suportado ({other:?})")),
+    }
+    Ok(PngRgba {
+        largura: info.width,
+        altura: info.height,
+        px,
+    })
+}
+
+/// Stamp `sprite` centered on `(cx, cy)`. `angulo` is degrees clockwise;
+/// 0 keeps the top of the image pointing up.
+fn carimbar(
+    buf: &mut [u32],
+    w: u32,
+    h: u32,
+    cx: i32,
+    cy: i32,
+    angulo: f64,
+    sprite: &PngRgba,
+) {
+    let rad = angulo.to_radians();
+    let (cos, sin) = (rad.cos(), rad.sin());
+    let sw = sprite.largura as i32;
+    let sh = sprite.altura as i32;
+    let ox = (sprite.largura as f64 - 1.0) / 2.0;
+    let oy = (sprite.altura as f64 - 1.0) / 2.0;
+    let reach = ((sw * sw + sh * sh) as f64).sqrt() / 2.0 + 1.0;
+    let r = reach.ceil() as i32;
+    for sy in -r..=r {
+        for sx in -r..=r {
+            let ix = (sx as f64 * cos + sy as f64 * sin + ox).round() as i32;
+            let iy = (-sx as f64 * sin + sy as f64 * cos + oy).round() as i32;
+            if ix < 0 || iy < 0 || ix >= sw || iy >= sh {
+                continue;
+            }
+            let dx = cx + sx;
+            let dy = cy + sy;
+            if dx < 0 || dy < 0 || dx as u32 >= w || dy as u32 >= h {
+                continue;
+            }
+            let i = ((iy as u32 * sprite.largura) + ix as u32) as usize * 4;
+            let a = sprite.px[i + 3] as u32;
+            if a < 16 {
+                continue;
+            }
+            let dest_i = (dy as u32 * w + dx as u32) as usize;
+            let dest = buf[dest_i];
+            let sr = sprite.px[i] as u32;
+            let sg = sprite.px[i + 1] as u32;
+            let sb = sprite.px[i + 2] as u32;
+            let dr = (dest >> 16) & 255;
+            let dg = (dest >> 8) & 255;
+            let db = dest & 255;
+            let rch = (sr * a + dr * (255 - a)) / 255;
+            let gch = (sg * a + dg * (255 - a)) / 255;
+            let bch = (sb * a + db * (255 - a)) / 255;
+            buf[dest_i] = (rch << 16) | (gch << 8) | bch;
+        }
     }
 }
 
@@ -296,5 +435,42 @@ mod tests {
         assert_eq!((w, h), (16, 16));
         assert_eq!(px.len(), 256);
         assert_eq!(px[0], 0x003366CC);
+    }
+
+    #[test]
+    fn imagem_aponta_para_cima_e_vira_para_a_direita() {
+        let path = std::env::temp_dir().join(format!("expressa-sprite-{}.png", std::process::id()));
+        // 3×3, only the top-center pixel is red. The rest is transparent.
+        let mut raw = vec![0u8; 3 * 3 * 4];
+        raw[1 * 4] = 255;
+        raw[1 * 4 + 3] = 255;
+        let mut bytes = Vec::new();
+        {
+            let mut enc = png::Encoder::new(&mut bytes, 3, 3);
+            enc.set_color(png::ColorType::Rgba);
+            enc.set_depth(png::BitDepth::Eight);
+            enc.write_header().unwrap().write_image_data(&raw).unwrap();
+        }
+        std::fs::write(&path, bytes).unwrap();
+        let tela = |angulo: f64| TelaGrafica {
+            id: 1,
+            largura: 16,
+            altura: 16,
+            fundo: "branco".into(),
+            ops: vec![OpGraf::Imagem {
+                x: 8,
+                y: 8,
+                angulo,
+                caminho: path.display().to_string(),
+            }],
+        };
+        let cima = tela(0.0).rgb32();
+        let direita = tela(90.0).rgb32();
+        let at = |buf: &[u32], x: u32, y: u32| buf[(y * 16 + x) as usize];
+        assert_eq!(at(&cima, 8, 7), 0x00FF0000, "topo fica acima do centro");
+        assert_eq!(at(&cima, 8, 8), 0x00FFFFFF);
+        assert_eq!(at(&direita, 9, 8), 0x00FF0000, "90° leva o topo para a direita");
+        assert_eq!(at(&direita, 8, 7), 0x00FFFFFF);
+        let _ = std::fs::remove_file(&path);
     }
 }

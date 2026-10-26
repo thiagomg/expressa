@@ -326,7 +326,7 @@ Módulos (`importe "…"`):
 | `matriz` | `matriz` `transposta` `det` `identidade` `zeros` `uns` `cheia` `nlinhas` `ncolunas` |
 | `arquivo` | `leia_arquivo` `salve_arquivo` `adicione_arquivo` `leia_csv` `salve_csv` |
 | `cartesiano` | `documento` `grafico` `eixos` `plotar` `adicione` `mostre` |
-| `tela_grafica` | `nova` `cor` `linha` `circulo` `ponto` `apague` `pixel` `salve` `mostre` |
+| `tela_grafica` | `nova` `cor` `linha` `circulo` `ponto` `imagem` `apague` `pixel` `salve` `mostre` |
 
 Nativas não podem ser reatribuídas (`escreva = 1` é erro).
 

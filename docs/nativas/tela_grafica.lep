@@ -26,6 +26,13 @@ circulo = funcao(g, x, y, r) { 0 }
 /// Exemplo: g.ponto(5, 5)
 ponto = funcao(g, x, y) { 0 }
 
+/// Carimba um PNG (até 256×256) centrado em (x, y).
+/// angulo é em graus, no sentido horário; 0 deixa o topo da imagem para cima.
+/// Pixels transparentes não cobrem o desenho.
+///
+/// Exemplo: g.imagem("tartaruga.png", 160, 100, 0)
+imagem = funcao(g, caminho, x, y, angulo) { 0 }
+
 /// Apaga o desenho. O fundo continua branco.
 ///
 /// Exemplo: g.apague()

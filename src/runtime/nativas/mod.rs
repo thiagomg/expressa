@@ -359,6 +359,10 @@ pub const NATIVAS: &[Nativa] = &[
         module: Some("tela_grafica"),
     },
     Nativa {
+        names: &["imagem"],
+        module: Some("tela_grafica"),
+    },
+    Nativa {
         names: &["apague"],
         module: Some("tela_grafica"),
     },
@@ -500,6 +504,7 @@ impl Vm<'_, '_> {
             "linha" => self.bi_graf_linha(args, span),
             "circulo" | "círculo" => self.bi_graf_circulo(args, span),
             "ponto" => self.bi_graf_ponto(args, span),
+            "imagem" => self.bi_graf_imagem(args, span),
             "pixel" => self.bi_graf_pixel(args, span),
             "salve" => self.bi_graf_salve(args, span),
             "mostre" => {

@@ -6,8 +6,8 @@ use std::rc::Rc;
 
 use expressa::runtime::TelaGrafica;
 use gtk::cairo::{Format, ImageSurface};
-use gtk::prelude::*;
 use gtk::glib;
+use gtk::prelude::*;
 use gtk::{DrawingArea, Window};
 
 pub struct Painel {
@@ -43,7 +43,7 @@ impl Painel {
                 if w < 1 || h < 1 {
                     return;
                 }
-                let pixels = tela.raster().rgb32();
+                let pixels = tela.rgb32();
                 let tw = tela.largura.max(1);
                 let th = tela.altura.max(1);
                 let Ok(mut surf) = ImageSurface::create(Format::Rgb24, tw as i32, th as i32) else {
@@ -70,8 +70,20 @@ impl Painel {
                 cr.restore().ok();
             });
             win.set_child(Some(&area));
-            win.set_default_width(self.telas.borrow().get(&id).map(|t| t.largura as i32).unwrap_or(320));
-            win.set_default_height(self.telas.borrow().get(&id).map(|t| t.altura as i32).unwrap_or(200));
+            win.set_default_width(
+                self.telas
+                    .borrow()
+                    .get(&id)
+                    .map(|t| t.largura as i32)
+                    .unwrap_or(320),
+            );
+            win.set_default_height(
+                self.telas
+                    .borrow()
+                    .get(&id)
+                    .map(|t| t.altura as i32)
+                    .unwrap_or(200),
+            );
             {
                 let telas = Rc::clone(&self.telas);
                 let windows = Rc::clone(&self.windows);

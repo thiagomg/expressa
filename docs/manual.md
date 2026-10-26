@@ -507,7 +507,7 @@ c.cart::mostre()
 
 ## `importe "tela_grafica"`
 
-Tela de pixels (MSX SCREEN 2): um mapa por janela, comandos `linha` / `circulo` / `ponto`, depois `mostre` ou `salve`.
+Tela de pixels (MSX SCREEN 2): um mapa por janela, comandos `linha` / `circulo` / `ponto` / `imagem`, depois `mostre` ou `salve`.
 
 ```
 tela_grafica = importe "tela_grafica"

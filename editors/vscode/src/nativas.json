@@ -1002,6 +1002,17 @@
       "doc": "Um pixel da caneta. Fora da tela, ignora.\n\nExemplo: g.ponto(5, 5)"
     },
     {
+      "name": "imagem",
+      "aliases": [],
+      "module": "tela_grafica",
+      "kind": "funcao",
+      "signatures": [
+        "imagem(g, caminho, x, y, angulo)"
+      ],
+      "summary": "Carimba um PNG (até 256×256) centrado em (x, y). angulo é em graus, no sentido horário; 0 deixa o topo da imagem para cima. Pixels transparentes não cobrem o desenho.",
+      "doc": "Carimba um PNG (até 256×256) centrado em (x, y).\nangulo é em graus, no sentido horário; 0 deixa o topo da imagem para cima.\nPixels transparentes não cobrem o desenho.\n\nExemplo: g.imagem(\"tartaruga.png\", 160, 100, 0)"
+    },
+    {
       "name": "apague",
       "aliases": [],
       "module": "tela_grafica",

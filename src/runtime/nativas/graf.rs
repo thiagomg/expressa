@@ -100,6 +100,43 @@ impl Vm<'_, '_> {
         Ok(args[0].clone())
     }
 
+    pub(crate) fn bi_graf_imagem(
+        &mut self,
+        args: &[Value],
+        span: Span,
+    ) -> Result<Value, EvalError> {
+        self.expect_arity(args, 5, span)?;
+        let mapa = expect_graf(&args[0], span, self)?;
+        let caminho = self.expect_texto(&args[1], span)?;
+        let x = self.expect_px(&args[2], span)?;
+        let y = self.expect_px(&args[3], span)?;
+        let angulo = self.expect_f64(&args[4], span)?;
+        if !angulo.is_finite() {
+            return Err(self.err("ângulo da imagem deve ser um número finito", span));
+        }
+        let path = self.resolve_data_path(&caminho, span)?;
+        crate::runtime::graf::png_rgba(&path).map_err(|e| {
+            self.err(
+                format!("não foi possível ler '{}': {e}", path.display()),
+                span,
+            )
+        })?;
+        push_op(
+            &mapa,
+            Value::mapa(vec![
+                (MapKey::Texto("tipo".into()), Value::Texto("imagem".into())),
+                (
+                    MapKey::Texto("caminho".into()),
+                    Value::Texto(path.display().to_string()),
+                ),
+                (MapKey::Texto("x".into()), Value::Numero((x as f64).into())),
+                (MapKey::Texto("y".into()), Value::Numero((y as f64).into())),
+                (MapKey::Texto("angulo".into()), Value::Numero(angulo.into())),
+            ]),
+        );
+        Ok(args[0].clone())
+    }
+
     pub(crate) fn bi_graf_limpe(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
         self.expect_arity(args, 1, span)?;
         let mapa = expect_graf(&args[0], span, self)?;
@@ -136,7 +173,7 @@ impl Vm<'_, '_> {
         }
         let path = self.resolve_data_path(&nome, span)?;
         self.ensure_parent_dir(&path, span)?;
-        tela.raster().write_png(&path).map_err(|e| {
+        tela.write_png(&path).map_err(|e| {
             self.err(
                 format!("não foi possível salvar '{}': {e}", path.display()),
                 span,
@@ -265,6 +302,12 @@ fn op_de(v: &Value, span: Span, vm: &Vm<'_, '_>) -> Result<OpGraf, EvalError> {
             r: get_i32(xs, "r").unwrap_or(0),
             cor,
         }),
+        "imagem" => Ok(OpGraf::Imagem {
+            x: get_i32(xs, "x").unwrap_or(0),
+            y: get_i32(xs, "y").unwrap_or(0),
+            angulo: get_f64(xs, "angulo").unwrap_or(0.0),
+            caminho: get_texto(xs, "caminho").unwrap_or_default(),
+        }),
         other => Err(vm.err(format!("comando de tela gráfica desconhecido ({other})"), span)),
     }
 }
@@ -326,6 +369,17 @@ fn get_u32(mapa: &Rc<RefCell<Vec<(MapKey, Value)>>>, chave: &str) -> Option<u32>
             } else {
                 None
             }
+        }
+        _ => None,
+    }
+}
+
+fn get_f64(mapa: &Rc<RefCell<Vec<(MapKey, Value)>>>, chave: &str) -> Option<f64> {
+    let k = MapKey::Texto(chave.into());
+    match mapa.borrow().iter().find(|(kk, _)| *kk == k).map(|(_, v)| v) {
+        Some(Value::Numero(n)) => {
+            let f = n.to_f64();
+            f.is_finite().then_some(f)
         }
         _ => None,
     }

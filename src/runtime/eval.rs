@@ -2261,16 +2261,16 @@ t.tartaruga::velocidade(0.001)
 t:passo = 2
 t.tartaruga::ande(6)
 g = t:tela
-escreva(g.tela_grafica::pixel(16, 13))
+escreva(ultimo(g:ops):tipo)
 n = tamanho(g:ops)
-g:ops = remova(g:ops, n - 2, n)
-escreva(g.tela_grafica::pixel(16, 13))
+g:ops = remova(g:ops, n, n)
 escreva(g.tela_grafica::pixel(10, 10))
 escreva(g.tela_grafica::pixel(10, 4))
+escreva(g.tela_grafica::pixel(11, 10))
 escreva(t:y)
 "#;
         let out = run_to_string(src, "exemplos/jogos/t.lep").unwrap_or_else(|e| panic!("{e}"));
-        assert_eq!(out, "verde\nbranco\nazul\nazul\n4\n");
+        assert_eq!(out, "imagem\nazul\nazul\nbranco\n4\n");
     }
 
     #[test]
