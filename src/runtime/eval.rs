@@ -15,13 +15,12 @@ use super::cartesiano_host::{CartesianoHost, CliCartesianoHost};
 use super::debug::{DebugAction, DebugCtx, DebugHook, NoopHook};
 use super::env::{AssignError, Env, FrameKind};
 use super::error::{CallFrame, EvalError, RuntimeError};
+use super::graf_host::{CliGrafHost, GrafHost};
 use super::leia::LeiaHost;
 use super::nativas;
-use super::rng::Rng;
 use super::numero::{Numero, NumeroAritmetica, default_numero_aritmetica, parse_numero};
-use super::value::{
-    Closure, MapKey, NumeroLocale, Value, default_numero_locale, format_numero,
-};
+use super::rng::Rng;
+use super::value::{Closure, MapKey, NumeroLocale, Value, default_numero_locale, format_numero};
 
 /// Source of lines for `leia()`. Implemented for any [`BufRead`] (tests)
 /// and for [`ConsoleInput`] (locks stdin only during the read, so the
@@ -71,6 +70,8 @@ pub(crate) struct Vm<'a, 'c> {
     pub(crate) leia_host: Option<&'a mut dyn LeiaHost>,
     pub(crate) cartesiano_host: Option<&'c mut dyn CartesianoHost>,
     pub(crate) cli_cart: CliCartesianoHost,
+    pub(crate) graf_host: Option<&'c mut dyn GrafHost>,
+    pub(crate) cli_graf: CliGrafHost,
     pub(crate) abrir_cartesiano: bool,
     pub(crate) numero_locale: NumeroLocale,
     pub(crate) numero_aritmetica: NumeroAritmetica,
@@ -108,6 +109,7 @@ pub fn run_source_args(source: &str, file: &str, args: &[String]) -> Result<i32,
         None,
         None,
         true,
+        None,
         args,
     )
 }
@@ -142,6 +144,7 @@ pub fn run_source_marcador_args(
         Some(&mut host),
         None,
         true,
+        None,
         args,
     )
 }
@@ -166,6 +169,7 @@ pub fn debug_source_args(source: &str, file: &str, args: &[String]) -> Result<i3
         None,
         None,
         true,
+        None,
         args,
     )
 }
@@ -271,11 +275,12 @@ pub fn run_with_hook(
         err,
         leia_host,
         None,
+        None,
         script_args,
     )
 }
 
-pub fn run_with_hosts(
+pub fn run_with_hosts<'c>(
     source: &str,
     file: &str,
     hook: Box<dyn DebugHook>,
@@ -284,7 +289,8 @@ pub fn run_with_hosts(
     out: &mut dyn Write,
     err: &mut dyn Write,
     leia_host: &mut dyn LeiaHost,
-    cartesiano_host: Option<&mut dyn CartesianoHost>,
+    cartesiano_host: Option<&'c mut dyn CartesianoHost>,
+    graf_host: Option<&'c mut dyn GrafHost>,
     script_args: &[String],
 ) -> Result<i32, RuntimeError> {
     let mut dummy_in = io::Cursor::new("");
@@ -300,6 +306,7 @@ pub fn run_with_hosts(
         Some(leia_host),
         cartesiano_host,
         false,
+        graf_host,
         script_args,
     )
 }
@@ -328,6 +335,7 @@ pub(crate) fn run_with<'a>(
         leia_host,
         None,
         false,
+        None,
         script_args,
     )
 }
@@ -344,6 +352,7 @@ pub(crate) fn run_with_io<'a, 'c>(
     leia_host: Option<&'a mut dyn LeiaHost>,
     cartesiano_host: Option<&'c mut dyn CartesianoHost>,
     abrir_cartesiano: bool,
+    graf_host: Option<&'c mut dyn GrafHost>,
     script_args: &[String],
 ) -> Result<i32, RuntimeError> {
     let program = parse(source).map_err(|e| RuntimeError {
@@ -364,6 +373,7 @@ pub(crate) fn run_with_io<'a, 'c>(
         leia_host,
         cartesiano_host,
         abrir_cartesiano,
+        graf_host,
         script_args,
     );
     match vm.run(&program) {
@@ -391,6 +401,14 @@ pub(crate) fn run_with_io<'a, 'c>(
     }
 }
 
+fn valor_vivo(result: &Result<Value, EvalError>) -> &Value {
+    match result {
+        Ok(v) => v,
+        Err(EvalError::Return { value, .. }) => value,
+        _ => &Value::Nada,
+    }
+}
+
 impl<'a, 'c> Vm<'a, 'c> {
     pub(crate) fn new(
         file: &str,
@@ -404,6 +422,7 @@ impl<'a, 'c> Vm<'a, 'c> {
         leia_host: Option<&'a mut dyn LeiaHost>,
         cartesiano_host: Option<&'c mut dyn CartesianoHost>,
         abrir_cartesiano: bool,
+        graf_host: Option<&'c mut dyn GrafHost>,
         script_args: &[String],
     ) -> Self {
         let builtins = Env::new(FrameKind::Builtins, None);
@@ -431,6 +450,8 @@ impl<'a, 'c> Vm<'a, 'c> {
             leia_host,
             cartesiano_host,
             cli_cart: CliCartesianoHost::new(),
+            graf_host,
+            cli_graf: CliGrafHost::default(),
             abrir_cartesiano,
             numero_locale: default_numero_locale(),
             numero_aritmetica: default_numero_aritmetica(),
@@ -443,7 +464,12 @@ impl<'a, 'c> Vm<'a, 'c> {
 
     fn run(&mut self, program: &Program) -> Result<(), EvalError> {
         let env = Env::child(&self.builtins, FrameKind::Module);
-        self.eval_program(program, &env)
+        let result = self.eval_program(program, &env);
+        Env::soltar_capturas(&env, &Value::Nada);
+        for m in self.modules.values() {
+            Env::soltar_capturas(m, &Value::Nada);
+        }
+        result
     }
 
     fn eval_program(&mut self, program: &Program, env: &Rc<RefCell<Env>>) -> Result<(), EvalError> {
@@ -677,13 +703,14 @@ impl<'a, 'c> Vm<'a, 'c> {
                 if n < 0 {
                     return Err(self.err("'repita' espera um número >= 0", count.span()));
                 }
-                let loop_env = Env::child(env, FrameKind::Block);
-                for _ in 0..n {
-                    if self.eval_loop_body(&body.stmts, &loop_env)? {
-                        break;
+                self.eval_in_child(env, FrameKind::Block, |vm, loop_env| {
+                    for _ in 0..n {
+                        if vm.eval_loop_body(&body.stmts, loop_env)? {
+                            break;
+                        }
                     }
-                }
-                Ok(Value::Nada)
+                    Ok(Value::Nada)
+                })
             }
             Stmt::ParaRange {
                 var,
@@ -696,46 +723,49 @@ impl<'a, 'c> Vm<'a, 'c> {
                 let start = self.expect_int(&from_v, from.span())?;
                 let to_v = self.eval_expr(to, env)?;
                 let end = self.expect_int(&to_v, to.span())?;
-                let loop_env = Env::child(env, FrameKind::Block);
-                let mut i = start;
-                while i <= end {
-                    loop_env
-                        .borrow_mut()
-                        .define(var.clone(), Value::Numero(Numero::from_i64(i)));
-                    if self.eval_loop_body(&body.stmts, &loop_env)? {
-                        break;
+                self.eval_in_child(env, FrameKind::Block, |vm, loop_env| {
+                    let mut i = start;
+                    while i <= end {
+                        loop_env
+                            .borrow_mut()
+                            .define(var.clone(), Value::Numero(Numero::from_i64(i)));
+                        if vm.eval_loop_body(&body.stmts, loop_env)? {
+                            break;
+                        }
+                        i += 1;
                     }
-                    i += 1;
-                }
-                Ok(Value::Nada)
+                    Ok(Value::Nada)
+                })
             }
             Stmt::ParaIn {
                 var, iter, body, ..
             } => {
                 let seq = self.eval_expr(iter, env)?;
                 let items = self.iter_items(&seq, iter.span())?;
-                let loop_env = Env::child(env, FrameKind::Block);
-                for item in items {
-                    loop_env.borrow_mut().define(var.clone(), item);
-                    if self.eval_loop_body(&body.stmts, &loop_env)? {
-                        break;
+                self.eval_in_child(env, FrameKind::Block, |vm, loop_env| {
+                    for item in items {
+                        loop_env.borrow_mut().define(var.clone(), item);
+                        if vm.eval_loop_body(&body.stmts, loop_env)? {
+                            break;
+                        }
                     }
-                }
-                Ok(Value::Nada)
+                    Ok(Value::Nada)
+                })
             }
             Stmt::Enquanto { cond, body, span } => {
-                let loop_env = Env::child(env, FrameKind::Block);
-                loop {
-                    self.check_deadline(*span)?;
-                    let cond_v = self.eval_expr(cond, env)?;
-                    if !self.expect_bool(&cond_v, cond.span())? {
-                        break;
+                self.eval_in_child(env, FrameKind::Block, |vm, loop_env| {
+                    loop {
+                        vm.check_deadline(*span)?;
+                        let cond_v = vm.eval_expr(cond, env)?;
+                        if !vm.expect_bool(&cond_v, cond.span())? {
+                            break;
+                        }
+                        if vm.eval_loop_body(&body.stmts, loop_env)? {
+                            break;
+                        }
                     }
-                    if self.eval_loop_body(&body.stmts, &loop_env)? {
-                        break;
-                    }
-                }
-                Ok(Value::Nada)
+                    Ok(Value::Nada)
+                })
             }
             Stmt::Pare { span } => Err(EvalError::Break { span: *span }),
             Stmt::Continue { span } => Err(EvalError::Continue { span: *span }),
@@ -792,8 +822,23 @@ impl<'a, 'c> Vm<'a, 'c> {
     }
 
     fn eval_block(&mut self, block: &Block, env: &Rc<RefCell<Env>>) -> Result<Value, EvalError> {
-        let child = Env::child(env, FrameKind::Block);
-        self.eval_stmts(&block.stmts, &child)
+        self.eval_in_child(env, FrameKind::Block, |vm, child| {
+            vm.eval_stmts(&block.stmts, child)
+        })
+    }
+
+    /// Runs `f` in a fresh frame and breaks `Rc` cycles before the frame
+    /// is dropped (`g = funcao() { … }` inside a function or block).
+    fn eval_in_child(
+        &mut self,
+        parent: &Rc<RefCell<Env>>,
+        kind: FrameKind,
+        f: impl FnOnce(&mut Self, &Rc<RefCell<Env>>) -> Result<Value, EvalError>,
+    ) -> Result<Value, EvalError> {
+        let child = Env::child(parent, kind);
+        let result = f(self, &child);
+        Env::soltar_capturas(&child, valor_vivo(&result));
+        result
     }
 
     fn eval_expr(&mut self, expr: &Expr, env: &Rc<RefCell<Env>>) -> Result<Value, EvalError> {
@@ -1215,6 +1260,7 @@ impl<'a, 'c> Vm<'a, 'c> {
                 self.file = saved_file;
                 self.source = saved_source;
                 self.stack.pop();
+                Env::soltar_capturas(&call_env, valor_vivo(&result));
                 match result {
                     Ok(v) => Ok(v),
                     Err(EvalError::Return { value, .. }) => Ok(value),
@@ -1713,6 +1759,10 @@ impl<'a, 'c> Vm<'a, 'c> {
         })
     }
 
+    pub(crate) fn interrupted(&mut self) -> bool {
+        self.hook.interrupted()
+    }
+
     pub(crate) fn check_deadline(&self, span: Span) -> Result<(), EvalError> {
         if let Some(deadline) = self.deadline {
             if Instant::now() >= deadline {
@@ -1968,10 +2018,7 @@ impl Vm<'_, '_> {
         }
         let ptr = Rc::as_ptr(xs) as usize;
         if !self.como_texto_guard.insert(ptr) {
-            return Err(self.err(
-                ":_como_texto não pode formatar o mesmo mapa de novo",
-                span,
-            ));
+            return Err(self.err(":_como_texto não pode formatar o mesmo mapa de novo", span));
         }
         let result = self.call_value(&hook, std::slice::from_ref(v), span, "como_texto", env);
         self.como_texto_guard.remove(&ptr);
@@ -2166,6 +2213,96 @@ mod tests {
         let src = include_str!("../../exemplos/escola/calc_fracoes.lep");
         let out = run_to_string(src, "exemplos/escola/calc_fracoes.lep").unwrap();
         assert!(out.contains("1/4 + 1/4 = 1/2"), "{out}");
+    }
+
+    #[test]
+    fn tartaruga_anda_para_cima_e_pinta() {
+        let src = r#"
+tartaruga = importe "../lib/tartaruga"
+tela_grafica = importe "tela_grafica"
+t = tartaruga::nova_tamanho(20, 20)
+t.tartaruga::cor(:azul)
+t.tartaruga::ande(5)
+g = t:tela
+escreva(g.tela_grafica::pixel(10, 10))
+escreva(g.tela_grafica::pixel(10, 5))
+escreva(g.tela_grafica::pixel(11, 10))
+escreva(t:x)
+escreva(t:y)
+"#;
+        let out = run_to_string(src, "exemplos/jogos/t.lep").unwrap_or_else(|e| panic!("{e}"));
+        assert_eq!(out, "azul\nazul\nbranco\n10\n5\n");
+    }
+
+    #[test]
+    fn tartaruga_subir_nao_pinta_e_olhe_direita() {
+        let src = r#"
+tartaruga = importe "../lib/tartaruga"
+tela_grafica = importe "tela_grafica"
+t = tartaruga::nova_tamanho(20, 20)
+g = t:tela
+t.tartaruga::subir()
+t.tartaruga::ande(5)
+escreva(g.tela_grafica::pixel(10, 10))
+escreva(g.tela_grafica::pixel(10, 5))
+t.tartaruga::casa()
+t.tartaruga::baixar()
+t.tartaruga::cor(:vermelho)
+t.tartaruga::olhe(90)
+t.tartaruga::ande(5)
+escreva(g.tela_grafica::pixel(15, 10))
+escreva(g.tela_grafica::pixel(10, 9))
+"#;
+        let out = run_to_string(src, "exemplos/jogos/t.lep").unwrap_or_else(|e| panic!("{e}"));
+        assert_eq!(out, "branco\nbranco\nvermelho\nbranco\n");
+    }
+
+    #[test]
+    fn tartaruga_catalogo_esconde_imports_internos() {
+        let src = r#"
+ache = funcao(lista, nome)
+inicio
+    para item em lista
+    inicio
+        se item:nome == nome
+        inicio
+            retorne verdadeiro
+        fim
+    fim
+    falso
+fim
+tartaruga = importe "../lib/tartaruga"
+membros = catalogo(tartaruga)
+escreva(ache(membros, "ande"))
+escreva(ache(membros, "velocidade"))
+escreva(ache(membros, "_mat"))
+escreva(ache(membros, "_ande"))
+"#;
+        let out = run_to_string(src, "exemplos/jogos/t.lep").unwrap_or_else(|e| panic!("{e}"));
+        assert_eq!(out, "verdadeiro\nverdadeiro\nfalso\nfalso\n");
+    }
+
+    #[test]
+    fn tartaruga_devagar_termina_no_mesmo_ponto() {
+        let src = r#"
+tartaruga = importe "../lib/tartaruga"
+tela_grafica = importe "tela_grafica"
+t = tartaruga::nova_tamanho(20, 20)
+t.tartaruga::cor(:azul)
+t.tartaruga::velocidade(0.001)
+t:passo = 2
+t.tartaruga::ande(6)
+g = t:tela
+escreva(ultimo(g:ops):tipo)
+n = tamanho(g:ops)
+g:ops = remova(g:ops, n, n)
+escreva(g.tela_grafica::pixel(10, 10))
+escreva(g.tela_grafica::pixel(10, 4))
+escreva(g.tela_grafica::pixel(11, 10))
+escreva(t:y)
+"#;
+        let out = run_to_string(src, "exemplos/jogos/t.lep").unwrap_or_else(|e| panic!("{e}"));
+        assert_eq!(out, "imagem\nazul\nazul\nbranco\n4\n");
     }
 
     #[test]
@@ -2562,6 +2699,45 @@ escreva(soma(1, 2))
     }
 
     #[test]
+    fn named_inner_function_can_be_returned() {
+        let src = r#"
+faz_somador = funcao(n) {
+    soma = funcao(x) { x + n }
+    soma
+}
+mais3 = faz_somador(3)
+escreva(mais3(10))
+"#;
+        assert_eq!(run(src), "13\n");
+    }
+
+    #[test]
+    fn inner_function_sees_reassigned_local() {
+        let src = r#"
+f = funcao() {
+    x = 1
+    g = funcao() { x }
+    x = 2
+    g()
+}
+escreva(f())
+"#;
+        assert_eq!(run(src), "2\n");
+    }
+
+    #[test]
+    fn loop_closure_keeps_last_i() {
+        let src = r#"
+f = 0
+para i de 1 ate 3 {
+    f = funcao() { i }
+}
+escreva(f())
+"#;
+        assert_eq!(run(src), "3\n");
+    }
+
+    #[test]
     fn para_range_and_para_in() {
         let src = r#"
 s = 0
@@ -2620,11 +2796,7 @@ escreva(fr.como_texto())
             "t.lep",
         )
         .unwrap_err();
-        assert!(
-            err.message.contains("mesmo mapa"),
-            "{}",
-            err.message
-        );
+        assert!(err.message.contains("mesmo mapa"), "{}", err.message);
     }
 
     #[test]
@@ -2634,11 +2806,7 @@ escreva(fr.como_texto())
             "t.lep",
         )
         .unwrap_err();
-        assert!(
-            err.message.contains("devolver texto"),
-            "{}",
-            err.message
-        );
+        assert!(err.message.contains("devolver texto"), "{}", err.message);
     }
 
     #[test]
@@ -2981,10 +3149,7 @@ escreva(x)
 
     #[test]
     fn call_stack_names_the_callee() {
-        let err = match run_to_string(
-            "boom = funcao() {\n    1 / 0\n}\nboom()\n",
-            "app.lep",
-        ) {
+        let err = match run_to_string("boom = funcao() {\n    1 / 0\n}\nboom()\n", "app.lep") {
             Err(e) => e,
             Ok(_) => panic!("expected error"),
         };
@@ -3034,7 +3199,10 @@ escreva(x)
             "exemplos/linguagem"
         );
         assert_eq!(base_dir_of("media.lep").as_os_str(), ".");
-        assert_eq!(Value::Numero(3.0.into()).format_with(NumeroLocale::PtBr), "3");
+        assert_eq!(
+            Value::Numero(3.0.into()).format_with(NumeroLocale::PtBr),
+            "3"
+        );
         assert_eq!(
             Value::Texto("a".into()).format_with(NumeroLocale::PtBr),
             "a"
@@ -3275,12 +3443,13 @@ leia_arquivo("../secret.txt")
         let err = run_to_string(src, main.to_str().unwrap()).unwrap_err();
         assert!(err.file.ends_with("lib/m.lep"), "{err}");
         assert_eq!(err.span.line, 2);
-        // The call site stays in the caller's file.
+        // Innermost frame is the imported function; the caller is below.
         assert!(
-            err.stack.last().unwrap().file.ends_with("main.lep"),
+            err.stack.last().unwrap().file.ends_with("lib/m.lep"),
             "{:?}",
             err.stack
         );
+        assert!(err.stack[0].file.ends_with("main.lep"), "{:?}", err.stack);
 
         // The debugger stops in the module, showing the module's line.
         use super::super::debug::ChannelDebugger;

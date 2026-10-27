@@ -1,0 +1,13 @@
+/// Quadrado com a tartaruga. Mude o lado ou o ângulo e rode de novo.
+
+tartaruga = importe "../lib/tartaruga"
+
+t = tartaruga::nova()
+t.tartaruga::velocidade(0.02)
+t.tartaruga::cor(:azul)
+repita 4 vezes
+inicio
+    t.tartaruga::ande(80)
+    t.tartaruga::vire(90)
+fim
+t.tartaruga::mostre()

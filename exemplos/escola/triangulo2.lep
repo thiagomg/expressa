@@ -1,0 +1,37 @@
+
+//Entrada de dados
+A = leia("Digite o valor do primeiro lado: ")
+B = leia("Digite o valor do segundo lado: ")
+C = leia("Digite o valor do terceiro lado: ")
+
+A = numero(A)
+B = numero(B)
+C = numero(C)
+
+triangulo = ""
+verificador = ""
+
+//Processamento
+se A * B * C == 0 ou A + B < C {
+    verificador = verdadeiro
+} senão {
+    se A == B e B == C {
+        triangulo = "Equilatero"
+    }
+    ou se A == B ou B == C ou A == C {
+        triangulo = "Isósceles"
+    }
+    senão {
+        triangulo = "Escaleno"
+    }
+
+    verificador = falso
+}
+
+//Saida
+se verificador == verdadeiro {
+    escreva("Lados Inválidos")
+}
+se verificador == falso {
+    escreva("O triangulo é: ", triangulo)
+}

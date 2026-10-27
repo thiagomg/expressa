@@ -231,11 +231,7 @@ impl Doc {
 
     pub fn refresh_label(&self) {
         let name = self.name();
-        let base = name
-            .rsplit(['/', '\\'])
-            .next()
-            .unwrap_or(&name)
-            .to_string();
+        let base = name.rsplit(['/', '\\']).next().unwrap_or(&name).to_string();
         self.label.set_text(&if self.is_dirty() {
             format!("● {base}")
         } else {

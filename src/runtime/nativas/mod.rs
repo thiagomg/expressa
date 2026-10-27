@@ -11,6 +11,8 @@ use super::value::{Value, format_numero};
 
 mod arquivo;
 mod cartesiano;
+mod graf;
+mod imagem;
 mod mat;
 mod matriz;
 mod nucleo;
@@ -337,6 +339,74 @@ pub const NATIVAS: &[Nativa] = &[
         names: &["mostre"],
         module: Some("cartesiano"),
     },
+    Nativa {
+        names: &["nova"],
+        module: Some("tela_grafica"),
+    },
+    Nativa {
+        names: &["cor"],
+        module: Some("tela_grafica"),
+    },
+    Nativa {
+        names: &["linha"],
+        module: Some("tela_grafica"),
+    },
+    Nativa {
+        names: &["circulo", "círculo"],
+        module: Some("tela_grafica"),
+    },
+    Nativa {
+        names: &["ponto"],
+        module: Some("tela_grafica"),
+    },
+    Nativa {
+        names: &["imagem"],
+        module: Some("tela_grafica"),
+    },
+    Nativa {
+        names: &["apague"],
+        module: Some("tela_grafica"),
+    },
+    Nativa {
+        names: &["pixel"],
+        module: Some("tela_grafica"),
+    },
+    Nativa {
+        names: &["salve"],
+        module: Some("tela_grafica"),
+    },
+    Nativa {
+        names: &["mostre"],
+        module: Some("tela_grafica"),
+    },
+    Nativa {
+        names: &["evento"],
+        module: Some("tela_grafica"),
+    },
+    Nativa {
+        names: &["carregue"],
+        module: Some("imagem"),
+    },
+    Nativa {
+        names: &["salve"],
+        module: Some("imagem"),
+    },
+    Nativa {
+        names: &["rotacione"],
+        module: Some("imagem"),
+    },
+    Nativa {
+        names: &["escala"],
+        module: Some("imagem"),
+    },
+    Nativa {
+        names: &["largura"],
+        module: Some("imagem"),
+    },
+    Nativa {
+        names: &["altura"],
+        module: Some("imagem"),
+    },
 ];
 
 pub fn bind_nucleo(env: &Rc<RefCell<Env>>) {
@@ -447,6 +517,8 @@ impl Vm<'_, '_> {
             "separe" => self.bi_separe(args, span),
             "junte" => self.bi_junte(args, span, env),
             "limpe" => self.bi_limpe(args, span),
+            "apague" => self.bi_graf_limpe(args, span),
+            "evento" => self.bi_graf_evento(args, span),
             "leia_arquivo" => self.bi_leia_arquivo(args, span),
             "salve_arquivo" => self.bi_salve_arquivo(args, span),
             "adicione_arquivo" => self.bi_adicione_arquivo(args, span),
@@ -457,7 +529,32 @@ impl Vm<'_, '_> {
             "eixos" => self.bi_eixos(args, span),
             "plotar" => self.bi_plotar(args, span, env),
             "adicione" => self.bi_adicione(args, span),
-            "mostre" => self.bi_mostre(args, span),
+            "nova" => self.bi_graf_nova(args, span),
+            "cor" => self.bi_graf_cor(args, span),
+            "linha" => self.bi_graf_linha(args, span),
+            "circulo" | "círculo" => self.bi_graf_circulo(args, span),
+            "ponto" => self.bi_graf_ponto(args, span),
+            "imagem" => self.bi_graf_imagem(args, span),
+            "pixel" => self.bi_graf_pixel(args, span),
+            "carregue" => self.bi_img_carregue(args, span),
+            "rotacione" => self.bi_img_rotacione(args, span),
+            "escala" => self.bi_img_escala(args, span),
+            "largura" => self.bi_img_largura(args, span),
+            "altura" => self.bi_img_altura(args, span),
+            "salve" => {
+                if !args.is_empty() && matches!(&args[0], Value::Imagem(_)) {
+                    self.bi_img_salve(args, span)
+                } else {
+                    self.bi_graf_salve(args, span)
+                }
+            }
+            "mostre" => {
+                if !args.is_empty() && graf::is_graf(&args[0]) {
+                    self.bi_graf_mostre(args, span)
+                } else {
+                    self.bi_mostre(args, span)
+                }
+            }
             "mapa" => self.bi_mapa(args, span),
             "conjunto" => self.bi_conjunto(args, span),
             other => Err(self.err(format!("função nativa desconhecida: {other}"), span)),
@@ -531,7 +628,11 @@ pub(super) fn csv_cell(v: &Value) -> String {
     }
 }
 
-pub(super) fn lines_to_text(lines: &[Value], span: Span, vm: &Vm<'_, '_>) -> Result<String, EvalError> {
+pub(super) fn lines_to_text(
+    lines: &[Value],
+    span: Span,
+    vm: &Vm<'_, '_>,
+) -> Result<String, EvalError> {
     let mut body = String::new();
     for line in lines {
         match line {
@@ -668,21 +769,22 @@ mod tests {
         assert_eq!(run(r#"escreva(tipo(mapa()))"#), "mapa\n");
         assert_eq!(run(r#"escreva(tipo(conjunto()))"#), "conjunto\n");
         assert_eq!(run(r#"escreva(tipo(escreva))"#), "funcao\n");
-        assert_eq!(run(r#"m = importe "mat"
-escreva(tipo(m))"#), "modulo\n");
+        assert_eq!(
+            run(r#"m = importe "mat"
+escreva(tipo(m))"#),
+            "modulo\n"
+        );
         assert_eq!(run(r#"escreva(tipo(10) == "numero")"#), "verdadeiro\n");
         assert_eq!(
-            run(
-                r#"f = função(x) { x * 2 }
-escreva(tipo(f))"#
-            ),
+            run(r#"f = função(x) { x * 2 }
+escreva(tipo(f))"#),
             "funcao\n"
         );
         assert!(run_err("tipo()").contains("argumento"));
         assert_eq!(run(r#"escreva(10.tipo())"#), "numero\n");
         assert_eq!(
             run(r#"escreva(tipos())"#),
-            "[\"numero\", \"texto\", \"bool\", \"lista\", \"par\", \"mapa\", \"conjunto\", \"matriz\", \"funcao\", \"modulo\", \"nada\"]\n"
+            "[\"numero\", \"texto\", \"bool\", \"lista\", \"par\", \"mapa\", \"conjunto\", \"matriz\", \"imagem\", \"funcao\", \"modulo\", \"nada\"]\n"
         );
         assert_eq!(run(r#"escreva(tipos() contem "numero")"#), "verdadeiro\n");
         assert!(run_err("tipos(1)").contains("argumento"));
@@ -723,10 +825,7 @@ escreva(f(3))
 
     #[test]
     fn aritmetica_decimal_padrao_e_float_opcional() {
-        assert_eq!(
-            run("escreva(35.87+12.63+11.05+11.47+10.35)"),
-            "81,37\n"
-        );
+        assert_eq!(run("escreva(35.87+12.63+11.05+11.47+10.35)"), "81,37\n");
         assert_eq!(run("escreva(0.1 + 0.2)"), "0,3\n");
         assert_eq!(run("escreva(0.1 + 0.2 == 0.3)"), "verdadeiro\n");
         assert_eq!(

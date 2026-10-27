@@ -129,9 +129,8 @@ impl Vm<'_, '_> {
             (MapKey::Texto("cor".into()), Value::Texto(cor)),
         ]);
         {
-            let curvas = get_lista(&mapa, "curvas").ok_or_else(|| {
-                self.err("grafico precisa de :curvas", span)
-            })?;
+            let curvas = get_lista(&mapa, "curvas")
+                .ok_or_else(|| self.err("grafico precisa de :curvas", span))?;
             curvas.borrow_mut().push(curva);
         }
         Ok(args[0].clone())
@@ -141,10 +140,7 @@ impl Vm<'_, '_> {
         self.expect_arity(args, 2, span)?;
         let doc = expect_mapa(&args[0], "documento", span, self)?;
         if !tem_chave(&doc, "graficos") {
-            return Err(self.err(
-                "adicione espera um documento (cart::documento())",
-                span,
-            ));
+            return Err(self.err("adicione espera um documento (cart::documento())", span));
         }
         let graf = expect_mapa(&args[1], "grafico", span, self)?;
         if !tem_chave(&graf, "curvas") {
@@ -160,9 +156,8 @@ impl Vm<'_, '_> {
             return Err(self.err("adicione espera um gráfico com pelo menos uma curva", span));
         }
         let copia = deep_clone(&args[1]);
-        let graficos = get_lista(&doc, "graficos").ok_or_else(|| {
-            self.err("documento precisa de :graficos", span)
-        })?;
+        let graficos = get_lista(&doc, "graficos")
+            .ok_or_else(|| self.err("documento precisa de :graficos", span))?;
         graficos.borrow_mut().push(copia);
         Ok(args[0].clone())
     }
@@ -173,9 +168,8 @@ impl Vm<'_, '_> {
         if !tem_chave(&doc, "graficos") {
             return Err(self.err("mostre espera um documento (cart::documento())", span));
         }
-        let graficos = get_lista(&doc, "graficos").ok_or_else(|| {
-            self.err("documento precisa de :graficos", span)
-        })?;
+        let graficos = get_lista(&doc, "graficos")
+            .ok_or_else(|| self.err("documento precisa de :graficos", span))?;
         if graficos.borrow().is_empty() {
             return Err(self.err("adicione pelo menos um gráfico", span));
         }
@@ -191,9 +185,7 @@ impl Vm<'_, '_> {
         if let Some(host) = self.cartesiano_host.as_mut() {
             host.mostre(folha).map_err(|e| self.err(e, span))?;
         } else if self.abrir_cartesiano {
-            self.cli_cart
-                .mostre(folha)
-                .map_err(|e| self.err(e, span))?;
+            self.cli_cart.mostre(folha).map_err(|e| self.err(e, span))?;
         }
         Ok(args[0].clone())
     }
@@ -232,7 +224,10 @@ fn grafico_pronto(v: &Value, span: Span, vm: &Vm<'_, '_>) -> Result<GraficoPront
                         Value::Nada => pontos.push((x, None)),
                         other => {
                             return Err(vm.err(
-                                format!("y do ponto deve ser numero, encontrado {}", other.type_name()),
+                                format!(
+                                    "y do ponto deve ser numero, encontrado {}",
+                                    other.type_name()
+                                ),
                                 span,
                             ));
                         }
@@ -277,9 +272,17 @@ fn tem_chave(mapa: &Rc<RefCell<Vec<(MapKey, Value)>>>, chave: &str) -> bool {
     mapa.borrow().iter().any(|(kk, _)| *kk == k)
 }
 
-fn get_lista(mapa: &Rc<RefCell<Vec<(MapKey, Value)>>>, chave: &str) -> Option<Rc<RefCell<Vec<Value>>>> {
+fn get_lista(
+    mapa: &Rc<RefCell<Vec<(MapKey, Value)>>>,
+    chave: &str,
+) -> Option<Rc<RefCell<Vec<Value>>>> {
     let k = MapKey::Texto(chave.into());
-    match mapa.borrow().iter().find(|(kk, _)| *kk == k).map(|(_, v)| v) {
+    match mapa
+        .borrow()
+        .iter()
+        .find(|(kk, _)| *kk == k)
+        .map(|(_, v)| v)
+    {
         Some(Value::Lista(xs)) => Some(Rc::clone(xs)),
         _ => None,
     }
@@ -287,7 +290,12 @@ fn get_lista(mapa: &Rc<RefCell<Vec<(MapKey, Value)>>>, chave: &str) -> Option<Rc
 
 fn get_f64(mapa: &Rc<RefCell<Vec<(MapKey, Value)>>>, chave: &str) -> Option<f64> {
     let k = MapKey::Texto(chave.into());
-    match mapa.borrow().iter().find(|(kk, _)| *kk == k).map(|(_, v)| v) {
+    match mapa
+        .borrow()
+        .iter()
+        .find(|(kk, _)| *kk == k)
+        .map(|(_, v)| v)
+    {
         Some(Value::Numero(n)) => Some(n.to_f64()),
         _ => None,
     }
@@ -295,7 +303,12 @@ fn get_f64(mapa: &Rc<RefCell<Vec<(MapKey, Value)>>>, chave: &str) -> Option<f64>
 
 fn get_texto(mapa: &Rc<RefCell<Vec<(MapKey, Value)>>>, chave: &str) -> Option<String> {
     let k = MapKey::Texto(chave.into());
-    match mapa.borrow().iter().find(|(kk, _)| *kk == k).map(|(_, v)| v) {
+    match mapa
+        .borrow()
+        .iter()
+        .find(|(kk, _)| *kk == k)
+        .map(|(_, v)| v)
+    {
         Some(Value::Texto(s)) => Some(s.clone()),
         _ => None,
     }
@@ -359,8 +372,7 @@ escreva(tipo(c))
 
     #[test]
     fn plotar_amostra_e_congela_no_adicione() {
-        let out = run(
-            r#"
+        let out = run(r#"
 g = grafico()
 g.eixos(-1, 1, -1, 1)
 g.plotar(função(x) { x }, :azul)
@@ -371,8 +383,7 @@ c.adicione(g)
 g.plotar(função(x) { 0 }, :vermelho)
 escreva(tamanho(g:curvas))
 escreva(tamanho(c:graficos[1]:curvas))
-"#,
-        );
+"#);
         assert_eq!(out, format!("1\n{}\n2\n1\n", super::AMOSTRAS));
     }
 
@@ -381,30 +392,36 @@ escreva(tamanho(c:graficos[1]:curvas))
         assert!(run_err("g = grafico()\ng.plotar(função(x) { x }, :azul)").contains("eixos"));
         assert!(run_err("c = documento()\nc.mostre()").contains("gráfico"));
         assert!(run_err("eixos(1, 0, 1, -1, 1)").contains("grafico"));
-        assert!(run_err(
-            r#"
+        assert!(
+            run_err(
+                r#"
 g = grafico()
 g.eixos(1, 0, -1, 1)
 "#
-        )
-        .contains("xmin"));
-        assert!(run_err(
-            r#"
+            )
+            .contains("xmin")
+        );
+        assert!(
+            run_err(
+                r#"
 g = grafico()
 g.eixos(-1, 1, -1, 1)
 g.plotar(função(x) { x }, :rosa)
 "#
-        )
-        .contains("cor desconhecida"));
-        assert!(run_err(
-            r#"
+            )
+            .contains("cor desconhecida")
+        );
+        assert!(
+            run_err(
+                r#"
 c = documento()
 g = grafico()
 g.eixos(-1, 1, -1, 1)
 c.adicione(g)
 "#
-        )
-        .contains("curva"));
+            )
+            .contains("curva")
+        );
     }
 
     #[test]
@@ -436,6 +453,7 @@ c.mostre()
             None,
             Some(&mut cap),
             false,
+            None,
             &[],
         )
         .unwrap();
@@ -479,6 +497,7 @@ c2.mostre()
             None,
             Some(&mut cap),
             false,
+            None,
             &[],
         )
         .unwrap();
@@ -500,7 +519,7 @@ c = documento()
 c.adicione(g)
 c.mostre()
 "#;
-        // 0/0 in decimal might error; use a function that returns via se_falhar nada? 
+        // 0/0 in decimal might error; use a function that returns via se_falhar nada?
         // Simpler: plot 1/x which is inf at 0? 1/0 errors in expressa.
         // We'll just check the test below with explicit nothing via a condition that
         // still returns a number that's inf... decimal 1/0 is error.
@@ -511,14 +530,12 @@ c.mostre()
         // For this language, holes happen if we later add sqrt negative as nan... raiz errors.
         // Keep the test as "plotar succeeds" — hole path is still unit-tested via FolhaPronta.
         let _ = src;
-        let out = run(
-            r#"
+        let out = run(r#"
 g = grafico()
 g.eixos(-1, 1, -1, 1)
 g.plotar(função(x) { x }, :azul)
 escreva(g:curvas[1]:cor)
-"#,
-        );
+"#);
         assert_eq!(out, "azul\n");
     }
 }

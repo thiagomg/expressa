@@ -15,6 +15,8 @@ pub struct Prefs {
     pub pasta: String,
     /// Last remote server URL.
     pub servidor: String,
+    /// Last file opened in the project (relative path).
+    pub arquivo: String,
 }
 
 impl Default for Prefs {
@@ -24,6 +26,7 @@ impl Default for Prefs {
             dark: false,
             pasta: String::new(),
             servidor: "http://127.0.0.1:50051".to_string(),
+            arquivo: String::new(),
         }
     }
 }
@@ -50,6 +53,7 @@ impl Prefs {
                 "tema" => p.dark = v.trim() == "escuro",
                 "pasta" => p.pasta = v.trim().to_string(),
                 "servidor" => p.servidor = v.trim().to_string(),
+                "arquivo" => p.arquivo = v.trim().to_string(),
                 _ => {}
             }
         }
@@ -58,11 +62,12 @@ impl Prefs {
 
     pub fn to_text(&self) -> String {
         format!(
-            "fonte={}\ntema={}\npasta={}\nservidor={}\n",
+            "fonte={}\ntema={}\npasta={}\nservidor={}\narquivo={}\n",
             self.font_size,
             if self.dark { "escuro" } else { "claro" },
             self.pasta,
             self.servidor,
+            self.arquivo,
         )
     }
 
@@ -101,9 +106,7 @@ pub fn expand_tilde(path: &str) -> PathBuf {
     if path == "~" {
         return home_dir().unwrap_or_else(|| PathBuf::from("~"));
     }
-    let rest = path
-        .strip_prefix("~/")
-        .or_else(|| path.strip_prefix("~\\"));
+    let rest = path.strip_prefix("~/").or_else(|| path.strip_prefix("~\\"));
     if let Some(rest) = rest {
         if let Some(home) = home_dir() {
             return home.join(rest);
@@ -183,7 +186,8 @@ impl ThemeCss {
     }
 
     pub fn apply(&self, dark: bool) {
-        self.0.load_from_data(if dark { DARK_CSS } else { LIGHT_CSS });
+        self.0
+            .load_from_data(if dark { DARK_CSS } else { LIGHT_CSS });
     }
 }
 

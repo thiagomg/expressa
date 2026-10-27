@@ -252,10 +252,7 @@ mod tests {
             .add(n("10.35"), mode)
             .unwrap();
         assert_eq!(s.to_plain_string(), "81.37");
-        assert_eq!(
-            n("0.1").add(n("0.2"), mode).unwrap(),
-            n("0.3")
-        );
+        assert_eq!(n("0.1").add(n("0.2"), mode).unwrap(), n("0.3"));
     }
 
     #[test]

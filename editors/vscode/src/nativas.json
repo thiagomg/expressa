@@ -46,9 +46,11 @@
   "modules": [
     "arquivo",
     "cartesiano",
+    "imagem",
     "mat",
     "matriz",
-    "tela"
+    "tela",
+    "tela_grafica"
   ],
   "nativas": [
     {
@@ -205,7 +207,7 @@
         "tipo(valor)"
       ],
       "summary": "Quantidade de caracteres, itens, pares ou linhas.",
-      "doc": "Quantidade de caracteres, itens, pares ou linhas.\n\nNome do tipo do valor: numero, texto, bool, lista, par, mapa,\nconjunto, matriz, funcao, modulo ou nada.\n\nServe para uma função aceitar mais de um tipo (se tipo(x) == \"numero\").\nOs nomes são os mesmos das mensagens de erro (sem acento).\n\nExemplo: tipo(10)"
+      "doc": "Quantidade de caracteres, itens, pares ou linhas.\n\nNome do tipo do valor: numero, texto, bool, lista, par, mapa,\nconjunto, matriz, imagem, funcao, modulo ou nada.\n\nServe para uma função aceitar mais de um tipo (se tipo(x) == \"numero\").\nOs nomes são os mesmos das mensagens de erro (sem acento).\n\nExemplo: tipo(10)"
     },
     {
       "name": "tipos",
@@ -937,10 +939,207 @@
       "module": "cartesiano",
       "kind": "funcao",
       "signatures": [
-        "mostre(documento)"
+        "mostre(documento)",
+        "mostre(g)"
       ],
       "summary": "Abre ou atualiza a janela deste documento e devolve o foco. Não espera fechar.",
       "doc": "Abre ou atualiza a janela deste documento e devolve o foco. Não espera fechar.\n\nO primeiro mostre abre; os seguintes só atualizam a mesma janela. Folha vazia é erro.\n\nExemplo: c.mostre()"
+    },
+    {
+      "name": "nova",
+      "aliases": [],
+      "module": "tela_grafica",
+      "kind": "funcao",
+      "signatures": [
+        "nova(largura, altura)"
+      ],
+      "summary": "Tela de pixels. A janela abre no primeiro mostre().",
+      "doc": "Tela de pixels. A janela abre no primeiro mostre().\n\nlargura e altura são inteiros de 1 a 2048. Origem no canto superior\nesquerdo, y para baixo, (0, 0) no primeiro pixel.\n\nExemplo: g = nova(320, 200)"
+    },
+    {
+      "name": "cor",
+      "aliases": [],
+      "module": "tela_grafica",
+      "kind": "funcao",
+      "signatures": [
+        "cor(g, cor)"
+      ],
+      "summary": "Caneta atual. Cores: as da tela (azul, vermelho, …). Padrão: preto.",
+      "doc": "Caneta atual. Cores: as da tela (azul, vermelho, …). Padrão: preto.\n\nExemplo: g.cor(:azul)"
+    },
+    {
+      "name": "linha",
+      "aliases": [],
+      "module": "tela_grafica",
+      "kind": "funcao",
+      "signatures": [
+        "linha(g, x1, y1, x2, y2)"
+      ],
+      "summary": "Reta da caneta. Pixels fora da tela são recortados.",
+      "doc": "Reta da caneta. Pixels fora da tela são recortados.\n\nExemplo: g.linha(10, 10, 310, 190)"
+    },
+    {
+      "name": "circulo",
+      "aliases": [
+        "círculo"
+      ],
+      "module": "tela_grafica",
+      "kind": "funcao",
+      "signatures": [
+        "circulo(g, x, y, r)"
+      ],
+      "summary": "Circunferência (contorno). Raio ≥ 0.",
+      "doc": "Circunferência (contorno). Raio ≥ 0.\n\nExemplo: g.circulo(160, 100, 40)"
+    },
+    {
+      "name": "ponto",
+      "aliases": [],
+      "module": "tela_grafica",
+      "kind": "funcao",
+      "signatures": [
+        "ponto(g, x, y)"
+      ],
+      "summary": "Um pixel da caneta. Fora da tela, ignora.",
+      "doc": "Um pixel da caneta. Fora da tela, ignora.\n\nExemplo: g.ponto(5, 5)"
+    },
+    {
+      "name": "imagem",
+      "aliases": [],
+      "module": "tela_grafica",
+      "kind": "funcao",
+      "signatures": [
+        "imagem(g, caminho, x, y, angulo)",
+        "imagem(g, img, x, y, angulo)",
+        "imagem(g, img, x, y)"
+      ],
+      "summary": "Carimba uma imagem centrada em (x, y). O segundo argumento é um caminho PNG ou um valor de `importe \"imagem\"`. O arquivo é lido uma vez; os pixels ficam no comando. angulo é em graus, no sentido horário; 0 deixa o topo para cima. Pixels transparentes não cobrem o desenho.",
+      "doc": "Carimba uma imagem centrada em (x, y). O segundo argumento é um caminho\nPNG ou um valor de `importe \"imagem\"`. O arquivo é lido uma vez; os\npixels ficam no comando. angulo é em graus, no sentido horário; 0 deixa\no topo para cima. Pixels transparentes não cobrem o desenho.\n\nExemplo: g.imagem(img, 160, 100, 90)"
+    },
+    {
+      "name": "apague",
+      "aliases": [],
+      "module": "tela_grafica",
+      "kind": "funcao",
+      "signatures": [
+        "apague(g)"
+      ],
+      "summary": "Apaga o desenho. O fundo continua branco.",
+      "doc": "Apaga o desenho. O fundo continua branco.\n\nExemplo: g.apague()"
+    },
+    {
+      "name": "pixel",
+      "aliases": [],
+      "module": "tela_grafica",
+      "kind": "funcao",
+      "signatures": [
+        "pixel(g, x, y)"
+      ],
+      "summary": "Cor do pixel (texto). Fora da tela é erro. Rasteriza se precisar.",
+      "doc": "Cor do pixel (texto). Fora da tela é erro. Rasteriza se precisar.\n\nExemplo: escreva(g.pixel(10, 10))"
+    },
+    {
+      "name": "salve",
+      "aliases": [],
+      "module": "tela_grafica",
+      "kind": "funcao",
+      "signatures": [
+        "salve(g, caminho)",
+        "salve(img, caminho)"
+      ],
+      "summary": "Grava um PNG. Não precisa de janela. Caminho relativo ao .lep.",
+      "doc": "Grava um PNG. Não precisa de janela. Caminho relativo ao .lep.\n\nExemplo: g.salve(\"casa.png\")"
+    },
+    {
+      "name": "mostre",
+      "aliases": [],
+      "module": "tela_grafica",
+      "kind": "funcao",
+      "signatures": [
+        "mostre(documento)",
+        "mostre(g)"
+      ],
+      "summary": "Abre ou atualiza a janela deste documento e devolve o foco. Não espera fechar.",
+      "doc": "Abre ou atualiza a janela deste documento e devolve o foco. Não espera fechar.\n\nO primeiro mostre abre; os seguintes só atualizam a mesma janela. Folha vazia é erro.\n\nExemplo: c.mostre()"
+    },
+    {
+      "name": "evento",
+      "aliases": [],
+      "module": "tela_grafica",
+      "kind": "funcao",
+      "signatures": [
+        "evento(g)",
+        "evento(g, segundos)"
+      ],
+      "summary": "Espera um clique, tecla ou fechar nesta janela. Sem tempo, espera até acontecer. Com segundos, espera no máximo isso (0 olha uma vez). Devolve um mapa :tipo (clique, tecla, sair, nada), :x :y em pixels, :botao, :tecla. Chame mostre() antes. Sem janela é erro.",
+      "doc": "Espera um clique, tecla ou fechar nesta janela. Sem tempo, espera até\nacontecer. Com segundos, espera no máximo isso (0 olha uma vez). Devolve\num mapa :tipo (clique, tecla, sair, nada), :x :y em pixels, :botao, :tecla.\nChame mostre() antes. Sem janela é erro.\n\nExemplo: ev = g.evento(0.05)"
+    },
+    {
+      "name": "carregue",
+      "aliases": [],
+      "module": "imagem",
+      "kind": "funcao",
+      "signatures": [
+        "carregue(caminho)"
+      ],
+      "summary": "Lê um PNG (até 2048×2048). Devolve um valor do tipo imagem, em memória.",
+      "doc": "Lê um PNG (até 2048×2048). Devolve um valor do tipo imagem, em memória.\n\nCaminho relativo ao .lep. Pixels transparentes são preservados.\n\nExemplo: img = carregue(\"tartaruga.png\")"
+    },
+    {
+      "name": "salve",
+      "aliases": [],
+      "module": "imagem",
+      "kind": "funcao",
+      "signatures": [
+        "salve(g, caminho)",
+        "salve(img, caminho)"
+      ],
+      "summary": "Grava um PNG. Não precisa de janela. Caminho relativo ao .lep.",
+      "doc": "Grava um PNG. Não precisa de janela. Caminho relativo ao .lep.\n\nExemplo: g.salve(\"casa.png\")"
+    },
+    {
+      "name": "rotacione",
+      "aliases": [],
+      "module": "imagem",
+      "kind": "funcao",
+      "signatures": [
+        "rotacione(img, graus)"
+      ],
+      "summary": "Gira no sentido horário, em graus. 0 deixa o topo apontando para cima. 90, 180 e 270 são exatos. Devolve uma imagem nova; a original não muda.",
+      "doc": "Gira no sentido horário, em graus. 0 deixa o topo apontando para cima.\n90, 180 e 270 são exatos. Devolve uma imagem nova; a original não muda.\n\nExemplo: r = rotacione(img, 90)"
+    },
+    {
+      "name": "escala",
+      "aliases": [],
+      "module": "imagem",
+      "kind": "funcao",
+      "signatures": [
+        "escala(img, fator)",
+        "escala(img, fator_x, fator_y)"
+      ],
+      "summary": "Redimensiona. Fator 2 dobra; 0,5 reduz à metade. Vizinho mais próximo (bom para sprites). Devolve uma imagem nova.",
+      "doc": "Redimensiona. Fator 2 dobra; 0,5 reduz à metade. Vizinho mais próximo\n(bom para sprites). Devolve uma imagem nova.\n\nExemplo: d = escala(img, 2)"
+    },
+    {
+      "name": "largura",
+      "aliases": [],
+      "module": "imagem",
+      "kind": "funcao",
+      "signatures": [
+        "largura(img)"
+      ],
+      "summary": "Largura em pixels.",
+      "doc": "Largura em pixels.\n\nExemplo: escreva(largura(img))"
+    },
+    {
+      "name": "altura",
+      "aliases": [],
+      "module": "imagem",
+      "kind": "funcao",
+      "signatures": [
+        "altura(img)"
+      ],
+      "summary": "Altura em pixels.",
+      "doc": "Altura em pixels.\n\nExemplo: escreva(altura(img))"
     },
     {
       "name": "argumentos",

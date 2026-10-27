@@ -150,7 +150,7 @@ importe "matematica"      // nomes soltos
 soma(10, 5)
 ```
 
-Nativos: `tela`, `mat`, `matriz`, `arquivo`, `cartesiano`. Nome sem `/` nem `.lep` procura o nativo primeiro. `importe "./matriz"` força arquivo local.
+Nativos: `tela`, `mat`, `matriz`, `arquivo`, `cartesiano`, `tela_grafica`, `imagem`. Nome sem `/` nem `.lep` procura o nativo primeiro. `importe "./matriz"` força arquivo local.
 
 ---
 
@@ -504,6 +504,32 @@ c.cart::mostre()
 ```
 
 `adicione` copia o gráfico (congelado). O próximo `mostre` do mesmo `c` não abre outra janela. Dois `documento()` são duas janelas. Cores: as da `tela`. `tipo(g)` é `"mapa"`. Na Aula aparece o painel **Gráficos** (botão Destacar). No terminal, `expressa-grafico` (ou `expressa --grafico`).
+
+## `importe "tela_grafica"`
+
+Tela de pixels (MSX SCREEN 2): um mapa por janela, comandos `linha` / `circulo` / `ponto` / `imagem`, depois `mostre` ou `salve`.
+
+```
+tela_grafica = importe "tela_grafica"
+g = tela_grafica::nova(320, 200)
+g.tela_grafica::cor(:azul)
+g.tela_grafica::linha(10, 10, 310, 190)
+g.tela_grafica::mostre()
+g.tela_grafica::salve("casa.png")
+```
+
+`(0, 0)` é o canto superior esquerdo; y cresce para baixo. Cada `nova()` é uma janela; o `mostre` da mesma instância só atualiza. `evento(g)` espera um clique ou tecla nessa janela; `evento(g, 0.05)` espera até 50 ms. Na Aula a janela é irmã (não entra no painel Gráficos). `pixel(g, x, y)` devolve a cor daquele ponto. Detalhe do protocolo com o visor: `docs/tela_grafica.md`.
+
+## `importe "imagem"`
+
+PNG em memória: `carregue`, `salve`, `rotacione`, `escala`, `largura`, `altura`. `tipo(img)` é `"imagem"`. `tela_grafica::imagem` aceita o valor (ou um caminho, lido uma vez).
+
+```
+img = importe "imagem"
+figura = img::carregue("tartaruga.png")
+g.tela_grafica::imagem(figura, 160, 100, 90)
+figura.img::salve("copia.png")
+```
 
 ### `documento()`
 

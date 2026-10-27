@@ -1,0 +1,5 @@
+# Melhorias do editor
+
+A Aula reabre a última pasta do projeto em vez de pedir a pasta toda vez. Home e `/` não são pasta de projeto: listá-las na thread do GTK travava a janela. A árvore ignora pastas ocultas, `target` e `node_modules`, e recusa uma pasta com dezenas de milhares de entradas. O seletor de pasta é o `GtkFileDialog` (sem `MainLoop` aninhado). O `FileChooserNative` não abria janela nenhuma e, modal, deixava a Aula sem mouse e sem teclado. O último arquivo daquela pasta volta na aba. A barra de status mostra `linha:coluna` do cursor. **Ver → Ir para linha** (Ctrl+G) pede o número e posiciona o cursor.
+
+Essas três coisas eram o que mais atrapalhava o uso no dia a dia: diálogo de pasta a cada F5 da IDE, não saber em que linha se está, e não ter um atalho para pular para a linha de um erro ditado em voz alta.

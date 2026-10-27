@@ -748,29 +748,11 @@ mod tests {
             assert_eq!(t, "AAAXY\n");
             // write! splits "\x1b[{row};{col}H" into separate writes. Forca
             // and Termo place the keyboard that way.
-            let t = screen_text(&[
-                "AAAAAA\n",
-                "\x1b[",
-                "1",
-                ";",
-                "4",
-                "H",
-                "XY",
-                "\x1b[K",
-            ])
-            .unwrap();
+            let t =
+                screen_text(&["AAAAAA\n", "\x1b[", "1", ";", "4", "H", "XY", "\x1b[K"]).unwrap();
             assert_eq!(t, "AAAXY\n", "split CUP still overlays");
             let t = screen_text(&[
-                "\x1b[H",
-                "  |   |",
-                "\x1b[K",
-                "\r\n",
-                "\x1b[",
-                "1",
-                ";",
-                "12",
-                "H",
-                "Q W",
+                "\x1b[H", "  |   |", "\x1b[K", "\r\n", "\x1b[", "1", ";", "12", "H", "Q W",
                 "\x1b[K",
             ])
             .unwrap();

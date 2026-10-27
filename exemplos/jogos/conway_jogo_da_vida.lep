@@ -178,5 +178,5 @@ enquanto 1 == 1 {
     casa()
     m = m.nova_geracao()
     desenha(m)
-    durma(0.1)
+    durma(0.2)
 }

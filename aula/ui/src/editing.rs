@@ -178,9 +178,8 @@ pub fn attach_plain_paste(view: &sourceview5::View) {
         }
         let buffer = view.buffer();
         let view = view.clone();
-        view.clipboard().read_text_async(
-            gtk::gio::Cancellable::NONE,
-            move |res| {
+        view.clipboard()
+            .read_text_async(gtk::gio::Cancellable::NONE, move |res| {
                 let Ok(Some(text)) = res else {
                     return;
                 };
@@ -191,8 +190,7 @@ pub fn attach_plain_paste(view: &sourceview5::View) {
                 buffer.delete_selection(true, true);
                 buffer.insert_at_cursor(&text);
                 buffer.end_user_action();
-            },
-        );
+            });
     });
 }
 

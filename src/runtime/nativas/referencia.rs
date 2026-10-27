@@ -58,6 +58,8 @@ const MAT: &str = include_str!("../../../docs/nativas/mat.lep");
 const MATRIZ: &str = include_str!("../../../docs/nativas/matriz.lep");
 const ARQUIVO: &str = include_str!("../../../docs/nativas/arquivo.lep");
 const CARTESIANO: &str = include_str!("../../../docs/nativas/cartesiano.lep");
+const TELA_GRAFICA: &str = include_str!("../../../docs/nativas/tela_grafica.lep");
+const IMAGEM: &str = include_str!("../../../docs/nativas/imagem.lep");
 
 pub fn builtin_docs() -> &'static [BuiltinDoc] {
     static DOCS: OnceLock<Vec<BuiltinDoc>> = OnceLock::new();
@@ -108,6 +110,8 @@ fn load_all() -> Vec<BuiltinDoc> {
         (MATRIZ, Some("matriz")),
         (ARQUIVO, Some("arquivo")),
         (CARTESIANO, Some("cartesiano")),
+        (TELA_GRAFICA, Some("tela_grafica")),
+        (IMAGEM, Some("imagem")),
     ] {
         out.extend(extract(src, module).unwrap_or_else(|e| {
             panic!("docs/nativas ({module:?}): {e}");

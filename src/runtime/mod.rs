@@ -5,6 +5,10 @@ mod error;
 mod eval;
 mod folha;
 mod formate;
+mod graf;
+mod graf_host;
+mod graf_proto;
+mod imagem;
 mod leia;
 mod nativas;
 mod numero;
@@ -13,26 +17,29 @@ mod rng;
 mod value;
 mod viewer;
 
+pub use cartesiano_host::{CapturaCartesiano, CartesianoHost, CliCartesianoHost, NullCartesiano};
 pub use debug::{
     ChannelDebugger, CliDebugger, DebugAction, DebugBinding, DebugCtx, DebugFrameInfo, DebugHook,
     DebugPaused, DebugSession, NoopHook, StopHook, collect_stack, collect_vars, snapshot,
 };
 pub use error::{CallFrame, RuntimeError};
-pub use cartesiano_host::{CapturaCartesiano, CartesianoHost, CliCartesianoHost, NullCartesiano};
 pub use eval::{
     debug_source, debug_source_args, run_source, run_source_args, run_source_marcador,
     run_source_marcador_args, run_to_string, run_to_string_with, run_to_strings_with,
     run_with_hook, run_with_hosts, run_with_leia_host,
 };
 pub use folha::{CurvaPronta, FolhaPronta, GraficoPronto, pintar};
+pub use graf::{OpGraf, TelaGrafica};
+pub use graf_host::{CapturaGraf, EventoGraf, GrafHost, NullGraf};
+pub use imagem::Imagem;
 pub use leia::{CLEAR_SCREEN, CURSOR_HOME, LEIA_MARKER, LeiaHost};
-pub use viewer::run_viewer;
 pub use nativas::{
     BuiltinDoc, NATIVAS, Nativa, builtin_docs, lookup_alvo, lookup_builtin_doc, lookup_ficha,
 };
-pub use repl::run_repl;
 pub use numero::{Numero, NumeroAritmetica, default_numero_aritmetica};
+pub use repl::run_repl;
 pub use value::{NumeroLocale, Value, default_numero_locale};
+pub use viewer::{run_live_viewer, run_viewer};
 
 #[cfg(test)]
 mod tests {

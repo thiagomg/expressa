@@ -114,6 +114,16 @@
       <keyword>número</keyword>
       <keyword>formato</keyword>
       <keyword>formate</keyword>
+      <keyword>nova</keyword>
+      <keyword>cor</keyword>
+      <keyword>linha</keyword>
+      <keyword>circulo</keyword>
+      <keyword>círculo</keyword>
+      <keyword>ponto</keyword>
+      <keyword>apague</keyword>
+      <keyword>evento</keyword>
+      <keyword>pixel</keyword>
+      <keyword>salve</keyword>
       <keyword>avaliar</keyword>
       <keyword>catalogo</keyword>
       <keyword>ajuda</keyword>
@@ -172,6 +182,12 @@
       <keyword>adicione_arquivo</keyword>
       <keyword>leia_csv</keyword>
       <keyword>salve_csv</keyword>
+      <keyword>imagem</keyword>
+      <keyword>carregue</keyword>
+      <keyword>rotacione</keyword>
+      <keyword>escala</keyword>
+      <keyword>largura</keyword>
+      <keyword>altura</keyword>
       <keyword>documento</keyword>
       <keyword>grafico</keyword>
       <keyword>eixos</keyword>

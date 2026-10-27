@@ -43,9 +43,14 @@ Name: "envpath"; Description: "Adicionar expressa e expressa-grafico ao PATH"; G
 [Files]
 ; A pasta inteira: editor, GTK, exemplos e bin\ (expressa.exe e expressa-grafico.exe).
 Source: "dist\expressa-aula\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+; Copia para Documentos os exemplos que ainda nao existem (tambem na
+; atualizacao: arquivos novos entram, os ja editados ficam). Desinstalar
+; nao apaga essa pasta.
+Source: "dist\expressa-aula\exemplos\*"; DestDir: "{userdocs}\Expressa Aula\exemplos"; Flags: ignoreversion recursesubdirs createallsubdirs onlyifdoesntexist uninsneveruninstall
 
 [Icons]
 Name: "{group}\Expressa Aula"; Filename: "{app}\expressa-aula.exe"
+Name: "{group}\Tutoriais Expressa"; Filename: "{app}\expressa-tutorial.exe"
 Name: "{autodesktop}\Expressa Aula"; Filename: "{app}\expressa-aula.exe"; Tasks: desktopicon
 
 [Run]

@@ -1,0 +1,255 @@
+/// Tartaruga Logo: anda, vira e desenha na tela de pixels.
+///
+/// Ângulo 0 olha para cima. vire é para a direita (sentido horário).
+/// A origem (casa) fica no centro da tela.
+///
+/// velocidade(t, segundos) faz cada pedaço do traço aparecer na hora,
+/// com a figura tartaruga.png (32×32) no lugar da tartaruga.
+/// 0 desenha tudo de uma vez.
+/// Exemplo: velocidade(t, 0.02).
+
+_mat = importe "mat"
+_tela = importe "tela_grafica"
+_img = importe "imagem"
+
+/// Tela 400×400, caneta abaixada, olhando para cima.
+nova = função()
+inicio
+    nova_tamanho(400, 400)
+fim
+
+/// Tela largura×altura. Centro é a casa.
+nova_tamanho = função(largura, altura)
+inicio
+    g = _tela::nova(largura, altura)
+    mapa([
+        :tela -> g,
+        :figura -> _img::carregue("../lib/tartaruga.png"),
+        :largura -> largura,
+        :altura -> altura,
+        :x -> largura / 2,
+        :y -> altura / 2,
+        :angulo -> 0,
+        :baixo -> verdadeiro,
+        :cor -> "preto",
+        :pausa -> 0,
+        :passo -> 8,
+        :marca -> 0,
+    ])
+fim
+
+/// Segundos entre um pedaço e o próximo. 0 desenha a reta inteira de uma vez.
+velocidade = função(t, segundos)
+inicio
+    se segundos < 0
+    inicio
+        segundos = 0
+    fim
+    t:pausa = segundos
+    se segundos > 0
+    inicio
+        _desenha(t)
+        g = t:tela
+        g._tela::mostre()
+    fim
+    t
+fim
+
+/// Tira a figura da lista de traços. O desenho da caneta fica.
+_esconde = função(t)
+inicio
+    se t:marca > 0
+    inicio
+        g = t:tela
+        n = tamanho(g:ops)
+        se n >= t:marca
+        inicio
+            g:ops = remova(g:ops, n - t:marca + 1, n)
+        fim
+        t:marca = 0
+    fim
+    t
+fim
+
+/// tartaruga.png (32×32) ao lado desta biblioteca. A cabeça da figura
+/// aponta para cima, que é o ângulo 0.
+_desenha = função(t)
+inicio
+    _esconde(t)
+    g = t:tela
+    g._tela::imagem(t:figura, t:x, t:y, t:angulo)
+    t:marca = 1
+    t
+fim
+
+_mostra_passo = função(t)
+inicio
+    _desenha(t)
+    g = t:tela
+    g._tela::mostre()
+    durma(t:pausa)
+    t
+fim
+
+/// Um deslocamento só, sem espera.
+_ande = função(t, n)
+inicio
+    a = _mat::radianos(t:angulo)
+    x2 = t:x + n * _mat::seno(a)
+    y2 = t:y - n * _mat::cosseno(a)
+    se t:baixo
+    inicio
+        g = t:tela
+        g._tela::cor(t:cor)
+        g._tela::linha(t:x, t:y, x2, y2)
+    fim
+    t:x = x2
+    t:y = y2
+    t
+fim
+
+/// Anda n pixels na direção atual. Com a caneta abaixada, traça a reta.
+/// Com velocidade > 0, o traço aparece aos poucos.
+ande = função(t, n)
+inicio
+    se t:pausa <= 0
+    inicio
+        _ande(t, n)
+    fim
+    senao
+    inicio
+        _ande_devagar(t, n)
+    fim
+    t
+fim
+
+_ande_devagar = função(t, n)
+inicio
+    sinal = 1
+    falta = n
+    se n < 0
+    inicio
+        sinal = -1
+        falta = -n
+    fim
+    passo = t:passo
+    se passo <= 0
+    inicio
+        passo = falta
+    fim
+    enquanto falta > 0
+    inicio
+        d = passo
+        se d > falta
+        inicio
+            d = falta
+        fim
+        _esconde(t)
+        _ande(t, d * sinal)
+        _mostra_passo(t)
+        falta = falta - d
+    fim
+    t
+fim
+
+/// Vira graus para a direita.
+vire = função(t, graus)
+inicio
+    t:angulo = t:angulo + graus
+    se t:pausa > 0
+    inicio
+        _mostra_passo(t)
+    fim
+    t
+fim
+
+/// Vira graus para a esquerda.
+vire_esquerda = função(t, graus)
+inicio
+    t:angulo = t:angulo - graus
+    se t:pausa > 0
+    inicio
+        _mostra_passo(t)
+    fim
+    t
+fim
+
+/// Levanta a caneta: ande não desenha.
+subir = função(t)
+inicio
+    t:baixo = falso
+    t
+fim
+
+/// Abaixa a caneta: ande desenha.
+baixar = função(t)
+inicio
+    t:baixo = verdadeiro
+    t
+fim
+
+/// Cor da caneta (as mesmas da tela: :azul, :vermelho, …).
+cor = função(t, c)
+inicio
+    t:cor = c
+    t
+fim
+
+/// Olha para graus (0 = cima, 90 = direita).
+olhe = função(t, graus)
+inicio
+    t:angulo = graus
+    se t:pausa > 0
+    inicio
+        _mostra_passo(t)
+    fim
+    t
+fim
+
+/// Volta ao centro, olhando para cima. Não apaga o desenho.
+casa = função(t)
+inicio
+    t:x = t:largura / 2
+    t:y = t:altura / 2
+    t:angulo = 0
+    se t:pausa > 0
+    inicio
+        _mostra_passo(t)
+    fim
+    t
+fim
+
+/// Apaga o desenho. A tartaruga fica onde está.
+apague = função(t)
+inicio
+    g = t:tela
+    g._tela::apague()
+    t:marca = 0
+    se t:pausa > 0
+    inicio
+        _mostra_passo(t)
+    fim
+    t
+fim
+
+/// Abre ou atualiza a janela.
+mostre = função(t)
+inicio
+    g = t:tela
+    g._tela::mostre()
+    t
+fim
+
+/// Grava um PNG. Caminho relativo ao .lep.
+salve = função(t, caminho)
+inicio
+    tinha = t:marca
+    _esconde(t)
+    g = t:tela
+    g._tela::salve(caminho)
+    se tinha > 0
+    inicio
+        _desenha(t)
+    fim
+    t
+fim

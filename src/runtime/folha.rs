@@ -98,10 +98,7 @@ impl FolhaPronta {
                     curvas: Vec::new(),
                 });
             } else if let Some(cor) = line.strip_prefix("curva ") {
-                let g = folha
-                    .graficos
-                    .last_mut()
-                    .ok_or("curva sem gráfico")?;
+                let g = folha.graficos.last_mut().ok_or("curva sem gráfico")?;
                 g.curvas.push(CurvaPronta {
                     cor: cor.trim().to_string(),
                     pontos: Vec::new(),
@@ -225,7 +222,16 @@ fn pintar_grafico(
         linha(buf, w, h, zx0, zy0, zx1, zy1, COR_EIXO);
     }
 
-    rect(buf, w, h, left as i32, inner_top as i32, right as i32, inner_bot as i32, COR_EIXO);
+    rect(
+        buf,
+        w,
+        h,
+        left as i32,
+        inner_top as i32,
+        right as i32,
+        inner_bot as i32,
+        COR_EIXO,
+    );
 
     for x in &xticks {
         let (sx, _) = to_s(*x, g.ymin);
@@ -252,16 +258,7 @@ fn pintar_grafico(
     }
     for y in &yticks {
         let (_, sy) = to_s(g.xmin, *y);
-        linha(
-            buf,
-            w,
-            h,
-            left as i32 - 4,
-            sy,
-            left as i32,
-            sy,
-            COR_EIXO,
-        );
+        linha(buf, w, h, left as i32 - 4, sy, left as i32, sy, COR_EIXO);
         let label = tick_label(*y);
         texto(
             buf,

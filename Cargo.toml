@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = [".", "aula/proto", "aula/server", "aula/ui"]
+members = [".", "aula/proto", "aula/server", "aula/ui", "aula/tutorial"]
 
 [workspace.package]
 version = "0.3.0"
@@ -27,6 +27,7 @@ edition.workspace = true
 rustyline = "15"
 rust_decimal = "1"
 minifb = "0.28"
+png = "0.17"
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"

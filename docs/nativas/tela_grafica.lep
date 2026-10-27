@@ -1,0 +1,73 @@
+/// Tela de pixels. A janela abre no primeiro mostre().
+///
+/// largura e altura são inteiros de 1 a 2048. Origem no canto superior
+/// esquerdo, y para baixo, (0, 0) no primeiro pixel.
+///
+/// Exemplo: g = nova(320, 200)
+nova = funcao(largura, altura) { mapa() }
+
+/// Caneta atual. Cores: as da tela (azul, vermelho, …). Padrão: preto.
+///
+/// Exemplo: g.cor(:azul)
+cor = funcao(g, cor) { 0 }
+
+/// Reta da caneta. Pixels fora da tela são recortados.
+///
+/// Exemplo: g.linha(10, 10, 310, 190)
+linha = funcao(g, x1, y1, x2, y2) { 0 }
+
+/// Circunferência (contorno). Raio ≥ 0.
+///
+/// Exemplo: g.circulo(160, 100, 40)
+circulo = funcao(g, x, y, r) { 0 }
+
+/// Um pixel da caneta. Fora da tela, ignora.
+///
+/// Exemplo: g.ponto(5, 5)
+ponto = funcao(g, x, y) { 0 }
+
+/// imagem(g, caminho, x, y, angulo)
+/// imagem(g, img, x, y, angulo)
+/// imagem(g, img, x, y)
+///
+/// Carimba uma imagem centrada em (x, y). O segundo argumento é um caminho
+/// PNG ou um valor de `importe "imagem"`. O arquivo é lido uma vez; os
+/// pixels ficam no comando. angulo é em graus, no sentido horário; 0 deixa
+/// o topo para cima. Pixels transparentes não cobrem o desenho.
+///
+/// Exemplo: g.imagem(img, 160, 100, 90)
+imagem = funcao(g, caminho, x, y, angulo) { 0 }
+
+/// Apaga o desenho. O fundo continua branco.
+///
+/// Exemplo: g.apague()
+apague = funcao(g) { 0 }
+
+/// Cor do pixel (texto). Fora da tela é erro. Rasteriza se precisar.
+///
+/// Exemplo: escreva(g.pixel(10, 10))
+pixel = funcao(g, x, y) { 0 }
+
+/// Grava um PNG. Não precisa de janela. Caminho relativo ao .lep.
+///
+/// Exemplo: g.salve("casa.png")
+salve = funcao(g, caminho) { 0 }
+
+/// Abre ou atualiza a janela desta tela. Não espera fechar.
+///
+/// O primeiro mostre abre; os seguintes só atualizam a mesma janela.
+/// Cada nova() é uma janela. Não acopla na IDE.
+///
+/// Exemplo: g.mostre()
+mostre = funcao(g) { 0 }
+
+/// evento(g)
+/// evento(g, segundos)
+///
+/// Espera um clique, tecla ou fechar nesta janela. Sem tempo, espera até
+/// acontecer. Com segundos, espera no máximo isso (0 olha uma vez). Devolve
+/// um mapa :tipo (clique, tecla, sair, nada), :x :y em pixels, :botao, :tecla.
+/// Chame mostre() antes. Sem janela é erro.
+///
+/// Exemplo: ev = g.evento(0.05)
+evento = funcao(g, segundos) { mapa() }

@@ -1,0 +1,37 @@
+/// Lê um PNG (até 2048×2048). Devolve um valor do tipo imagem, em memória.
+///
+/// Caminho relativo ao .lep. Pixels transparentes são preservados.
+///
+/// Exemplo: img = carregue("tartaruga.png")
+carregue = funcao(caminho) { 0 }
+
+/// Grava a imagem em PNG (com transparência). Caminho relativo ao .lep.
+///
+/// Exemplo: img.salve("copia.png")
+salve = funcao(img, caminho) { 0 }
+
+/// Gira no sentido horário, em graus. 0 deixa o topo apontando para cima.
+/// 90, 180 e 270 são exatos. Devolve uma imagem nova; a original não muda.
+///
+/// Exemplo: r = rotacione(img, 90)
+rotacione = funcao(img, graus) { 0 }
+
+/// escala(img, fator)
+/// escala(img, fator_x, fator_y)
+///
+/// Redimensiona. Fator 2 dobra; 0,5 reduz à metade. Vizinho mais próximo
+/// (bom para sprites). Devolve uma imagem nova.
+///
+/// Exemplo: d = escala(img, 2)
+escala = funcao(img, fator) { 0 }
+escala = funcao(img, fator_x, fator_y) { 0 }
+
+/// Largura em pixels.
+///
+/// Exemplo: escreva(largura(img))
+largura = funcao(img) { 0 }
+
+/// Altura em pixels.
+///
+/// Exemplo: escreva(altura(img))
+altura = funcao(img) { 0 }

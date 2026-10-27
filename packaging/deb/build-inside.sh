@@ -36,10 +36,11 @@ echo "Compilando release…"
 cargo build --release --locked \
     -p expressa \
     -p expressa-aula \
-    -p expressa-aula-server
+    -p expressa-aula-server \
+    -p expressa-tutorial
 
 BIN="$TARGET/release"
-for name in expressa expressa-grafico expressa-aula expressa-aula-server; do
+for name in expressa expressa-grafico expressa-aula expressa-aula-server expressa-tutorial; do
     if [[ ! -x "$BIN/$name" ]]; then
         echo "erro: faltou $BIN/$name" >&2
         exit 1
@@ -66,13 +67,16 @@ install -m0755 "$BIN/expressa" "$ROOT/usr/bin/expressa"
 install -m0755 "$BIN/expressa-grafico" "$ROOT/usr/bin/expressa-grafico"
 install -m0755 "$BIN/expressa-aula" "$ROOT/usr/bin/expressa-aula"
 install -m0755 "$BIN/expressa-aula-server" "$ROOT/usr/bin/expressa-aula-server"
+install -m0755 "$BIN/expressa-tutorial" "$ROOT/usr/bin/expressa-tutorial"
 strip --strip-unneeded \
     "$ROOT/usr/bin/expressa" \
     "$ROOT/usr/bin/expressa-grafico" \
     "$ROOT/usr/bin/expressa-aula" \
-    "$ROOT/usr/bin/expressa-aula-server"
+    "$ROOT/usr/bin/expressa-aula-server" \
+    "$ROOT/usr/bin/expressa-tutorial"
 
 cp -a "$SRC/exemplos" "$ROOT/usr/share/expressa/exemplos"
+cp -a "$SRC/tutorial" "$ROOT/usr/share/expressa/tutorial"
 find "$ROOT/usr/share/expressa/exemplos" -type d -name saida -prune -exec rm -rf {} +
 find "$ROOT/usr/share/expressa/exemplos" -name .expressa-grava -delete
 
@@ -93,6 +97,8 @@ install -m0644 "$SRC/packaging/deb/expressa-aula.desktop" \
     "$ROOT/usr/share/applications/expressa-aula.desktop"
 install -m0644 "$SRC/packaging/deb/expressa.desktop" \
     "$ROOT/usr/share/applications/expressa.desktop"
+install -m0644 "$SRC/packaging/deb/expressa-tutorial.desktop" \
+    "$ROOT/usr/share/applications/expressa-tutorial.desktop"
 install -m0644 "$SRC/packaging/deb/expressa.xml" \
     "$ROOT/usr/share/mime/packages/expressa.xml"
 install -m0644 "$SRC/res/expressa-2.png" \
@@ -132,7 +138,8 @@ EOF
         "$ROOT/usr/bin/expressa" \
         "$ROOT/usr/bin/expressa-grafico" \
         "$ROOT/usr/bin/expressa-aula" \
-        "$ROOT/usr/bin/expressa-aula-server"
+        "$ROOT/usr/bin/expressa-aula-server" \
+        "$ROOT/usr/bin/expressa-tutorial"
 )
 SHLIBS="$(sed -n 's/^shlibs:Depends=//p' "$WORK/debian/substvars")"
 rm -rf "$WORK"
@@ -152,7 +159,8 @@ Depends: ${SHLIBS}
 Description: linguagem Expressa e editor Aula
  Expressa é uma linguagem de programação em português brasileiro.
  Este pacote instala o interpretador (expressa), o visualizador de
- gráficos (expressa-grafico), o editor GTK Expressa Aula e o servidor
+ gráficos (expressa-grafico), o editor GTK Expressa Aula, os tutoriais
+ (expressa-tutorial) e o servidor
  de arquivos da sala.
 EOF
 
@@ -160,6 +168,9 @@ cat > "$ROOT/DEBIAN/postinst" <<'EOF'
 #!/bin/sh
 set -e
 if [ "$1" = configure ]; then
+    if [ -n "${SUDO_USER:-}" ] && [ "$SUDO_USER" != root ]; then
+        su -s /bin/sh - "$SUDO_USER" -c "/usr/bin/expressa --instalar-exemplos" >/dev/null 2>&1 || true
+    fi
     if command -v update-desktop-database >/dev/null 2>&1; then
         update-desktop-database -q /usr/share/applications || true
     fi

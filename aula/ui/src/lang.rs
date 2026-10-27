@@ -755,7 +755,15 @@ mod tests {
         assert!(native("escreva").unwrap().module.is_none());
         assert_eq!(
             modules(),
-            ["arquivo", "cartesiano", "mat", "matriz", "tela"]
+            [
+                "arquivo",
+                "cartesiano",
+                "imagem",
+                "mat",
+                "matriz",
+                "tela",
+                "tela_grafica",
+            ]
         );
         for n in natives() {
             assert!(!n.summary.is_empty(), "{} has no summary", n.name);

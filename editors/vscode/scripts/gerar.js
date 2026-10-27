@@ -83,6 +83,8 @@ function readDocs() {
     'matriz.lep': 'matriz',
     'arquivo.lep': 'arquivo',
     'cartesiano.lep': 'cartesiano',
+    'tela_grafica.lep': 'tela_grafica',
+    'imagem.lep': 'imagem',
   };
   const sections = {};
   for (const [f, module] of Object.entries(files)) {
@@ -159,13 +161,20 @@ function build() {
       name,
       aliases: [],
       module: d.module || null,
-      kind: 'valor',
-      signatures: [],
+      kind: d.signatures.length ? 'funcao' : 'valor',
+      signatures: d.signatures,
       summary: d.summary,
       doc: d.doc,
     });
   }
-  const modules = [...new Set(nativas.map((n) => n.module).filter(Boolean))].sort();
+  const modules = [
+    ...new Set(
+      [
+        ...nativas.map((n) => n.module),
+        ...Object.values(docs).map((d) => d.module),
+      ].filter(Boolean)
+    ),
+  ].sort();
   return { data: { keywords, modules, nativas: items }, warnings };
 }
 

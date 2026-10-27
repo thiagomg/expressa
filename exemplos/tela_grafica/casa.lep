@@ -1,0 +1,41 @@
+/// Casinha e sol na tela de pixels.
+///
+/// Altere um número (o raio do sol, a porta) e rode de novo.
+
+mat = importe "mat"
+tela_grafica = importe "tela_grafica"
+
+/// Quatro linhas: canto superior esquerdo (x1, y1) até o inferior direito (x2, y2).
+retangulo = função(g, x1, y1, x2, y2)
+inicio
+    g.tela_grafica::linha(x1, y1, x2, y1)
+    g.tela_grafica::linha(x2, y1, x2, y2)
+    g.tela_grafica::linha(x2, y2, x1, y2)
+    g.tela_grafica::linha(x1, y2, x1, y1)
+fim
+
+g = tela_grafica::nova(320, 200)
+
+// Sol: círculo e oito raios.
+cx = 250
+cy = 42
+raio = 22
+alcance = 36
+g.tela_grafica::cor(:amarelo)
+g.tela_grafica::circulo(cx, cy, raio)
+para i de 0 ate 7
+inicio
+    a = i * mat::pi / 4
+    g.tela_grafica::linha(cx, cy, cx + alcance * mat::cosseno(a), cy + alcance * mat::seno(a))
+fim
+
+// Casa: parede, telhado, porta e janela.
+g.tela_grafica::cor(:preto)
+retangulo(g, 70, 110, 180, 185)
+g.tela_grafica::linha(70, 110, 125, 55)
+g.tela_grafica::linha(125, 55, 180, 110)
+retangulo(g, 110, 145, 140, 185)
+retangulo(g, 150, 125, 170, 145)
+
+g.tela_grafica::mostre()
+g.tela_grafica::salve("casa.png")

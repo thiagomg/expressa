@@ -1,3 +1,4 @@
+pub mod exemplos;
 pub mod lexer;
 pub mod parser;
 pub mod runtime;
