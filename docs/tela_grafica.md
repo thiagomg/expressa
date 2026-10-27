@@ -74,7 +74,7 @@ Visor → VM:
 
 O **handle** é um `u32` escolhido pela VM (contador, identidade = ponteiro do `Arc` de pixels). O visor não escolhe id. `CARREGUE` também não espera ACK: no mesmo pipe, `CARREGUE` imediatamente antes do `MOSTRE` que usa o handle chega em ordem.
 
-Ops no `MOSTRE`: `ponto`, `linha`, `circulo` (cor pelo nome) e `imagem handle x y angulo` (graus, horário, 0 = topo para cima). O visor preenche o fundo, replay das ops, apresenta. `apague` no Expressa esvazia `:ops`; o handle da figura **continua** válido.
+Ops no `MOSTRE`: `ponto`, `linha`, `circulo` (cor pelo nome), `texto x y tamanho cor t` e `imagem handle x y angulo` (graus, horário, 0 = topo para cima). O visor preenche o fundo, replay das ops, apresenta. `apague` no Expressa esvazia `:ops`; o handle da figura **continua** válido.
 
 ## Fluxo: abrir figura, girar, andar
 

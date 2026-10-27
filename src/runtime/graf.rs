@@ -5,6 +5,7 @@ use std::io::Cursor;
 use std::path::Path;
 
 use super::folha::cor_rgb;
+use super::fonte8x8;
 use super::imagem::{Imagem, carimbar};
 
 pub const LARGURA_MAX: u32 = 2048;
@@ -38,6 +39,15 @@ pub enum OpGraf {
         y: i32,
         angulo: f64,
         figura: Imagem,
+    },
+    /// Canto superior esquerdo `(x, y)`, y para baixo. `tamanho` é a
+    /// altura da célula em pixels (padrão 8). Fundo do glifo transparente.
+    Texto {
+        x: i32,
+        y: i32,
+        tamanho: i32,
+        cor: String,
+        texto: String,
     },
 }
 
@@ -91,6 +101,15 @@ impl TelaGrafica {
                 }
                 OpGraf::Circulo { x, y, r, cor } => {
                     circulo_idx(&mut idx, w, h, *x, *y, *r, idx_cor(cor));
+                }
+                OpGraf::Texto {
+                    x,
+                    y,
+                    tamanho,
+                    cor,
+                    texto,
+                } => {
+                    texto_idx(&mut idx, w, h, *x, *y, *tamanho, texto, idx_cor(cor));
                 }
                 OpGraf::Imagem { .. } => {}
             }
@@ -299,6 +318,38 @@ fn circulo_idx(idx: &mut [u8], w: u32, h: u32, cx: i32, cy: i32, r: i32, cor: u8
     }
 }
 
+fn texto_idx(idx: &mut [u8], w: u32, h: u32, x: i32, y: i32, tamanho: i32, texto: &str, cor: u8) {
+    let t = tamanho.max(1);
+    let mut cx = x;
+    let mut cy = y;
+    for ch in texto.chars() {
+        if ch == '\r' {
+            continue;
+        }
+        if ch == '\n' {
+            cx = x;
+            cy += t;
+            continue;
+        }
+        if ch == '\t' {
+            cx += 2 * t;
+            continue;
+        }
+        let g = fonte8x8::glifo(ch);
+        for py in 0..t {
+            let fy = ((py * fonte8x8::LADO) / t) as usize;
+            let row = g[fy];
+            for px in 0..t {
+                let fx = ((px * fonte8x8::LADO) / t) as usize;
+                if row & (1 << fx) != 0 {
+                    plot_idx(idx, w, h, cx + px, cy + py, cor);
+                }
+            }
+        }
+        cx += t;
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -359,5 +410,34 @@ mod tests {
             "90° leva o topo para a direita"
         );
         assert_eq!(at(&direita, 8, 7), 0x00FFFFFF);
+    }
+
+    #[test]
+    fn texto_pinta_e_acento_nao_e_caixa() {
+        let t = TelaGrafica {
+            id: 1,
+            largura: 64,
+            altura: 16,
+            fundo: "branco".into(),
+            ops: vec![OpGraf::Texto {
+                x: 0,
+                y: 0,
+                tamanho: 8,
+                cor: "azul".into(),
+                texto: "Aã".into(),
+            }],
+        };
+        let r = t.raster();
+        assert_eq!(r.pixel(0, 0), Some("branco"), "A não preenche o canto");
+        assert_eq!(r.pixel(2, 0), Some("azul"));
+        // segundo glifo (ã) começa em x=8; o til está no topo
+        assert_eq!(r.pixel(8, 0), Some("branco"));
+        let mut algum_azul = false;
+        for x in 8..16 {
+            if r.pixel(x, 0) == Some("azul") {
+                algum_azul = true;
+            }
+        }
+        assert!(algum_azul, "ã tem pixels no topo (til)");
     }
 }

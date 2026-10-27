@@ -20,6 +20,7 @@ const OP_PONTO: u8 = 1;
 const OP_LINHA: u8 = 2;
 const OP_CIRCULO: u8 = 3;
 const OP_IMAGEM: u8 = 4;
+const OP_TEXTO: u8 = 5;
 
 pub const TIPO_NADA: u8 = 0;
 pub const TIPO_CLIQUE: u8 = 1;
@@ -94,6 +95,13 @@ pub enum OpMsg {
         x: i32,
         y: i32,
         angulo: f64,
+    },
+    Texto {
+        x: i32,
+        y: i32,
+        tamanho: i32,
+        cor: String,
+        texto: String,
     },
 }
 
@@ -189,6 +197,19 @@ pub fn mensagens_de(
                     angulo: *angulo,
                 });
             }
+            OpGraf::Texto {
+                x,
+                y,
+                tamanho,
+                cor,
+                texto,
+            } => ops.push(OpMsg::Texto {
+                x: *x,
+                y: *y,
+                tamanho: *tamanho,
+                cor: cor.clone(),
+                texto: texto.clone(),
+            }),
         }
     }
     out.push(Msg::Mostre { id: tela.id, ops });
@@ -245,6 +266,19 @@ pub fn tela_de_mostre(
                     });
                 }
             }
+            OpMsg::Texto {
+                x,
+                y,
+                tamanho,
+                cor,
+                texto,
+            } => out.push(OpGraf::Texto {
+                x: *x,
+                y: *y,
+                tamanho: (*tamanho).clamp(1, 256),
+                cor: cor_ok(cor),
+                texto: texto.clone(),
+            }),
         }
     }
     TelaGrafica {
@@ -395,6 +429,20 @@ fn encode_op(buf: &mut Vec<u8>, op: &OpMsg) {
             put_i32(buf, *y);
             buf.extend_from_slice(&angulo.to_le_bytes());
         }
+        OpMsg::Texto {
+            x,
+            y,
+            tamanho,
+            cor,
+            texto,
+        } => {
+            buf.push(OP_TEXTO);
+            put_i32(buf, *x);
+            put_i32(buf, *y);
+            put_i32(buf, *tamanho);
+            put_str(buf, cor);
+            put_str(buf, texto);
+        }
     }
 }
 
@@ -483,6 +531,13 @@ fn decode_op(p: &[u8], i: &mut usize) -> Option<OpMsg> {
                 angulo: f64::from_le_bytes(b),
             })
         }
+        OP_TEXTO => Some(OpMsg::Texto {
+            x: get_i32(p, i)?,
+            y: get_i32(p, i)?,
+            tamanho: get_i32(p, i)?,
+            cor: get_str(p, i)?,
+            texto: get_str(p, i)?,
+        }),
         _ => None,
     }
 }
@@ -595,6 +650,13 @@ mod tests {
                     x: 40,
                     y: 100,
                     angulo: 90.0,
+                },
+                OpMsg::Texto {
+                    x: 8,
+                    y: 8,
+                    tamanho: 8,
+                    cor: "preto".into(),
+                    texto: "olá".into(),
                 },
             ],
         });

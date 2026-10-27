@@ -4,6 +4,7 @@ mod env;
 mod error;
 mod eval;
 mod folha;
+mod fonte8x8;
 mod formate;
 mod graf;
 mod graf_host;

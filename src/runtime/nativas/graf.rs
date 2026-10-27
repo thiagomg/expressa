@@ -2,6 +2,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use std::time::{Duration, Instant};
 
+use super::super::fonte8x8;
 use crate::lexer::Span;
 use crate::runtime::error::EvalError;
 use crate::runtime::eval::Vm;
@@ -110,6 +111,50 @@ impl Vm<'_, '_> {
                 (MapKey::Texto("x".into()), Value::Numero((x as f64).into())),
                 (MapKey::Texto("y".into()), Value::Numero((y as f64).into())),
                 (MapKey::Texto("cor".into()), Value::Texto(cor)),
+            ]),
+        );
+        Ok(args[0].clone())
+    }
+
+    pub(crate) fn bi_graf_texto(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
+        if args.len() != 4 && args.len() != 5 {
+            return Err(self.err(
+                format!("esperado 4 ou 5 argumento(s), recebeu {}", args.len()),
+                span,
+            ));
+        }
+        let mapa = expect_graf(&args[0], span, self)?;
+        let x = self.expect_px(&args[1], span)?;
+        let y = self.expect_px(&args[2], span)?;
+        let texto = self.expect_texto(&args[3], span)?;
+        let tamanho = if args.len() == 5 {
+            let n = self.expect_int(&args[4], span)?;
+            if n < 1 || n > fonte8x8::TAMANHO_MAX as i64 {
+                return Err(self.err(
+                    format!(
+                        "tamanho do texto deve ser um inteiro de 1 a {}",
+                        fonte8x8::TAMANHO_MAX
+                    ),
+                    span,
+                ));
+            }
+            n as i32
+        } else {
+            fonte8x8::TAMANHO_PADRAO
+        };
+        let cor = pen(&mapa);
+        push_op(
+            &mapa,
+            Value::mapa(vec![
+                (MapKey::Texto("tipo".into()), Value::Texto("texto".into())),
+                (MapKey::Texto("x".into()), Value::Numero((x as f64).into())),
+                (MapKey::Texto("y".into()), Value::Numero((y as f64).into())),
+                (
+                    MapKey::Texto("tamanho".into()),
+                    Value::Numero((tamanho as f64).into()),
+                ),
+                (MapKey::Texto("cor".into()), Value::Texto(cor)),
+                (MapKey::Texto("texto".into()), Value::Texto(texto)),
             ]),
         );
         Ok(args[0].clone())
@@ -392,6 +437,15 @@ fn op_de(v: &Value, span: Span, vm: &Vm<'_, '_>) -> Result<OpGraf, EvalError> {
                 figura,
             })
         }
+        "texto" => Ok(OpGraf::Texto {
+            x: get_i32(xs, "x").unwrap_or(0),
+            y: get_i32(xs, "y").unwrap_or(0),
+            tamanho: get_i32(xs, "tamanho")
+                .unwrap_or(fonte8x8::TAMANHO_PADRAO)
+                .clamp(1, fonte8x8::TAMANHO_MAX),
+            cor,
+            texto: get_texto(xs, "texto").unwrap_or_default(),
+        }),
         other => Err(vm.err(
             format!("comando de tela gráfica desconhecido ({other})"),
             span,
@@ -706,6 +760,23 @@ b.mostre()
         let bytes = std::fs::read(&path).expect("png");
         assert!(bytes.starts_with(&[0x89, b'P', b'N', b'G']));
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn texto_e_pixel_e_tamanho() {
+        let out = run(r#"
+g = nova(64, 16)
+g.cor(:azul)
+g.texto(0, 0, "A")
+escreva(g.pixel(2, 0))
+escreva(g.pixel(0, 0))
+g.apague()
+g.texto(0, 0, "oi", 16)
+escreva(g.pixel(0, 0))
+"#);
+        assert_eq!(out, "azul\nbranco\nbranco\n");
+        assert!(run_err("g = nova(8, 8)\ng.texto(0, 0, \"a\", 0)\n").contains("tamanho"));
+        assert!(run_err("g = nova(8, 8)\ng.texto(0, 0, 1)\n").contains("texto"));
     }
 
     #[test]

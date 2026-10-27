@@ -514,11 +514,12 @@ tela_grafica = importe "tela_grafica"
 g = tela_grafica::nova(320, 200)
 g.tela_grafica::cor(:azul)
 g.tela_grafica::linha(10, 10, 310, 190)
+g.tela_grafica::texto(10, 10, "casa")
 g.tela_grafica::mostre()
 g.tela_grafica::salve("casa.png")
 ```
 
-`(0, 0)` é o canto superior esquerdo; y cresce para baixo. Cada `nova()` é uma janela; o `mostre` da mesma instância só atualiza. `evento(g)` espera um clique ou tecla nessa janela; `evento(g, 0.05)` espera até 50 ms. Na Aula a janela é irmã (não entra no painel Gráficos). `pixel(g, x, y)` devolve a cor daquele ponto. Detalhe do protocolo com o visor: `docs/tela_grafica.md`.
+`(0, 0)` é o canto superior esquerdo; y cresce para baixo. Cada `nova()` é uma janela; o `mostre` da mesma instância só atualiza. `texto(g, x, y, t)` escreve na caneta a partir de `(x, y)` (células de 8 pixels; `texto(..., 16)` dobra). `evento(g)` espera um clique ou tecla nessa janela; `evento(g, 0.05)` espera até 50 ms. Na Aula a janela é irmã (não entra no painel Gráficos). `pixel(g, x, y)` devolve a cor daquele ponto. Detalhe do protocolo com o visor: `docs/tela_grafica.md`.
 
 ## `importe "imagem"`
 

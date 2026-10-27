@@ -26,6 +26,16 @@ circulo = funcao(g, x, y, r) { 0 }
 /// Exemplo: g.ponto(5, 5)
 ponto = funcao(g, x, y) { 0 }
 
+/// texto(g, x, y, t)
+/// texto(g, x, y, t, tamanho)
+///
+/// Escreve t na caneta. (x, y) é o canto superior esquerdo do primeiro
+/// glifo. tamanho é a altura da célula em pixels (padrão 8). Acento e
+/// ç entram. Quebra de linha (`\n`) desce uma célula. Fundo transparente.
+///
+/// Exemplo: g.texto(8, 8, "olá")
+texto = funcao(g, x, y, t, tamanho) { 0 }
+
 /// imagem(g, caminho, x, y, angulo)
 /// imagem(g, img, x, y, angulo)
 /// imagem(g, img, x, y)

@@ -1003,6 +1003,18 @@
       "doc": "Um pixel da caneta. Fora da tela, ignora.\n\nExemplo: g.ponto(5, 5)"
     },
     {
+      "name": "texto",
+      "aliases": [],
+      "module": "tela_grafica",
+      "kind": "funcao",
+      "signatures": [
+        "texto(g, x, y, t)",
+        "texto(g, x, y, t, tamanho)"
+      ],
+      "summary": "Escreve t na caneta. (x, y) é o canto superior esquerdo do primeiro glifo. tamanho é a altura da célula em pixels (padrão 8). Acento e ç entram. Quebra de linha (`\\n`) desce uma célula. Fundo transparente.",
+      "doc": "Escreve t na caneta. (x, y) é o canto superior esquerdo do primeiro\nglifo. tamanho é a altura da célula em pixels (padrão 8). Acento e\nç entram. Quebra de linha (`\\n`) desce uma célula. Fundo transparente.\n\nExemplo: g.texto(8, 8, \"olá\")"
+    },
+    {
       "name": "imagem",
       "aliases": [],
       "module": "tela_grafica",

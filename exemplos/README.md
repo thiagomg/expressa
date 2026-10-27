@@ -71,6 +71,7 @@ Tela de pixels (`importe "tela_grafica"`). Rode no terminal ou no Aula (F5): abr
 | Arquivo | O que mostra |
 |---------|----------------|
 | `linha.lep` | linha, círculo, `mostre`, `salve` |
+| `texto.lep` | `texto` na caneta (acento, tamanho 16) |
 | `casa.lep` | casinha e sol (`cor`, `linha`, `circulo`, `mat::seno`) |
 | `clique.lep` | `evento`: clique desenha círculo |
 | `gira.lep` | figura andando e girando (`evento(0.05)`) |

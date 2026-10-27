@@ -1,12 +1,14 @@
 /// Estrela de cinco pontas. Mude o lado ou o ângulo (144°) e rode de novo.
 
 tartaruga = importe "../lib/tartaruga"
+tela = importe "tela_grafica"
 
 t = tartaruga::nova()
 t.tartaruga::velocidade(0.02)
 t.tartaruga::cor(:vermelho)
+
 repita 5 vezes
-inicio
+inicio   
     t.tartaruga::ande(140)
     t.tartaruga::vire(144)
 fim

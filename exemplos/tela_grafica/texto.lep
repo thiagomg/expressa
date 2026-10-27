@@ -1,0 +1,9 @@
+tela_grafica = importe "tela_grafica"
+
+g = tela_grafica::nova(320, 200)
+g.tela_grafica::cor(:azul)
+g.tela_grafica::texto(16, 16, "Olá, turma")
+g.tela_grafica::cor(:vermelho)
+g.tela_grafica::texto(16, 40, "placar 10", 16)
+g.tela_grafica::mostre()
+g.tela_grafica::salve("texto.png")
