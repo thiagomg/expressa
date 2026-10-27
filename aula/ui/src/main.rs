@@ -645,19 +645,24 @@ fn fechar_janelas_filhas(ui: &UiRc) {
 }
 
 fn open_ajuda(ui: &UiRc) {
-    let u = ui.borrow();
-    if let Some(w) = u.ajuda_win.borrow().as_ref() {
-        w.present();
-        return;
+    if let Some(w) = ui.borrow().ajuda_win.borrow().clone() {
+        if w.is_visible() {
+            w.present();
+            return;
+        }
+        ui.borrow().ajuda_win.borrow_mut().take();
+        w.close();
     }
-    let w = ajuda::open(&u.window);
-    w.connect_destroy({
+    let w = ajuda::open(&ui.borrow().window);
+    w.set_hide_on_close(false);
+    w.connect_close_request({
         let ui = Rc::clone(ui);
         move |_| {
-            *ui.borrow().ajuda_win.borrow_mut() = None;
+            ui.borrow().ajuda_win.borrow_mut().take();
+            glib::Propagation::Proceed
         }
     });
-    *u.ajuda_win.borrow_mut() = Some(w);
+    ui.borrow().ajuda_win.borrow_mut().replace(w);
 }
 
 fn connect(button: &impl IsA<Button>, ui: &UiRc, f: impl Fn(&UiRc) + 'static) {
