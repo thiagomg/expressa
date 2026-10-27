@@ -87,6 +87,8 @@ use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
+use crate::parser::{AssignTarget, Block, Expr, Stmt};
+
 use super::value::Value;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -203,14 +205,300 @@ impl Env {
         out.sort_by(|a, b| a.0.cmp(&b.0));
         out
     }
+
+    /// Drops locals that form an `Rc` cycle with this frame, unless an
+    /// escaped closure still looks them up by name.
+    ///
+    /// A nested `g = funcao() { … }` stores `g` in the call frame and the
+    /// closure holds that same frame. Without this, the frame (and every
+    /// captured value, including a replaced matrix) lives forever. Names
+    /// that escaped closures actually read are kept so `faz_somador` and
+    /// `retorne g` keep working.
+    pub(crate) fn soltar_capturas(env: &Rc<RefCell<Self>>, keep: &Value) {
+        let frame = Rc::as_ptr(env);
+        let needed = nomes_vivos(keep, frame);
+        let soltar: Vec<String> = {
+            let e = env.borrow();
+            e.vars
+                .iter()
+                .filter(|(nome, valor)| {
+                    !needed.contains(*nome) && fecha_ciclo_com_frame(valor, frame)
+                })
+                .map(|(nome, _)| nome.clone())
+                .collect()
+        };
+        if soltar.is_empty() {
+            return;
+        }
+        let mut e = env.borrow_mut();
+        for nome in soltar {
+            e.vars.remove(&nome);
+        }
+    }
+}
+
+fn nomes_vivos(keep: &Value, frame: *const RefCell<Env>) -> HashSet<String> {
+    let mut needed = HashSet::new();
+    let mut visto = HashSet::new();
+    coletar_nomes_vivos(keep, frame, &mut needed, &mut visto);
+    needed
+}
+
+fn coletar_nomes_vivos(
+    v: &Value,
+    frame: *const RefCell<Env>,
+    needed: &mut HashSet<String>,
+    visto: &mut HashSet<usize>,
+) {
+    match v {
+        Value::Funcao(c) => {
+            let p = Rc::as_ptr(c) as usize;
+            if !visto.insert(p) {
+                return;
+            }
+            if env_alcanca_frame(&c.env, frame) {
+                coletar_idents_bloco(&c.body, needed);
+            }
+        }
+        Value::Lista(xs) => {
+            let p = Rc::as_ptr(xs) as usize;
+            if !visto.insert(p) {
+                return;
+            }
+            for item in xs.borrow().iter() {
+                coletar_nomes_vivos(item, frame, needed, visto);
+            }
+        }
+        Value::Mapa(m) => {
+            let p = Rc::as_ptr(m) as usize;
+            if !visto.insert(p) {
+                return;
+            }
+            for (_, item) in m.borrow().iter() {
+                coletar_nomes_vivos(item, frame, needed, visto);
+            }
+        }
+        Value::Par(_, item) => coletar_nomes_vivos(item, frame, needed, visto),
+        Value::Nada
+        | Value::Numero(_)
+        | Value::Texto(_)
+        | Value::Bool(_)
+        | Value::Conjunto(_)
+        | Value::Matriz(_)
+        | Value::Imagem(_)
+        | Value::Builtin(_)
+        | Value::Modulo(_) => {}
+    }
+}
+
+fn fecha_ciclo_com_frame(v: &Value, frame: *const RefCell<Env>) -> bool {
+    let mut visto = HashSet::new();
+    valor_ve_frame(v, frame, &mut visto)
+}
+
+fn valor_ve_frame(v: &Value, frame: *const RefCell<Env>, visto: &mut HashSet<usize>) -> bool {
+    match v {
+        Value::Funcao(c) => {
+            let p = Rc::as_ptr(c) as usize;
+            if !visto.insert(p) {
+                return false;
+            }
+            env_alcanca_frame(&c.env, frame)
+        }
+        Value::Lista(xs) => {
+            let p = Rc::as_ptr(xs) as usize;
+            if !visto.insert(p) {
+                return false;
+            }
+            xs.borrow()
+                .iter()
+                .any(|item| valor_ve_frame(item, frame, visto))
+        }
+        Value::Mapa(m) => {
+            let p = Rc::as_ptr(m) as usize;
+            if !visto.insert(p) {
+                return false;
+            }
+            m.borrow()
+                .iter()
+                .any(|(_, item)| valor_ve_frame(item, frame, visto))
+        }
+        Value::Par(_, item) => valor_ve_frame(item, frame, visto),
+        _ => false,
+    }
+}
+
+fn env_alcanca_frame(from: &Rc<RefCell<Env>>, frame: *const RefCell<Env>) -> bool {
+    let mut atual = Some(Rc::clone(from));
+    while let Some(e) = atual {
+        if Rc::as_ptr(&e) == frame {
+            return true;
+        }
+        atual = e.borrow().parent.clone();
+    }
+    false
+}
+
+fn coletar_idents_bloco(block: &Block, out: &mut HashSet<String>) {
+    for stmt in &block.stmts {
+        coletar_idents_stmt(stmt, out);
+    }
+}
+
+fn coletar_idents_stmt(stmt: &Stmt, out: &mut HashSet<String>) {
+    match stmt {
+        Stmt::Expr { expr, .. } => coletar_idents_expr(expr, out),
+        Stmt::Assign { target, value, .. } => {
+            coletar_idents_alvo(target, out);
+            coletar_idents_expr(value, out);
+        }
+        Stmt::Repita { count, body, .. } => {
+            coletar_idents_expr(count, out);
+            coletar_idents_bloco(body, out);
+        }
+        Stmt::ParaRange { from, to, body, .. } => {
+            coletar_idents_expr(from, out);
+            coletar_idents_expr(to, out);
+            coletar_idents_bloco(body, out);
+        }
+        Stmt::ParaIn { iter, body, .. } => {
+            coletar_idents_expr(iter, out);
+            coletar_idents_bloco(body, out);
+        }
+        Stmt::Enquanto { cond, body, .. } => {
+            coletar_idents_expr(cond, out);
+            coletar_idents_bloco(body, out);
+        }
+        Stmt::Retorne { value, .. } => {
+            if let Some(expr) = value {
+                coletar_idents_expr(expr, out);
+            }
+        }
+        Stmt::Pare { .. } | Stmt::Continue { .. } => {}
+    }
+}
+
+fn coletar_idents_alvo(target: &AssignTarget, out: &mut HashSet<String>) {
+    match target {
+        AssignTarget::Name { .. } => {}
+        AssignTarget::Index { object, index, .. } => {
+            coletar_idents_expr(object, out);
+            coletar_idents_expr(index, out);
+        }
+        AssignTarget::Index2 {
+            object, row, col, ..
+        } => {
+            coletar_idents_expr(object, out);
+            coletar_idents_expr(row, out);
+            coletar_idents_expr(col, out);
+        }
+        AssignTarget::MapField { object, .. } => coletar_idents_expr(object, out),
+    }
+}
+
+fn coletar_idents_expr(expr: &Expr, out: &mut HashSet<String>) {
+    match expr {
+        Expr::Ident { name, .. } => {
+            out.insert(name.clone());
+        }
+        Expr::Number { .. } | Expr::String { .. } | Expr::Bool { .. } => {}
+        Expr::List { elements, .. } => {
+            for el in elements {
+                coletar_idents_expr(el, out);
+            }
+        }
+        Expr::Par { key, value, .. } => {
+            coletar_idents_expr(key, out);
+            coletar_idents_expr(value, out);
+        }
+        Expr::Function { body, .. } => coletar_idents_bloco(body, out),
+        Expr::Field { object, .. } | Expr::MapField { object, .. } => {
+            coletar_idents_expr(object, out);
+        }
+        Expr::Call { callee, args, .. } => {
+            coletar_idents_expr(callee, out);
+            for arg in args {
+                coletar_idents_expr(arg, out);
+            }
+        }
+        Expr::Index { object, index, .. } => {
+            coletar_idents_expr(object, out);
+            coletar_idents_expr(index, out);
+        }
+        Expr::Index2 {
+            object, row, col, ..
+        } => {
+            coletar_idents_expr(object, out);
+            coletar_idents_expr(row, out);
+            coletar_idents_expr(col, out);
+        }
+        Expr::Slice {
+            object, start, end, ..
+        } => {
+            coletar_idents_expr(object, out);
+            coletar_idents_expr(start, out);
+            if let Some(end) = end {
+                coletar_idents_expr(end, out);
+            }
+        }
+        Expr::Unary { expr, .. } => coletar_idents_expr(expr, out),
+        Expr::Binary { left, right, .. } => {
+            coletar_idents_expr(left, out);
+            coletar_idents_expr(right, out);
+        }
+        Expr::Block(block) => coletar_idents_bloco(block, out),
+        Expr::If {
+            branches,
+            else_block,
+            ..
+        } => {
+            for br in branches {
+                coletar_idents_expr(&br.cond, out);
+                coletar_idents_bloco(&br.body, out);
+            }
+            if let Some(body) = else_block {
+                coletar_idents_bloco(body, out);
+            }
+        }
+        Expr::SeFalhar {
+            attempt, fallback, ..
+        } => {
+            coletar_idents_expr(attempt, out);
+            coletar_idents_expr(fallback, out);
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
+    use super::super::value::Closure;
     use super::*;
+    use crate::lexer::Span;
+    use crate::parser::{Block, Expr, Stmt};
 
     fn num(n: f64) -> Value {
         Value::Numero(n.into())
+    }
+
+    fn closao(env: Rc<RefCell<Env>>, ident: &str) -> Value {
+        Value::Funcao(Rc::new(Closure {
+            params: vec![],
+            body: Block {
+                stmts: vec![Stmt::Expr {
+                    expr: Expr::Ident {
+                        name: ident.into(),
+                        span: Span::default(),
+                    },
+                    span: Span::default(),
+                }],
+                span: Span::default(),
+            },
+            env,
+            span: Span::default(),
+            file: String::new(),
+            source: "".into(),
+            doc: None,
+        }))
     }
 
     #[test]
@@ -307,5 +595,29 @@ mod tests {
             })
             .collect();
         assert_eq!(got, [("x".into(), 9.0.into()), ("y".into(), 2.0.into())]);
+    }
+
+    #[test]
+    fn soltar_capturas_quebra_ciclo_de_funcao_local() {
+        let module = Env::new(FrameKind::Module, None);
+        let frame = Env::child(&module, FrameKind::Function);
+        frame.borrow_mut().define("m", num(1.0));
+        let g = closao(Rc::clone(&frame), "m");
+        frame.borrow_mut().define("g", g);
+        assert!(Rc::strong_count(&frame) >= 2);
+        Env::soltar_capturas(&frame, &Value::Nada);
+        assert_eq!(Rc::strong_count(&frame), 1);
+    }
+
+    #[test]
+    fn soltar_capturas_preserva_local_lido_pela_funcao_devolvida() {
+        let module = Env::new(FrameKind::Module, None);
+        let frame = Env::child(&module, FrameKind::Function);
+        frame.borrow_mut().define("n", num(5.0));
+        let soma = closao(Rc::clone(&frame), "n");
+        frame.borrow_mut().define("soma", soma.clone());
+        Env::soltar_capturas(&frame, &soma);
+        assert!(frame.borrow().vars.contains_key("n"));
+        assert!(!frame.borrow().vars.contains_key("soma"));
     }
 }

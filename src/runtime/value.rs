@@ -331,11 +331,7 @@ fn format_numero_locale(n: Numero, loc: impl Into<Option<NumeroLocale>>) -> Stri
         Some(f) => format!("{grouped}{dec}{f}"),
         None => grouped,
     };
-    if neg {
-        format!("-{body}")
-    } else {
-        body
-    }
+    if neg { format!("-{body}") } else { body }
 }
 
 fn format_matriz(rows: &[Vec<f64>], loc: NumeroLocale) -> String {

@@ -10,12 +10,21 @@ pub enum Inline {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Block {
-    Heading { level: u32, text: String },
+    Heading {
+        level: u32,
+        text: String,
+    },
     Paragraph(Vec<Inline>),
-    Code { lang: String, text: String },
+    Code {
+        lang: String,
+        text: String,
+    },
     Quote(Vec<Inline>),
     List(Vec<Vec<Inline>>),
-    Table { headers: Vec<String>, rows: Vec<Vec<String>> },
+    Table {
+        headers: Vec<String>,
+        rows: Vec<Vec<String>>,
+    },
     Hr,
 }
 
@@ -170,9 +179,7 @@ fn heading(line: &str) -> Option<(u32, String)> {
 }
 
 fn is_list_item(line: &str) -> bool {
-    line.starts_with("- ")
-        || line.starts_with("* ")
-        || numbered_list(line).is_some()
+    line.starts_with("- ") || line.starts_with("* ") || numbered_list(line).is_some()
 }
 
 fn numbered_list(line: &str) -> Option<&str> {

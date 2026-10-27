@@ -320,9 +320,11 @@ mod tests {
         let paths: Vec<_> = tree.iter().map(|e| e.path.as_str()).collect();
         assert!(paths.contains(&"src"));
         assert!(paths.iter().any(|p| p.ends_with("ola.lep")));
-        assert!(!paths
-            .iter()
-            .any(|p| p.contains(".git") || p.contains("target")));
+        assert!(
+            !paths
+                .iter()
+                .any(|p| p.contains(".git") || p.contains("target"))
+        );
         let _ = std::fs::remove_dir_all(&root);
     }
 

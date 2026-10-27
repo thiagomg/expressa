@@ -8,7 +8,7 @@ use std::time::{Duration, Instant};
 
 use crate::lexer::Span;
 use crate::parser::{
-    parse, AssignTarget, BinaryOp, Block, Expr, Import, Item, Param, Program, Stmt, UnaryOp,
+    AssignTarget, BinaryOp, Block, Expr, Import, Item, Param, Program, Stmt, UnaryOp, parse,
 };
 
 use super::cartesiano_host::{CartesianoHost, CliCartesianoHost};
@@ -18,9 +18,9 @@ use super::error::{CallFrame, EvalError, RuntimeError};
 use super::graf_host::{CliGrafHost, GrafHost};
 use super::leia::LeiaHost;
 use super::nativas;
-use super::numero::{default_numero_aritmetica, parse_numero, Numero, NumeroAritmetica};
+use super::numero::{Numero, NumeroAritmetica, default_numero_aritmetica, parse_numero};
 use super::rng::Rng;
-use super::value::{default_numero_locale, format_numero, Closure, MapKey, NumeroLocale, Value};
+use super::value::{Closure, MapKey, NumeroLocale, Value, default_numero_locale, format_numero};
 
 /// Source of lines for `leia()`. Implemented for any [`BufRead`] (tests)
 /// and for [`ConsoleInput`] (locks stdin only during the read, so the
@@ -401,6 +401,14 @@ pub(crate) fn run_with_io<'a, 'c>(
     }
 }
 
+fn valor_vivo(result: &Result<Value, EvalError>) -> &Value {
+    match result {
+        Ok(v) => v,
+        Err(EvalError::Return { value, .. }) => value,
+        _ => &Value::Nada,
+    }
+}
+
 impl<'a, 'c> Vm<'a, 'c> {
     pub(crate) fn new(
         file: &str,
@@ -456,7 +464,12 @@ impl<'a, 'c> Vm<'a, 'c> {
 
     fn run(&mut self, program: &Program) -> Result<(), EvalError> {
         let env = Env::child(&self.builtins, FrameKind::Module);
-        self.eval_program(program, &env)
+        let result = self.eval_program(program, &env);
+        Env::soltar_capturas(&env, &Value::Nada);
+        for m in self.modules.values() {
+            Env::soltar_capturas(m, &Value::Nada);
+        }
+        result
     }
 
     fn eval_program(&mut self, program: &Program, env: &Rc<RefCell<Env>>) -> Result<(), EvalError> {
@@ -690,13 +703,14 @@ impl<'a, 'c> Vm<'a, 'c> {
                 if n < 0 {
                     return Err(self.err("'repita' espera um número >= 0", count.span()));
                 }
-                let loop_env = Env::child(env, FrameKind::Block);
-                for _ in 0..n {
-                    if self.eval_loop_body(&body.stmts, &loop_env)? {
-                        break;
+                self.eval_in_child(env, FrameKind::Block, |vm, loop_env| {
+                    for _ in 0..n {
+                        if vm.eval_loop_body(&body.stmts, loop_env)? {
+                            break;
+                        }
                     }
-                }
-                Ok(Value::Nada)
+                    Ok(Value::Nada)
+                })
             }
             Stmt::ParaRange {
                 var,
@@ -709,46 +723,49 @@ impl<'a, 'c> Vm<'a, 'c> {
                 let start = self.expect_int(&from_v, from.span())?;
                 let to_v = self.eval_expr(to, env)?;
                 let end = self.expect_int(&to_v, to.span())?;
-                let loop_env = Env::child(env, FrameKind::Block);
-                let mut i = start;
-                while i <= end {
-                    loop_env
-                        .borrow_mut()
-                        .define(var.clone(), Value::Numero(Numero::from_i64(i)));
-                    if self.eval_loop_body(&body.stmts, &loop_env)? {
-                        break;
+                self.eval_in_child(env, FrameKind::Block, |vm, loop_env| {
+                    let mut i = start;
+                    while i <= end {
+                        loop_env
+                            .borrow_mut()
+                            .define(var.clone(), Value::Numero(Numero::from_i64(i)));
+                        if vm.eval_loop_body(&body.stmts, loop_env)? {
+                            break;
+                        }
+                        i += 1;
                     }
-                    i += 1;
-                }
-                Ok(Value::Nada)
+                    Ok(Value::Nada)
+                })
             }
             Stmt::ParaIn {
                 var, iter, body, ..
             } => {
                 let seq = self.eval_expr(iter, env)?;
                 let items = self.iter_items(&seq, iter.span())?;
-                let loop_env = Env::child(env, FrameKind::Block);
-                for item in items {
-                    loop_env.borrow_mut().define(var.clone(), item);
-                    if self.eval_loop_body(&body.stmts, &loop_env)? {
-                        break;
+                self.eval_in_child(env, FrameKind::Block, |vm, loop_env| {
+                    for item in items {
+                        loop_env.borrow_mut().define(var.clone(), item);
+                        if vm.eval_loop_body(&body.stmts, loop_env)? {
+                            break;
+                        }
                     }
-                }
-                Ok(Value::Nada)
+                    Ok(Value::Nada)
+                })
             }
             Stmt::Enquanto { cond, body, span } => {
-                let loop_env = Env::child(env, FrameKind::Block);
-                loop {
-                    self.check_deadline(*span)?;
-                    let cond_v = self.eval_expr(cond, env)?;
-                    if !self.expect_bool(&cond_v, cond.span())? {
-                        break;
+                self.eval_in_child(env, FrameKind::Block, |vm, loop_env| {
+                    loop {
+                        vm.check_deadline(*span)?;
+                        let cond_v = vm.eval_expr(cond, env)?;
+                        if !vm.expect_bool(&cond_v, cond.span())? {
+                            break;
+                        }
+                        if vm.eval_loop_body(&body.stmts, loop_env)? {
+                            break;
+                        }
                     }
-                    if self.eval_loop_body(&body.stmts, &loop_env)? {
-                        break;
-                    }
-                }
-                Ok(Value::Nada)
+                    Ok(Value::Nada)
+                })
             }
             Stmt::Pare { span } => Err(EvalError::Break { span: *span }),
             Stmt::Continue { span } => Err(EvalError::Continue { span: *span }),
@@ -805,8 +822,23 @@ impl<'a, 'c> Vm<'a, 'c> {
     }
 
     fn eval_block(&mut self, block: &Block, env: &Rc<RefCell<Env>>) -> Result<Value, EvalError> {
-        let child = Env::child(env, FrameKind::Block);
-        self.eval_stmts(&block.stmts, &child)
+        self.eval_in_child(env, FrameKind::Block, |vm, child| {
+            vm.eval_stmts(&block.stmts, child)
+        })
+    }
+
+    /// Runs `f` in a fresh frame and breaks `Rc` cycles before the frame
+    /// is dropped (`g = funcao() { … }` inside a function or block).
+    fn eval_in_child(
+        &mut self,
+        parent: &Rc<RefCell<Env>>,
+        kind: FrameKind,
+        f: impl FnOnce(&mut Self, &Rc<RefCell<Env>>) -> Result<Value, EvalError>,
+    ) -> Result<Value, EvalError> {
+        let child = Env::child(parent, kind);
+        let result = f(self, &child);
+        Env::soltar_capturas(&child, valor_vivo(&result));
+        result
     }
 
     fn eval_expr(&mut self, expr: &Expr, env: &Rc<RefCell<Env>>) -> Result<Value, EvalError> {
@@ -1228,6 +1260,7 @@ impl<'a, 'c> Vm<'a, 'c> {
                 self.file = saved_file;
                 self.source = saved_source;
                 self.stack.pop();
+                Env::soltar_capturas(&call_env, valor_vivo(&result));
                 match result {
                     Ok(v) => Ok(v),
                     Err(EvalError::Return { value, .. }) => Ok(value),
@@ -2502,11 +2535,13 @@ escreva(xs)
 "#),
             "12\nAna Silva\n[1, 2, 3]\n[11, 2, 3]\n"
         );
-        assert!(run_err(
-            r#"xs = [1]
+        assert!(
+            run_err(
+                r#"xs = [1]
 xs -= [1]"#
-        )
-        .contains("numero"));
+            )
+            .contains("numero")
+        );
         assert_eq!(
             run(r#"
 tentativas = []
@@ -2661,6 +2696,45 @@ fim
 escreva(soma(1, 2))
 "#;
         assert_eq!(run(src), "13\n");
+    }
+
+    #[test]
+    fn named_inner_function_can_be_returned() {
+        let src = r#"
+faz_somador = funcao(n) {
+    soma = funcao(x) { x + n }
+    soma
+}
+mais3 = faz_somador(3)
+escreva(mais3(10))
+"#;
+        assert_eq!(run(src), "13\n");
+    }
+
+    #[test]
+    fn inner_function_sees_reassigned_local() {
+        let src = r#"
+f = funcao() {
+    x = 1
+    g = funcao() { x }
+    x = 2
+    g()
+}
+escreva(f())
+"#;
+        assert_eq!(run(src), "2\n");
+    }
+
+    #[test]
+    fn loop_closure_keeps_last_i() {
+        let src = r#"
+f = 0
+para i de 1 ate 3 {
+    f = funcao() { i }
+}
+escreva(f())
+"#;
+        assert_eq!(run(src), "3\n");
     }
 
     #[test]
@@ -2900,42 +2974,52 @@ escreva(s)
 "#),
             "ABC\nxBC\n"
         );
-        assert!(run_err(
-            r#"
+        assert!(
+            run_err(
+                r#"
 s = "ABC"
 s[2] = "ab"
 "#
-        )
-        .contains("tamanho 1"));
-        assert!(run_err(
-            r#"
+            )
+            .contains("tamanho 1")
+        );
+        assert!(
+            run_err(
+                r#"
 s = "ABC"
 s[2] = ""
 "#
-        )
-        .contains("tamanho 1"));
-        assert!(run_err(
-            r#"
+            )
+            .contains("tamanho 1")
+        );
+        assert!(
+            run_err(
+                r#"
 s = "ABC"
 s[2] = 1
 "#
-        )
-        .contains("caractere"));
+            )
+            .contains("caractere")
+        );
         assert!(run_err(r#""ABC"[2] = "b""#).contains("literal"));
-        assert!(run_err(
-            r#"
+        assert!(
+            run_err(
+                r#"
 s = "ABC"
 s[0] = "x"
 "#
-        )
-        .contains(">= 1"));
-        assert!(run_err(
-            r#"
+            )
+            .contains(">= 1")
+        );
+        assert!(
+            run_err(
+                r#"
 s = "ABC"
 s[4] = "x"
 "#
-        )
-        .contains("fora do intervalo"));
+            )
+            .contains("fora do intervalo")
+        );
     }
 
     #[test]
@@ -3123,11 +3207,13 @@ escreva(x)
             Value::Texto("a".into()).format_with(NumeroLocale::PtBr),
             "a"
         );
-        assert!(check_unique_params(&[Param {
-            name: "a".into(),
-            span: Span::default(),
-        }])
-        .is_ok());
+        assert!(
+            check_unique_params(&[Param {
+                name: "a".into(),
+                span: Span::default(),
+            }])
+            .is_ok()
+        );
         assert_eq!(
             check_unique_params(&[
                 Param {

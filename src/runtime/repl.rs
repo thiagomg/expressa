@@ -3,8 +3,8 @@ use std::path::PathBuf;
 use std::process;
 use std::rc::Rc;
 
-use rustyline::error::ReadlineError;
 use rustyline::DefaultEditor;
+use rustyline::error::ReadlineError;
 
 use crate::parser::{needs_more_input, parse};
 
@@ -284,11 +284,7 @@ fn parse_repl_command(line: &str) -> Option<ReplCommand<'_>> {
 
 fn rest_of<'a>(line: &'a str, cmd: &str) -> Option<&'a str> {
     let rest = line.get(cmd.len()..)?.trim();
-    if rest.is_empty() {
-        None
-    } else {
-        Some(rest)
-    }
+    if rest.is_empty() { None } else { Some(rest) }
 }
 
 fn catalogo_src(alvo: Option<&str>) -> String {

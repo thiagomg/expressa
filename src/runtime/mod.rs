@@ -19,8 +19,8 @@ mod viewer;
 
 pub use cartesiano_host::{CapturaCartesiano, CartesianoHost, CliCartesianoHost, NullCartesiano};
 pub use debug::{
-    collect_stack, collect_vars, snapshot, ChannelDebugger, CliDebugger, DebugAction, DebugBinding,
-    DebugCtx, DebugFrameInfo, DebugHook, DebugPaused, DebugSession, NoopHook, StopHook,
+    ChannelDebugger, CliDebugger, DebugAction, DebugBinding, DebugCtx, DebugFrameInfo, DebugHook,
+    DebugPaused, DebugSession, NoopHook, StopHook, collect_stack, collect_vars, snapshot,
 };
 pub use error::{CallFrame, RuntimeError};
 pub use eval::{
@@ -28,17 +28,17 @@ pub use eval::{
     run_source_marcador_args, run_to_string, run_to_string_with, run_to_strings_with,
     run_with_hook, run_with_hosts, run_with_leia_host,
 };
-pub use folha::{pintar, CurvaPronta, FolhaPronta, GraficoPronto};
+pub use folha::{CurvaPronta, FolhaPronta, GraficoPronto, pintar};
 pub use graf::{OpGraf, TelaGrafica};
 pub use graf_host::{CapturaGraf, EventoGraf, GrafHost, NullGraf};
 pub use imagem::Imagem;
-pub use leia::{LeiaHost, CLEAR_SCREEN, CURSOR_HOME, LEIA_MARKER};
+pub use leia::{CLEAR_SCREEN, CURSOR_HOME, LEIA_MARKER, LeiaHost};
 pub use nativas::{
-    builtin_docs, lookup_alvo, lookup_builtin_doc, lookup_ficha, BuiltinDoc, Nativa, NATIVAS,
+    BuiltinDoc, NATIVAS, Nativa, builtin_docs, lookup_alvo, lookup_builtin_doc, lookup_ficha,
 };
-pub use numero::{default_numero_aritmetica, Numero, NumeroAritmetica};
+pub use numero::{Numero, NumeroAritmetica, default_numero_aritmetica};
 pub use repl::run_repl;
-pub use value::{default_numero_locale, NumeroLocale, Value};
+pub use value::{NumeroLocale, Value, default_numero_locale};
 pub use viewer::{run_live_viewer, run_viewer};
 
 #[cfg(test)]

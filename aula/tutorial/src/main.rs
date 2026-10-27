@@ -368,4 +368,3 @@ textview.tutorial-body text {
         );
     }
 }
-

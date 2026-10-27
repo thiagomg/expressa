@@ -865,7 +865,11 @@ fn install_menubar(
     ver.append_item(&menu_item("_Arquivos", "win.mostrar-arquivos", Some("F7")));
     ver.append_item(&menu_item("_Painel", "win.mostrar-painel", Some("F8")));
     ver.append_item(&menu_item("_Buscar", "win.buscar", Some("<Primary>f")));
-    ver.append_item(&menu_item("_Ir para linha", "win.ir-linha", Some("<Primary>g")));
+    ver.append_item(&menu_item(
+        "_Ir para linha",
+        "win.ir-linha",
+        Some("<Primary>g"),
+    ));
     let aparencia = gio::Menu::new();
     aparencia.append_item(&menu_item(
         "Letra _maior",

@@ -8,9 +8,9 @@ use std::sync::mpsc;
 use std::thread;
 use std::time::{Duration, Instant, SystemTime};
 
-use super::folha::{pintar, FolhaPronta};
+use super::folha::{FolhaPronta, pintar};
 use super::graf::png_to_rgb32;
-use super::graf_proto::{self, write_msg, Msg, TIPO_CLIQUE, TIPO_NADA, TIPO_SAIR, TIPO_TECLA};
+use super::graf_proto::{self, Msg, TIPO_CLIQUE, TIPO_NADA, TIPO_SAIR, TIPO_TECLA, write_msg};
 use super::imagem::Imagem;
 
 pub fn run_viewer(path: &Path) -> Result<(), String> {

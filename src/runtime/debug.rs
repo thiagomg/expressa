@@ -783,12 +783,14 @@ mod tests {
         dbg.session.mode = StepMode::Continue;
         dbg.session.breakpoints.insert(("a.lep".into(), 3));
 
-        assert!(dbg
-            .session
-            .should_pause(&ctx("a.lep", "", span3, &env, &stack)));
-        assert!(!dbg
-            .session
-            .should_pause(&ctx("a.lep", "", span4, &env, &stack)));
+        assert!(
+            dbg.session
+                .should_pause(&ctx("a.lep", "", span3, &env, &stack))
+        );
+        assert!(
+            !dbg.session
+                .should_pause(&ctx("a.lep", "", span4, &env, &stack))
+        );
     }
 
     #[test]
@@ -818,15 +820,18 @@ mod tests {
             span: outer,
         };
 
-        assert!(!dbg
-            .session
-            .should_pause(&ctx("a.lep", "", inner, &env, &stack)));
-        assert!(dbg
-            .session
-            .should_pause(&ctx("a.lep", "", after, &env, &stack)));
-        assert!(dbg
-            .session
-            .should_pause(&ctx("a.lep", "", inner, &env, &[])));
+        assert!(
+            !dbg.session
+                .should_pause(&ctx("a.lep", "", inner, &env, &stack))
+        );
+        assert!(
+            dbg.session
+                .should_pause(&ctx("a.lep", "", after, &env, &stack))
+        );
+        assert!(
+            dbg.session
+                .should_pause(&ctx("a.lep", "", inner, &env, &[]))
+        );
     }
 
     #[test]
@@ -853,12 +858,14 @@ mod tests {
         let mut dbg = debugger();
         dbg.session.mode = StepMode::StepOut { depth: 1 };
 
-        assert!(!dbg
-            .session
-            .should_pause(&ctx("a.lep", "", span, &env, &deep)));
-        assert!(dbg
-            .session
-            .should_pause(&ctx("a.lep", "", span, &env, &shallow)));
+        assert!(
+            !dbg.session
+                .should_pause(&ctx("a.lep", "", span, &env, &deep))
+        );
+        assert!(
+            dbg.session
+                .should_pause(&ctx("a.lep", "", span, &env, &shallow))
+        );
     }
 
     #[test]

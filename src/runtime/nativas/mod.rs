@@ -7,7 +7,7 @@ use crate::lexer::Span;
 use super::env::{Env, FrameKind};
 use super::error::EvalError;
 use super::eval::Vm;
-use super::value::{format_numero, Value};
+use super::value::{Value, format_numero};
 
 mod arquivo;
 mod cartesiano;
@@ -19,7 +19,7 @@ mod nucleo;
 mod referencia;
 mod tela;
 
-pub use referencia::{builtin_docs, lookup_alvo, lookup_builtin_doc, lookup_ficha, BuiltinDoc};
+pub use referencia::{BuiltinDoc, builtin_docs, lookup_alvo, lookup_builtin_doc, lookup_ficha};
 
 pub struct Nativa {
     pub names: &'static [&'static str],
@@ -657,7 +657,7 @@ mod tests {
     use std::path::{Path, PathBuf};
     use std::time::{SystemTime, UNIX_EPOCH};
 
-    use super::{builtin_docs, lookup_builtin_doc, NATIVAS};
+    use super::{NATIVAS, builtin_docs, lookup_builtin_doc};
     use crate::runtime::run_to_string;
 
     const PRELUDE: &str =
@@ -749,10 +749,11 @@ mod tests {
         }
         for n in NATIVAS {
             if n.module.is_none() {
-                assert!(n
-                    .names
-                    .iter()
-                    .any(|nm| *nm == "escreva" || lookup_builtin_doc(nm).is_some()));
+                assert!(
+                    n.names
+                        .iter()
+                        .any(|nm| *nm == "escreva" || lookup_builtin_doc(nm).is_some())
+                );
             }
         }
         let _ = builtin_docs().len();

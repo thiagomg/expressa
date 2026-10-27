@@ -9,7 +9,7 @@ use std::time::Duration;
 
 use super::graf::TelaGrafica;
 use super::graf_proto::{
-    self, write_msg, FiguraIntern, Msg, TIPO_CLIQUE, TIPO_SAIR, TIPO_SOLTE, TIPO_TECLA,
+    self, FiguraIntern, Msg, TIPO_CLIQUE, TIPO_SAIR, TIPO_SOLTE, TIPO_TECLA, write_msg,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq)]

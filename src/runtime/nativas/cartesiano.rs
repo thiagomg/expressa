@@ -342,7 +342,7 @@ fn deep_clone(v: &Value) -> Value {
 mod tests {
     use crate::runtime::cartesiano_host::CapturaCartesiano;
     use crate::runtime::eval::run_with_io;
-    use crate::runtime::{run_to_string, NoopHook};
+    use crate::runtime::{NoopHook, run_to_string};
 
     fn run(src: &str) -> String {
         let src = format!("importe \"mat\"\nimporte \"cartesiano\"\n{src}");
@@ -392,30 +392,36 @@ escreva(tamanho(c:graficos[1]:curvas))
         assert!(run_err("g = grafico()\ng.plotar(função(x) { x }, :azul)").contains("eixos"));
         assert!(run_err("c = documento()\nc.mostre()").contains("gráfico"));
         assert!(run_err("eixos(1, 0, 1, -1, 1)").contains("grafico"));
-        assert!(run_err(
-            r#"
+        assert!(
+            run_err(
+                r#"
 g = grafico()
 g.eixos(1, 0, -1, 1)
 "#
-        )
-        .contains("xmin"));
-        assert!(run_err(
-            r#"
+            )
+            .contains("xmin")
+        );
+        assert!(
+            run_err(
+                r#"
 g = grafico()
 g.eixos(-1, 1, -1, 1)
 g.plotar(função(x) { x }, :rosa)
 "#
-        )
-        .contains("cor desconhecida"));
-        assert!(run_err(
-            r#"
+            )
+            .contains("cor desconhecida")
+        );
+        assert!(
+            run_err(
+                r#"
 c = documento()
 g = grafico()
 g.eixos(-1, 1, -1, 1)
 c.adicione(g)
 "#
-        )
-        .contains("curva"));
+            )
+            .contains("curva")
+        );
     }
 
     #[test]

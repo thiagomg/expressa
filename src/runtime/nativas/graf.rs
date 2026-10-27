@@ -5,7 +5,7 @@ use std::time::{Duration, Instant};
 use crate::lexer::Span;
 use crate::runtime::error::EvalError;
 use crate::runtime::eval::Vm;
-use crate::runtime::graf::{cor_graf_conhecida, OpGraf, TelaGrafica, ALTURA_MAX, LARGURA_MAX};
+use crate::runtime::graf::{ALTURA_MAX, LARGURA_MAX, OpGraf, TelaGrafica, cor_graf_conhecida};
 use crate::runtime::graf_host::{EventoGraf, GrafHost};
 use crate::runtime::imagem::{self, Imagem};
 use crate::runtime::value::{MapKey, Value};
@@ -574,9 +574,9 @@ fn set_texto(entries: &mut Vec<(MapKey, Value)>, chave: &str, s: String) {
 
 #[cfg(test)]
 mod tests {
+    use crate::runtime::NoopHook;
     use crate::runtime::eval::{run_to_string, run_with_io};
     use crate::runtime::graf_host::{CapturaGraf, EventoGraf};
-    use crate::runtime::NoopHook;
 
     fn run(src: &str) -> String {
         let src = format!("importe \"tela_grafica\"\n{src}");

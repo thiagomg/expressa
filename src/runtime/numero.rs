@@ -4,8 +4,8 @@ use std::cmp::Ordering;
 use std::fmt;
 use std::str::FromStr;
 
-use rust_decimal::prelude::ToPrimitive;
 use rust_decimal::Decimal;
+use rust_decimal::prelude::ToPrimitive;
 
 /// How `+` `-` `*` `/` `%` run. Locale (`formato("pt")`) is independent.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]

@@ -9,8 +9,8 @@ use std::sync::mpsc::{Receiver, Sender, SyncSender};
 use std::time::Duration;
 
 use expressa::runtime::{
-    run_with_hosts, CartesianoHost, ChannelDebugger, DebugHook, DebugPaused, EventoGraf,
-    FolhaPronta, GrafHost, LeiaHost, StopHook, TelaGrafica,
+    CartesianoHost, ChannelDebugger, DebugHook, DebugPaused, EventoGraf, FolhaPronta, GrafHost,
+    LeiaHost, StopHook, TelaGrafica, run_with_hosts,
 };
 
 use crate::store::Files;

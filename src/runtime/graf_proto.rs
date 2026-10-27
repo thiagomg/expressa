@@ -5,7 +5,7 @@ use std::collections::{HashMap, HashSet};
 use std::io::{self, Read, Write};
 
 use super::graf::OpGraf;
-use super::graf::{cor_graf_conhecida, TelaGrafica};
+use super::graf::{TelaGrafica, cor_graf_conhecida};
 use super::imagem::Imagem;
 
 pub const MAX_PAYLOAD: u32 = 32 * 1024 * 1024;
