@@ -1,7 +1,7 @@
 //! Sibling windows for `tela_grafica::mostre`. Not the Gráficos dock.
 
 use std::cell::RefCell;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 use std::sync::mpsc::Sender;
 
@@ -16,6 +16,9 @@ pub struct Painel {
     telas: Rc<RefCell<HashMap<u64, TelaGrafica>>>,
     windows: Rc<RefCell<HashMap<u64, Window>>>,
     eventos: Rc<RefCell<Option<Sender<EventoGraf>>>>,
+    /// Ids whose window the student closed. `mostre` must not recreate
+    /// them until the next run (`limpar`).
+    fechadas: Rc<RefCell<HashSet<u64>>>,
 }
 
 impl Painel {
@@ -24,6 +27,7 @@ impl Painel {
             telas: Rc::new(RefCell::new(HashMap::new())),
             windows: Rc::new(RefCell::new(HashMap::new())),
             eventos: Rc::new(RefCell::new(None)),
+            fechadas: Rc::new(RefCell::new(HashSet::new())),
         })
     }
 
@@ -39,6 +43,9 @@ impl Painel {
 
     pub fn mostrar(self: &Rc<Self>, tela: TelaGrafica) {
         let id = tela.id;
+        if self.fechadas.borrow().contains(&id) {
+            return;
+        }
         let nova = !self.windows.borrow().contains_key(&id);
         self.telas.borrow_mut().insert(id, tela);
         if nova {
@@ -149,6 +156,7 @@ impl Painel {
                 let painel = Rc::clone(self);
                 win.connect_close_request(move |_| {
                     painel.emita(EventoGraf::sair());
+                    painel.fechadas.borrow_mut().insert(id);
                     painel.telas.borrow_mut().remove(&id);
                     painel.windows.borrow_mut().remove(&id);
                     glib::Propagation::Proceed
@@ -176,6 +184,9 @@ impl Painel {
         for w in windows {
             w.close();
         }
+        // `close()` runs `close-request` and would fill `fechadas`; a new
+        // run (F5) must be allowed to open windows again.
+        self.fechadas.borrow_mut().clear();
     }
 }
 
