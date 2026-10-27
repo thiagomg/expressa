@@ -1,11 +1,12 @@
 use std::cell::RefCell;
 use std::rc::Rc;
+use std::time::{Duration, Instant};
 
 use crate::lexer::Span;
 use crate::runtime::error::EvalError;
 use crate::runtime::eval::Vm;
-use crate::runtime::graf::{ALTURA_MAX, LARGURA_MAX, OpGraf, TelaGrafica, cor_graf_conhecida};
-use crate::runtime::graf_host::GrafHost;
+use crate::runtime::graf::{cor_graf_conhecida, OpGraf, TelaGrafica, ALTURA_MAX, LARGURA_MAX};
+use crate::runtime::graf_host::{EventoGraf, GrafHost};
 use crate::runtime::imagem::{self, Imagem};
 use crate::runtime::value::{MapKey, Value};
 
@@ -208,6 +209,77 @@ impl Vm<'_, '_> {
             self.cli_graf.mostre(tela).map_err(|e| self.err(e, span))?;
         }
         Ok(args[0].clone())
+    }
+
+    pub(crate) fn bi_graf_evento(
+        &mut self,
+        args: &[Value],
+        span: Span,
+    ) -> Result<Value, EvalError> {
+        if args.is_empty() || args.len() > 2 {
+            return Err(self.err(
+                format!("esperado 1 ou 2 argumento(s), recebeu {}", args.len()),
+                span,
+            ));
+        }
+        let tela = tela_de(&args[0], span, self)?;
+        let timeout_secs = if args.len() == 2 {
+            let s = self.expect_f64(&args[1], span)?;
+            if !s.is_finite() || s < 0.0 {
+                return Err(self.err("evento() espera um tempo ≥ 0 (segundos)", span));
+            }
+            Some(s)
+        } else {
+            None
+        };
+        if timeout_secs == Some(0.0) {
+            return self
+                .pedir_evento(&tela, Some(Duration::ZERO), span)
+                .map(evento_valor);
+        }
+        let deadline = timeout_secs.map(|s| {
+            Instant::now() + Duration::from_secs_f64(s.min((i32::MAX as u64 / 1000) as f64))
+        });
+        loop {
+            self.check_deadline(span)?;
+            if self.interrupted() {
+                return Err(EvalError::Quit(0));
+            }
+            let slice = match deadline {
+                None => Duration::from_millis(50),
+                Some(end) => {
+                    let left = end.saturating_duration_since(Instant::now());
+                    if left.is_zero() {
+                        return Ok(evento_valor(EventoGraf::nada()));
+                    }
+                    left.min(Duration::from_millis(50))
+                }
+            };
+            let ev = self.pedir_evento(&tela, Some(slice), span)?;
+            if ev.tipo != "nada" {
+                return Ok(evento_valor(ev));
+            }
+            if deadline.is_some_and(|end| Instant::now() >= end) {
+                return Ok(evento_valor(EventoGraf::nada()));
+            }
+        }
+    }
+
+    fn pedir_evento(
+        &mut self,
+        tela: &TelaGrafica,
+        timeout: Option<Duration>,
+        span: Span,
+    ) -> Result<EventoGraf, EvalError> {
+        if let Some(host) = self.graf_host.as_mut() {
+            host.evento(tela, timeout).map_err(|e| self.err(e, span))
+        } else if self.abrir_cartesiano {
+            self.cli_graf
+                .evento(tela, timeout)
+                .map_err(|e| self.err(e, span))
+        } else {
+            Err(self.err("evento() precisa de uma janela gráfica", span))
+        }
     }
 
     fn expect_graf_dim(&self, v: &Value, nome: &str, span: Span) -> Result<u32, EvalError> {
@@ -475,6 +547,22 @@ fn get_i32(mapa: &Rc<RefCell<Vec<(MapKey, Value)>>>, chave: &str) -> Option<i32>
     }
 }
 
+fn evento_valor(e: EventoGraf) -> Value {
+    Value::mapa(vec![
+        (MapKey::Texto("tipo".into()), Value::Texto(e.tipo)),
+        (
+            MapKey::Texto("x".into()),
+            Value::Numero((e.x as f64).into()),
+        ),
+        (
+            MapKey::Texto("y".into()),
+            Value::Numero((e.y as f64).into()),
+        ),
+        (MapKey::Texto("botao".into()), Value::Texto(e.botao)),
+        (MapKey::Texto("tecla".into()), Value::Texto(e.tecla)),
+    ])
+}
+
 fn set_texto(entries: &mut Vec<(MapKey, Value)>, chave: &str, s: String) {
     let key = MapKey::Texto(chave.into());
     if let Some((_, v)) = entries.iter_mut().find(|(k, _)| *k == key) {
@@ -486,9 +574,9 @@ fn set_texto(entries: &mut Vec<(MapKey, Value)>, chave: &str, s: String) {
 
 #[cfg(test)]
 mod tests {
-    use crate::runtime::NoopHook;
     use crate::runtime::eval::{run_to_string, run_with_io};
-    use crate::runtime::graf_host::CapturaGraf;
+    use crate::runtime::graf_host::{CapturaGraf, EventoGraf};
+    use crate::runtime::NoopHook;
 
     fn run(src: &str) -> String {
         let src = format!("importe \"tela_grafica\"\n{src}");
@@ -665,5 +753,77 @@ g.mostre()
         let rgb = cap.telas[0].rgb32();
         assert_eq!(rgb[(7 * 16 + 8) as usize], 0x00FF0000);
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn evento_sem_janela_e_erro() {
+        assert!(run_err("g = nova(8, 8)\nescreva(g.evento(0))\n").contains("janela"));
+    }
+
+    #[test]
+    fn evento_devolve_clique_da_fila() {
+        let src = r#"
+importe "tela_grafica"
+g = nova(8, 8)
+g.mostre()
+ev = g.evento(0)
+escreva(ev:tipo)
+escreva(ev:x)
+escreva(ev:y)
+escreva(ev:botao)
+"#;
+        let mut cap = CapturaGraf::default();
+        cap.eventos.push_back(EventoGraf::clique(3, 4, "esquerdo"));
+        let mut input = std::io::Cursor::new(String::new());
+        let mut out = Vec::new();
+        let mut err = Vec::new();
+        run_with_io(
+            src,
+            "t.lep",
+            Box::new(NoopHook),
+            &mut input,
+            &mut out,
+            &mut err,
+            None,
+            None,
+            None,
+            None,
+            false,
+            Some(&mut cap),
+            &[],
+        )
+        .unwrap();
+        assert_eq!(String::from_utf8_lossy(&out), "clique\n3\n4\nesquerdo\n");
+    }
+
+    #[test]
+    fn evento_zero_sem_fila_e_nada() {
+        let src = r#"
+importe "tela_grafica"
+g = nova(8, 8)
+ev = g.evento(0)
+escreva(ev:tipo)
+"#;
+        let mut cap = CapturaGraf::default();
+        let mut input = std::io::Cursor::new(String::new());
+        let mut out = Vec::new();
+        let mut err = Vec::new();
+        run_with_io(
+            src,
+            "t.lep",
+            Box::new(NoopHook),
+            &mut input,
+            &mut out,
+            &mut err,
+            None,
+            None,
+            None,
+            None,
+            false,
+            Some(&mut cap),
+            &[],
+        )
+        .unwrap();
+        assert_eq!(String::from_utf8_lossy(&out), "nada\n");
     }
 }

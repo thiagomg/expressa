@@ -4,8 +4,8 @@ use std::cmp::Ordering;
 use std::fmt;
 use std::str::FromStr;
 
-use rust_decimal::Decimal;
 use rust_decimal::prelude::ToPrimitive;
+use rust_decimal::Decimal;
 
 /// How `+` `-` `*` `/` `%` run. Locale (`formato("pt")`) is independent.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -252,10 +252,7 @@ mod tests {
             .add(n("10.35"), mode)
             .unwrap();
         assert_eq!(s.to_plain_string(), "81.37");
-        assert_eq!(
-            n("0.1").add(n("0.2"), mode).unwrap(),
-            n("0.3")
-        );
+        assert_eq!(n("0.1").add(n("0.2"), mode).unwrap(), n("0.3"));
     }
 
     #[test]

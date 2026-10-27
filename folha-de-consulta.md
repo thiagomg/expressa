@@ -276,6 +276,7 @@ g.tela_grafica::cor(:azul)
 g.tela_grafica::linha(10, 10, 310, 190)
 g.tela_grafica::circulo(160, 100, 40)
 g.tela_grafica::mostre()         // janela irmã; o próximo mostre atualiza
+ev = g.tela_grafica::evento(0.05) // clique / tecla / sair / nada
 g.tela_grafica::apague()        // zera o desenho
 g.tela_grafica::salve("casa.png")
 escreva(g.tela_grafica::pixel(10, 10))
@@ -326,7 +327,7 @@ Módulos (`importe "…"`):
 | `matriz` | `matriz` `transposta` `det` `identidade` `zeros` `uns` `cheia` `nlinhas` `ncolunas` |
 | `arquivo` | `leia_arquivo` `salve_arquivo` `adicione_arquivo` `leia_csv` `salve_csv` |
 | `cartesiano` | `documento` `grafico` `eixos` `plotar` `adicione` `mostre` |
-| `tela_grafica` | `nova` `cor` `linha` `circulo` `ponto` `imagem` `apague` `pixel` `salve` `mostre` |
+| `tela_grafica` | `nova` `cor` `linha` `circulo` `ponto` `imagem` `apague` `pixel` `salve` `mostre` `evento` |
 | `imagem` | `carregue` `salve` `rotacione` `escala` `largura` `altura` |
 
 Nativas não podem ser reatribuídas (`escreva = 1` é erro).

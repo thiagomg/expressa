@@ -9,10 +9,8 @@ use super::super::env::Env;
 use super::super::error::{CallFrame, EvalError};
 use super::super::eval::Vm;
 use super::super::numero::NumeroAritmetica;
-use super::super::value::{MapKey, NumeroLocale, Value, conjunto_insert};
-use super::{
-    builtin_args, builtin_doc_summary, builtin_modulo, lookup_ficha, sem_acento,
-};
+use super::super::value::{conjunto_insert, MapKey, NumeroLocale, Value};
+use super::{builtin_args, builtin_doc_summary, builtin_modulo, lookup_ficha, sem_acento};
 
 impl Vm<'_, '_> {
     pub(crate) fn bi_escreva(
@@ -175,9 +173,7 @@ impl Vm<'_, '_> {
             return Ok(Value::Nada);
         }
         Err(self.err(
-            format!(
-                "padrão desconhecido `{name}` (use \"pt\", \"en\", \"decimal\" ou \"float\")"
-            ),
+            format!("padrão desconhecido `{name}` (use \"pt\", \"en\", \"decimal\" ou \"float\")"),
             span,
         ))
     }

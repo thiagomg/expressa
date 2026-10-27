@@ -953,8 +953,8 @@
       "signatures": [
         "nova(largura, altura)"
       ],
-      "summary": "Tela de pixels. Ainda não abre a janela.",
-      "doc": "Tela de pixels. Ainda não abre a janela.\n\nlargura e altura são inteiros de 1 a 2048. Origem no canto superior\nesquerdo, y para baixo, (0, 0) no primeiro pixel.\n\nExemplo: g = nova(320, 200)"
+      "summary": "Tela de pixels. A janela abre no primeiro mostre().",
+      "doc": "Tela de pixels. A janela abre no primeiro mostre().\n\nlargura e altura são inteiros de 1 a 2048. Origem no canto superior\nesquerdo, y para baixo, (0, 0) no primeiro pixel.\n\nExemplo: g = nova(320, 200)"
     },
     {
       "name": "cor",
@@ -1060,6 +1060,18 @@
       ],
       "summary": "Abre ou atualiza a janela deste documento e devolve o foco. Não espera fechar.",
       "doc": "Abre ou atualiza a janela deste documento e devolve o foco. Não espera fechar.\n\nO primeiro mostre abre; os seguintes só atualizam a mesma janela. Folha vazia é erro.\n\nExemplo: c.mostre()"
+    },
+    {
+      "name": "evento",
+      "aliases": [],
+      "module": "tela_grafica",
+      "kind": "funcao",
+      "signatures": [
+        "evento(g)",
+        "evento(g, segundos)"
+      ],
+      "summary": "Espera um clique, tecla ou fechar nesta janela. Sem tempo, espera até acontecer. Com segundos, espera no máximo isso (0 olha uma vez). Devolve um mapa :tipo (clique, tecla, sair, nada), :x :y em pixels, :botao, :tecla. Chame mostre() antes. Sem janela é erro.",
+      "doc": "Espera um clique, tecla ou fechar nesta janela. Sem tempo, espera até\nacontecer. Com segundos, espera no máximo isso (0 olha uma vez). Devolve\num mapa :tipo (clique, tecla, sair, nada), :x :y em pixels, :botao, :tecla.\nChame mostre() antes. Sem janela é erro.\n\nExemplo: ev = g.evento(0.05)"
     },
     {
       "name": "carregue",

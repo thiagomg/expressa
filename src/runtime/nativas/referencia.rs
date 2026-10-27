@@ -3,7 +3,7 @@
 
 use std::sync::OnceLock;
 
-use crate::parser::{AssignTarget, Expr, Item, Stmt, parse};
+use crate::parser::{parse, AssignTarget, Expr, Item, Stmt};
 
 use super::NATIVAS;
 

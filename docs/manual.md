@@ -518,7 +518,7 @@ g.tela_grafica::mostre()
 g.tela_grafica::salve("casa.png")
 ```
 
-`(0, 0)` é o canto superior esquerdo; y cresce para baixo. Cada `nova()` é uma janela; o `mostre` da mesma instância só atualiza. Na Aula a janela é irmã (não entra no painel Gráficos). `pixel(g, x, y)` devolve a cor daquele ponto.
+`(0, 0)` é o canto superior esquerdo; y cresce para baixo. Cada `nova()` é uma janela; o `mostre` da mesma instância só atualiza. `evento(g)` espera um clique ou tecla nessa janela; `evento(g, 0.05)` espera até 50 ms. Na Aula a janela é irmã (não entra no painel Gráficos). `pixel(g, x, y)` devolve a cor daquele ponto. Detalhe do protocolo com o visor: `docs/tela_grafica.md`.
 
 ## `importe "imagem"`
 

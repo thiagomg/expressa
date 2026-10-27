@@ -306,12 +306,6 @@ mod tests {
                 _ => panic!("expected number"),
             })
             .collect();
-        assert_eq!(
-            got,
-            [
-                ("x".into(), 9.0.into()),
-                ("y".into(), 2.0.into())
-            ]
-        );
+        assert_eq!(got, [("x".into(), 9.0.into()), ("y".into(), 2.0.into())]);
     }
 }

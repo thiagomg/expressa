@@ -8,21 +8,19 @@ use std::time::{Duration, Instant};
 
 use crate::lexer::Span;
 use crate::parser::{
-    AssignTarget, BinaryOp, Block, Expr, Import, Item, Param, Program, Stmt, UnaryOp, parse,
+    parse, AssignTarget, BinaryOp, Block, Expr, Import, Item, Param, Program, Stmt, UnaryOp,
 };
 
 use super::cartesiano_host::{CartesianoHost, CliCartesianoHost};
-use super::graf_host::{CliGrafHost, GrafHost};
 use super::debug::{DebugAction, DebugCtx, DebugHook, NoopHook};
 use super::env::{AssignError, Env, FrameKind};
 use super::error::{CallFrame, EvalError, RuntimeError};
+use super::graf_host::{CliGrafHost, GrafHost};
 use super::leia::LeiaHost;
 use super::nativas;
+use super::numero::{default_numero_aritmetica, parse_numero, Numero, NumeroAritmetica};
 use super::rng::Rng;
-use super::numero::{Numero, NumeroAritmetica, default_numero_aritmetica, parse_numero};
-use super::value::{
-    Closure, MapKey, NumeroLocale, Value, default_numero_locale, format_numero,
-};
+use super::value::{default_numero_locale, format_numero, Closure, MapKey, NumeroLocale, Value};
 
 /// Source of lines for `leia()`. Implemented for any [`BufRead`] (tests)
 /// and for [`ConsoleInput`] (locks stdin only during the read, so the
@@ -1728,6 +1726,10 @@ impl<'a, 'c> Vm<'a, 'c> {
         })
     }
 
+    pub(crate) fn interrupted(&mut self) -> bool {
+        self.hook.interrupted()
+    }
+
     pub(crate) fn check_deadline(&self, span: Span) -> Result<(), EvalError> {
         if let Some(deadline) = self.deadline {
             if Instant::now() >= deadline {
@@ -1983,10 +1985,7 @@ impl Vm<'_, '_> {
         }
         let ptr = Rc::as_ptr(xs) as usize;
         if !self.como_texto_guard.insert(ptr) {
-            return Err(self.err(
-                ":_como_texto não pode formatar o mesmo mapa de novo",
-                span,
-            ));
+            return Err(self.err(":_como_texto não pode formatar o mesmo mapa de novo", span));
         }
         let result = self.call_value(&hook, std::slice::from_ref(v), span, "como_texto", env);
         self.como_texto_guard.remove(&ptr);
@@ -2503,13 +2502,11 @@ escreva(xs)
 "#),
             "12\nAna Silva\n[1, 2, 3]\n[11, 2, 3]\n"
         );
-        assert!(
-            run_err(
-                r#"xs = [1]
+        assert!(run_err(
+            r#"xs = [1]
 xs -= [1]"#
-            )
-            .contains("numero")
-        );
+        )
+        .contains("numero"));
         assert_eq!(
             run(r#"
 tentativas = []
@@ -2725,11 +2722,7 @@ escreva(fr.como_texto())
             "t.lep",
         )
         .unwrap_err();
-        assert!(
-            err.message.contains("mesmo mapa"),
-            "{}",
-            err.message
-        );
+        assert!(err.message.contains("mesmo mapa"), "{}", err.message);
     }
 
     #[test]
@@ -2739,11 +2732,7 @@ escreva(fr.como_texto())
             "t.lep",
         )
         .unwrap_err();
-        assert!(
-            err.message.contains("devolver texto"),
-            "{}",
-            err.message
-        );
+        assert!(err.message.contains("devolver texto"), "{}", err.message);
     }
 
     #[test]
@@ -2911,52 +2900,42 @@ escreva(s)
 "#),
             "ABC\nxBC\n"
         );
-        assert!(
-            run_err(
-                r#"
+        assert!(run_err(
+            r#"
 s = "ABC"
 s[2] = "ab"
 "#
-            )
-            .contains("tamanho 1")
-        );
-        assert!(
-            run_err(
-                r#"
+        )
+        .contains("tamanho 1"));
+        assert!(run_err(
+            r#"
 s = "ABC"
 s[2] = ""
 "#
-            )
-            .contains("tamanho 1")
-        );
-        assert!(
-            run_err(
-                r#"
+        )
+        .contains("tamanho 1"));
+        assert!(run_err(
+            r#"
 s = "ABC"
 s[2] = 1
 "#
-            )
-            .contains("caractere")
-        );
+        )
+        .contains("caractere"));
         assert!(run_err(r#""ABC"[2] = "b""#).contains("literal"));
-        assert!(
-            run_err(
-                r#"
+        assert!(run_err(
+            r#"
 s = "ABC"
 s[0] = "x"
 "#
-            )
-            .contains(">= 1")
-        );
-        assert!(
-            run_err(
-                r#"
+        )
+        .contains(">= 1"));
+        assert!(run_err(
+            r#"
 s = "ABC"
 s[4] = "x"
 "#
-            )
-            .contains("fora do intervalo")
-        );
+        )
+        .contains("fora do intervalo"));
     }
 
     #[test]
@@ -3086,10 +3065,7 @@ escreva(x)
 
     #[test]
     fn call_stack_names_the_callee() {
-        let err = match run_to_string(
-            "boom = funcao() {\n    1 / 0\n}\nboom()\n",
-            "app.lep",
-        ) {
+        let err = match run_to_string("boom = funcao() {\n    1 / 0\n}\nboom()\n", "app.lep") {
             Err(e) => e,
             Ok(_) => panic!("expected error"),
         };
@@ -3139,18 +3115,19 @@ escreva(x)
             "exemplos/linguagem"
         );
         assert_eq!(base_dir_of("media.lep").as_os_str(), ".");
-        assert_eq!(Value::Numero(3.0.into()).format_with(NumeroLocale::PtBr), "3");
+        assert_eq!(
+            Value::Numero(3.0.into()).format_with(NumeroLocale::PtBr),
+            "3"
+        );
         assert_eq!(
             Value::Texto("a".into()).format_with(NumeroLocale::PtBr),
             "a"
         );
-        assert!(
-            check_unique_params(&[Param {
-                name: "a".into(),
-                span: Span::default(),
-            }])
-            .is_ok()
-        );
+        assert!(check_unique_params(&[Param {
+            name: "a".into(),
+            span: Span::default(),
+        }])
+        .is_ok());
         assert_eq!(
             check_unique_params(&[
                 Param {
@@ -3386,11 +3363,7 @@ leia_arquivo("../secret.txt")
             "{:?}",
             err.stack
         );
-        assert!(
-            err.stack[0].file.ends_with("main.lep"),
-            "{:?}",
-            err.stack
-        );
+        assert!(err.stack[0].file.ends_with("main.lep"), "{:?}", err.stack);
 
         // The debugger stops in the module, showing the module's line.
         use super::super::debug::ChannelDebugger;

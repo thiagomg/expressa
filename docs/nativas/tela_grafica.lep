@@ -1,4 +1,4 @@
-/// Tela de pixels. Ainda não abre a janela.
+/// Tela de pixels. A janela abre no primeiro mostre().
 ///
 /// largura e altura são inteiros de 1 a 2048. Origem no canto superior
 /// esquerdo, y para baixo, (0, 0) no primeiro pixel.
@@ -60,3 +60,14 @@ salve = funcao(g, caminho) { 0 }
 ///
 /// Exemplo: g.mostre()
 mostre = funcao(g) { 0 }
+
+/// evento(g)
+/// evento(g, segundos)
+///
+/// Espera um clique, tecla ou fechar nesta janela. Sem tempo, espera até
+/// acontecer. Com segundos, espera no máximo isso (0 olha uma vez). Devolve
+/// um mapa :tipo (clique, tecla, sair, nada), :x :y em pixels, :botao, :tecla.
+/// Chame mostre() antes. Sem janela é erro.
+///
+/// Exemplo: ev = g.evento(0.05)
+evento = funcao(g, segundos) { mapa() }

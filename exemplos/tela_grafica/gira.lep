@@ -1,0 +1,24 @@
+/// Tartaruga andando e girando. q ou fechar a janela sai.
+
+tela_grafica = importe "tela_grafica"
+imagem = importe "imagem"
+
+g = tela_grafica::nova(320, 200)
+nave = imagem::carregue("../lib/tartaruga.png")
+
+angulo = 0
+x = 40
+y = 100
+
+enquanto verdadeiro
+inicio
+    g.tela_grafica::apague()
+    g.tela_grafica::imagem(nave, x, y, angulo)
+    g.tela_grafica::mostre()
+    ev = g.tela_grafica::evento(0.05)
+    se ev:tipo == :sair { pare }
+    se ev:tipo == :tecla e ev:tecla == "q" { pare }
+    angulo += 6
+    x += 2
+    se x > 300 { x = 20 }
+fim

@@ -1997,6 +1997,7 @@ fn executar(ui: &UiRc, debug: bool) {
     }
 
     let run = exec::spawn(&ws, &name, doc.text(), debug, bps, args);
+    telas_graf.set_eventos(Some(run.graf_eventos.clone()));
     ui.borrow_mut().run = Some(Run {
         debug_cmd: run.debug_cmd.clone(),
         ws_dir: ws.dir.clone(),
@@ -2042,6 +2043,7 @@ fn executar(ui: &UiRc, debug: bool) {
                 }
                 Ok(ExecEvent::Finished(f)) => {
                     console.cancel_input();
+                    telas_graf.set_eventos(None);
                     ui_ev.borrow_mut().run = None;
                     set_debug_buttons(&ui_ev, false, false);
                     clear_debug_views(&ui_ev);

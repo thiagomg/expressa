@@ -6,10 +6,11 @@ use std::collections::HashMap;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{Receiver, Sender, SyncSender};
+use std::time::Duration;
 
 use expressa::runtime::{
-    run_with_hosts, CartesianoHost, ChannelDebugger, DebugHook, DebugPaused, FolhaPronta, GrafHost,
-    LeiaHost, StopHook, TelaGrafica,
+    run_with_hosts, CartesianoHost, ChannelDebugger, DebugHook, DebugPaused, EventoGraf,
+    FolhaPronta, GrafHost, LeiaHost, StopHook, TelaGrafica,
 };
 
 use crate::store::Files;
@@ -248,6 +249,7 @@ impl CartesianoHost for ChannelCartesiano {
 
 struct ChannelGraf {
     tx: SyncSender<ExecEvent>,
+    eventos: Receiver<EventoGraf>,
 }
 
 impl GrafHost for ChannelGraf {
@@ -255,6 +257,25 @@ impl GrafHost for ChannelGraf {
         self.tx
             .send(ExecEvent::TelaGraf(tela))
             .map_err(|_| "IDE fechada".to_string())
+    }
+
+    fn evento(
+        &mut self,
+        _tela: &TelaGrafica,
+        timeout: Option<Duration>,
+    ) -> Result<EventoGraf, String> {
+        match timeout {
+            None => self.eventos.recv().map_err(|_| "IDE fechada".to_string()),
+            Some(d) if d.is_zero() => Ok(self
+                .eventos
+                .try_recv()
+                .unwrap_or_else(|_| EventoGraf::nada())),
+            Some(d) => match self.eventos.recv_timeout(d) {
+                Ok(e) => Ok(e),
+                Err(std::sync::mpsc::RecvTimeoutError::Timeout) => Ok(EventoGraf::nada()),
+                Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => Err("IDE fechada".into()),
+            },
+        }
     }
 }
 
@@ -286,6 +307,8 @@ pub struct RunHandle {
     pub events: Receiver<ExecEvent>,
     /// Answers to `leia`.
     pub lines: Sender<String>,
+    /// Clique / tecla / fechar da janela gráfica.
+    pub graf_eventos: Sender<EventoGraf>,
     /// continuar | proximo | entrar | sair | terminar
     pub debug_cmd: Sender<String>,
 }
@@ -302,6 +325,7 @@ pub fn spawn(
 ) -> RunHandle {
     let (event_tx, events) = std::sync::mpsc::sync_channel(EVENT_BACKLOG);
     let (lines, line_rx) = std::sync::mpsc::channel::<String>();
+    let (graf_eventos, graf_rx) = std::sync::mpsc::channel::<EventoGraf>();
     let (debug_cmd, ui_cmd_rx) = std::sync::mpsc::channel::<String>();
     let (dcmd_tx, dcmd_rx) = std::sync::mpsc::channel::<String>();
     let (pause_tx, pause_rx) = std::sync::mpsc::channel::<DebugPaused>();
@@ -309,10 +333,12 @@ pub fn spawn(
     // Parar during `leia`: the program waits on a line, not on the hook.
     {
         let lines = lines.clone();
+        let graf_eventos = graf_eventos.clone();
         std::thread::spawn(move || {
             while let Ok(cmd) = ui_cmd_rx.recv() {
                 if matches!(cmd.trim(), "terminar" | "q" | "quit") {
                     let _ = lines.send(String::new());
+                    let _ = graf_eventos.send(EventoGraf::sair());
                 }
                 if dcmd_tx.send(cmd).is_err() {
                     break;
@@ -357,6 +383,7 @@ pub fn spawn(
         };
         let mut graf = ChannelGraf {
             tx: event_tx.clone(),
+            eventos: graf_rx,
         };
         let mut out = ChannelOut {
             tx: event_tx.clone(),
@@ -433,6 +460,7 @@ pub fn spawn(
     RunHandle {
         events,
         lines,
+        graf_eventos,
         debug_cmd,
     }
 }

@@ -7,6 +7,7 @@ mod folha;
 mod formate;
 mod graf;
 mod graf_host;
+mod graf_proto;
 mod imagem;
 mod leia;
 mod nativas;
@@ -18,8 +19,8 @@ mod viewer;
 
 pub use cartesiano_host::{CapturaCartesiano, CartesianoHost, CliCartesianoHost, NullCartesiano};
 pub use debug::{
-    ChannelDebugger, CliDebugger, DebugAction, DebugBinding, DebugCtx, DebugFrameInfo, DebugHook,
-    DebugPaused, DebugSession, NoopHook, StopHook, collect_stack, collect_vars, snapshot,
+    collect_stack, collect_vars, snapshot, ChannelDebugger, CliDebugger, DebugAction, DebugBinding,
+    DebugCtx, DebugFrameInfo, DebugHook, DebugPaused, DebugSession, NoopHook, StopHook,
 };
 pub use error::{CallFrame, RuntimeError};
 pub use eval::{
@@ -27,18 +28,18 @@ pub use eval::{
     run_source_marcador_args, run_to_string, run_to_string_with, run_to_strings_with,
     run_with_hook, run_with_hosts, run_with_leia_host,
 };
-pub use folha::{CurvaPronta, FolhaPronta, GraficoPronto, pintar};
+pub use folha::{pintar, CurvaPronta, FolhaPronta, GraficoPronto};
 pub use graf::{OpGraf, TelaGrafica};
-pub use graf_host::{CapturaGraf, GrafHost, NullGraf};
+pub use graf_host::{CapturaGraf, EventoGraf, GrafHost, NullGraf};
 pub use imagem::Imagem;
-pub use leia::{CLEAR_SCREEN, CURSOR_HOME, LEIA_MARKER, LeiaHost};
+pub use leia::{LeiaHost, CLEAR_SCREEN, CURSOR_HOME, LEIA_MARKER};
 pub use nativas::{
-    BuiltinDoc, NATIVAS, Nativa, builtin_docs, lookup_alvo, lookup_builtin_doc, lookup_ficha,
+    builtin_docs, lookup_alvo, lookup_builtin_doc, lookup_ficha, BuiltinDoc, Nativa, NATIVAS,
 };
-pub use numero::{Numero, NumeroAritmetica, default_numero_aritmetica};
+pub use numero::{default_numero_aritmetica, Numero, NumeroAritmetica};
 pub use repl::run_repl;
-pub use value::{NumeroLocale, Value, default_numero_locale};
-pub use viewer::run_viewer;
+pub use value::{default_numero_locale, NumeroLocale, Value};
+pub use viewer::{run_live_viewer, run_viewer};
 
 #[cfg(test)]
 mod tests {

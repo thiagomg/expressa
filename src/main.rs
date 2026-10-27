@@ -52,6 +52,7 @@ fn try_main() -> Result<(), Box<dyn std::error::Error>> {
              expressa --ast <arquivo.lep>\n  \
              expressa --marcador-leia <arquivo.lep> [args…]\n  \
              expressa --grafico <arquivo.cart>\n  \
+             expressa --ao-vivo\n  \
              expressa --instalar-exemplos\n  \
              expressa --numeros pt|en [arquivo.lep] [args…]\n  \
              expressa --aritmetica decimal|float [arquivo.lep] [args…]"
@@ -69,6 +70,10 @@ fn try_main() -> Result<(), Box<dyn std::error::Error>> {
             return Ok(());
         }
         expressa::runtime::run_viewer(std::path::Path::new(&args[1]))?;
+        return Ok(());
+    }
+    if args[0] == "--ao-vivo" {
+        expressa::runtime::run_live_viewer()?;
         return Ok(());
     }
 

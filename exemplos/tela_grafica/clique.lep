@@ -1,0 +1,19 @@
+/// Clique na janela para desenhar um círculo. q ou fechar a janela sai.
+
+tela_grafica = importe "tela_grafica"
+
+g = tela_grafica::nova(320, 200)
+g.tela_grafica::cor(:azul)
+g.tela_grafica::mostre()
+
+enquanto verdadeiro
+inicio
+    ev = g.tela_grafica::evento()
+    se ev:tipo == :sair { pare }
+    se ev:tipo == :tecla e ev:tecla == "q" { pare }
+    se ev:tipo == :clique
+    inicio
+        g.tela_grafica::circulo(ev:x, ev:y, 8)
+        g.tela_grafica::mostre()
+    fim
+fim

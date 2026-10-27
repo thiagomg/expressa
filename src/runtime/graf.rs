@@ -5,7 +5,7 @@ use std::io::Cursor;
 use std::path::Path;
 
 use super::folha::cor_rgb;
-use super::imagem::{Imagem, carimbar};
+use super::imagem::{carimbar, Imagem};
 
 pub const LARGURA_MAX: u32 = 2048;
 pub const ALTURA_MAX: u32 = 2048;
