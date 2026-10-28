@@ -240,7 +240,7 @@ fn map_int(
     vm.expect_int(&v, span)
 }
 
-fn set_map_numero(entries: &mut Vec<(MapKey, Value)>, chave: &str, n: i64) {
+fn set_map_numero(entries: &mut [(MapKey, Value)], chave: &str, n: i64) {
     let key = MapKey::Texto(chave.into());
     if let Some((_, v)) = entries.iter_mut().find(|(k, _)| *k == key) {
         *v = Value::Numero(n.into());

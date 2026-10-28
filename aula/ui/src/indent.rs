@@ -13,7 +13,7 @@ fn line_text(buffer: &SourceBuffer, line: i32) -> String {
     let Some(start) = buffer.iter_at_line(line) else {
         return String::new();
     };
-    let mut end = start.clone();
+    let mut end = start;
     // On an empty line forward_to_line_end() would jump to the next line's end.
     if !end.ends_line() && !end.forward_to_line_end() {
         end = buffer.end_iter();
@@ -154,7 +154,7 @@ fn set_line_indent(buffer: &SourceBuffer, line: i32, want: usize) {
     let cursor_col = (cursor.line() == line).then(|| cursor.line_offset() as usize);
     let has_selection = buffer.has_selection();
     if have != want {
-        let mut ws_end = start.clone();
+        let mut ws_end = start;
         ws_end.forward_chars(have as i32);
         buffer.delete(&mut start.clone(), &mut ws_end);
         let mut ins = buffer.iter_at_line(line).unwrap_or(start);

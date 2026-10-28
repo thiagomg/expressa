@@ -9,8 +9,6 @@ use super::env::Env;
 use super::imagem::Imagem;
 use super::numero::Numero;
 
-pub use super::numero::parse_numero;
-
 #[derive(Clone)]
 pub enum Value {
     Nada,
@@ -487,6 +485,7 @@ pub fn conjunto_insert(xs: &mut Vec<MapKey>, k: MapKey) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::runtime::numero::parse_numero;
 
     #[test]
     fn type_names_are_portuguese() {

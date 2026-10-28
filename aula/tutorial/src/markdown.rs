@@ -71,8 +71,8 @@ pub fn parse(src: &str) -> Vec<Block> {
             i += 1;
             continue;
         }
-        if trimmed.starts_with("```") {
-            let lang = trimmed[3..].trim().to_string();
+        if let Some(lang) = trimmed.strip_prefix("```") {
+            let lang = lang.trim().to_string();
             i += 1;
             let mut body = String::new();
             while i < lines.len() && !lines[i].trim_start().starts_with("```") {

@@ -515,6 +515,7 @@ impl Vm<'_, '_> {
         if program.items.is_empty() {
             return Err(self.err("avaliar espera uma expressão", span));
         }
+        self.check_profundidade(span)?;
         self.stack.push(CallFrame {
             name: "avaliar".into(),
             file: self.file.clone(),

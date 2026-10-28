@@ -6,12 +6,12 @@ use std::path::{Path, PathBuf};
 
 /// Templates next to the binary, in `/usr/share/expressa/exemplos`, or the repo.
 pub fn bundled_dir() -> Option<PathBuf> {
-    if let Ok(exe) = std::env::current_exe() {
-        if let Some(dir) = exe.parent() {
-            for cand in [dir.join("exemplos"), dir.join("share/expressa/exemplos")] {
-                if cand.join("linguagem").is_dir() {
-                    return Some(cand);
-                }
+    if let Ok(exe) = std::env::current_exe()
+        && let Some(dir) = exe.parent()
+    {
+        for cand in [dir.join("exemplos"), dir.join("share/expressa/exemplos")] {
+            if cand.join("linguagem").is_dir() {
+                return Some(cand);
             }
         }
     }

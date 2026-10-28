@@ -73,14 +73,12 @@ impl<'src> Scanner<'src> {
     }
 
     pub fn skip_peek(&self, skip_count: usize) -> Option<char> {
-        self.source[self.pos..].chars().skip(skip_count).next()
+        self.source[self.pos..].chars().nth(skip_count)
     }
 
     pub fn remove(&mut self) -> Option<char> {
         let c = self.peek();
-        if c == None {
-            return None;
-        }
+        c?;
         let c = c.unwrap();
         if c == '\n' {
             self.line += 1;

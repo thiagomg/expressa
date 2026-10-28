@@ -58,7 +58,7 @@
   "scripts": {
     "gerar": "node scripts/gerar.js",
     "verificar": "node scripts/gerar.js --check",
-    "test": "node --test test/",
+    "test": "node --test test/*.test.js",
     "empacotar": "sh scripts/empacotar.sh"
   },
   "devDependencies": {

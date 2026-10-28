@@ -33,6 +33,8 @@ pub struct StackFrame {
     pub name: String,
     pub file: String,
     pub line: u32,
+    /// How many more identical frames follow this one (deep recursion).
+    pub repeticoes: usize,
 }
 
 pub struct Finished {
@@ -433,13 +435,13 @@ pub fn spawn(
             },
             Err(e) => {
                 let stack = if e.shows_stack() {
-                    e.stack
-                        .iter()
-                        .rev()
-                        .map(|f| StackFrame {
+                    e.pilha_compacta()
+                        .into_iter()
+                        .map(|(f, repeticoes)| StackFrame {
                             name: f.name.clone(),
                             file: rel(&f.file),
                             line: f.span.line,
+                            repeticoes,
                         })
                         .collect()
                 } else {
@@ -456,7 +458,6 @@ pub fn spawn(
         };
         let _ = event_tx.send(ExecEvent::Finished(finished));
     });
-
     RunHandle {
         events,
         lines,

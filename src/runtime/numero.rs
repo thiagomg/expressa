@@ -113,10 +113,6 @@ impl Numero {
         self.bin(rhs, mode, |a, b| a.checked_rem(b), |a, b| a % b)
     }
 
-    pub fn neg(self) -> Self {
-        Self(-self.0)
-    }
-
     fn bin(
         self,
         rhs: Self,
@@ -147,7 +143,15 @@ impl PartialEq for Numero {
 
 impl PartialOrd for Numero {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.0.cmp(&other.0))
+        Some(self.cmp(other))
+    }
+}
+
+impl std::ops::Neg for Numero {
+    type Output = Self;
+
+    fn neg(self) -> Self {
+        Self(-self.0)
     }
 }
 

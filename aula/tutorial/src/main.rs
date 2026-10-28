@@ -77,16 +77,16 @@ fn tutorial_dir() -> Option<PathBuf> {
             return Some(p);
         }
     }
-    if let Ok(exe) = std::env::current_exe() {
-        if let Some(dir) = exe.parent() {
-            for cand in [
-                dir.join("tutorial"),
-                dir.join("share/expressa/tutorial"),
-                dir.parent().map(|p| p.join("tutorial")).unwrap_or_default(),
-            ] {
-                if cand.join("basico.md").is_file() {
-                    return Some(cand);
-                }
+    if let Ok(exe) = std::env::current_exe()
+        && let Some(dir) = exe.parent()
+    {
+        for cand in [
+            dir.join("tutorial"),
+            dir.join("share/expressa/tutorial"),
+            dir.parent().map(|p| p.join("tutorial")).unwrap_or_default(),
+        ] {
+            if cand.join("basico.md").is_file() {
+                return Some(cand);
             }
         }
     }

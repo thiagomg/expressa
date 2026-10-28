@@ -735,23 +735,23 @@ mod imp {
                 return;
             };
             let cursor = buffer.iter_at_mark(&buffer.get_insert());
-            let (mut begin, mut end) = context.bounds().unwrap_or((cursor.clone(), cursor.clone()));
+            let (mut begin, mut end) = context.bounds().unwrap_or((cursor, cursor));
             if item.kind == Kind::File
                 || item.kind == Kind::Module && {
-                    let mut s = cursor.clone();
+                    let mut s = cursor;
                     s.set_line_offset(0);
                     s.text(&cursor).contains("importe")
                 }
             {
                 // Replace the whole spec typed after the quote (`lib/a`).
-                let mut s = cursor.clone();
+                let mut s = cursor;
                 s.set_line_offset(0);
                 let line = s.text(&cursor).to_string();
                 if let Some(q) = line.rfind('"') {
                     begin = buffer
                         .iter_at_line_offset(cursor.line(), line[..q + 1].chars().count() as i32)
                         .unwrap_or(begin);
-                    end = cursor.clone();
+                    end = cursor;
                 }
             }
             buffer.begin_user_action();
@@ -828,9 +828,9 @@ mod imp {
                 let path = (help.path_of)(&buffer).unwrap_or_default();
                 let (s, e) = buffer.bounds();
                 let text = buffer.text(&s, &e, true).to_string();
-                let mut ls = iter.clone();
+                let mut ls = iter;
                 ls.set_line_offset(0);
-                let mut le = iter.clone();
+                let mut le = iter;
                 if !le.ends_line() {
                     le.forward_to_line_end();
                 }
@@ -1036,7 +1036,7 @@ pub fn attach(
                 let buffer = view.buffer();
                 let (s, e) = buffer.bounds();
                 let cursor = buffer.iter_at_mark(&buffer.get_insert());
-                let mut from = cursor.clone();
+                let mut from = cursor;
                 from.backward_lines(30);
                 from.set_line_offset(0);
                 let before = buffer.text(&from, &cursor, true).to_string();
@@ -1125,9 +1125,9 @@ pub fn show_info(view: &SourceView, vh: &ViewHelp, help: &Help) -> bool {
     let (s, e) = buffer.bounds();
     let text = buffer.text(&s, &e, true).to_string();
     let cursor = buffer.iter_at_mark(&buffer.get_insert());
-    let mut ls = cursor.clone();
+    let mut ls = cursor;
     ls.set_line_offset(0);
-    let mut le = cursor.clone();
+    let mut le = cursor;
     if !le.ends_line() {
         le.forward_to_line_end();
     }

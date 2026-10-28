@@ -169,16 +169,14 @@ impl Rpc {
             .enable_all()
             .build()
             .map_err(|e| e.to_string())?;
-        let channel = rt
-            .block_on(async {
-                Endpoint::from_shared(url.to_string())
-                    .map_err(|e| e.to_string())?
-                    .connect_timeout(limit)
-                    .connect()
-                    .await
-                    .map_err(|e| e.to_string())
-            })
-            .map_err(|e| e)?;
+        let channel = rt.block_on(async {
+            Endpoint::from_shared(url.to_string())
+                .map_err(|e| e.to_string())?
+                .connect_timeout(limit)
+                .connect()
+                .await
+                .map_err(|e| e.to_string())
+        })?;
         Ok(Self {
             rt,
             channel,
@@ -199,10 +197,10 @@ impl Rpc {
         if SPAWNED_PID_ATOMIC.load(Ordering::SeqCst) == pid {
             SPAWNED_PID_ATOMIC.store(0, Ordering::SeqCst);
         }
-        if let Ok(mut guard) = SPAWNED_PID.lock() {
-            if *guard == Some(pid) {
-                *guard = None;
-            }
+        if let Ok(mut guard) = SPAWNED_PID.lock()
+            && *guard == Some(pid)
+        {
+            *guard = None;
         }
         if std::fs::read_to_string(pidfile())
             .ok()

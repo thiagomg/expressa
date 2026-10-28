@@ -104,10 +104,10 @@ impl LineInput for ConsoleInput {
 /// On a terminal, ↑/↓ walk the command history.
 pub fn run_repl() -> io::Result<()> {
     println!("Expressa. Digite 'ajuda' ou 'sair'. Setas ↑ ↓ recorrem comandos.");
-    if io::stdin().is_terminal() {
-        if let Ok(mut rl) = DefaultEditor::new() {
-            return run_repl_editor(&mut rl);
-        }
+    if io::stdin().is_terminal()
+        && let Ok(mut rl) = DefaultEditor::new()
+    {
+        return run_repl_editor(&mut rl);
     }
     run_repl_plain()
 }
@@ -375,12 +375,11 @@ fn mapa_campo(v: &Value, key: &str) -> String {
         return String::new();
     };
     for (k, val) in xs.borrow().iter() {
-        if let MapKey::Texto(t) = k {
-            if t == key {
-                if let Value::Texto(s) = val {
-                    return s.clone();
-                }
-            }
+        if let MapKey::Texto(t) = k
+            && t == key
+            && let Value::Texto(s) = val
+        {
+            return s.clone();
         }
     }
     String::new()
@@ -401,9 +400,7 @@ fn print_catalogo(v: &Value) {
         let tipo = mapa_campo(item, "tipo");
         let args = mapa_campo(item, "args");
         let modulo = mapa_campo(item, "modulo");
-        let sig = if args.is_empty() {
-            nome.clone()
-        } else if tipo == "modulo" {
+        let sig = if args.is_empty() || tipo == "modulo" {
             nome.clone()
         } else {
             format!("{nome}({args})")

@@ -1,6 +1,6 @@
 //! `formate(modelo, valores…)` — Rust-style `{}` / `{:<n}` / `{:^n}` / `{:>n}`.
 
-use super::value::{NumeroLocale, Value};
+use super::value::Value;
 
 #[derive(Clone, Copy)]
 enum Align {
@@ -16,7 +16,11 @@ enum Indexing {
 }
 
 #[cfg(test)]
-pub(crate) fn formate(template: &str, args: &[Value], loc: NumeroLocale) -> Result<String, String> {
+pub(crate) fn formate(
+    template: &str,
+    args: &[Value],
+    loc: super::value::NumeroLocale,
+) -> Result<String, String> {
     let texts: Vec<String> = args.iter().map(|v| v.format_with(loc)).collect();
     formate_with(template, args, &texts)
 }
@@ -233,7 +237,7 @@ fn pad(text: &str, width: usize, align: Align, fill: char) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::runtime::value::Value;
+    use crate::runtime::value::{NumeroLocale, Value};
 
     fn t(s: &str) -> Value {
         Value::Texto(s.into())

@@ -315,7 +315,7 @@ impl Doc {
         let Some(a) = self.buffer.iter_at_line(line as i32 - 1) else {
             return;
         };
-        let mut b = a.clone();
+        let mut b = a;
         if !b.forward_line() {
             b = self.buffer.end_iter();
         }

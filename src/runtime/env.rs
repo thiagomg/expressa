@@ -111,8 +111,24 @@ pub enum AssignError {
     Builtin { name: String },
 }
 
+// Live frames on this thread. Tests use it to see frames that are never
+// freed (an `Rc` cycle between a frame and a function defined in it).
+#[cfg(test)]
+thread_local! {
+    pub(crate) static ENVS_VIVOS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+#[cfg(test)]
+impl Drop for Env {
+    fn drop(&mut self) {
+        ENVS_VIVOS.with(|n| n.set(n.get() - 1));
+    }
+}
+
 impl Env {
     pub fn new(kind: FrameKind, parent: Option<Rc<RefCell<Env>>>) -> Rc<RefCell<Self>> {
+        #[cfg(test)]
+        ENVS_VIVOS.with(|n| n.set(n.get() + 1));
         Rc::new(RefCell::new(Self {
             vars: HashMap::new(),
             parent,
@@ -518,7 +534,7 @@ mod tests {
         let block = Env::child(&module, FrameKind::Block);
         Env::assign(&block, "x", num(2.0)).unwrap();
         assert_eq!(Env::get(&module, "x"), Some(num(2.0)));
-        assert!(block.borrow().vars.get("x").is_none());
+        assert!(!block.borrow().vars.contains_key("x"));
     }
 
     #[test]

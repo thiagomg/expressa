@@ -13,6 +13,7 @@ mod imagem;
 mod leia;
 mod nativas;
 mod numero;
+mod pilha;
 mod repl;
 mod rng;
 mod value;
@@ -38,6 +39,7 @@ pub use nativas::{
     BuiltinDoc, NATIVAS, Nativa, builtin_docs, lookup_alvo, lookup_builtin_doc, lookup_ficha,
 };
 pub use numero::{Numero, NumeroAritmetica, default_numero_aritmetica};
+pub use pilha::PROFUNDIDADE_MAXIMA;
 pub use repl::run_repl;
 pub use value::{NumeroLocale, Value, default_numero_locale};
 pub use viewer::{run_live_viewer, run_viewer};

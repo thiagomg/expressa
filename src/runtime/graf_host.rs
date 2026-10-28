@@ -139,11 +139,10 @@ impl Drop for Filho {
         // EOF to the viewer so it keeps the last frame; do not wait, or
         // `expressa casa.lep` would sit until the student closes the window.
         self.stdin.take();
-        if let Some(mut child) = self.child.take() {
-            match child.try_wait() {
-                Ok(None) => std::mem::forget(child),
-                _ => {}
-            }
+        if let Some(mut child) = self.child.take()
+            && let Ok(None) = child.try_wait()
+        {
+            std::mem::forget(child)
         }
     }
 }
@@ -156,10 +155,7 @@ pub struct CliGrafHost {
 
 impl CliGrafHost {
     fn vivo(filho: &mut Filho) -> bool {
-        match filho.child.as_mut().map(|c| c.try_wait()) {
-            Some(Ok(None)) => true,
-            _ => false,
-        }
+        matches!(filho.child.as_mut().map(|c| c.try_wait()), Some(Ok(None)))
     }
 
     fn ensure(&mut self, tela: &TelaGrafica) -> Result<&mut Filho, String> {

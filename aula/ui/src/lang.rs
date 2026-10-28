@@ -659,6 +659,7 @@ pub fn word_at(line: &str, col: usize) -> Option<Word> {
 
 /// Expressa program whose stdout is the general catalog (natives, imported
 /// native modules, and top-level `funcao` from `text`).
+#[cfg(test)]
 pub fn catalogo_fonte(text: &str) -> String {
     let mut src = String::new();
     for imp in parse_imports(text) {
@@ -705,6 +706,7 @@ para f em catalogo() {
 }
 
 /// Run [`catalogo_fonte`] in the interpreter; the editor shows this text.
+#[cfg(test)]
 pub fn catalogo_texto(text: &str) -> String {
     expressa::runtime::run_to_string(&catalogo_fonte(text), "<catalogo.lep>")
         .unwrap_or_else(|e| format!("ajuda: {}", e.message))

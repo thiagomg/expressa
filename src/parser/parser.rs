@@ -406,15 +406,10 @@ impl Parser {
         // Not an infix yet. Examples: 10, x, (a+b), -3, nao ok, se …, funcao …
         let mut lhs = self.parse_unary()?;
 
-        loop {
-            // --- infix operator? ---
-            // Returns (operator token kind, left_bp, right_bp).
-            // If the next token is not an infix (e.g. `)`, `fim`, Eof), stop.
-            let (op_kind, l_bp, r_bp) = match infix_info(self.peek_kind()) {
-                Some(info) => info,
-                None => break,
-            };
-
+        // --- infix operator? ---
+        // Returns (operator token kind, left_bp, right_bp).
+        // If the next token is not an infix (e.g. `)`, `fim`, Eof), stop.
+        while let Some((op_kind, l_bp, r_bp)) = infix_info(self.peek_kind()) {
             // Gate: operator too weak for this nesting level → let the
             // *caller* handle it. Example: inside RHS of `+` we used
             // min_bp=10; a following `+` has l_bp=9 < 10, so we break
@@ -424,15 +419,14 @@ impl Parser {
             }
 
             // Spec: no `a < b < c` (would be confusing with bool vs number).
-            if is_comparison_token(&op_kind) {
-                if let Expr::Binary { op, span, .. } = &lhs {
-                    if is_comparison_op(*op) {
-                        return Err(self.err_at(
-                            "comparações não podem ser encadeadas; use 'e' (ex.: a < b e b < c)",
-                            *span,
-                        ));
-                    }
-                }
+            if is_comparison_token(&op_kind)
+                && let Expr::Binary { op, span, .. } = &lhs
+                && is_comparison_op(*op)
+            {
+                return Err(self.err_at(
+                    "comparações não podem ser encadeadas; use 'e' (ex.: a < b e b < c)",
+                    *span,
+                ));
             }
 
             // Commit to this operator, then parse its right-hand side.
