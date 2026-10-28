@@ -2,7 +2,7 @@ use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::io::{self, BufRead, IsTerminal, Write};
 use std::path::{Path, PathBuf};
-use std::rc::Rc;
+use std::rc::{Rc, Weak};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -84,7 +84,16 @@ pub(crate) struct Vm<'a, 'c> {
     error_reported: bool,
     /// Map identities currently inside `:_como_texto` (recursion guard).
     como_texto_guard: HashSet<usize>,
+    /// Frames where a function was defined ([`Env::marcar_funcao`]). Those
+    /// the end-of-frame check could not free are emptied by
+    /// [`Vm::liberar_frames`] when the run ends.
+    frames_com_funcao: Vec<Weak<RefCell<Env>>>,
+    /// Length of `frames_com_funcao` at which dead entries are dropped.
+    podar_em: usize,
 }
+
+/// First size at which `frames_com_funcao` drops dead entries.
+const PODA_INICIAL: usize = 1024;
 
 fn script_args_value(args: &[String]) -> Value {
     Value::lista(args.iter().cloned().map(Value::Texto).collect())
@@ -402,14 +411,6 @@ pub(crate) fn run_with_io<'a, 'c>(
     }
 }
 
-fn valor_vivo(result: &Result<Value, EvalError>) -> &Value {
-    match result {
-        Ok(v) => v,
-        Err(EvalError::Return { value, .. }) => value,
-        _ => &Value::Nada,
-    }
-}
-
 impl<'a, 'c> Vm<'a, 'c> {
     pub(crate) fn new(
         file: &str,
@@ -460,17 +461,53 @@ impl<'a, 'c> Vm<'a, 'c> {
             protected: 0,
             error_reported: false,
             como_texto_guard: HashSet::new(),
+            frames_com_funcao: Vec::new(),
+            podar_em: PODA_INICIAL,
         }
     }
 
     fn run(&mut self, program: &Program) -> Result<(), EvalError> {
         let env = Env::child(&self.builtins, FrameKind::Module);
         let result = self.eval_program(program, &env);
-        Env::soltar_capturas(&env, &Value::Nada);
-        for m in self.modules.values() {
-            Env::soltar_capturas(m, &Value::Nada);
-        }
+        drop(env);
+        self.liberar_frames();
         result
+    }
+
+    /// A function value was just created in `env`.
+    fn marcar_funcao(&mut self, env: &Rc<RefCell<Env>>) {
+        let frames = &mut self.frames_com_funcao;
+        Env::marcar_funcao(env, |e| frames.push(Rc::downgrade(e)));
+        if frames.len() >= self.podar_em {
+            // A frame left alone at its end because a function escaped is
+            // garbage once that function is dropped: check it again. The
+            // upgrade is the only handle, as the evaluator's is at frame
+            // exit; one at a time, so a handle never counts against another
+            // frame's check. Frames still running have a second handle and
+            // are skipped.
+            for frame in frames.iter() {
+                if let Some(frame) = frame.upgrade() {
+                    Env::liberar_se_lixo(&frame);
+                }
+            }
+            // Freed frames are dead entries; drop them so a long loop does
+            // not grow this list forever.
+            frames.retain(|w| w.strong_count() > 0);
+            self.podar_em = (frames.len() * 2).max(PODA_INICIAL);
+        }
+    }
+
+    /// End of the run: empties every frame with a function that is still
+    /// alive. Frames the end-of-frame check left alone (a function escaped
+    /// and later became garbage) are freed here instead of leaking.
+    pub(crate) fn liberar_frames(&mut self) {
+        for frame in std::mem::take(&mut self.frames_com_funcao) {
+            if let Some(frame) = frame.upgrade() {
+                let vars = std::mem::take(&mut frame.borrow_mut().vars);
+                drop(frame);
+                drop(vars);
+            }
+        }
     }
 
     fn eval_program(&mut self, program: &Program, env: &Rc<RefCell<Env>>) -> Result<(), EvalError> {
@@ -835,7 +872,7 @@ impl<'a, 'c> Vm<'a, 'c> {
     ) -> Result<Value, EvalError> {
         let child = Env::child(parent, kind);
         let result = f(self, &child);
-        Env::soltar_capturas(&child, valor_vivo(&result));
+        Env::liberar_se_lixo(&child);
         result
     }
 
@@ -880,6 +917,7 @@ impl<'a, 'c> Vm<'a, 'c> {
             } => {
                 check_unique_params(params)
                     .map_err(|name| self.err(format!("parâmetro duplicado `{name}`"), *span))?;
+                self.marcar_funcao(env);
                 Ok(Value::Funcao(Rc::new(Closure {
                     params: params.clone(),
                     body: body.clone(),
@@ -1270,7 +1308,7 @@ impl<'a, 'c> Vm<'a, 'c> {
                 self.file = saved_file;
                 self.source = saved_source;
                 self.stack.pop();
-                Env::soltar_capturas(&call_env, valor_vivo(&result));
+                Env::liberar_se_lixo(&call_env);
                 match result {
                     Ok(v) => Ok(v),
                     Err(EvalError::Return { value, .. }) => Ok(value),
@@ -3283,8 +3321,46 @@ escreva(x)
         );
     }
 
+    fn devolve_recursiva(chamadas: usize) -> String {
+        format!(
+            "faz = funcao(k) {{\n\
+             \x20   g = funcao(n) {{ se n == 0 {{ k }} senao {{ g(n - 1) }} }}\n\
+             \x20   retorne g\n\
+             }}\n\
+             s = 0\n\
+             para i de 1 ate {chamadas} {{ s += faz(i)(2) }}\n\
+             escreva(s)\n"
+        )
+    }
+
     #[test]
-    #[ignore = "fase 1: soltar_capturas apaga `g`, que escapou por um mapa"]
+    fn funcao_que_escapa_e_depois_e_descartada_e_liberada_durante_a_execucao() {
+        // Each `faz` frame escapes with `g` and so survives its own end;
+        // once `g` is dropped the periodic check frees it.
+        let (max_poucas, _) = frames_vivos(&devolve_recursiva(3_000));
+        let (max_muitas, sobra) = frames_vivos(&devolve_recursiva(9_000));
+        assert!(
+            max_muitas <= max_poucas + 16,
+            "frames crescem com as chamadas: {max_poucas} → {max_muitas}"
+        );
+        assert_eq!(sobra, 0);
+    }
+
+    #[test]
+    fn verificacao_periodica_nao_esvazia_frame_em_execucao() {
+        // `cria()` registers thousands of frames while `usa` still runs, so
+        // the periodic check happens with `usa`'s frame (and `g`) live.
+        let out = run("cria = funcao() { funcao() { 0 } }\n\
+             usa = funcao() {\n\
+             \x20   g = funcao(n) { se n == 0 { 7 } senao { g(n - 1) } }\n\
+             \x20   repita 5000 vezes { cria() }\n\
+             \x20   g(3)\n\
+             }\n\
+             escreva(usa())\n");
+        assert_eq!(out, "7\n");
+    }
+
+    #[test]
     fn funcao_local_que_escapa_por_mapa_continua_funcionando() {
         let out = run("guardadas = mapa([:f -> 0])\n\
              registra = funcao(m) {\n\
@@ -3298,7 +3374,6 @@ escreva(x)
     }
 
     #[test]
-    #[ignore = "fase 1: soltar_capturas apaga `g`, que escapou por uma lista"]
     fn funcao_local_que_escapa_por_lista_continua_funcionando() {
         let out = run("guardadas = [0]\n\
              registra = funcao(xs) {\n\

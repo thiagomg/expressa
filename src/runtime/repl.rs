@@ -21,6 +21,15 @@ pub struct ReplSession<'a> {
     exit_code: Option<i32>,
 }
 
+/// The session's frame lives until the session ends, so its functions are
+/// freed here rather than when a line finishes.
+impl Drop for ReplSession<'_> {
+    fn drop(&mut self) {
+        self.env.borrow_mut().vars.clear();
+        self.vm.liberar_frames();
+    }
+}
+
 impl<'a> ReplSession<'a> {
     pub fn new(
         input: &'a mut dyn LineInput,
@@ -559,6 +568,7 @@ mod tests {
         let mut session = ReplSession::new(&mut input, &mut out, &mut err);
         let v = session.eval(r#"escreva("oi")"#).unwrap();
         assert!(matches!(v, Value::Nada));
+        drop(session);
         assert_eq!(String::from_utf8(out).unwrap(), "oi\n");
     }
 

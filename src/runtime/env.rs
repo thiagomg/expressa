@@ -82,14 +82,34 @@
 //!
 //! [`Env::define`] always writes **this** frame (params, loop variables).
 //! [`Env::assign`] is what `nome = valor` in source code does.
+//!
+//! # Memory
+//!
+//! Frames are `Rc`, so a function defined inside a function makes a cycle:
+//!
+//! ```text
+//! vizinhos = funcao(m, l, c) {
+//!     pos_lin = funcao(l) { … }   // frame → pos_lin → frame
+//!     …
+//! }
+//! ```
+//!
+//! Three steps free these cycles without ever changing what a program does:
+//!
+//! 1. Creating a function marks its frame (and the blocks up to the
+//!    function frame) with [`Env::marcar_funcao`].
+//! 2. When a marked frame ends, [`Env::liberar_se_lixo`] empties it if
+//!    nothing outside can still reach it (trial deletion over the objects
+//!    that lead back to the frame). If a function escaped, it does nothing.
+//! 3. The VM keeps weak references to marked frames. Now and then it runs
+//!    the same check on them again (an escaped function may have been
+//!    dropped since), and at the end of the run it empties all of them.
 
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
-use crate::parser::{AssignTarget, Block, Expr, Stmt};
-
-use super::value::Value;
+use super::value::{Closure, MapKey, Value};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FrameKind {
@@ -103,6 +123,9 @@ pub struct Env {
     pub vars: HashMap<String, Value>,
     pub parent: Option<Rc<RefCell<Env>>>,
     pub kind: FrameKind,
+    /// A function was defined here or in a block inside (see
+    /// [`Env::marcar_funcao`]).
+    pub(crate) criou_funcao: bool,
 }
 
 #[derive(Debug)]
@@ -133,6 +156,7 @@ impl Env {
             vars: HashMap::new(),
             parent,
             kind,
+            criou_funcao: false,
         }))
     }
 
@@ -222,267 +246,227 @@ impl Env {
         out
     }
 
-    /// Drops locals that form an `Rc` cycle with this frame, unless an
-    /// escaped closure still looks them up by name.
+    /// Marks `env` and the blocks around it, up to the enclosing function
+    /// or module frame, as holding a function defined there. Only marked
+    /// frames can be in an `Rc` cycle with a closure, so only they are
+    /// checked by [`Env::liberar_se_lixo`]. `novo` gets each frame marked now.
+    pub(crate) fn marcar_funcao(env: &Rc<RefCell<Self>>, mut novo: impl FnMut(&Rc<RefCell<Self>>)) {
+        let mut atual = Some(Rc::clone(env));
+        while let Some(e) = atual {
+            let mut frame = e.borrow_mut();
+            if frame.criou_funcao {
+                // Marked before, so its ancestors are marked too.
+                return;
+            }
+            frame.criou_funcao = true;
+            let parar = matches!(
+                frame.kind,
+                FrameKind::Function | FrameKind::Module | FrameKind::Builtins
+            );
+            let parent = frame.parent.clone();
+            drop(frame);
+            novo(&e);
+            if parar {
+                return;
+            }
+            atual = parent;
+        }
+    }
+
+    /// Called when a frame ends, with `frame` the evaluator's own handle to
+    /// it. If nothing outside can still reach the frame, empties it: that
+    /// breaks the `Rc` cycles between it and the functions defined in it
+    /// (`g = funcao() { … }` inside a function), which would otherwise keep
+    /// the frame and everything it holds alive forever.
     ///
-    /// A nested `g = funcao() { … }` stores `g` in the call frame and the
-    /// closure holds that same frame. Without this, the frame (and every
-    /// captured value, including a replaced matrix) lives forever. Names
-    /// that escaped closures actually read are kept so `faz_somador` and
-    /// `retorne g` keep working.
-    pub(crate) fn soltar_capturas(env: &Rc<RefCell<Self>>, keep: &Value) {
-        let frame = Rc::as_ptr(env);
-        let needed = nomes_vivos(keep, frame);
-        let soltar: Vec<String> = {
-            let e = env.borrow();
-            e.vars
-                .iter()
-                .filter(|(nome, valor)| {
-                    !needed.contains(*nome) && fecha_ciclo_com_frame(valor, frame)
-                })
-                .map(|(nome, _)| nome.clone())
-                .collect()
-        };
-        if soltar.is_empty() {
+    /// Conservative: when in doubt (the frame or a function in it escaped,
+    /// the graph is too big, something is borrowed), it does nothing and
+    /// the frame is freed at the end of the run instead.
+    pub(crate) fn liberar_se_lixo(frame: &Rc<RefCell<Self>>) {
+        if !frame.borrow().criou_funcao || !ciclo_morto(frame) {
             return;
         }
-        let mut e = env.borrow_mut();
-        for nome in soltar {
-            e.vars.remove(&nome);
-        }
+        // Drop the values after the borrow ends: dropping a closure can
+        // drop a block frame whose parent is this one.
+        let vars = std::mem::take(&mut frame.borrow_mut().vars);
+        drop(vars);
     }
 }
 
-fn nomes_vivos(keep: &Value, frame: *const RefCell<Env>) -> HashSet<String> {
-    let mut needed = HashSet::new();
-    let mut visto = HashSet::new();
-    coletar_nomes_vivos(keep, frame, &mut needed, &mut visto);
-    needed
+/// Values visited by one [`ciclo_morto`] check before it gives up.
+const LIMITE_DA_BUSCA: usize = 100_000;
+
+/// An object that holds `Rc`s of other values.
+enum Objeto {
+    Env(Rc<RefCell<Env>>),
+    Lista(Rc<RefCell<Vec<Value>>>),
+    Mapa(Rc<RefCell<Vec<(MapKey, Value)>>>),
+    Funcao(Rc<Closure>),
 }
 
-fn coletar_nomes_vivos(
-    v: &Value,
-    frame: *const RefCell<Env>,
-    needed: &mut HashSet<String>,
-    visto: &mut HashSet<usize>,
-) {
-    match v {
-        Value::Funcao(c) => {
-            let p = Rc::as_ptr(c) as usize;
-            if !visto.insert(p) {
-                return;
-            }
-            if env_alcanca_frame(&c.env, frame) {
-                coletar_idents_bloco(&c.body, needed);
-            }
+impl Objeto {
+    fn de_valor(v: &Value) -> Option<Self> {
+        match v {
+            Value::Lista(xs) => Some(Self::Lista(Rc::clone(xs))),
+            Value::Mapa(m) => Some(Self::Mapa(Rc::clone(m))),
+            Value::Funcao(c) => Some(Self::Funcao(Rc::clone(c))),
+            Value::Par(_, v) => Self::de_valor(v),
+            // A module's frame is not inside any function frame, so it is
+            // never part of the cycle being checked (see `ciclo_morto`).
+            Value::Modulo(_)
+            | Value::Nada
+            | Value::Numero(_)
+            | Value::Texto(_)
+            | Value::Bool(_)
+            | Value::Conjunto(_)
+            | Value::Matriz(_)
+            | Value::Imagem(_)
+            | Value::Builtin(_) => None,
         }
-        Value::Lista(xs) => {
-            let p = Rc::as_ptr(xs) as usize;
-            if !visto.insert(p) {
-                return;
-            }
-            for item in xs.borrow().iter() {
-                coletar_nomes_vivos(item, frame, needed, visto);
-            }
+    }
+
+    fn id(&self) -> usize {
+        match self {
+            Self::Env(e) => Rc::as_ptr(e) as *const () as usize,
+            Self::Lista(xs) => Rc::as_ptr(xs) as *const () as usize,
+            Self::Mapa(m) => Rc::as_ptr(m) as *const () as usize,
+            Self::Funcao(c) => Rc::as_ptr(c) as *const () as usize,
         }
-        Value::Mapa(m) => {
-            let p = Rc::as_ptr(m) as usize;
-            if !visto.insert(p) {
-                return;
-            }
-            for (_, item) in m.borrow().iter() {
-                coletar_nomes_vivos(item, frame, needed, visto);
-            }
+    }
+
+    fn fortes(&self) -> usize {
+        match self {
+            Self::Env(e) => Rc::strong_count(e),
+            Self::Lista(xs) => Rc::strong_count(xs),
+            Self::Mapa(m) => Rc::strong_count(m),
+            Self::Funcao(c) => Rc::strong_count(c),
         }
-        Value::Par(_, item) => coletar_nomes_vivos(item, frame, needed, visto),
-        Value::Nada
-        | Value::Numero(_)
-        | Value::Texto(_)
-        | Value::Bool(_)
-        | Value::Conjunto(_)
-        | Value::Matriz(_)
-        | Value::Imagem(_)
-        | Value::Builtin(_)
-        | Value::Modulo(_) => {}
+    }
+
+    /// Objects this one holds, one entry per `Rc` it owns. `None` when
+    /// something is borrowed (the check then gives up).
+    fn filhos(&self, raiz: usize, visitados: &mut usize) -> Option<Vec<Objeto>> {
+        let mut out = Vec::new();
+        match self {
+            Self::Env(e) => {
+                let e = e.try_borrow().ok()?;
+                *visitados += e.vars.len();
+                out.extend(e.vars.values().filter_map(Objeto::de_valor));
+                // Frames inside `raiz` point at their parent; `raiz`'s own
+                // parent is outside the search.
+                if self.id() != raiz
+                    && let Some(p) = &e.parent
+                {
+                    out.push(Self::Env(Rc::clone(p)));
+                }
+            }
+            Self::Lista(xs) => {
+                let xs = xs.try_borrow().ok()?;
+                *visitados += xs.len();
+                out.extend(xs.iter().filter_map(Objeto::de_valor));
+            }
+            Self::Mapa(m) => {
+                let m = m.try_borrow().ok()?;
+                *visitados += m.len();
+                out.extend(m.iter().filter_map(|(_, v)| Objeto::de_valor(v)));
+            }
+            Self::Funcao(c) => out.push(Self::Env(Rc::clone(&c.env))),
+        }
+        // Frames outside `raiz` are not followed (see `ciclo_morto`).
+        out.retain(|o| match o {
+            Self::Env(e) => dentro_de(e, raiz),
+            _ => true,
+        });
+        Some(out)
     }
 }
 
-fn fecha_ciclo_com_frame(v: &Value, frame: *const RefCell<Env>) -> bool {
-    let mut visto = HashSet::new();
-    valor_ve_frame(v, frame, &mut visto)
-}
+/// Trial deletion (as in CPython's cycle collector) over the objects that
+/// can reach `frame`: true when every one of them is referenced only from
+/// inside that set, plus the evaluator's handle to `frame`. Then nothing
+/// else can reach the frame, and emptying it frees the whole set.
+///
+/// The search does not go above `frame` (its parent chain is alive anyway)
+/// and only enters frames nested inside it (blocks of the function), so an
+/// outside frame that reaches in shows up as an extra strong count.
+fn ciclo_morto(frame: &Rc<RefCell<Env>>) -> bool {
+    let raiz = Rc::as_ptr(frame) as *const () as usize;
+    // One clone of each object found; `arestas[i]` lists what `nos[i]`
+    // holds, one entry per `Rc`.
+    let mut nos: Vec<Objeto> = vec![Objeto::Env(Rc::clone(frame))];
+    let mut arestas: Vec<Vec<usize>> = vec![Vec::new()];
+    let mut indice: HashMap<usize, usize> = HashMap::from([(raiz, 0)]);
+    let mut pendentes = vec![0];
+    let mut visitados = 0;
 
-fn valor_ve_frame(v: &Value, frame: *const RefCell<Env>, visto: &mut HashSet<usize>) -> bool {
-    match v {
-        Value::Funcao(c) => {
-            let p = Rc::as_ptr(c) as usize;
-            if !visto.insert(p) {
-                return false;
-            }
-            env_alcanca_frame(&c.env, frame)
+    while let Some(i) = pendentes.pop() {
+        let Some(filhos) = nos[i].filhos(raiz, &mut visitados) else {
+            return false;
+        };
+        if visitados > LIMITE_DA_BUSCA {
+            return false;
         }
-        Value::Lista(xs) => {
-            let p = Rc::as_ptr(xs) as usize;
-            if !visto.insert(p) {
-                return false;
-            }
-            xs.borrow()
-                .iter()
-                .any(|item| valor_ve_frame(item, frame, visto))
+        for filho in filhos {
+            let j = *indice.entry(filho.id()).or_insert_with(|| {
+                nos.push(filho);
+                arestas.push(Vec::new());
+                pendentes.push(nos.len() - 1);
+                nos.len() - 1
+            });
+            arestas[i].push(j);
         }
-        Value::Mapa(m) => {
-            let p = Rc::as_ptr(m) as usize;
-            if !visto.insert(p) {
-                return false;
-            }
-            m.borrow()
-                .iter()
-                .any(|(_, item)| valor_ve_frame(item, frame, visto))
-        }
-        Value::Par(_, item) => valor_ve_frame(item, frame, visto),
-        _ => false,
     }
+
+    // Only objects on a path back to `frame` matter: an outside reference
+    // to anything else does not keep the frame alive.
+    let n = nos.len();
+    let mut entram: Vec<Vec<usize>> = vec![Vec::new(); n];
+    for (de, para) in arestas.iter().enumerate() {
+        for &p in para {
+            entram[p].push(de);
+        }
+    }
+    let mut alcanca = vec![false; n];
+    alcanca[0] = true;
+    let mut fila = vec![0];
+    while let Some(i) = fila.pop() {
+        for &de in &entram[i] {
+            if !alcanca[de] {
+                alcanca[de] = true;
+                fila.push(de);
+            }
+        }
+    }
+
+    let mut internas = vec![0usize; n];
+    for (de, para) in arestas.iter().enumerate() {
+        if alcanca[de] {
+            for &p in para {
+                internas[p] += 1;
+            }
+        }
+    }
+    // Counts are read now that the only clones left are the ones in `nos`
+    // (one each); `frame` also has the evaluator's handle.
+    (0..n).all(|i| {
+        let esperado = internas[i] + 1 + usize::from(i == 0);
+        !alcanca[i] || nos[i].fortes() == esperado
+    })
 }
 
-fn env_alcanca_frame(from: &Rc<RefCell<Env>>, frame: *const RefCell<Env>) -> bool {
-    let mut atual = Some(Rc::clone(from));
+/// True when `env` is the frame `raiz` or nested inside it.
+fn dentro_de(env: &Rc<RefCell<Env>>, raiz: usize) -> bool {
+    let mut atual = Some(Rc::clone(env));
     while let Some(e) = atual {
-        if Rc::as_ptr(&e) == frame {
+        if Rc::as_ptr(&e) as *const () as usize == raiz {
             return true;
         }
-        atual = e.borrow().parent.clone();
+        atual = match e.try_borrow() {
+            Ok(b) => b.parent.clone(),
+            Err(_) => return false,
+        };
     }
     false
-}
-
-fn coletar_idents_bloco(block: &Block, out: &mut HashSet<String>) {
-    for stmt in &block.stmts {
-        coletar_idents_stmt(stmt, out);
-    }
-}
-
-fn coletar_idents_stmt(stmt: &Stmt, out: &mut HashSet<String>) {
-    match stmt {
-        Stmt::Expr { expr, .. } => coletar_idents_expr(expr, out),
-        Stmt::Assign { target, value, .. } => {
-            coletar_idents_alvo(target, out);
-            coletar_idents_expr(value, out);
-        }
-        Stmt::Repita { count, body, .. } => {
-            coletar_idents_expr(count, out);
-            coletar_idents_bloco(body, out);
-        }
-        Stmt::ParaRange { from, to, body, .. } => {
-            coletar_idents_expr(from, out);
-            coletar_idents_expr(to, out);
-            coletar_idents_bloco(body, out);
-        }
-        Stmt::ParaIn { iter, body, .. } => {
-            coletar_idents_expr(iter, out);
-            coletar_idents_bloco(body, out);
-        }
-        Stmt::Enquanto { cond, body, .. } => {
-            coletar_idents_expr(cond, out);
-            coletar_idents_bloco(body, out);
-        }
-        Stmt::Retorne { value, .. } => {
-            if let Some(expr) = value {
-                coletar_idents_expr(expr, out);
-            }
-        }
-        Stmt::Pare { .. } | Stmt::Continue { .. } => {}
-    }
-}
-
-fn coletar_idents_alvo(target: &AssignTarget, out: &mut HashSet<String>) {
-    match target {
-        AssignTarget::Name { .. } => {}
-        AssignTarget::Index { object, index, .. } => {
-            coletar_idents_expr(object, out);
-            coletar_idents_expr(index, out);
-        }
-        AssignTarget::Index2 {
-            object, row, col, ..
-        } => {
-            coletar_idents_expr(object, out);
-            coletar_idents_expr(row, out);
-            coletar_idents_expr(col, out);
-        }
-        AssignTarget::MapField { object, .. } => coletar_idents_expr(object, out),
-    }
-}
-
-fn coletar_idents_expr(expr: &Expr, out: &mut HashSet<String>) {
-    match expr {
-        Expr::Ident { name, .. } => {
-            out.insert(name.clone());
-        }
-        Expr::Number { .. } | Expr::String { .. } | Expr::Bool { .. } => {}
-        Expr::List { elements, .. } => {
-            for el in elements {
-                coletar_idents_expr(el, out);
-            }
-        }
-        Expr::Par { key, value, .. } => {
-            coletar_idents_expr(key, out);
-            coletar_idents_expr(value, out);
-        }
-        Expr::Function { body, .. } => coletar_idents_bloco(body, out),
-        Expr::Field { object, .. } | Expr::MapField { object, .. } => {
-            coletar_idents_expr(object, out);
-        }
-        Expr::Call { callee, args, .. } => {
-            coletar_idents_expr(callee, out);
-            for arg in args {
-                coletar_idents_expr(arg, out);
-            }
-        }
-        Expr::Index { object, index, .. } => {
-            coletar_idents_expr(object, out);
-            coletar_idents_expr(index, out);
-        }
-        Expr::Index2 {
-            object, row, col, ..
-        } => {
-            coletar_idents_expr(object, out);
-            coletar_idents_expr(row, out);
-            coletar_idents_expr(col, out);
-        }
-        Expr::Slice {
-            object, start, end, ..
-        } => {
-            coletar_idents_expr(object, out);
-            coletar_idents_expr(start, out);
-            if let Some(end) = end {
-                coletar_idents_expr(end, out);
-            }
-        }
-        Expr::Unary { expr, .. } => coletar_idents_expr(expr, out),
-        Expr::Binary { left, right, .. } => {
-            coletar_idents_expr(left, out);
-            coletar_idents_expr(right, out);
-        }
-        Expr::Block(block) => coletar_idents_bloco(block, out),
-        Expr::If {
-            branches,
-            else_block,
-            ..
-        } => {
-            for br in branches {
-                coletar_idents_expr(&br.cond, out);
-                coletar_idents_bloco(&br.body, out);
-            }
-            if let Some(body) = else_block {
-                coletar_idents_bloco(body, out);
-            }
-        }
-        Expr::SeFalhar {
-            attempt, fallback, ..
-        } => {
-            coletar_idents_expr(attempt, out);
-            coletar_idents_expr(fallback, out);
-        }
-    }
 }
 
 #[cfg(test)]
@@ -613,27 +597,86 @@ mod tests {
         assert_eq!(got, [("x".into(), 9.0.into()), ("y".into(), 2.0.into())]);
     }
 
-    #[test]
-    fn soltar_capturas_quebra_ciclo_de_funcao_local() {
+    /// A function frame inside `module` holding `g`, a function that
+    /// closes over that frame (the `vizinhos` / `pos_lin` shape).
+    fn frame_com_funcao_local() -> (Rc<RefCell<Env>>, Rc<RefCell<Env>>, Value) {
         let module = Env::new(FrameKind::Module, None);
         let frame = Env::child(&module, FrameKind::Function);
         frame.borrow_mut().define("m", num(1.0));
         let g = closao(Rc::clone(&frame), "m");
-        frame.borrow_mut().define("g", g);
-        assert!(Rc::strong_count(&frame) >= 2);
-        Env::soltar_capturas(&frame, &Value::Nada);
+        Env::marcar_funcao(&frame, |_| {});
+        frame.borrow_mut().define("g", g.clone());
+        (module, frame, g)
+    }
+
+    #[test]
+    fn liberar_se_lixo_quebra_ciclo_de_funcao_local() {
+        let (_module, frame, g) = frame_com_funcao_local();
+        drop(g);
+        assert_eq!(Rc::strong_count(&frame), 2);
+        Env::liberar_se_lixo(&frame);
+        assert_eq!(Rc::strong_count(&frame), 1);
+        assert!(frame.borrow().vars.is_empty());
+    }
+
+    #[test]
+    fn liberar_se_lixo_preserva_funcao_que_escapou() {
+        // `g` is still held outside (returned, or kept by the caller).
+        let (_module, frame, g) = frame_com_funcao_local();
+        Env::liberar_se_lixo(&frame);
+        assert!(frame.borrow().vars.contains_key("g"));
+        assert!(frame.borrow().vars.contains_key("m"));
+        drop(g);
+    }
+
+    #[test]
+    fn liberar_se_lixo_preserva_funcao_guardada_numa_lista_de_fora() {
+        // `xs[1] = g` with `xs` a list that the caller also holds.
+        let (_module, frame, g) = frame_com_funcao_local();
+        let de_fora = Value::lista(vec![g]);
+        frame.borrow_mut().define("xs", de_fora.clone());
+        Env::liberar_se_lixo(&frame);
+        assert!(frame.borrow().vars.contains_key("g"));
+        drop(de_fora);
+    }
+
+    #[test]
+    fn liberar_se_lixo_libera_lista_local_com_a_funcao() {
+        // A list only this frame holds is part of the dead cycle.
+        let (_module, frame, g) = frame_com_funcao_local();
+        frame
+            .borrow_mut()
+            .define("fs", Value::lista(vec![g.clone(), g]));
+        Env::liberar_se_lixo(&frame);
+        assert!(frame.borrow().vars.is_empty());
+    }
+
+    #[test]
+    fn liberar_se_lixo_funcao_definida_num_bloco_interno() {
+        // `se … { h = funcao() { … } }` with `h` assigned to a name of the
+        // function frame: the cycle goes through the block's frame.
+        let module = Env::new(FrameKind::Module, None);
+        let frame = Env::child(&module, FrameKind::Function);
+        frame.borrow_mut().define("h", Value::Nada);
+        let bloco = Env::child(&frame, FrameKind::Block);
+        Env::marcar_funcao(&bloco, |_| {});
+        assert!(frame.borrow().criou_funcao, "marca sobe até a função");
+        let h = closao(Rc::clone(&bloco), "h");
+        Env::assign(&bloco, "h", h).unwrap();
+        // The block ends first: the cycle is not through it alone.
+        Env::liberar_se_lixo(&bloco);
+        drop(bloco);
+        Env::liberar_se_lixo(&frame);
+        assert!(frame.borrow().vars.is_empty());
         assert_eq!(Rc::strong_count(&frame), 1);
     }
 
     #[test]
-    fn soltar_capturas_preserva_local_lido_pela_funcao_devolvida() {
+    fn liberar_se_lixo_ignora_frame_sem_funcao() {
         let module = Env::new(FrameKind::Module, None);
         let frame = Env::child(&module, FrameKind::Function);
-        frame.borrow_mut().define("n", num(5.0));
-        let soma = closao(Rc::clone(&frame), "n");
-        frame.borrow_mut().define("soma", soma.clone());
-        Env::soltar_capturas(&frame, &soma);
+        frame.borrow_mut().define("n", num(1.0));
+        Env::liberar_se_lixo(&frame);
         assert!(frame.borrow().vars.contains_key("n"));
-        assert!(!frame.borrow().vars.contains_key("soma"));
     }
 }
