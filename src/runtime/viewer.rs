@@ -90,12 +90,12 @@ fn run_png_viewer(path: &Path) -> Result<(), String> {
         let resized = w != width || h != height;
         let changed = new_mtime != mtime;
         if changed {
-            if let Ok(b) = std::fs::read(path) {
-                if let Ok((nw, nh, px)) = png_to_rgb32(&b) {
-                    iw = nw;
-                    ih = nh;
-                    pixels = px;
-                }
+            if let Ok(b) = std::fs::read(path)
+                && let Ok((nw, nh, px)) = png_to_rgb32(&b)
+            {
+                iw = nw;
+                ih = nh;
+                pixels = px;
             }
             mtime = new_mtime;
         }
@@ -193,11 +193,11 @@ pub fn run_live_viewer() -> Result<(), String> {
             }
         }
 
-        if window.is_none() {
-            if let Some(t) = tela.as_ref() {
-                window = Some(abre_janela(t.largura, t.altura)?);
-                ja_apareceu = false;
-            }
+        if window.is_none()
+            && let Some(t) = tela.as_ref()
+        {
+            window = Some(abre_janela(t.largura, t.altura)?);
+            ja_apareceu = false;
         }
 
         if let Some(win) = window.as_mut() {

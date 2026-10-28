@@ -102,6 +102,7 @@ pub(crate) fn expect_imagem<'a>(
 }
 
 #[cfg(test)]
+#[allow(clippy::identity_op)] // `1 * 4`: pixel 1, 4 bytes each
 mod tests {
     use std::fs;
     use std::path::PathBuf;

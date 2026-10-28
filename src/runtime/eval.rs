@@ -2,7 +2,7 @@ use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::io::{self, BufRead, IsTerminal, Write};
 use std::path::{Path, PathBuf};
-use std::rc::Rc;
+use std::rc::{Rc, Weak};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -19,6 +19,7 @@ use super::graf_host::{CliGrafHost, GrafHost};
 use super::leia::LeiaHost;
 use super::nativas;
 use super::numero::{Numero, NumeroAritmetica, default_numero_aritmetica, parse_numero};
+use super::pilha::{PILHA_RESERVA, PILHA_SEGMENTO, PROFUNDIDADE_MAXIMA};
 use super::rng::Rng;
 use super::value::{Closure, MapKey, NumeroLocale, Value, default_numero_locale, format_numero};
 
@@ -83,7 +84,16 @@ pub(crate) struct Vm<'a, 'c> {
     error_reported: bool,
     /// Map identities currently inside `:_como_texto` (recursion guard).
     como_texto_guard: HashSet<usize>,
+    /// Frames where a function was defined ([`Env::marcar_funcao`]). Those
+    /// the end-of-frame check could not free are emptied by
+    /// [`Vm::liberar_frames`] when the run ends.
+    frames_com_funcao: Vec<Weak<RefCell<Env>>>,
+    /// Length of `frames_com_funcao` at which dead entries are dropped.
+    podar_em: usize,
 }
+
+/// First size at which `frames_com_funcao` drops dead entries.
+const PODA_INICIAL: usize = 1024;
 
 fn script_args_value(args: &[String]) -> Value {
     Value::lista(args.iter().cloned().map(Value::Texto).collect())
@@ -401,14 +411,6 @@ pub(crate) fn run_with_io<'a, 'c>(
     }
 }
 
-fn valor_vivo(result: &Result<Value, EvalError>) -> &Value {
-    match result {
-        Ok(v) => v,
-        Err(EvalError::Return { value, .. }) => value,
-        _ => &Value::Nada,
-    }
-}
-
 impl<'a, 'c> Vm<'a, 'c> {
     pub(crate) fn new(
         file: &str,
@@ -459,17 +461,53 @@ impl<'a, 'c> Vm<'a, 'c> {
             protected: 0,
             error_reported: false,
             como_texto_guard: HashSet::new(),
+            frames_com_funcao: Vec::new(),
+            podar_em: PODA_INICIAL,
         }
     }
 
     fn run(&mut self, program: &Program) -> Result<(), EvalError> {
         let env = Env::child(&self.builtins, FrameKind::Module);
         let result = self.eval_program(program, &env);
-        Env::soltar_capturas(&env, &Value::Nada);
-        for m in self.modules.values() {
-            Env::soltar_capturas(m, &Value::Nada);
-        }
+        drop(env);
+        self.liberar_frames();
         result
+    }
+
+    /// A function value was just created in `env`.
+    fn marcar_funcao(&mut self, env: &Rc<RefCell<Env>>) {
+        let frames = &mut self.frames_com_funcao;
+        Env::marcar_funcao(env, |e| frames.push(Rc::downgrade(e)));
+        if frames.len() >= self.podar_em {
+            // A frame left alone at its end because a function escaped is
+            // garbage once that function is dropped: check it again. The
+            // upgrade is the only handle, as the evaluator's is at frame
+            // exit; one at a time, so a handle never counts against another
+            // frame's check. Frames still running have a second handle and
+            // are skipped.
+            for frame in frames.iter() {
+                if let Some(frame) = frame.upgrade() {
+                    Env::liberar_se_lixo(&frame);
+                }
+            }
+            // Freed frames are dead entries; drop them so a long loop does
+            // not grow this list forever.
+            frames.retain(|w| w.strong_count() > 0);
+            self.podar_em = (frames.len() * 2).max(PODA_INICIAL);
+        }
+    }
+
+    /// End of the run: empties every frame with a function that is still
+    /// alive. Frames the end-of-frame check left alone (a function escaped
+    /// and later became garbage) are freed here instead of leaking.
+    pub(crate) fn liberar_frames(&mut self) {
+        for frame in std::mem::take(&mut self.frames_com_funcao) {
+            if let Some(frame) = frame.upgrade() {
+                let vars = std::mem::take(&mut frame.borrow_mut().vars);
+                drop(frame);
+                drop(vars);
+            }
+        }
     }
 
     fn eval_program(&mut self, program: &Program, env: &Rc<RefCell<Env>>) -> Result<(), EvalError> {
@@ -543,19 +581,19 @@ impl<'a, 'c> Vm<'a, 'c> {
     }
 
     fn eval_import(&mut self, import: &Import, env: &Rc<RefCell<Env>>) -> Result<(), EvalError> {
-        if is_bare_module_spec(&import.path) {
-            if let Some(native) = self.native_modules.get(&import.path).cloned() {
-                if self.native_conflicts_with_file(&import.path, import.span)? {
-                    return Err(self.err(
+        if is_bare_module_spec(&import.path)
+            && let Some(native) = self.native_modules.get(&import.path).cloned()
+        {
+            if self.native_conflicts_with_file(&import.path, import.span)? {
+                return Err(self.err(
                         format!(
                             "'{}' é um módulo nativo e existe {}.lep nesta pasta. Use importe \"./{}\" para o arquivo, ou mude o nome/pasta do arquivo para usar o nativo.",
                             import.path, import.path, import.path
                         ),
                         import.span,
                     ));
-                }
-                return self.bind_imported(import, env, native);
             }
+            return self.bind_imported(import, env, native);
         }
         let path = self.resolve_import_path(&import.path, import.span)?;
         let key = std::fs::canonicalize(&path).unwrap_or_else(|_| path.clone());
@@ -671,16 +709,13 @@ impl<'a, 'c> Vm<'a, 'c> {
             // variables still in scope: let the debugger show them.
             if self.protected == 0 && !self.error_reported {
                 self.error_reported = true;
-                let file = self.file.clone();
-                let source = Rc::clone(&self.source);
-                let stack = self.stack.clone();
                 self.hook.on_error(
                     &DebugCtx {
-                        file: &file,
-                        source: &source,
+                        file: &self.file,
+                        source: &self.source,
                         span: e.span,
                         env,
-                        stack: &stack,
+                        stack: &self.stack,
                     },
                     &e.message,
                 );
@@ -837,11 +872,20 @@ impl<'a, 'c> Vm<'a, 'c> {
     ) -> Result<Value, EvalError> {
         let child = Env::child(parent, kind);
         let result = f(self, &child);
-        Env::soltar_capturas(&child, valor_vivo(&result));
+        Env::liberar_se_lixo(&child);
         result
     }
 
+    /// Every recursion in the evaluator (calls, nested expressions, blocks)
+    /// passes through here, so this is where the Rust stack is grown before
+    /// it can overflow — on any thread, in debug or release.
     fn eval_expr(&mut self, expr: &Expr, env: &Rc<RefCell<Env>>) -> Result<Value, EvalError> {
+        stacker::maybe_grow(PILHA_RESERVA, PILHA_SEGMENTO, || {
+            self.eval_expr_inner(expr, env)
+        })
+    }
+
+    fn eval_expr_inner(&mut self, expr: &Expr, env: &Rc<RefCell<Env>>) -> Result<Value, EvalError> {
         match expr {
             Expr::Number { raw, span } => {
                 let n = parse_numero(raw)
@@ -873,6 +917,7 @@ impl<'a, 'c> Vm<'a, 'c> {
             } => {
                 check_unique_params(params)
                     .map_err(|name| self.err(format!("parâmetro duplicado `{name}`"), *span))?;
+                self.marcar_funcao(env);
                 Ok(Value::Funcao(Rc::new(Closure {
                     params: params.clone(),
                     body: body.clone(),
@@ -989,7 +1034,7 @@ impl<'a, 'c> Vm<'a, 'c> {
                                 .collect();
                             Ok(Value::matriz(rows))
                         }
-                        _ => Ok(Value::Numero(self.expect_numero(&v, *span)?.neg())),
+                        _ => Ok(Value::Numero(-self.expect_numero(&v, *span)?)),
                     },
                     UnaryOp::Not => Ok(Value::Bool(!self.expect_bool(&v, *span)?)),
                 }
@@ -1020,19 +1065,21 @@ impl<'a, 'c> Vm<'a, 'c> {
             }
             Expr::SeFalhar {
                 attempt, fallback, ..
-            } => match {
+            } => {
                 self.protected += 1;
-                let r = self.eval_expr(attempt, env);
+                let attempt = self.eval_expr(attempt, env);
                 self.protected -= 1;
-                r
-            } {
-                Ok(v) => Ok(v),
-                Err(EvalError::Quit(code)) => Err(EvalError::Quit(code)),
-                Err(EvalError::Return { value, span }) => Err(EvalError::Return { value, span }),
-                Err(EvalError::Break { span }) => Err(EvalError::Break { span }),
-                Err(EvalError::Continue { span }) => Err(EvalError::Continue { span }),
-                Err(EvalError::Runtime(_)) => self.eval_expr(fallback, env),
-            },
+                match attempt {
+                    Ok(v) => Ok(v),
+                    Err(EvalError::Quit(code)) => Err(EvalError::Quit(code)),
+                    Err(EvalError::Return { value, span }) => {
+                        Err(EvalError::Return { value, span })
+                    }
+                    Err(EvalError::Break { span }) => Err(EvalError::Break { span }),
+                    Err(EvalError::Continue { span }) => Err(EvalError::Continue { span }),
+                    Err(EvalError::Runtime(_)) => self.eval_expr(fallback, env),
+                }
+            }
         }
     }
 
@@ -1240,6 +1287,7 @@ impl<'a, 'c> Vm<'a, 'c> {
                         span,
                     ));
                 }
+                self.check_profundidade(span)?;
                 let call_env = Env::child(&closure.env, FrameKind::Function);
                 for (param, arg) in closure.params.iter().zip(args) {
                     call_env
@@ -1260,7 +1308,7 @@ impl<'a, 'c> Vm<'a, 'c> {
                 self.file = saved_file;
                 self.source = saved_source;
                 self.stack.pop();
-                Env::soltar_capturas(&call_env, valor_vivo(&result));
+                Env::liberar_se_lixo(&call_env);
                 match result {
                     Ok(v) => Ok(v),
                     Err(EvalError::Return { value, .. }) => Ok(value),
@@ -1763,11 +1811,26 @@ impl<'a, 'c> Vm<'a, 'c> {
         self.hook.interrupted()
     }
 
+    /// Called before pushing a function frame: past the limit the call is
+    /// a normal runtime error (`se_falhar` catches it), not a stack overflow.
+    pub(crate) fn check_profundidade(&self, span: Span) -> Result<(), EvalError> {
+        if self.stack.len() >= PROFUNDIDADE_MAXIMA {
+            return Err(self.err(
+                format!(
+                    "recursão profunda demais (mais de {PROFUNDIDADE_MAXIMA} chamadas): \
+                     a função chama a si mesma sem parar?"
+                ),
+                span,
+            ));
+        }
+        Ok(())
+    }
+
     pub(crate) fn check_deadline(&self, span: Span) -> Result<(), EvalError> {
-        if let Some(deadline) = self.deadline {
-            if Instant::now() >= deadline {
-                return Err(self.err("tempo esgotado", span));
-            }
+        if let Some(deadline) = self.deadline
+            && Instant::now() >= deadline
+        {
+            return Err(self.err("tempo esgotado", span));
         }
         Ok(())
     }
@@ -1814,15 +1877,14 @@ impl<'a, 'c> Vm<'a, 'c> {
 
     fn pause(&mut self, span: Span, env: &Rc<RefCell<Env>>) -> Result<(), EvalError> {
         self.check_deadline(span)?;
-        let file = self.file.clone();
-        let source = Rc::clone(&self.source);
-        let stack = self.stack.clone();
+        // Borrow the fields directly: cloning the stack here made every
+        // statement cost O(call depth).
         match self.hook.before_stmt(&DebugCtx {
-            file: &file,
-            source: &source,
+            file: &self.file,
+            source: &self.source,
             span,
             env,
-            stack: &stack,
+            stack: &self.stack,
         }) {
             DebugAction::Continue => Ok(()),
             DebugAction::Quit => Err(EvalError::Quit(0)),
@@ -3145,6 +3207,203 @@ escreva(x)
         .unwrap();
         assert_eq!(out, "1\n");
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Runs on a plain test thread (2 MB of stack): the evaluator must grow
+    /// its own stack instead of relying on a big one.
+    fn run_fundo(src: &str) -> Result<String, RuntimeError> {
+        run_to_string(src, "teste.lep")
+    }
+
+    #[test]
+    fn recursao_sem_fim_e_erro_e_nao_estouro_de_pilha() {
+        let err = run_fundo("f = funcao(n) {\n    f(n + 1)\n}\nf(1)\n").unwrap_err();
+        assert!(
+            err.message.contains("recursão profunda demais"),
+            "{}",
+            err.message
+        );
+        assert_eq!(err.stack.len(), PROFUNDIDADE_MAXIMA);
+        // Ten thousand identical frames print as one line plus a count.
+        let text = err.to_string();
+        assert!(text.lines().count() < 10, "{text}");
+        assert!(text.contains("a mesma chamada, mais 9998 vezes"), "{text}");
+    }
+
+    #[test]
+    fn recursao_profunda_mas_finita_funciona() {
+        let out = run_fundo(
+            "f = funcao(n) {\n    se n == 0 { 0 } senao { 1 + f(n - 1) }\n}\nescreva(f(9000))\n",
+        )
+        .unwrap();
+        assert_eq!(out, "9.000\n");
+    }
+
+    #[test]
+    fn se_falhar_pega_recursao_sem_fim() {
+        let out =
+            run_fundo("f = funcao(n) {\n    f(n + 1)\n}\nescreva(f(1) se_falhar \"parou\")\n")
+                .unwrap();
+        assert_eq!(out, "parou\n");
+    }
+
+    #[test]
+    fn avaliar_recursivo_tambem_tem_limite() {
+        let err = run_fundo("f = funcao() {\n    avaliar(\"f()\")\n}\nf()\n").unwrap_err();
+        assert!(
+            err.message.contains("recursão profunda demais"),
+            "{}",
+            err.message
+        );
+    }
+
+    // ── Funções locais e memória (ajustes/01-modelo-de-memoria.md) ─────
+
+    /// Max live frames seen before any statement, and live frames left
+    /// after the run.
+    fn frames_vivos(src: &str) -> (usize, usize) {
+        use crate::runtime::env::ENVS_VIVOS;
+        use std::cell::Cell;
+
+        struct Contador(Rc<Cell<usize>>);
+        impl DebugHook for Contador {
+            fn before_stmt(&mut self, _ctx: &DebugCtx<'_>) -> DebugAction {
+                let vivos = ENVS_VIVOS.with(Cell::get);
+                self.0.set(self.0.get().max(vivos));
+                DebugAction::Continue
+            }
+        }
+
+        let antes = ENVS_VIVOS.with(Cell::get);
+        let max = Rc::new(Cell::new(0));
+        let mut input = io::Cursor::new(String::new());
+        let (mut out, mut err) = (Vec::new(), Vec::new());
+        run_with(
+            src,
+            "teste.lep",
+            Box::new(Contador(Rc::clone(&max))),
+            &mut input,
+            &mut out,
+            &mut err,
+            None,
+            None,
+            None,
+            &[],
+        )
+        .unwrap_or_else(|e| panic!("run failed: {e}"));
+        let depois = ENVS_VIVOS.with(Cell::get);
+        (max.get() - antes, depois - antes)
+    }
+
+    /// `exemplos/jogos/conway_jogo_da_vida.lep` without its endless main
+    /// loop, running `geracoes` generations of the glider pattern.
+    fn conway(geracoes: usize) -> String {
+        let src = include_str!("../../exemplos/jogos/conway_jogo_da_vida.lep");
+        let funcoes = src.split("// Rotina principal do jogo").next().unwrap();
+        format!(
+            "{funcoes}\nm = zeros(10, 25)\nm.predefinido()\n\
+             repita {geracoes} vezes {{\n    m = m.nova_geracao()\n}}\n"
+        )
+    }
+
+    #[test]
+    fn funcoes_locais_que_nao_escapam_nao_acumulam_frames() {
+        // `vizinhos` defines `pos_lin`/`pos_col`, which close over its frame.
+        // Each call must free that frame, or every generation strands one
+        // frame per cell (and the old matrix each one holds).
+        let (max_2, sobra_2) = frames_vivos(&conway(2));
+        let (max_6, sobra_6) = frames_vivos(&conway(6));
+        assert_eq!(max_2, max_6, "frames crescem com o número de gerações");
+        assert_eq!(
+            (sobra_2, sobra_6),
+            (0, 0),
+            "frames vivos depois da execução"
+        );
+    }
+
+    fn devolve_recursiva(chamadas: usize) -> String {
+        format!(
+            "faz = funcao(k) {{\n\
+             \x20   g = funcao(n) {{ se n == 0 {{ k }} senao {{ g(n - 1) }} }}\n\
+             \x20   retorne g\n\
+             }}\n\
+             s = 0\n\
+             para i de 1 ate {chamadas} {{ s += faz(i)(2) }}\n\
+             escreva(s)\n"
+        )
+    }
+
+    #[test]
+    fn funcao_que_escapa_e_depois_e_descartada_e_liberada_durante_a_execucao() {
+        // Each `faz` frame escapes with `g` and so survives its own end;
+        // once `g` is dropped the periodic check frees it.
+        let (max_poucas, _) = frames_vivos(&devolve_recursiva(3_000));
+        let (max_muitas, sobra) = frames_vivos(&devolve_recursiva(9_000));
+        assert!(
+            max_muitas <= max_poucas + 16,
+            "frames crescem com as chamadas: {max_poucas} → {max_muitas}"
+        );
+        assert_eq!(sobra, 0);
+    }
+
+    #[test]
+    fn verificacao_periodica_nao_esvazia_frame_em_execucao() {
+        // `cria()` registers thousands of frames while `usa` still runs, so
+        // the periodic check happens with `usa`'s frame (and `g`) live.
+        let out = run("cria = funcao() { funcao() { 0 } }\n\
+             usa = funcao() {\n\
+             \x20   g = funcao(n) { se n == 0 { 7 } senao { g(n - 1) } }\n\
+             \x20   repita 5000 vezes { cria() }\n\
+             \x20   g(3)\n\
+             }\n\
+             escreva(usa())\n");
+        assert_eq!(out, "7\n");
+    }
+
+    #[test]
+    fn funcao_local_que_escapa_por_mapa_continua_funcionando() {
+        let out = run("guardadas = mapa([:f -> 0])\n\
+             registra = funcao(m) {\n\
+             \x20   g = funcao(n) { se n == 0 { 0 } senao { g(n - 1) } }\n\
+             \x20   m[\"f\"] = g\n\
+             \x20   0\n\
+             }\n\
+             registra(guardadas)\n\
+             escreva(guardadas[\"f\"](3))\n");
+        assert_eq!(out, "0\n");
+    }
+
+    #[test]
+    fn funcao_local_que_escapa_por_lista_continua_funcionando() {
+        let out = run("guardadas = [0]\n\
+             registra = funcao(xs) {\n\
+             \x20   g = funcao(n) { se n == 0 { 0 } senao { g(n - 1) } }\n\
+             \x20   xs[1] = g\n\
+             \x20   0\n\
+             }\n\
+             registra(guardadas)\n\
+             escreva(guardadas[1](3))\n");
+        assert_eq!(out, "0\n");
+    }
+
+    #[test]
+    fn funcao_local_recursiva_devolvida_funciona() {
+        let out = run("faz = funcao() {\n\
+             \x20   g = funcao(n) { se n == 0 { 0 } senao { g(n - 1) } }\n\
+             \x20   retorne g\n\
+             }\n\
+             escreva(faz()(3))\n");
+        assert_eq!(out, "0\n");
+    }
+
+    #[test]
+    fn funcao_local_recursiva_devolvida_numa_lista_funciona() {
+        let out = run("faz = funcao() {\n\
+             \x20   g = funcao(n) { se n == 0 { 0 } senao { g(n - 1) } }\n\
+             \x20   retorne [g]\n\
+             }\n\
+             escreva(faz()[1](3))\n");
+        assert_eq!(out, "0\n");
     }
 
     #[test]

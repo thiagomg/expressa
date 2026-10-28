@@ -4,6 +4,9 @@ version.workspace = true
 edition.workspace = true
 publish = false
 
+[lints]
+workspace = true
+
 [dependencies]
 expressa-aula-proto = { workspace = true }
 tonic = { workspace = true }

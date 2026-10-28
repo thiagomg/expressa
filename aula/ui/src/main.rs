@@ -1,4 +1,7 @@
 #![cfg_attr(windows, windows_subsystem = "windows")]
+// TreeView, TreeStore and MessageDialog are deprecated since GTK 4.10; the
+// move to ListView/AlertDialog is in ajustes/05-aula-e-servidor.md.
+#![allow(deprecated)]
 
 mod ajuda;
 mod assist;
@@ -23,7 +26,6 @@ use std::rc::{Rc, Weak};
 use gtk::gdk::Key;
 use gtk::gio::{self, prelude::*};
 use gtk::glib;
-use gtk::glib::prelude::*;
 use gtk::prelude::*;
 use gtk::{
     Application, ApplicationWindow, Box as GtkBox, Button, CellRendererText, Entry, Label,
@@ -645,19 +647,24 @@ fn fechar_janelas_filhas(ui: &UiRc) {
 }
 
 fn open_ajuda(ui: &UiRc) {
-    let u = ui.borrow();
-    if let Some(w) = u.ajuda_win.borrow().as_ref() {
-        w.present();
-        return;
+    if let Some(w) = ui.borrow().ajuda_win.borrow().clone() {
+        if w.is_visible() {
+            w.present();
+            return;
+        }
+        ui.borrow().ajuda_win.borrow_mut().take();
+        w.close();
     }
-    let w = ajuda::open(&u.window);
-    w.connect_destroy({
+    let w = ajuda::open(&ui.borrow().window);
+    w.set_hide_on_close(false);
+    w.connect_close_request({
         let ui = Rc::clone(ui);
         move |_| {
-            *ui.borrow().ajuda_win.borrow_mut() = None;
+            ui.borrow().ajuda_win.borrow_mut().take();
+            glib::Propagation::Proceed
         }
     });
-    *u.ajuda_win.borrow_mut() = Some(w);
+    ui.borrow().ajuda_win.borrow_mut().replace(w);
 }
 
 fn connect(button: &impl IsA<Button>, ui: &UiRc, f: impl Fn(&UiRc) + 'static) {
@@ -722,10 +729,10 @@ fn add_win_toggle(
 }
 
 fn set_action_enabled(win: &ApplicationWindow, name: &str, on: bool) {
-    if let Some(a) = win.lookup_action(name) {
-        if let Ok(a) = a.downcast::<gio::SimpleAction>() {
-            a.set_enabled(on);
-        }
+    if let Some(a) = win.lookup_action(name)
+        && let Ok(a) = a.downcast::<gio::SimpleAction>()
+    {
+        a.set_enabled(on);
     }
 }
 
@@ -736,10 +743,10 @@ fn trigger_win_action(win: &ApplicationWindow, name: &str) {
 }
 
 fn set_action_state_str(win: &ApplicationWindow, name: &str, value: &str) {
-    if let Some(a) = win.lookup_action(name) {
-        if let Ok(a) = a.downcast::<gio::SimpleAction>() {
-            a.set_state(&value.to_variant());
-        }
+    if let Some(a) = win.lookup_action(name)
+        && let Ok(a) = a.downcast::<gio::SimpleAction>()
+    {
+        a.set_state(&value.to_variant());
     }
 }
 
@@ -974,27 +981,24 @@ fn existing_exemplos_dir() -> Option<PathBuf> {
     if let Some(d) = expressa::exemplos::dest_dir() {
         candidates.push(d);
     }
-    if let Some(docs) = glib::user_special_dir(glib::UserDirectory::Documents) {
-        if !docs.as_os_str().is_empty() {
-            candidates.push(docs.join("Expressa Aula").join("exemplos"));
-        }
+    if let Some(docs) = glib::user_special_dir(glib::UserDirectory::Documents)
+        && !docs.as_os_str().is_empty()
+    {
+        candidates.push(docs.join("Expressa Aula").join("exemplos"));
     }
     candidates.push(glib::user_data_dir().join("expressa-aula").join("exemplos"));
-    for dir in candidates {
-        if dir.join("linguagem").is_dir() {
-            return Some(dir);
-        }
-    }
-    None
+    candidates
+        .into_iter()
+        .find(|dir| dir.join("linguagem").is_dir())
 }
 
 fn data_dir() -> PathBuf {
-    if let Ok(exe) = std::env::current_exe() {
-        if let Some(dir) = exe.parent() {
-            let bundled = dir.join("res");
-            if bundled.join("language-specs").is_dir() {
-                return bundled;
-            }
+    if let Ok(exe) = std::env::current_exe()
+        && let Some(dir) = exe.parent()
+    {
+        let bundled = dir.join("res");
+        if bundled.join("language-specs").is_dir() {
+            return bundled;
         }
     }
     let share = PathBuf::from("/usr/share/expressa-aula");
@@ -1067,11 +1071,11 @@ fn remember_arquivo(ui: &UiRc, doc: &Doc) {
     let Some(path) = doc.path.borrow().clone() else {
         return;
     };
-    if let Ok(mut u) = ui.try_borrow_mut() {
-        if u.prefs.arquivo != path {
-            u.prefs.arquivo = path;
-            u.prefs.save();
-        }
+    if let Ok(mut u) = ui.try_borrow_mut()
+        && u.prefs.arquivo != path
+    {
+        u.prefs.arquivo = path;
+        u.prefs.save();
     }
 }
 
@@ -1504,10 +1508,8 @@ fn confirm_unsaved(ui: &UiRc, docs: Vec<Rc<Doc>>, then: impl FnOnce() + 'static)
             gtk::ResponseType::Accept => docs.iter().all(|doc| save_doc(&ui_c, doc)),
             _ => false,
         };
-        if go {
-            if let Some(f) = then.borrow_mut().take() {
-                f();
-            }
+        if go && let Some(f) = then.borrow_mut().take() {
+            f();
         }
     });
     dlg.present();
@@ -1544,9 +1546,9 @@ fn refresh_diag_label(ui: &UiRc) {
 
 fn go_to_definition(ui: &UiRc, doc: &Rc<Doc>, at: &gtk::TextIter) {
     let help = ui.borrow().help.clone().expect("help");
-    let mut ls = at.clone();
+    let mut ls = *at;
     ls.set_line_offset(0);
-    let mut le = at.clone();
+    let mut le = *at;
     if !le.ends_line() {
         le.forward_to_line_end();
     }
@@ -1895,8 +1897,13 @@ fn fill_error_stack(ui: &UiRc, frames: &[exec::StackFrame]) {
     u.stack_store.clear();
     for f in frames {
         let loc = format!("{}:{}", f.file, f.line);
+        let name = if f.repeticoes > 0 {
+            format!("{} (×{})", f.name, f.repeticoes + 1)
+        } else {
+            f.name.clone()
+        };
         let iter = u.stack_store.append(None);
-        u.stack_store.set(&iter, &[(0, &f.name), (1, &loc)]);
+        u.stack_store.set(&iter, &[(0, &name), (1, &loc)]);
     }
 }
 
@@ -2069,11 +2076,19 @@ fn executar(ui: &UiRc, debug: bool) {
                         ));
                         if !f.stack.is_empty() {
                             console.stderr("pilha de chamadas:\n");
-                            for (i, fr) in f.stack.iter().enumerate() {
+                            let mut i = 0;
+                            for fr in &f.stack {
                                 console.error_link(&format!(
                                     "  {i}: {} em {}:{}\n",
                                     fr.name, fr.file, fr.line
                                 ));
+                                if fr.repeticoes > 0 {
+                                    console.stderr(&format!(
+                                        "  … a mesma chamada, mais {} vezes\n",
+                                        fr.repeticoes
+                                    ));
+                                }
+                                i += 1 + fr.repeticoes;
                             }
                             fill_error_stack(&ui_ev, &f.stack);
                         }
@@ -2762,10 +2777,10 @@ fn confirmar_apagar(ui: &UiRc, rel: &str) {
     dlg.add_button("Apagar", gtk::ResponseType::Accept);
     dlg.connect_response(move |d, resp| {
         d.close();
-        if resp == gtk::ResponseType::Accept {
-            if let Some(f) = then.borrow_mut().take() {
-                f();
-            }
+        if resp == gtk::ResponseType::Accept
+            && let Some(f) = then.borrow_mut().take()
+        {
+            f();
         }
     });
     dlg.present();
@@ -2799,11 +2814,11 @@ fn ir_para_linha(ui: &UiRc) {
         let doc = Rc::clone(&doc);
         move || {
             let t = entry.text();
-            if let Ok(n) = t.trim().parse::<u32>() {
-                if n >= 1 {
-                    doc.goto_line(n);
-                    doc.view.grab_focus();
-                }
+            if let Ok(n) = t.trim().parse::<u32>()
+                && n >= 1
+            {
+                doc.goto_line(n);
+                doc.view.grab_focus();
             }
             win.close();
         }
@@ -2892,6 +2907,25 @@ fn search_replace_all(ui: &UiRc) {
     }
 }
 
+/// Ask Windows to put our top-level window in front. A newly started process
+/// is often not allowed to cover the window that already has focus, so the
+/// IDE was opening maximized and invisible behind it.
+fn schedule_raise() {
+    #[cfg(windows)]
+    win32_foreground::schedule();
+}
+
+/// Stop stealing focus while a folder or server dialog is open.
+fn pause_raise() {
+    #[cfg(windows)]
+    win32_foreground::pause();
+}
+
+fn resume_raise() {
+    #[cfg(windows)]
+    win32_foreground::resume();
+}
+
 /// GTK may only be used from the thread that initialized it, but tests run
 /// on many threads: every GTK test runs its body on one shared thread.
 #[cfg(test)]
@@ -2926,25 +2960,6 @@ mod gtk_test {
             resume_unwind(panic);
         }
     }
-}
-
-/// Ask Windows to put our top-level window in front. A newly started process
-/// is often not allowed to cover the window that already has focus, so the
-/// IDE was opening maximized and invisible behind it.
-fn schedule_raise() {
-    #[cfg(windows)]
-    win32_foreground::schedule();
-}
-
-/// Stop stealing focus while a folder or server dialog is open.
-fn pause_raise() {
-    #[cfg(windows)]
-    win32_foreground::pause();
-}
-
-fn resume_raise() {
-    #[cfg(windows)]
-    win32_foreground::resume();
 }
 
 #[cfg(windows)]

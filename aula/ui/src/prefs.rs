@@ -107,10 +107,10 @@ pub fn expand_tilde(path: &str) -> PathBuf {
         return home_dir().unwrap_or_else(|| PathBuf::from("~"));
     }
     let rest = path.strip_prefix("~/").or_else(|| path.strip_prefix("~\\"));
-    if let Some(rest) = rest {
-        if let Some(home) = home_dir() {
-            return home.join(rest);
-        }
+    if let Some(rest) = rest
+        && let Some(home) = home_dir()
+    {
+        return home.join(rest);
     }
     PathBuf::from(path)
 }
@@ -446,9 +446,11 @@ mod tests {
     #[test]
     fn parse_and_print() {
         let p = Prefs::parse("fonte=18\ntema=escuro\n");
-        let mut expect = Prefs::default();
-        expect.font_size = 18;
-        expect.dark = true;
+        let expect = Prefs {
+            font_size: 18,
+            dark: true,
+            ..Prefs::default()
+        };
         assert_eq!(p, expect);
         assert_eq!(Prefs::parse(&p.to_text()), p);
         assert_eq!(Prefs::parse("fonte=999\nlixo\n").font_size, MAX_FONT);
@@ -485,6 +487,6 @@ mod tests {
         assert_eq!(expand_tilde("/abs"), PathBuf::from("/abs"));
         assert_eq!(expand_tilde("~nao"), PathBuf::from("~nao"));
         let proj = home.join("proj");
-        assert_eq!(path_for_display(&proj), format!("~/proj"));
+        assert_eq!(path_for_display(&proj), "~/proj".to_string());
     }
 }

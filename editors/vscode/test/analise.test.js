@@ -104,6 +104,14 @@ test('generated data covers the language', () => {
     assert.ok(n.signatures.length > 0, `${n.name} has a signature`);
     assert.ok(n.summary, `${n.name} has a summary`);
   }
-  assert.deepEqual(DATA.modules, ['arquivo', 'mat', 'matriz', 'tela']);
+  assert.deepEqual(DATA.modules, [
+    'arquivo',
+    'cartesiano',
+    'imagem',
+    'mat',
+    'matriz',
+    'tela',
+    'tela_grafica',
+  ]);
   assert.ok(DATA.keywords.controle.includes('se_falhar'));
 });

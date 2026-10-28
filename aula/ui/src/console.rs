@@ -44,7 +44,8 @@ impl Console {
         let input_tag = TextTag::new(Some("input"));
         input_tag.set_weight(700);
         table.add(&input_tag);
-        let console = Self {
+
+        Self {
             view,
             err_tag,
             error_link_tag,
@@ -52,8 +53,7 @@ impl Console {
             input_tag,
             screen: RefCell::new(Screen::default()),
             input: RefCell::new(None),
-        };
-        console
+        }
     }
 
     fn buffer(&self) -> gtk::TextBuffer {
@@ -185,7 +185,7 @@ impl Console {
         let iter = self.view.iter_at_location(bx, by)?;
         let buf = self.buffer();
         let a = buf.iter_at_line(iter.line())?;
-        let mut b = a.clone();
+        let mut b = a;
         if !b.ends_line() {
             b.forward_to_line_end();
         }
@@ -215,10 +215,10 @@ fn parse_file_line(loc: &str) -> Option<(String, u32)> {
 /// `"erro: … em lib/a.lep:12"` or `"  0: pega (app.lep:4:1)"` -> file and line.
 pub fn parse_error_location(line: &str) -> Option<(String, u32)> {
     let line = line.trim();
-    if let Some(em) = line.rfind(" em ") {
-        if let Some(parsed) = parse_file_line(&line[em + 4..]) {
-            return Some(parsed);
-        }
+    if let Some(em) = line.rfind(" em ")
+        && let Some(parsed) = parse_file_line(&line[em + 4..])
+    {
+        return Some(parsed);
     }
     let open = line.rfind('(')?;
     let inner = line.get(open + 1..)?.strip_suffix(')')?;
@@ -368,15 +368,15 @@ fn parse_cup(params: &str) -> (i32, i32) {
     let mut row = 1i32;
     let mut col = 1i32;
     let mut parts = params.split(';');
-    if let Some(p) = parts.next() {
-        if !p.is_empty() {
-            row = p.parse().unwrap_or(1);
-        }
+    if let Some(p) = parts.next()
+        && !p.is_empty()
+    {
+        row = p.parse().unwrap_or(1);
     }
-    if let Some(p) = parts.next() {
-        if !p.is_empty() {
-            col = p.parse().unwrap_or(1);
-        }
+    if let Some(p) = parts.next()
+        && !p.is_empty()
+    {
+        col = p.parse().unwrap_or(1);
     }
     (row.max(1), col.max(1))
 }
@@ -390,7 +390,7 @@ fn ensure_line(buf: &gtk::TextBuffer, row: i32) {
 
 fn line_range(buf: &gtk::TextBuffer, row: i32) -> Option<(i32, i32)> {
     let start = buf.iter_at_line(row)?;
-    let mut end = start.clone();
+    let mut end = start;
     if !end.ends_line() {
         end.forward_to_line_end();
     }
@@ -578,15 +578,15 @@ fn ansi_spans(text: &str) -> Vec<(String, AnsiStyle)> {
     };
     while pos < text.len() {
         let rest = &text[pos..];
-        if rest.as_bytes().first() == Some(&0x1b) {
-            if let Some((len, final_byte, params)) = parse_csi(rest) {
-                flush(&mut chunk, style, &mut out);
-                if final_byte == b'm' {
-                    apply_sgr(&mut style, params);
-                }
-                pos += len;
-                continue;
+        if rest.as_bytes().first() == Some(&0x1b)
+            && let Some((len, final_byte, params)) = parse_csi(rest)
+        {
+            flush(&mut chunk, style, &mut out);
+            if final_byte == b'm' {
+                apply_sgr(&mut style, params);
             }
+            pos += len;
+            continue;
         }
         let ch = rest.chars().next().unwrap();
         chunk.push(ch);
@@ -655,20 +655,20 @@ fn insert_ansi_at(buf: &gtk::TextBuffer, mut offset: i32, text: &str, extra: Opt
         if let Some(tag) = extra {
             buf.apply_tag(tag, &a, &b);
         }
-        if let Some(name) = style.fg.and_then(ansi_fg_tag) {
-            if let Some(tag) = table.lookup(name) {
-                buf.apply_tag(&tag, &a, &b);
-            }
+        if let Some(name) = style.fg.and_then(ansi_fg_tag)
+            && let Some(tag) = table.lookup(name)
+        {
+            buf.apply_tag(&tag, &a, &b);
         }
-        if let Some(name) = style.bg.and_then(ansi_bg_tag) {
-            if let Some(tag) = table.lookup(name) {
-                buf.apply_tag(&tag, &a, &b);
-            }
+        if let Some(name) = style.bg.and_then(ansi_bg_tag)
+            && let Some(tag) = table.lookup(name)
+        {
+            buf.apply_tag(&tag, &a, &b);
         }
-        if style.bold {
-            if let Some(tag) = table.lookup("ansi-negrito") {
-                buf.apply_tag(&tag, &a, &b);
-            }
+        if style.bold
+            && let Some(tag) = table.lookup("ansi-negrito")
+        {
+            buf.apply_tag(&tag, &a, &b);
         }
     }
 }

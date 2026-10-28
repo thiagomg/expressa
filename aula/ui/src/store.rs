@@ -279,8 +279,12 @@ mod tests {
         assert!(ok.ends_with(Path::new("lib").join("mat.lep")));
         assert!(local_file(root, "../segredo.lep").is_err());
         assert!(local_file(root, "/etc/passwd").is_err());
-        assert!(local_file(root, r"C:\Windows\notepad.exe").is_err());
-        assert!(local_file(root, "C:segredo.lep").is_err());
+        // Drive prefixes only exist on Windows; elsewhere `C:` is an
+        // ordinary folder name inside the project.
+        if cfg!(windows) {
+            assert!(local_file(root, r"C:\Windows\notepad.exe").is_err());
+            assert!(local_file(root, "C:segredo.lep").is_err());
+        }
         assert!(
             local_file(root, "lib/../mat.lep")
                 .unwrap()

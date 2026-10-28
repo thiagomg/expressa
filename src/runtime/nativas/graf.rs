@@ -627,6 +627,7 @@ fn set_texto(entries: &mut Vec<(MapKey, Value)>, chave: &str, s: String) {
 }
 
 #[cfg(test)]
+#[allow(clippy::identity_op)] // `1 * 4`: pixel 1, 4 bytes each
 mod tests {
     use crate::runtime::NoopHook;
     use crate::runtime::eval::{run_to_string, run_with_io};

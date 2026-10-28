@@ -6,6 +6,9 @@ publish = false
 description = "Janela dos tutoriais da Expressa"
 build = "build.rs"
 
+[lints]
+workspace = true
+
 [build-dependencies]
 winresource = "0.1"
 

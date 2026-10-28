@@ -4,6 +4,7 @@ pub mod error;
 pub mod expression_types;
 pub mod incomplete;
 pub mod operator_types;
+#[allow(clippy::module_inception)]
 pub mod parser;
 pub mod se_value;
 pub mod statement_types;

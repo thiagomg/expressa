@@ -40,8 +40,8 @@ impl Vm<'_, '_> {
         }
         let n = n as usize;
         let mut out = vec![vec![0.0; n]; n];
-        for i in 0..n {
-            out[i][i] = 1.0;
+        for (i, row) in out.iter_mut().enumerate() {
+            row[i] = 1.0;
         }
         Ok(Value::matriz(out))
     }

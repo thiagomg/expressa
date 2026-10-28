@@ -180,15 +180,15 @@ pub fn mensagens_de(
                 figura,
             } => {
                 let h = intern.handle(figura);
-                if enviadas.insert(h) {
-                    if let Some(img) = intern.get(h) {
-                        out.push(Msg::CarregueFigura {
-                            handle: h,
-                            largura: img.largura,
-                            altura: img.altura,
-                            rgba: img.px.to_vec(),
-                        });
-                    }
+                if enviadas.insert(h)
+                    && let Some(img) = intern.get(h)
+                {
+                    out.push(Msg::CarregueFigura {
+                        handle: h,
+                        largura: img.largura,
+                        altura: img.altura,
+                        rgba: img.px.to_vec(),
+                    });
                 }
                 ops.push(OpMsg::Imagem {
                     handle: h,

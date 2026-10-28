@@ -37,11 +37,8 @@ impl BuiltinDoc {
         } else {
             out.push_str(&self.signatures.join("\n"));
         }
-        match &self.module {
-            Some(m) => {
-                out.push_str(&format!("\nimporte \"{m}\""));
-            }
-            None => {}
+        if let Some(m) = &self.module {
+            out.push_str(&format!("\nimporte \"{m}\""));
         }
         if !self.doc.is_empty() {
             out.push('\n');
@@ -69,7 +66,7 @@ pub fn builtin_docs() -> &'static [BuiltinDoc] {
 pub fn lookup_builtin_doc(name: &str) -> Option<&'static BuiltinDoc> {
     let canon = NATIVAS
         .iter()
-        .find(|n| n.names.iter().any(|nm| *nm == name))
+        .find(|n| n.names.contains(&name))
         .map(|n| n.names[0])
         .unwrap_or(name);
     builtin_docs()
@@ -155,15 +152,15 @@ fn extract(source: &str, module: Option<&str>) -> Result<Vec<BuiltinDoc>, String
             _ => continue,
         };
         if let Some(existing) = parts.iter_mut().find(|p| p.name == name) {
-            if let Some(s) = sig {
-                if !existing.signatures.contains(&s) {
-                    existing.signatures.push(s);
-                }
+            if let Some(s) = sig
+                && !existing.signatures.contains(&s)
+            {
+                existing.signatures.push(s);
             }
-            if existing.doc.is_empty() {
-                if let Some(d) = doc {
-                    existing.doc = d;
-                }
+            if existing.doc.is_empty()
+                && let Some(d) = doc
+            {
+                existing.doc = d;
             }
             existing.is_value |= is_value;
         } else {

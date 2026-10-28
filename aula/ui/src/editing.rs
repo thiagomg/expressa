@@ -8,7 +8,7 @@ fn line_text(buffer: &SourceBuffer, line: i32) -> String {
     let Some(start) = buffer.iter_at_line(line) else {
         return String::new();
     };
-    let mut end = start.clone();
+    let mut end = start;
     if !end.ends_line() {
         end.forward_to_line_end();
     }

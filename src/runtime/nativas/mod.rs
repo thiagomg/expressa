@@ -608,7 +608,7 @@ fn strip_diacritic(c: char) -> char {
 pub(crate) fn builtin_modulo(name: &str) -> &'static str {
     NATIVAS
         .iter()
-        .find(|n| n.names.iter().any(|nm| *nm == name))
+        .find(|n| n.names.contains(&name))
         .and_then(|n| n.module)
         .unwrap_or("")
 }

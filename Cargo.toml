@@ -1,9 +1,11 @@
 [workspace]
 resolver = "3"
 members = [".", "aula/proto", "aula/server", "aula/ui", "aula/tutorial"]
+# Built by cargo-fuzz with nightly; see fuzz/README.md.
+exclude = ["fuzz"]
 
 [workspace.package]
-version = "0.3.0"
+version = "0.3.1"
 edition = "2024"
 license = "MIT"
 authors = ["Thiago Massari Guedes"]
@@ -18,16 +20,28 @@ tokio-stream = "0.1"
 tonic-build = "0.13"
 prost-types = "0.13"
 
+# Design debts tracked in ajustes/03-estrutura-do-interpretador.md (builder
+# instead of the run_* functions, boxed errors). Allowed so CI can deny the rest.
+[workspace.lints.clippy]
+too_many_arguments = "allow"
+result_large_err = "allow"
+large_enum_variant = "allow"
+type_complexity = "allow"
+
 [package]
 name = "expressa"
 version.workspace = true
 edition.workspace = true
+
+[lints]
+workspace = true
 
 [dependencies]
 rustyline = "15"
 rust_decimal = "1"
 minifb = "0.28"
 png = "0.17"
+stacker = "0.1"
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"

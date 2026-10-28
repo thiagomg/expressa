@@ -57,7 +57,7 @@ impl Span {
     ///
     /// # Panics
     /// Panics if the span is out of bounds or not on a UTF-8 boundary.
-    pub fn lexeme<'a>(self, source: &'a str) -> &'a str {
+    pub fn lexeme(self, source: &str) -> &str {
         &source[self.start..self.end]
     }
 

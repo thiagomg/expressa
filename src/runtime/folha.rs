@@ -532,6 +532,6 @@ mod tests {
         let buf = pintar(&f, 200, 150);
         assert_eq!(buf.len(), 200 * 150);
         assert!(buf.iter().any(|&p| p == cor_rgb("azul")));
-        assert!(buf.iter().any(|&p| p == COR_EIXO));
+        assert!(buf.contains(&COR_EIXO));
     }
 }

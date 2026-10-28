@@ -50,6 +50,28 @@ impl RuntimeError {
     }
 }
 
+impl RuntimeError {
+    /// Innermost first, with consecutive identical frames folded: each
+    /// frame comes with how many more times it repeats right after itself.
+    /// A runaway recursion is then one line, not ten thousand.
+    pub fn pilha_compacta(&self) -> Vec<(&CallFrame, usize)> {
+        let mut out: Vec<(&CallFrame, usize)> = Vec::new();
+        for frame in self.stack.iter().rev() {
+            match out.last_mut() {
+                Some((prev, n)) if prev.same_place(frame) => *n += 1,
+                _ => out.push((frame, 0)),
+            }
+        }
+        out
+    }
+}
+
+impl CallFrame {
+    fn same_place(&self, other: &Self) -> bool {
+        self.name == other.name && self.file == other.file && self.span == other.span
+    }
+}
+
 fn is_root_frame(name: &str) -> bool {
     matches!(name, "<modulo>" | "<repl>")
 }
@@ -65,13 +87,18 @@ impl fmt::Display for RuntimeError {
         if self.shows_stack() {
             writeln!(f)?;
             write!(f, "pilha de chamadas:")?;
-            for (i, frame) in self.stack.iter().rev().enumerate() {
+            let mut i = 0;
+            for (frame, repeticoes) in self.pilha_compacta() {
                 write!(
                     f,
                     "\n  {i}: {} ({})",
                     frame.name,
                     frame.span.location_in(&frame.file)
                 )?;
+                if repeticoes > 0 {
+                    write!(f, "\n  … a mesma chamada, mais {repeticoes} vezes")?;
+                }
+                i += 1 + repeticoes;
             }
         }
         Ok(())
