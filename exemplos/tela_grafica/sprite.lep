@@ -15,38 +15,3 @@ para i de 0 até 4 {
 }
 g.tela_grafica::mostre()
 g.tela_grafica::salve("sprite.png")
-
-// importe "tela_grafica"
-// importe "tela"
-
-// ser_grande = funcao(cel) {
-//     cs = cel:largura // colunas
-//     ls = cel:altura // linhas
-    
-//     cel.fundo(:transparente)
-//     cel.cor(:verde)
-//     cel.retangulo(0, 0, cs-1, ls-1)
-//     cel.cor(:transparente)
-
-//     ponto_grande = funcao(cel, lo, co) {
-//         para l de 0 ate 1 {
-//             para c de 0 ate 1 {
-//                 cel.ponto(c-co, l-lo)
-//             }
-//         }
-//     }
-
-//     cel.ponto_grande(0, 0)
-//     cel.ponto_grande(0, -(ls-2))
-//     cel.ponto_grande(-(cs-2), 0)
-//     cel.ponto_grande(-(cs-2), -(ls-2))
-//     cel.cor(:verde)
-//     cel.ponto(1, 1)
-//     cel.ponto(1, ls-2)
-//     cel.ponto(cs-2, 1)
-//     cel.ponto(cs-2, ls-2)
-// }
-
-// cel = nova(16, 16)
-// cel.ser_grande()
-// cel.mostre()
