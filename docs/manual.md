@@ -507,7 +507,7 @@ c.cart::mostre()
 
 ## `importe "tela_grafica"`
 
-Tela de pixels (MSX SCREEN 2): um mapa por janela, comandos `linha` / `circulo` / `ponto` / `retangulo` / `imagem`, depois `mostre` ou `salve`.
+Tela de pixels (MSX SCREEN 2): um mapa por janela, comandos `linha` / `circulo` / `ponto` / `retangulo` / `imagem`, depois `mostre` ou `salve`. Cores da `tela` e `transparente`. `fundo(g, cor)` é o papel. `como_imagem(g)` vira um valor `imagem` (furos com alpha 0).
 
 ```
 tela_grafica = importe "tela_grafica"
@@ -523,7 +523,7 @@ g.tela_grafica::salve("casa.png")
 
 ## `importe "imagem"`
 
-PNG em memória: `carregue`, `salve`, `rotacione`, `escala`, `largura`, `altura`. `tipo(img)` é `"imagem"`. `tela_grafica::imagem` aceita o valor (ou um caminho, lido uma vez).
+PNG em memória: `carregue`, `salve`, `rotacione`, `escala`, `largura`, `altura`. `tipo(img)` é `"imagem"`. `tela_grafica::imagem` aceita o valor, um caminho (lido uma vez) ou outra tela gráfica.
 
 ```
 img = importe "imagem"

@@ -37,6 +37,15 @@ impl Vm<'_, '_> {
         Ok(args[0].clone())
     }
 
+    pub(crate) fn bi_graf_fundo(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
+        self.expect_arity(args, 2, span)?;
+        let mapa = expect_graf(&args[0], span, self)?;
+        let cor = self.expect_texto(&args[1], span)?;
+        check_cor(&cor, span, self)?;
+        set_texto(&mut mapa.borrow_mut(), "fundo", cor);
+        Ok(args[0].clone())
+    }
+
     pub(crate) fn bi_graf_linha(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
         self.expect_arity(args, 5, span)?;
         let mapa = expect_graf(&args[0], span, self)?;
@@ -280,6 +289,16 @@ impl Vm<'_, '_> {
             )
         })?;
         Ok(args[0].clone())
+    }
+
+    pub(crate) fn bi_graf_como_imagem(
+        &mut self,
+        args: &[Value],
+        span: Span,
+    ) -> Result<Value, EvalError> {
+        self.expect_arity(args, 1, span)?;
+        let tela = tela_de(&args[0], span, self)?;
+        Ok(Value::Imagem(tela.como_imagem()))
     }
 
     pub(crate) fn bi_graf_mostre(
@@ -527,7 +546,7 @@ fn check_cor(cor: &str, span: Span, vm: &Vm<'_, '_>) -> Result<(), EvalError> {
     } else {
         Err(vm.err(
             format!(
-                "cor desconhecida (\"{cor}\"); use normal, preto, vermelho, verde, amarelo, azul, magenta, ciano ou branco"
+                "cor desconhecida (\"{cor}\"); use normal, preto, vermelho, verde, amarelo, azul, magenta, ciano, branco ou transparente"
             ),
             span,
         ))
@@ -568,6 +587,7 @@ fn get_lista(
 fn figura_de(v: &Value, span: Span, vm: &Vm<'_, '_>) -> Result<Imagem, EvalError> {
     match v {
         Value::Imagem(img) => Ok(img.clone()),
+        Value::Mapa(_) if is_graf(v) => Ok(tela_de(v, span, vm)?.como_imagem()),
         Value::Texto(caminho) => {
             let path = vm.resolve_data_path(caminho, span)?;
             imagem::leia_png(&path).map_err(|e| {
@@ -579,7 +599,7 @@ fn figura_de(v: &Value, span: Span, vm: &Vm<'_, '_>) -> Result<Imagem, EvalError
         }
         other => Err(vm.err(
             format!(
-                "imagem espera um caminho ou uma imagem, encontrado {}",
+                "imagem espera um caminho, uma imagem ou uma tela gráfica, encontrado {}",
                 other.type_name()
             ),
             span,
@@ -757,6 +777,70 @@ escreva(g.pixel(7, 7))
 escreva(g.pixel(0, 0))
 "#);
         assert_eq!(out, "verde\nverde\nbranco\nazul\nazul\nbranco\n");
+    }
+
+    #[test]
+    fn fundo_transparente_e_como_imagem() {
+        let out = run(r#"
+g = nova(8, 8)
+g.fundo(:transparente)
+g.cor(:verde)
+g.ponto(3, 3)
+escreva(g.pixel(0, 0))
+escreva(g.pixel(3, 3))
+img = g.como_imagem()
+escreva(tipo(img))
+g.cor(:transparente)
+g.ponto(3, 3)
+escreva(g.pixel(3, 3))
+g.fundo(:azul)
+g.apague()
+escreva(g.pixel(0, 0))
+"#);
+        assert_eq!(
+            out,
+            "transparente\nverde\nimagem\ntransparente\nazul\n"
+        );
+        assert!(run_err("g = nova(8, 8)\ng.fundo(:roxo)\n").contains("cor desconhecida"));
+    }
+
+    #[test]
+    fn imagem_aceita_outra_tela() {
+        let src = r#"
+importe "tela_grafica"
+celula = nova(4, 4)
+celula.fundo(:transparente)
+celula.cor(:verde)
+celula.retangulo(1, 1, 2, 2)
+w = nova(8, 8)
+w.cor(:vermelho)
+w.retangulo(0, 0, 7, 7)
+w.imagem(celula, 4, 4)
+w.mostre()
+"#;
+        let mut cap = CapturaGraf::default();
+        let mut input = std::io::Cursor::new(String::new());
+        let mut out = Vec::new();
+        let mut err = Vec::new();
+        run_with_io(
+            src,
+            "t.lep",
+            Box::new(NoopHook),
+            &mut input,
+            &mut out,
+            &mut err,
+            None,
+            None,
+            None,
+            None,
+            false,
+            Some(&mut cap),
+            &[],
+        )
+        .unwrap();
+        let rgb = cap.telas[0].rgb32();
+        assert_eq!(rgb[0], 0x00CC3333, "canto continua vermelho");
+        assert_eq!(rgb[(3 * 8 + 3) as usize], 0x0022AA44, "célula verde no centro");
     }
 
     #[test]

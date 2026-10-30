@@ -294,6 +294,58 @@ pub fn carimbar(buf: &mut [u32], w: u32, h: u32, cx: i32, cy: i32, angulo: f64, 
     }
 }
 
+/// Same stamp as [`carimbar`], onto packed RGBA (`4` bytes per pixel).
+pub fn carimbar_rgba(
+    buf: &mut [u8],
+    w: u32,
+    h: u32,
+    cx: i32,
+    cy: i32,
+    angulo: f64,
+    sprite: &Imagem,
+) {
+    let rad = angulo.to_radians();
+    let (cos, sin) = (rad.cos(), rad.sin());
+    let sw = sprite.largura as i32;
+    let sh = sprite.altura as i32;
+    let ox = (sprite.largura as f64 - 1.0) / 2.0;
+    let oy = (sprite.altura as f64 - 1.0) / 2.0;
+    let reach = ((sw * sw + sh * sh) as f64).sqrt() / 2.0 + 1.0;
+    let r = reach.ceil() as i32;
+    for sy in -r..=r {
+        for sx in -r..=r {
+            let ix = (sx as f64 * cos + sy as f64 * sin + ox).round() as i32;
+            let iy = (-sx as f64 * sin + sy as f64 * cos + oy).round() as i32;
+            if ix < 0 || iy < 0 || ix >= sw || iy >= sh {
+                continue;
+            }
+            let dx = cx + sx;
+            let dy = cy + sy;
+            if dx < 0 || dy < 0 || dx as u32 >= w || dy as u32 >= h {
+                continue;
+            }
+            let i = ((iy as u32 * sprite.largura) + ix as u32) as usize * 4;
+            let a = sprite.px[i + 3] as u32;
+            if a < 16 {
+                continue;
+            }
+            let di = (dy as u32 * w + dx as u32) as usize * 4;
+            let da = buf[di + 3] as u32;
+            let out_a = a + da * (255 - a) / 255;
+            if out_a == 0 {
+                buf[di..di + 4].copy_from_slice(&[0, 0, 0, 0]);
+                continue;
+            }
+            for c in 0..3 {
+                let s = sprite.px[i + c] as u32 * a;
+                let d = buf[di + c] as u32 * da * (255 - a) / 255;
+                buf[di + c] = ((s + d) / out_a) as u8;
+            }
+            buf[di + 3] = out_a as u8;
+        }
+    }
+}
+
 #[cfg(test)]
 #[allow(clippy::identity_op)] // `1 * 4`: pixel 1, 4 bytes each
 mod tests {

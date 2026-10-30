@@ -348,6 +348,10 @@ pub const NATIVAS: &[Nativa] = &[
         module: Some("tela_grafica"),
     },
     Nativa {
+        names: &["fundo"],
+        module: Some("tela_grafica"),
+    },
+    Nativa {
         names: &["linha"],
         module: Some("tela_grafica"),
     },
@@ -377,6 +381,10 @@ pub const NATIVAS: &[Nativa] = &[
     },
     Nativa {
         names: &["pixel"],
+        module: Some("tela_grafica"),
+    },
+    Nativa {
+        names: &["como_imagem"],
         module: Some("tela_grafica"),
     },
     Nativa {
@@ -470,7 +478,13 @@ impl Vm<'_, '_> {
             "leia_linhas" => self.bi_leia_linhas(args, span),
             "eh_terminal" | "é_terminal" => self.bi_eh_terminal(args, span),
             "pinte" => self.bi_pinte(args, span),
-            "fundo" => self.bi_fundo(args, span),
+            "fundo" => {
+                if !args.is_empty() && graf::is_graf(&args[0]) {
+                    self.bi_graf_fundo(args, span)
+                } else {
+                    self.bi_fundo(args, span)
+                }
+            }
             "negrito" => self.bi_negrito(args, span),
             "colunas" => self.bi_colunas(args, span),
             "linhas" => self.bi_linhas(args, span),
@@ -546,6 +560,7 @@ impl Vm<'_, '_> {
             "texto" => self.bi_graf_texto(args, span),
             "imagem" => self.bi_graf_imagem(args, span),
             "pixel" => self.bi_graf_pixel(args, span),
+            "como_imagem" => self.bi_graf_como_imagem(args, span),
             "carregue" => self.bi_img_carregue(args, span),
             "rotacione" => self.bi_img_rotacione(args, span),
             "escala" => self.bi_img_escala(args, span),

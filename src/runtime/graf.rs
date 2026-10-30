@@ -6,7 +6,7 @@ use std::path::Path;
 
 use super::folha::cor_rgb;
 use super::fonte8x8;
-use super::imagem::{carimbar, Imagem};
+use super::imagem::{self, carimbar, carimbar_rgba, Imagem};
 
 pub const LARGURA_MAX: u32 = 2048;
 pub const ALTURA_MAX: u32 = 2048;
@@ -77,7 +77,16 @@ pub struct Raster {
 }
 
 const PALETA: &[&str] = &[
-    "preto", "vermelho", "verde", "amarelo", "azul", "magenta", "ciano", "branco", "normal",
+    "preto",
+    "vermelho",
+    "verde",
+    "amarelo",
+    "azul",
+    "magenta",
+    "ciano",
+    "branco",
+    "normal",
+    "transparente",
 ];
 
 fn idx_cor(nome: &str) -> u8 {
@@ -140,8 +149,27 @@ impl TelaGrafica {
     }
 
     /// Palette drawing, then any `imagem` stamps in true color.
+    /// `:transparente` shows the window paper (`:fundo`, or white if the
+    /// paper itself is transparent).
     pub fn rgb32(&self) -> Vec<u32> {
-        let mut buf = self.raster().rgb32();
+        let papel = if self.fundo == "transparente" {
+            rgb32_de_nome("branco")
+        } else {
+            rgb32_de_nome(&self.fundo)
+        };
+        let raster = self.raster();
+        let mut buf: Vec<u32> = raster
+            .idx
+            .iter()
+            .map(|&i| {
+                let n = nome_cor(i);
+                if n == "transparente" {
+                    papel
+                } else {
+                    rgb32_de_nome(n)
+                }
+            })
+            .collect();
         for op in &self.ops {
             let OpGraf::Imagem {
                 x,
@@ -157,8 +185,37 @@ impl TelaGrafica {
         buf
     }
 
+    /// Snapshot for `como_imagem`: palette plus stamps, with alpha 0 on
+    /// `:transparente`.
+    pub fn como_imagem(&self) -> Imagem {
+        let w = self.largura.max(1);
+        let h = self.altura.max(1);
+        let raster = self.raster();
+        let mut px = Vec::with_capacity((w * h * 4) as usize);
+        for &i in &raster.idx {
+            px.extend_from_slice(&rgba_de_nome(nome_cor(i)));
+        }
+        for op in &self.ops {
+            let OpGraf::Imagem {
+                x,
+                y,
+                angulo,
+                figura,
+            } = op
+            else {
+                continue;
+            };
+            carimbar_rgba(&mut px, w, h, *x, *y, *angulo, figura);
+        }
+        Imagem {
+            largura: w,
+            altura: h,
+            px: std::sync::Arc::from(px),
+        }
+    }
+
     pub fn png_bytes(&self) -> Result<Vec<u8>, String> {
-        encode_png(self.largura, self.altura, &self.rgb32())
+        imagem::encode_png_rgba(&self.como_imagem())
     }
 
     pub fn write_png(&self, path: &Path) -> Result<(), String> {
@@ -183,16 +240,7 @@ impl Raster {
     pub fn rgb32(&self) -> Vec<u32> {
         self.idx
             .iter()
-            .map(|&i| {
-                let n = nome_cor(i);
-                if n == "branco" {
-                    0x00FFFFFF
-                } else if n == "preto" {
-                    0x00000000
-                } else {
-                    cor_rgb(n)
-                }
-            })
+            .map(|&i| rgb32_de_nome(nome_cor(i)))
             .collect()
     }
 
@@ -266,7 +314,29 @@ pub fn cor_graf_conhecida(nome: &str) -> bool {
             | "magenta"
             | "ciano"
             | "branco"
+            | "transparente"
     )
+}
+
+fn rgb32_de_nome(nome: &str) -> u32 {
+    match nome {
+        "branco" | "transparente" => 0x00FFFFFF,
+        "preto" => 0x00000000,
+        _ => cor_rgb(nome),
+    }
+}
+
+fn rgba_de_nome(nome: &str) -> [u8; 4] {
+    if nome == "transparente" {
+        return [0, 0, 0, 0];
+    }
+    let c = rgb32_de_nome(nome);
+    [
+        ((c >> 16) & 0xff) as u8,
+        ((c >> 8) & 0xff) as u8,
+        (c & 0xff) as u8,
+        255,
+    ]
 }
 
 fn retangulo_idx(idx: &mut [u8], w: u32, h: u32, x1: i32, y1: i32, x2: i32, y2: i32, cor: u8) {
@@ -479,5 +549,32 @@ mod tests {
             }
         }
         assert!(algum_azul, "ã tem pixels no topo (til)");
+    }
+
+    #[test]
+    fn transparente_vira_alpha_em_como_imagem() {
+        let t = TelaGrafica {
+            id: 1,
+            largura: 4,
+            altura: 4,
+            fundo: "transparente".into(),
+            ops: vec![OpGraf::Ponto {
+                x: 1,
+                y: 2,
+                cor: "azul".into(),
+            }],
+        };
+        assert_eq!(t.raster().pixel(0, 0), Some("transparente"));
+        assert_eq!(t.raster().pixel(1, 2), Some("azul"));
+        let img = t.como_imagem();
+        assert_eq!(img.pixel(0, 0), Some([0, 0, 0, 0]));
+        assert_eq!(img.pixel(1, 2), Some([0x33, 0x66, 0xCC, 255]));
+        let paper = t.rgb32();
+        assert_eq!(paper[0], 0x00FFFFFF);
+        assert_eq!(paper[(2 * 4 + 1) as usize], 0x003366CC);
+        let bytes = t.png_bytes().unwrap();
+        let volta = imagem::decode_png(&bytes).unwrap();
+        assert_eq!(volta.pixel(0, 0), Some([0, 0, 0, 0]));
+        assert_eq!(volta.pixel(1, 2).unwrap()[3], 255);
     }
 }

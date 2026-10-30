@@ -117,18 +117,21 @@ function readDocs() {
       if (i < lines.length && lines[i].trim() === '') i++;
       if (fromDoc.length) body = lines.slice(i).join('\n').trim();
       const first = body.split(/\n\s*\n/)[0].replace(/\n/g, ' ').trim();
-      if (!sections[name]) {
-        sections[name] = {
+      const key = `${module || ''}::${name}`;
+      if (!sections[key]) {
+        sections[key] = {
+          name,
           signatures: fromDoc.length ? fromDoc : [],
           summary: first,
           doc: body,
           module,
         };
       }
-      if (!fromDoc.length && sig && !sections[name].signatures.includes(sig)) {
-        sections[name].signatures.push(sig);
+      const slot = sections[key];
+      if (!fromDoc.length && sig && !slot.signatures.includes(sig)) {
+        slot.signatures.push(sig);
       }
-      if (body && !sections[name].doc) sections[name].doc = body;
+      if (body && !slot.doc) slot.doc = body;
     }
   }
   return sections;
@@ -140,7 +143,7 @@ function build() {
   const docs = readDocs();
   const warnings = [];
   const items = nativas.map((n) => {
-    const d = docs[n.name];
+    const d = docs[`${n.module || ''}::${n.name}`];
     if (!d) warnings.push(`sem documentação em docs/nativas: ${n.name}`);
     else if (d.signatures.length === 0) warnings.push(`sem assinatura (bloco text): ${n.name}`);
     return {
@@ -155,10 +158,10 @@ function build() {
   });
   // Documented names that are not functions (e.g. `argumentos`) are values.
   const known = new Set(nativas.flatMap((n) => [n.name, ...n.aliases]));
-  for (const [name, d] of Object.entries(docs)) {
-    if (known.has(name)) continue;
+  for (const d of Object.values(docs)) {
+    if (known.has(d.name)) continue;
     items.push({
-      name,
+      name: d.name,
       aliases: [],
       module: d.module || null,
       kind: d.signatures.length ? 'funcao' : 'valor',
