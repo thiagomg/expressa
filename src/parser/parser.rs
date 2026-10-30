@@ -18,12 +18,24 @@ pub fn parse(source: &str) -> Result<Program, ParseError> {
     Ok(program)
 }
 
+/// Deepest syntax tree the parser builds. Every part of the interpreter
+/// that walks the tree (checks, evaluation, copies, even dropping it) is
+/// recursive, so a deeper tree would overflow the stack and abort.
+const PROFUNDIDADE_MAXIMA: usize = 1000;
+
+/// Stack left before the parser moves to a new segment, and its size.
+const PILHA_RESERVA: usize = 128 * 1024;
+const PILHA_SEGMENTO: usize = 2 * 1024 * 1024;
+
 struct Parser {
     tokens: Vec<Token>,
     pos: usize,
     /// `obj:campo` postfix, only when `:` is on the same line.
     /// Inside `(…)`, field access is always allowed (`(obj:campo)`).
     allow_colon_field: bool,
+    /// Depth of the tree being built here: one per nested call below, and
+    /// one each time a loop wraps what it built (`a + b + c`, `x[1][2]`).
+    profundidade: usize,
 }
 
 impl Parser {
@@ -32,7 +44,35 @@ impl Parser {
             tokens,
             pos: 0,
             allow_colon_field: true,
+            profundidade: 0,
         }
+    }
+
+    // ── depth ────────────────────────────────────────────────────
+
+    /// One more level of tree; an error past [`PROFUNDIDADE_MAXIMA`].
+    fn descer(&mut self) -> Result<(), ParseError> {
+        if self.profundidade >= PROFUNDIDADE_MAXIMA {
+            return Err(self.err(format!(
+                "expressão longa ou aninhada demais (mais de {PROFUNDIDADE_MAXIMA} níveis); \
+                 divida em partes com variáveis"
+            )));
+        }
+        self.profundidade += 1;
+        Ok(())
+    }
+
+    /// Runs `f` one level deeper, on a stack that grows if needed, and
+    /// restores the depth afterwards (levels `f` added by looping too).
+    fn aninhado<T>(
+        &mut self,
+        f: impl FnOnce(&mut Self) -> Result<T, ParseError>,
+    ) -> Result<T, ParseError> {
+        let antes = self.profundidade;
+        self.descer()?;
+        let r = stacker::maybe_grow(PILHA_RESERVA, PILHA_SEGMENTO, || f(self));
+        self.profundidade = antes;
+        r
     }
 
     // ── token helpers ────────────────────────────────────────────
@@ -333,6 +373,10 @@ impl Parser {
     }
 
     fn parse_block(&mut self) -> Result<Block, ParseError> {
+        self.aninhado(Self::parse_block_inner)
+    }
+
+    fn parse_block_inner(&mut self) -> Result<Block, ParseError> {
         let open = self.remove();
         let brace = match open.kind {
             TokenKind::Inicio => false,
@@ -402,6 +446,10 @@ impl Parser {
     ///
     /// See module comments above and [`infix_info`] for the two bp numbers.
     fn parse_bp(&mut self, min_bp: u8) -> Result<Expr, ParseError> {
+        self.aninhado(|p| p.parse_bp_inner(min_bp))
+    }
+
+    fn parse_bp_inner(&mut self, min_bp: u8) -> Result<Expr, ParseError> {
         // --- left-hand side: atom / unary / already-built subexpr ---
         // Not an infix yet. Examples: 10, x, (a+b), -3, nao ok, se …, funcao …
         let mut lhs = self.parse_unary()?;
@@ -442,6 +490,7 @@ impl Parser {
                 }
                 let rhs = self.parse_bp(r_bp)?;
                 let span = lhs.span().join(rhs.span());
+                self.descer()?;
                 lhs = Expr::Par {
                     key: Box::new(lhs),
                     value: Box::new(rhs),
@@ -451,6 +500,7 @@ impl Parser {
             }
             let rhs = self.parse_bp(r_bp)?;
             let span = lhs.span().join(rhs.span());
+            self.descer()?;
 
             // Fold: lhs becomes (lhs OP rhs), then loop may take another op.
             // e.g. 1 - 2 - 3 → first fold (1-2), then fold ((1-2)-3).
@@ -483,7 +533,7 @@ impl Parser {
         match self.peek_kind() {
             TokenKind::Minus => {
                 let start = self.remove().span;
-                let expr = self.parse_unary()?;
+                let expr = self.aninhado(Self::parse_unary)?;
                 let span = start.join(expr.span());
                 Ok(Expr::Unary {
                     op: UnaryOp::Neg,
@@ -493,7 +543,7 @@ impl Parser {
             }
             TokenKind::Nao => {
                 let start = self.remove().span;
-                let expr = self.parse_unary()?;
+                let expr = self.aninhado(Self::parse_unary)?;
                 let span = start.join(expr.span());
                 Ok(Expr::Unary {
                     op: UnaryOp::Not,
@@ -507,8 +557,22 @@ impl Parser {
 
     /// `f(a)[i].campo` — postfix attaches to the primary, not to a prefix op.
     fn parse_postfix(&mut self) -> Result<Expr, ParseError> {
+        self.aninhado(Self::parse_postfix_inner)
+    }
+
+    fn parse_postfix_inner(&mut self) -> Result<Expr, ParseError> {
         let mut lhs = self.parse_primary()?;
         loop {
+            if matches!(
+                self.peek_kind(),
+                TokenKind::LParen
+                    | TokenKind::LBracket
+                    | TokenKind::ColonColon
+                    | TokenKind::Colon
+                    | TokenKind::Dot
+            ) {
+                self.descer()?;
+            }
             match self.peek_kind() {
                 TokenKind::LParen => lhs = self.finish_call(lhs)?,
                 TokenKind::LBracket => lhs = self.finish_index_or_slice(lhs)?,
@@ -832,7 +896,7 @@ impl Parser {
         Ok(Expr::Function {
             params,
             span: start.join(body.span),
-            body,
+            body: std::rc::Rc::new(body),
             doc: None,
         })
     }

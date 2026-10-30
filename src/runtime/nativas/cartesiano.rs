@@ -1,4 +1,5 @@
 use std::cell::RefCell;
+use std::collections::HashMap;
 use std::rc::Rc;
 
 use crate::lexer::Span;
@@ -7,7 +8,7 @@ use crate::runtime::env::Env;
 use crate::runtime::error::EvalError;
 use crate::runtime::eval::Vm;
 use crate::runtime::folha::{CurvaPronta, FolhaPronta, GraficoPronto};
-use crate::runtime::value::{MapKey, Value};
+use crate::runtime::value::{ListaRc, MapKey, MapaRc, Value};
 
 use super::tela;
 
@@ -252,12 +253,7 @@ fn grafico_pronto(v: &Value, span: Span, vm: &Vm<'_, '_>) -> Result<GraficoPront
     })
 }
 
-fn expect_mapa(
-    v: &Value,
-    papel: &str,
-    span: Span,
-    vm: &Vm<'_, '_>,
-) -> Result<Rc<RefCell<Vec<(MapKey, Value)>>>, EvalError> {
+fn expect_mapa(v: &Value, papel: &str, span: Span, vm: &Vm<'_, '_>) -> Result<MapaRc, EvalError> {
     match v {
         Value::Mapa(xs) => Ok(Rc::clone(xs)),
         other => Err(vm.err(
@@ -267,15 +263,12 @@ fn expect_mapa(
     }
 }
 
-fn tem_chave(mapa: &Rc<RefCell<Vec<(MapKey, Value)>>>, chave: &str) -> bool {
+fn tem_chave(mapa: &MapaRc, chave: &str) -> bool {
     let k = MapKey::Texto(chave.into());
     mapa.borrow().iter().any(|(kk, _)| *kk == k)
 }
 
-fn get_lista(
-    mapa: &Rc<RefCell<Vec<(MapKey, Value)>>>,
-    chave: &str,
-) -> Option<Rc<RefCell<Vec<Value>>>> {
+fn get_lista(mapa: &MapaRc, chave: &str) -> Option<ListaRc> {
     let k = MapKey::Texto(chave.into());
     match mapa
         .borrow()
@@ -288,7 +281,7 @@ fn get_lista(
     }
 }
 
-fn get_f64(mapa: &Rc<RefCell<Vec<(MapKey, Value)>>>, chave: &str) -> Option<f64> {
+fn get_f64(mapa: &MapaRc, chave: &str) -> Option<f64> {
     let k = MapKey::Texto(chave.into());
     match mapa
         .borrow()
@@ -301,7 +294,7 @@ fn get_f64(mapa: &Rc<RefCell<Vec<(MapKey, Value)>>>, chave: &str) -> Option<f64>
     }
 }
 
-fn get_texto(mapa: &Rc<RefCell<Vec<(MapKey, Value)>>>, chave: &str) -> Option<String> {
+fn get_texto(mapa: &MapaRc, chave: &str) -> Option<String> {
     let k = MapKey::Texto(chave.into());
     match mapa
         .borrow()
@@ -323,23 +316,57 @@ fn set_num(entries: &mut Vec<(MapKey, Value)>, chave: &str, n: f64) {
     }
 }
 
+/// Copy of `v` that shares no list, map, set or matrix with it, so later
+/// changes to the chart do not reach the copy kept in the document.
 fn deep_clone(v: &Value) -> Value {
-    match v {
-        Value::Lista(xs) => Value::lista(xs.borrow().iter().map(deep_clone).collect()),
-        Value::Mapa(xs) => Value::mapa(
-            xs.borrow()
+    copiar(v, &mut HashMap::new())
+}
+
+/// `copias` maps each list or map already copied to its copy: one shared
+/// twice is copied once, and a cycle (`xs[1] = xs`) becomes the same cycle
+/// in the copy instead of copying forever.
+fn copiar(v: &Value, copias: &mut HashMap<usize, Value>) -> Value {
+    stacker::maybe_grow(64 * 1024, 1024 * 1024, || match v {
+        Value::Lista(xs) => {
+            let id = Rc::as_ptr(xs) as *const () as usize;
+            if let Some(copia) = copias.get(&id) {
+                return copia.clone();
+            }
+            let copia = Value::lista(Vec::new());
+            copias.insert(id, copia.clone());
+            let itens: Vec<Value> = xs.borrow().iter().map(|x| copiar(x, copias)).collect();
+            if let Value::Lista(destino) = &copia {
+                *destino.borrow_mut() = itens;
+            }
+            copia
+        }
+        Value::Mapa(m) => {
+            let id = Rc::as_ptr(m) as *const () as usize;
+            if let Some(copia) = copias.get(&id) {
+                return copia.clone();
+            }
+            let copia = Value::mapa(Vec::new());
+            copias.insert(id, copia.clone());
+            let entradas: Vec<(MapKey, Value)> = m
+                .borrow()
                 .iter()
-                .map(|(k, val)| (k.clone(), deep_clone(val)))
-                .collect(),
-        ),
+                .map(|(k, x)| (k.clone(), copiar(x, copias)))
+                .collect();
+            if let Value::Mapa(destino) = &copia {
+                *destino.borrow_mut() = entradas;
+            }
+            copia
+        }
+        Value::Par(k, x) => Value::Par(k.clone(), Box::new(copiar(x, copias))),
         Value::Conjunto(xs) => Value::conjunto(xs.borrow().clone()),
         Value::Matriz(m) => Value::matriz(m.borrow().clone()),
         other => other.clone(),
-    }
+    })
 }
 
 #[cfg(test)]
 mod tests {
+    use super::{Value, deep_clone};
     use crate::runtime::cartesiano_host::CapturaCartesiano;
     use crate::runtime::eval::run_with_io;
     use crate::runtime::{NoopHook, run_to_string};
@@ -537,5 +564,38 @@ g.plotar(função(x) { x }, :azul)
 escreva(g:curvas[1]:cor)
 "#);
         assert_eq!(out, "azul\n");
+    }
+
+    #[test]
+    fn deep_clone_copia_ciclo_e_compartilhamento() {
+        let comum = Value::lista(vec![Value::Numero(1.into())]);
+        let xs = Value::lista(vec![comum.clone(), comum.clone()]);
+        let Value::Lista(itens) = &xs else {
+            unreachable!()
+        };
+        itens.borrow_mut().push(xs.clone()); // xs contains itself
+        let copia = deep_clone(&xs);
+        assert_eq!(copia.to_string(), "[[1], [1], […]]");
+        let Value::Lista(c) = &copia else {
+            unreachable!()
+        };
+        let c = c.borrow();
+        // The cycle points at the copy, not at the original.
+        let Value::Lista(volta) = &c[2] else {
+            unreachable!()
+        };
+        let Value::Lista(raiz) = &copia else {
+            unreachable!()
+        };
+        assert!(std::rc::Rc::ptr_eq(volta, raiz));
+        // A list shared twice is still shared (once) in the copy.
+        let (Value::Lista(a), Value::Lista(b)) = (&c[0], &c[1]) else {
+            unreachable!()
+        };
+        assert!(std::rc::Rc::ptr_eq(a, b));
+        let Value::Lista(original) = &comum else {
+            unreachable!()
+        };
+        assert!(!std::rc::Rc::ptr_eq(a, original));
     }
 }

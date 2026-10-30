@@ -2135,9 +2135,23 @@ fn executar(ui: &UiRc, debug: bool) {
                 }
                 Err(std::sync::mpsc::TryRecvError::Empty) => break,
                 Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                    // The run thread ended without `Finished`: clean up the
+                    // same way, and say it instead of stopping silently.
                     console.cancel_input();
+                    telas_graf.set_eventos(None);
                     ui_ev.borrow_mut().run = None;
                     set_debug_buttons(&ui_ev, false, false);
+                    clear_debug_views(&ui_ev);
+                    let envio = {
+                        let u = ui_ev.borrow();
+                        ws.upload_changes(&u.files, &project)
+                    };
+                    mostrar_envio(&ui_ev, &console, envio);
+                    console.stderr(&format!(
+                        "{}: a execução parou sem terminar.\n",
+                        exec::ERRO_INTERNO
+                    ));
+                    set_status(&ui_ev, "a execução parou com um erro interno");
                     return glib::ControlFlow::Break;
                 }
             }

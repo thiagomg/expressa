@@ -3,7 +3,7 @@ use crate::lexer::Span;
 use super::super::error::EvalError;
 use super::super::eval::Vm;
 use super::super::leia::{CLEAR_SCREEN, CURSOR_HOME};
-use super::super::value::{MapKey, Value};
+use super::super::value::{MapKey, MapaRc, Value};
 
 const ERASE_DOWN: &str = "\x1b[J";
 const ERASE_LINE: &str = "\x1b[K";
@@ -224,12 +224,7 @@ impl Vm<'_, '_> {
     }
 }
 
-fn map_int(
-    xs: &std::rc::Rc<std::cell::RefCell<Vec<(MapKey, Value)>>>,
-    chave: &str,
-    span: Span,
-    vm: &Vm<'_, '_>,
-) -> Result<i64, EvalError> {
+fn map_int(xs: &MapaRc, chave: &str, span: Span, vm: &Vm<'_, '_>) -> Result<i64, EvalError> {
     let key = MapKey::Texto(chave.into());
     let v = xs
         .borrow()

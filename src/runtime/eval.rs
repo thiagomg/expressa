@@ -21,7 +21,9 @@ use super::nativas;
 use super::numero::{Numero, NumeroAritmetica, default_numero_aritmetica, parse_numero};
 use super::pilha::{PILHA_RESERVA, PILHA_SEGMENTO, PROFUNDIDADE_MAXIMA};
 use super::rng::Rng;
-use super::value::{Closure, MapKey, NumeroLocale, Value, default_numero_locale, format_numero};
+use super::value::{
+    Closure, ListaRc, MapKey, NumeroLocale, Value, default_numero_locale, format_numero,
+};
 
 /// Source of lines for `leia()`. Implemented for any [`BufRead`] (tests)
 /// and for [`ConsoleInput`] (locks stdin only during the read, so the
@@ -937,7 +939,7 @@ impl<'a, 'c> Vm<'a, 'c> {
                 self.marcar_funcao(env);
                 Ok(Value::Funcao(Rc::new(Closure {
                     params: params.clone(),
-                    body: body.clone(),
+                    body: Rc::clone(body),
                     env: Rc::clone(env),
                     span: *span,
                     file: self.file.clone(),
@@ -2010,11 +2012,7 @@ impl<'a, 'c> Vm<'a, 'c> {
         }
     }
 
-    pub(crate) fn expect_lista(
-        &self,
-        v: &Value,
-        span: Span,
-    ) -> Result<Rc<RefCell<Vec<Value>>>, EvalError> {
+    pub(crate) fn expect_lista(&self, v: &Value, span: Span) -> Result<ListaRc, EvalError> {
         match v {
             Value::Lista(xs) => Ok(Rc::clone(xs)),
             _ => Err(self.err(
@@ -3287,6 +3285,141 @@ escreva(x)
             "{}",
             err.message
         );
+    }
+
+    // ── Valores que contêm a si mesmos e estruturas muito fundas ─────
+
+    #[test]
+    fn lista_e_mapa_que_contem_a_si_mesmos_imprimem_e_comparam() {
+        let out = run("a = mapa([:x -> 1])\n\
+             a[\"eu\"] = a\n\
+             escreva(a)\n\
+             xs = [1, 2]\n\
+             xs[1] = xs\n\
+             escreva(xs)\n\
+             escreva(a == a, xs == xs, xs contem xs)\n\
+             b = mapa([:x -> 1])\n\
+             b[\"eu\"] = b\n\
+             escreva(a == b)\n\
+             b[\"x\"] = 2\n\
+             escreva(a == b)\n\
+             escreva(\"lista: \" + xs)\n\
+             escreva(formate(\"{}\", [xs]))\n");
+        assert_eq!(
+            out,
+            "mapa{\"x\": 1, \"eu\": mapa{…}}\n\
+             [[…], 2]\n\
+             verdadeiro verdadeiro verdadeiro\n\
+             verdadeiro\n\
+             falso\n\
+             lista: [[…], 2]\n\
+             [[[…], 2]]\n"
+        );
+    }
+
+    #[test]
+    fn mesma_lista_duas_vezes_nao_e_ciclo() {
+        let out = run("a = [1]\nb = [a, a]\nescreva(b)\n");
+        assert_eq!(out, "[[1], [1]]\n");
+    }
+
+    #[test]
+    fn estrutura_muito_funda_imprime_compara_e_e_liberada() {
+        // Built by the program, not by the parser: no depth limit applies.
+        let out = run("x = []\n\
+             y = []\n\
+             repita 100000 vezes {\n\
+             \x20   x = [x]\n\
+             \x20   y = [y]\n\
+             }\n\
+             escreva(x == y)\n\
+             escreva(tamanho(\"\" + x))\n");
+        assert_eq!(out, "verdadeiro\n200.002\n");
+    }
+
+    // ── Programas no limite de profundidade do parser ───────────────
+
+    /// The largest `n` whose program `gera(n)` still parses.
+    fn maior_aceito(gera: impl Fn(usize) -> String) -> usize {
+        let (mut ok, mut falha) = (0, 1);
+        while crate::parser::parse(&gera(falha)).is_ok() {
+            ok = falha;
+            falha *= 2;
+        }
+        while falha - ok > 1 {
+            let meio = (ok + falha) / 2;
+            if crate::parser::parse(&gera(meio)).is_ok() {
+                ok = meio;
+            } else {
+                falha = meio;
+            }
+        }
+        ok
+    }
+
+    #[test]
+    fn todo_programa_aceito_pelo_parser_roda_sem_estourar_a_pilha() {
+        // Runs on a plain test thread (2 MB, debug build): the checks after
+        // parsing, evaluation, and dropping the tree must all fit.
+        type Gera = fn(usize) -> String;
+        let formas: [(&str, Gera); 11] = [
+            ("parênteses", |n| {
+                format!("x = {}1{}\nescreva(x)\n", "(".repeat(n), ")".repeat(n))
+            }),
+            ("soma", |n| {
+                format!("x = 1{}\nescreva(x)\n", " + 1".repeat(n))
+            }),
+            ("e", |n| {
+                format!("x = verdadeiro{}\nescreva(x)\n", " e verdadeiro".repeat(n))
+            }),
+            ("nao", |n| {
+                format!("x = {}verdadeiro\nescreva(x)\n", "nao ".repeat(n))
+            }),
+            ("menos", |n| format!("x = {}1\nescreva(x)\n", "-".repeat(n))),
+            ("listas", |n| {
+                format!(
+                    "x = {}{}\nescreva(tamanho(x))\n",
+                    "[".repeat(n),
+                    "]".repeat(n)
+                )
+            }),
+            ("blocos", |n| {
+                format!("{}escreva(1)\n{}", "{\n".repeat(n), "}\n".repeat(n))
+            }),
+            ("chamadas", |n| {
+                format!("x = {}1{}\n", "tamanho(".repeat(n), ")".repeat(n))
+            }),
+            ("índices", |n| {
+                format!("x = [1]\ny = x{}\n", "[1]".repeat(n))
+            }),
+            ("se", |n| {
+                format!(
+                    "x = {}1{}\nescreva(x)\n",
+                    "se verdadeiro { ".repeat(n),
+                    " } senao { 0 }".repeat(n)
+                )
+            }),
+            ("funções", |n| {
+                format!(
+                    "f = {}1{}\nescreva(f())\n",
+                    "funcao() { ".repeat(n),
+                    " }".repeat(n)
+                )
+            }),
+        ];
+        for (nome, gera) in formas {
+            let n = maior_aceito(gera);
+            assert!(n >= 100, "{nome}: só {n} níveis");
+            // Any result is fine (some shapes fail at run time on purpose);
+            // the point is that the process is still here.
+            let _ = run_to_string(&gera(n), "teste.lep");
+            let erro = crate::parser::parse(&gera(n + 1)).unwrap_err();
+            assert!(
+                erro.message.contains("aninhada demais"),
+                "{nome}: {}",
+                erro.message
+            );
+        }
     }
 
     // ── Funções locais e memória (ajustes/01-modelo-de-memoria.md) ─────

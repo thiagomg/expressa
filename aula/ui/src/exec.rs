@@ -15,6 +15,22 @@ use expressa::runtime::{
 
 use crate::store::Files;
 
+/// Start of the message for a crash inside the interpreter.
+pub const ERRO_INTERNO: &str =
+    "erro interno da Expressa (não é um erro do seu programa; avise o professor)";
+
+/// What the console shows for a panic in the interpreter.
+fn mensagem_de_panico(panico: &(dyn std::any::Any + Send)) -> String {
+    let detalhe = panico
+        .downcast_ref::<&str>()
+        .map(|s| s.to_string())
+        .or_else(|| panico.downcast_ref::<String>().cloned());
+    match detalhe {
+        Some(d) => format!("{ERRO_INTERNO}: {d}"),
+        None => ERRO_INTERNO.to_string(),
+    }
+}
+
 /// Events the UI may lag behind before the program blocks. Keeps a program
 /// that prints forever from piling up memory or starving the UI.
 const EVENT_BACKLOG: usize = 256;
@@ -428,19 +444,36 @@ pub fn spawn(
             drop(pause_tx);
             Box::new(StopHook::new(dcmd_rx))
         };
-        let result = run_with_hosts(
-            &source,
-            &file,
-            hook,
-            Some(ws_dir),
-            None,
-            &mut out,
-            &mut err,
-            &mut host,
-            Some(&mut cart),
-            Some(&mut graf),
-            &args,
-        );
+        // A panic is a bug in the interpreter, not in the student's program:
+        // say so, and still end the run normally (upload files, clean up).
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            run_with_hosts(
+                &source,
+                &file,
+                hook,
+                Some(ws_dir),
+                None,
+                &mut out,
+                &mut err,
+                &mut host,
+                Some(&mut cart),
+                Some(&mut graf),
+                &args,
+            )
+        }));
+        let result = match result {
+            Ok(result) => result,
+            Err(panico) => {
+                let _ = event_tx.send(ExecEvent::Finished(Finished {
+                    ok: false,
+                    error_message: mensagem_de_panico(panico.as_ref()),
+                    error_file: String::new(),
+                    error_line: 0,
+                    stack: Vec::new(),
+                }));
+                return;
+            }
+        };
         let finished = match result {
             Ok(0) => Finished {
                 ok: true,
@@ -540,6 +573,22 @@ mod tests {
         );
         let _ = std::fs::remove_dir_all(&ws.dir);
         let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn panico_vira_erro_interno_com_o_detalhe() {
+        let texto = std::panic::catch_unwind(|| panic!("índice fora")).unwrap_err();
+        assert_eq!(
+            mensagem_de_panico(texto.as_ref()),
+            format!("{ERRO_INTERNO}: índice fora")
+        );
+        let formatado = std::panic::catch_unwind(|| panic!("valor {}", 3)).unwrap_err();
+        assert_eq!(
+            mensagem_de_panico(formatado.as_ref()),
+            format!("{ERRO_INTERNO}: valor 3")
+        );
+        let outro = std::panic::catch_unwind(|| std::panic::panic_any(7)).unwrap_err();
+        assert_eq!(mensagem_de_panico(outro.as_ref()), ERRO_INTERNO);
     }
 
     #[test]
