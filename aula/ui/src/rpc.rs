@@ -1,7 +1,7 @@
 use expressa_aula_proto::turma_client::TurmaClient;
 use expressa_aula_proto::{
-    DeleteFileRequest, ListFilesRequest, MkdirRequest, ReadFileRequest, RenameRequest, TreeEntry,
-    WriteFileRequest,
+    CreateProjectRequest, DeleteFileRequest, ListFilesRequest, ListProjectsRequest, MkdirRequest,
+    ReadFileRequest, RenameRequest, TreeEntry, WriteFileRequest,
 };
 use std::process::Child;
 use std::sync::Mutex;
@@ -218,73 +218,143 @@ impl Drop for Rpc {
     }
 }
 
+/// The server writes refusals (`já existe …`, bad paths) for the user; show
+/// those as they are, and the full status for anything unexpected.
+fn mensagem(status: tonic::Status) -> String {
+    match status.code() {
+        tonic::Code::AlreadyExists | tonic::Code::InvalidArgument | tonic::Code::NotFound => {
+            status.message().to_string()
+        }
+        _ => status.to_string(),
+    }
+}
+
 impl Rpc {
-    pub fn list_tree(&self, student: &str) -> Result<Vec<TreeEntry>, String> {
+    /// The student's projects, sorted.
+    pub fn list_projects(&self, student: &str) -> Result<Vec<String>, String> {
+        let mut c = TurmaClient::new(self.channel.clone());
+        let resp = self
+            .rt
+            .block_on(c.list_projects(ListProjectsRequest {
+                student: student.to_string(),
+            }))
+            .map_err(mensagem)?;
+        Ok(resp.into_inner().projects)
+    }
+
+    /// Fails with `já existe o projeto …` when it exists.
+    pub fn create_project(&self, student: &str, project: &str) -> Result<(), String> {
+        let mut c = TurmaClient::new(self.channel.clone());
+        self.rt
+            .block_on(c.create_project(CreateProjectRequest {
+                student: student.to_string(),
+                project: project.to_string(),
+            }))
+            .map_err(mensagem)?;
+        Ok(())
+    }
+
+    pub fn list_tree(&self, student: &str, project: &str) -> Result<Vec<TreeEntry>, String> {
         let mut c = TurmaClient::new(self.channel.clone());
         let resp = self
             .rt
             .block_on(c.list_files(ListFilesRequest {
                 student: student.to_string(),
+                project: project.to_string(),
             }))
-            .map_err(|e| e.to_string())?;
+            .map_err(mensagem)?;
         Ok(resp.into_inner().entries)
     }
 
-    pub fn read_file(&self, student: &str, path: &str) -> Result<String, String> {
+    pub fn read_file(&self, student: &str, project: &str, path: &str) -> Result<String, String> {
         let mut c = TurmaClient::new(self.channel.clone());
         let resp = self
             .rt
             .block_on(c.read_file(ReadFileRequest {
                 student: student.to_string(),
+                project: project.to_string(),
                 path: path.to_string(),
             }))
             .map_err(|e| e.to_string())?;
         Ok(resp.into_inner().source)
     }
 
-    pub fn write_file(&self, student: &str, path: &str, source: &str) -> Result<(), String> {
+    pub fn write_file(
+        &self,
+        student: &str,
+        project: &str,
+        path: &str,
+        source: &str,
+    ) -> Result<(), String> {
+        self.write(student, project, path, source, false)
+    }
+
+    /// Like [`Rpc::write_file`], but fails if the file already exists.
+    pub fn create_file(
+        &self,
+        student: &str,
+        project: &str,
+        path: &str,
+        source: &str,
+    ) -> Result<(), String> {
+        self.write(student, project, path, source, true)
+    }
+
+    fn write(
+        &self,
+        student: &str,
+        project: &str,
+        path: &str,
+        source: &str,
+        create_new: bool,
+    ) -> Result<(), String> {
         let mut c = TurmaClient::new(self.channel.clone());
         self.rt
             .block_on(c.write_file(WriteFileRequest {
                 student: student.to_string(),
+                project: project.to_string(),
                 path: path.to_string(),
                 source: source.to_string(),
+                create_new,
             }))
-            .map_err(|e| e.to_string())?;
+            .map_err(mensagem)?;
         Ok(())
     }
 
-    pub fn delete_file(&self, student: &str, path: &str) -> Result<(), String> {
+    pub fn delete_file(&self, student: &str, project: &str, path: &str) -> Result<(), String> {
         let mut c = TurmaClient::new(self.channel.clone());
         self.rt
             .block_on(c.delete_file(DeleteFileRequest {
                 student: student.to_string(),
+                project: project.to_string(),
                 path: path.to_string(),
             }))
-            .map_err(|e| e.to_string())?;
+            .map_err(mensagem)?;
         Ok(())
     }
 
-    pub fn mkdir(&self, student: &str, path: &str) -> Result<(), String> {
+    pub fn mkdir(&self, student: &str, project: &str, path: &str) -> Result<(), String> {
         let mut c = TurmaClient::new(self.channel.clone());
         self.rt
             .block_on(c.mkdir(MkdirRequest {
                 student: student.to_string(),
+                project: project.to_string(),
                 path: path.to_string(),
             }))
-            .map_err(|e| e.to_string())?;
+            .map_err(mensagem)?;
         Ok(())
     }
 
-    pub fn rename(&self, student: &str, from: &str, to: &str) -> Result<(), String> {
+    pub fn rename(&self, student: &str, project: &str, from: &str, to: &str) -> Result<(), String> {
         let mut c = TurmaClient::new(self.channel.clone());
         self.rt
             .block_on(c.rename(RenameRequest {
                 student: student.to_string(),
+                project: project.to_string(),
                 from: from.to_string(),
                 to: to.to_string(),
             }))
-            .map_err(|e| e.to_string())?;
+            .map_err(mensagem)?;
         Ok(())
     }
 }

@@ -15,6 +15,8 @@ pub struct Prefs {
     pub pasta: String,
     /// Last remote server URL.
     pub servidor: String,
+    /// Last project opened on the server; the project list selects it.
+    pub projeto: String,
     /// Last file opened in the project (relative path).
     pub arquivo: String,
 }
@@ -26,6 +28,7 @@ impl Default for Prefs {
             dark: false,
             pasta: String::new(),
             servidor: "http://127.0.0.1:50051".to_string(),
+            projeto: String::new(),
             arquivo: String::new(),
         }
     }
@@ -53,6 +56,7 @@ impl Prefs {
                 "tema" => p.dark = v.trim() == "escuro",
                 "pasta" => p.pasta = v.trim().to_string(),
                 "servidor" => p.servidor = v.trim().to_string(),
+                "projeto" => p.projeto = v.trim().to_string(),
                 "arquivo" => p.arquivo = v.trim().to_string(),
                 _ => {}
             }
@@ -62,11 +66,12 @@ impl Prefs {
 
     pub fn to_text(&self) -> String {
         format!(
-            "fonte={}\ntema={}\npasta={}\nservidor={}\narquivo={}\n",
+            "fonte={}\ntema={}\npasta={}\nservidor={}\nprojeto={}\narquivo={}\n",
             self.font_size,
             if self.dark { "escuro" } else { "claro" },
             self.pasta,
             self.servidor,
+            self.projeto,
             self.arquivo,
         )
     }
@@ -445,10 +450,11 @@ mod tests {
 
     #[test]
     fn parse_and_print() {
-        let p = Prefs::parse("fonte=18\ntema=escuro\n");
+        let p = Prefs::parse("fonte=18\ntema=escuro\nprojeto=aula-2\n");
         let expect = Prefs {
             font_size: 18,
             dark: true,
+            projeto: "aula-2".into(),
             ..Prefs::default()
         };
         assert_eq!(p, expect);

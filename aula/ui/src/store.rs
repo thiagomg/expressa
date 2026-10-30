@@ -1,9 +1,11 @@
 //! Where project files live.
 //!
 //! A local project is the directory the user picked: files sit directly in
-//! it. A remote project is one student folder on a server, `{root}/{aluno}/`.
+//! it. A remote project is one project folder of a student on a server,
+//! `{root}/{aluno}/{projeto}/`.
 
 use std::path::{Component, Path, PathBuf};
+use std::rc::Rc;
 
 use expressa_aula_proto::TreeEntry;
 
@@ -13,17 +15,33 @@ pub enum Files {
     /// The window is open and no folder has been chosen yet.
     None,
     Local(PathBuf),
-    Remote(Rpc),
+    /// `projeto` is the student's project the window has open. The
+    /// connection is shared with the project list (`escolher_projeto`).
+    Remote {
+        rpc: Rc<Rpc>,
+        projeto: String,
+    },
 }
 
 impl Files {
+    /// Name of the local run copy (see `exec::Workspace`): one per student
+    /// and project on a server, one per folder name locally.
+    pub fn cache_key(&self, student: &str) -> String {
+        match self {
+            Files::Remote { projeto, .. } => format!("{student}-{projeto}"),
+            _ => student.to_string(),
+        }
+    }
+
     pub fn is_remote(&self) -> bool {
-        matches!(self, Files::Remote(_))
+        matches!(self, Files::Remote { .. })
     }
 
     /// Stop a server this window started. A remote connection did not.
     pub fn shutdown(&mut self) {
-        if let Files::Remote(rpc) = self {
+        if let Files::Remote { rpc, .. } = self
+            && let Some(rpc) = Rc::get_mut(rpc)
+        {
             rpc.shutdown_spawned_server();
         }
     }
@@ -32,7 +50,7 @@ impl Files {
         match self {
             Files::None => Err("escolha uma pasta para o projeto".into()),
             Files::Local(root) => list_local(root),
-            Files::Remote(rpc) => rpc.list_tree(student),
+            Files::Remote { rpc, projeto } => rpc.list_tree(student, projeto),
         }
     }
 
@@ -43,7 +61,7 @@ impl Files {
                 let path = local_file(root, path)?;
                 std::fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))
             }
-            Files::Remote(rpc) => rpc.read_file(student, path),
+            Files::Remote { rpc, projeto } => rpc.read_file(student, projeto, path),
         }
     }
 
@@ -55,7 +73,7 @@ impl Files {
                 std::fs::read(&path).map_err(|e| format!("{}: {e}", path.display()))
             }
             Files::None => Err("escolha uma pasta para o projeto".into()),
-            Files::Remote(_) => Err("arquivo binário no servidor não é suportado".into()),
+            Files::Remote { .. } => Err("arquivo binário no servidor não é suportado".into()),
         }
     }
 
@@ -69,7 +87,7 @@ impl Files {
                 std::fs::write(&path, bytes).map_err(|e| format!("{}: {e}", path.display()))
             }
             Files::None => Err("escolha uma pasta para o projeto".into()),
-            Files::Remote(_) => Err("arquivo binário no servidor não é suportado".into()),
+            Files::Remote { .. } => Err("arquivo binário no servidor não é suportado".into()),
         }
     }
 
@@ -83,7 +101,32 @@ impl Files {
                 }
                 std::fs::write(&path, source).map_err(|e| format!("{}: {e}", path.display()))
             }
-            Files::Remote(rpc) => rpc.write_file(student, path, source),
+            Files::Remote { rpc, projeto } => rpc.write_file(student, projeto, path, source),
+        }
+    }
+
+    /// Create `path` with `source`; never replaces an existing file.
+    pub fn create_file(&self, student: &str, path: &str, source: &str) -> Result<(), String> {
+        match self {
+            Files::None => Err("escolha uma pasta para o projeto".into()),
+            Files::Local(root) => {
+                use std::io::Write;
+                let full = local_file(root, path)?;
+                if let Some(parent) = full.parent() {
+                    std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+                }
+                let mut file = std::fs::OpenOptions::new()
+                    .write(true)
+                    .create_new(true)
+                    .open(&full)
+                    .map_err(|e| match e.kind() {
+                        std::io::ErrorKind::AlreadyExists => ja_existe(path),
+                        _ => format!("{}: {e}", full.display()),
+                    })?;
+                file.write_all(source.as_bytes())
+                    .map_err(|e| format!("{}: {e}", full.display()))
+            }
+            Files::Remote { rpc, projeto } => rpc.create_file(student, projeto, path, source),
         }
     }
 
@@ -98,7 +141,7 @@ impl Files {
                     std::fs::remove_file(&path).map_err(|e| e.to_string())
                 }
             }
-            Files::Remote(rpc) => rpc.delete_file(student, path),
+            Files::Remote { rpc, projeto } => rpc.delete_file(student, projeto, path),
         }
     }
 
@@ -109,7 +152,7 @@ impl Files {
                 let path = local_file(root, path)?;
                 std::fs::create_dir_all(&path).map_err(|e| e.to_string())
             }
-            Files::Remote(rpc) => rpc.mkdir(student, path),
+            Files::Remote { rpc, projeto } => rpc.mkdir(student, projeto, path),
         }
     }
 
@@ -117,16 +160,29 @@ impl Files {
         match self {
             Files::None => Err("escolha uma pasta para o projeto".into()),
             Files::Local(root) => {
-                let from = local_file(root, from)?;
-                let to = local_file(root, to)?;
+                let from_path = local_file(root, from)?;
+                let to_path = local_file(root, to)?;
+                if from_path == to_path {
+                    return Ok(());
+                }
+                // `fs::rename` replaces an existing file on Unix.
+                if to_path.symlink_metadata().is_ok() {
+                    return Err(ja_existe(to));
+                }
+                let (from, to) = (from_path, to_path);
                 if let Some(parent) = to.parent() {
                     std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
                 }
                 std::fs::rename(&from, &to).map_err(|e| e.to_string())
             }
-            Files::Remote(rpc) => rpc.rename(student, from, to),
+            Files::Remote { rpc, projeto } => rpc.rename(student, projeto, from, to),
         }
     }
+}
+
+/// Same text the server sends, so both kinds of project read alike.
+fn ja_existe(rel: &str) -> String {
+    format!("já existe `{rel}`")
 }
 
 /// Student folder name on a remote server.
@@ -360,5 +416,55 @@ mod tests {
         assert!(!valid_aluno("../x"));
         assert!(!valid_aluno("a/b"));
         assert!(!valid_aluno("Meu Projeto"));
+    }
+
+    /// A local project with `a.lep` = "original".
+    fn projeto_local(nome: &str) -> (PathBuf, Files) {
+        let root =
+            std::env::temp_dir().join(format!("expressa-store-{nome}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::write(root.join("a.lep"), "original").unwrap();
+        (root.clone(), Files::Local(root))
+    }
+
+    #[test]
+    fn create_file_nao_substitui_arquivo() {
+        let (root, files) = projeto_local("create");
+        let err = files.create_file("", "a.lep", "novo").unwrap_err();
+        assert_eq!(err, "já existe `a.lep`");
+        assert_eq!(
+            std::fs::read_to_string(root.join("a.lep")).unwrap(),
+            "original"
+        );
+        files.create_file("", "lib/b.lep", "novo").unwrap();
+        assert_eq!(
+            std::fs::read_to_string(root.join("lib/b.lep")).unwrap(),
+            "novo"
+        );
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn rename_nao_substitui_destino() {
+        let (root, files) = projeto_local("rename");
+        std::fs::write(root.join("b.lep"), "outro").unwrap();
+        let err = files.rename("", "b.lep", "a.lep").unwrap_err();
+        assert_eq!(err, "já existe `a.lep`");
+        assert_eq!(
+            std::fs::read_to_string(root.join("a.lep")).unwrap(),
+            "original"
+        );
+        files.rename("", "b.lep", "c.lep").unwrap();
+        assert_eq!(
+            std::fs::read_to_string(root.join("c.lep")).unwrap(),
+            "outro"
+        );
+        files.rename("", "a.lep", "a.lep").unwrap();
+        assert_eq!(
+            std::fs::read_to_string(root.join("a.lep")).unwrap(),
+            "original"
+        );
+        let _ = std::fs::remove_dir_all(&root);
     }
 }

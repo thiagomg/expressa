@@ -245,6 +245,21 @@ impl Doc {
         self.refresh_label();
     }
 
+    /// Replace the text with `text`, the file's new saved content (the
+    /// program changed it). Keeps the cursor on the same line.
+    pub fn recarregar(&self, text: &str) {
+        let linha = self.cursor().line();
+        self.buffer.begin_irreversible_action();
+        self.buffer.set_text(text);
+        self.buffer.end_irreversible_action();
+        let iter = self
+            .buffer
+            .iter_at_line(linha)
+            .unwrap_or_else(|| self.buffer.end_iter());
+        self.buffer.place_cursor(&iter);
+        self.mark_saved();
+    }
+
     pub fn mark_saved(&self) {
         self.buffer.set_modified(false);
         self.refresh_label();

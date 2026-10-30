@@ -48,6 +48,15 @@ pub struct Finished {
 }
 
 /// Local copy of one student's project.
+/// What [`Workspace::upload_changes`] did.
+#[derive(Default)]
+pub struct Envio {
+    /// Files sent, with their new text (`None` for binary files).
+    pub enviados: Vec<(String, Option<String>)>,
+    /// Files that could not be sent, as messages for the console.
+    pub erros: Vec<String>,
+}
+
 pub struct Workspace {
     pub dir: PathBuf,
     /// Contents as downloaded, to find what the run changed.
@@ -85,7 +94,7 @@ fn cache_name(project: &str) -> String {
 impl Workspace {
     /// Replace the local copy with the project's files.
     pub fn download(files: &Files, project: &str) -> Result<Self, String> {
-        let dir = cache_root().join(cache_name(project));
+        let dir = cache_root().join(cache_name(&files.cache_key(project)));
         if dir.exists() {
             std::fs::remove_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
         }
@@ -119,20 +128,31 @@ impl Workspace {
         self.dir.join(rel).to_string_lossy().into_owned()
     }
 
-    /// Send files that are new or differ from the download. Returns how many.
-    pub fn upload_changes(&self, files: &Files, project: &str) -> Result<usize, String> {
+    /// Send files that are new or differ from the download. One file that
+    /// fails does not stop the others: every failure is reported.
+    pub fn upload_changes(&self, files: &Files, project: &str) -> Envio {
+        let mut envio = Envio::default();
         let mut paths = Vec::new();
-        walk(&self.dir, &mut paths).map_err(|e| e.to_string())?;
-        let mut sent = 0;
+        if let Err(e) = walk(&self.dir, &mut paths) {
+            envio.erros.push(format!("{}: {e}", self.dir.display()));
+        }
         for path in paths {
             let rel = self.relative(&path);
-            let bytes = std::fs::read(&path).map_err(|e| format!("{}: {e}", path.display()))?;
-            match String::from_utf8(bytes) {
+            let bytes = match std::fs::read(&path) {
+                Ok(b) => b,
+                Err(e) => {
+                    envio.erros.push(format!("{rel}: {e}"));
+                    continue;
+                }
+            };
+            let result = match String::from_utf8(bytes) {
                 Ok(source) => {
-                    if self.snapshot.get(&rel) != Some(&source) {
-                        files.write_file(project, &rel, &source)?;
-                        sent += 1;
+                    if self.snapshot.get(&rel) == Some(&source) {
+                        continue;
                     }
+                    files
+                        .write_file(project, &rel, &source)
+                        .map(|()| Some(source))
                 }
                 Err(err) => {
                     // PNG and other binaries are not in the text snapshot.
@@ -141,15 +161,18 @@ impl Workspace {
                         continue;
                     }
                     let bytes = err.into_bytes();
-                    let same = files.read_bytes(project, &rel).ok().as_ref() == Some(&bytes);
-                    if !same {
-                        files.write_bytes(project, &rel, &bytes)?;
-                        sent += 1;
+                    if files.read_bytes(project, &rel).ok().as_ref() == Some(&bytes) {
+                        continue;
                     }
+                    files.write_bytes(project, &rel, &bytes).map(|()| None)
                 }
+            };
+            match result {
+                Ok(texto) => envio.enviados.push((rel, texto)),
+                Err(e) => envio.erros.push(format!("{rel}: {e}")),
             }
         }
-        Ok(sent)
+        envio
     }
 
     /// `/cache/ana/lib/m.lep` -> `lib/m.lep`; other paths unchanged.
@@ -517,5 +540,40 @@ mod tests {
         );
         let _ = std::fs::remove_dir_all(&ws.dir);
         let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn upload_changes_continua_depois_de_uma_falha() {
+        let base = std::env::temp_dir().join(format!("expressa-envio-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        let (projeto, copia) = (base.join("projeto"), base.join("copia"));
+        std::fs::create_dir_all(&projeto).unwrap();
+        // `sub` is a file in the project, so `sub/d.lep` cannot be written.
+        std::fs::write(projeto.join("sub"), "").unwrap();
+        for (rel, texto) in [("a.lep", "igual"), ("b.lep", "novo"), ("sub/d.lep", "x")] {
+            write_file(&copia.join(rel), texto).unwrap();
+        }
+        let ws = Workspace {
+            dir: copia,
+            snapshot: HashMap::from([("a.lep".to_string(), "igual".to_string())]),
+        };
+
+        let envio = ws.upload_changes(&Files::Local(projeto.clone()), "");
+
+        assert_eq!(
+            envio.enviados,
+            [("b.lep".to_string(), Some("novo".to_string()))]
+        );
+        assert_eq!(envio.erros.len(), 1, "{:?}", envio.erros);
+        assert!(envio.erros[0].starts_with("sub/d.lep"), "{:?}", envio.erros);
+        assert_eq!(
+            std::fs::read_to_string(projeto.join("b.lep")).unwrap(),
+            "novo"
+        );
+        assert!(
+            !projeto.join("a.lep").exists(),
+            "unchanged files are not sent"
+        );
+        let _ = std::fs::remove_dir_all(&base);
     }
 }

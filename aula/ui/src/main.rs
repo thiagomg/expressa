@@ -786,6 +786,7 @@ fn install_menubar(
         choose_local_folder(ui);
     });
     add_win_action(win, ui, "servidor", ask_server);
+    add_win_action(win, ui, "trocar-projeto", trocar_projeto);
     add_win_action(win, ui, "executar", |ui| executar(ui, false));
     add_win_action(win, ui, "depurar", |ui| executar(ui, true));
     add_win_action(win, ui, "parar", |ui| send_debug_cmd(ui, "terminar"));
@@ -851,6 +852,7 @@ fn install_menubar(
     let projeto = gio::Menu::new();
     projeto.append_item(&menu_item("_Pasta…", "win.pasta", None));
     projeto.append_item(&menu_item("Se_rvidor…", "win.servidor", None));
+    projeto.append_item(&menu_item("_Trocar projeto…", "win.trocar-projeto", None));
     arquivo.append_section(None, &projeto);
     let sair = gio::Menu::new();
     sair.append_item(&menu_item("Sa_ir", "win.encerrar", Some("<Primary>q")));
@@ -1436,7 +1438,17 @@ fn save_doc(ui: &UiRc, doc: &Rc<Doc>) -> bool {
             set_status(ui, &format!("`{name}` já está aberto em outra aba"));
             return false;
         }
+        // A new name must not replace a file that is not open.
+        let result = {
+            let u = ui.borrow();
+            u.files.create_file(&u.project, &name, &doc.text())
+        };
+        if let Err(e) = result {
+            set_status(ui, &format!("erro ao salvar {name}: {e}"));
+            return false;
+        }
         doc.set_path(name);
+        return saved(ui, doc);
     }
     let name = doc.name();
     let result = {
@@ -1444,19 +1456,23 @@ fn save_doc(ui: &UiRc, doc: &Rc<Doc>) -> bool {
         u.files.write_file(&u.project, &name, &doc.text())
     };
     match result {
-        Ok(()) => {
-            doc.mark_saved();
-            ui.borrow().file_cache.borrow_mut().remove(&name);
-            refresh_tree(ui);
-            refresh_title(ui);
-            set_status(ui, &format!("salvo {name}"));
-            true
-        }
+        Ok(()) => saved(ui, doc),
         Err(e) => {
             set_status(ui, &format!("erro ao salvar {name}: {e}"));
             false
         }
     }
+}
+
+/// Bookkeeping after `doc` was written. Always true.
+fn saved(ui: &UiRc, doc: &Rc<Doc>) -> bool {
+    let name = doc.name();
+    doc.mark_saved();
+    ui.borrow().file_cache.borrow_mut().remove(&name);
+    refresh_tree(ui);
+    refresh_title(ui);
+    set_status(ui, &format!("salvo {name}"));
+    true
 }
 
 /// Unsaved changes in `docs`: Salvar (all), Descartar or Cancelar. `then`
@@ -1515,16 +1531,25 @@ fn confirm_unsaved(ui: &UiRc, docs: Vec<Rc<Doc>>, then: impl FnOnce() + 'static)
     dlg.present();
 }
 
+/// How the window names the open project: the folder, or `aluno / projeto`.
+fn nome_do_projeto(u: &Ui) -> String {
+    match &u.files {
+        Files::Remote { projeto, .. } => format!("{} / {projeto}", u.project),
+        _ => u.project.clone(),
+    }
+}
+
 fn refresh_title(ui: &UiRc) {
     let doc = current_doc(ui);
     let Ok(u) = ui.try_borrow() else { return };
+    let projeto = nome_do_projeto(&u);
     let title = match &doc {
         Some(doc) => {
             let star = if doc.is_dirty() { "● " } else { "" };
-            format!("{star}{} — {} — Expressa Aula", doc.name(), u.project)
+            format!("{star}{} — {projeto} — Expressa Aula", doc.name())
         }
-        None if u.project.is_empty() => "Expressa Aula".to_string(),
-        None => format!("{} — Expressa Aula", u.project),
+        None if projeto.is_empty() => "Expressa Aula".to_string(),
+        None => format!("{projeto} — Expressa Aula"),
     };
     u.window.set_title(Some(&title));
 }
@@ -2060,13 +2085,11 @@ fn executar(ui: &UiRc, debug: bool) {
                     clear_debug_views(&ui_ev);
                     // Files the program wrote (salve_arquivo, …) go back to
                     // the server.
-                    let sent = {
+                    let envio = {
                         let u = ui_ev.borrow();
                         ws.upload_changes(&u.files, &project)
                     };
-                    if matches!(sent, Ok(n) if n > 0) {
-                        refresh_tree(&ui_ev);
-                    }
+                    let nao_enviados = mostrar_envio(&ui_ev, &console, envio);
                     if f.ok {
                         set_status(&ui_ev, &format!("ok — {name}"));
                     } else {
@@ -2102,8 +2125,11 @@ fn executar(ui: &UiRc, debug: bool) {
                             goto_file_line(&ui_ev, &file, f.error_line);
                         }
                     }
-                    if let Err(e) = sent {
-                        set_status(&ui_ev, &format!("não enviou os arquivos: {e}"));
+                    if nao_enviados > 0 {
+                        set_status(
+                            &ui_ev,
+                            &format!("não enviou {nao_enviados} arquivo(s): veja o console"),
+                        );
                     }
                     return glib::ControlFlow::Break;
                 }
@@ -2210,7 +2236,8 @@ fn apply_local(ui: &UiRc, path: PathBuf) {
     finish_open(ui);
 }
 
-/// URL and student name. Files on that server live in `aula-data/aluno`.
+/// URL and student name, then the student's project (`escolher_projeto`).
+/// Files on that server live in `aula-data/aluno/projeto`.
 fn ask_server(ui: &UiRc) {
     if ui.borrow().run.is_some() {
         set_status(ui, "pare o programa antes de trocar de projeto");
@@ -2244,28 +2271,244 @@ fn ask_server(ui: &UiRc) {
     }
     let url = normalize_url(&url);
     match Rpc::connect(&url) {
-        Ok(rpc) => {
-            let ui_c = Rc::clone(ui);
-            after_unsaved(ui, move || apply_remote(&ui_c, rpc, url, aluno));
-        }
+        Ok(rpc) => abrir_projeto_remoto(ui, Rc::new(rpc), url, aluno),
         Err(e) => set_status(ui, &format!("servidor: {e}")),
     }
 }
 
-fn apply_remote(ui: &UiRc, rpc: Rpc, url: String, aluno: String) {
+/// Arquivo → Trocar projeto: the project list of the student connected now,
+/// or the server dialog when the window is not on a server.
+fn trocar_projeto(ui: &UiRc) {
+    let conectado = {
+        let u = ui.borrow();
+        match &u.files {
+            Files::Remote { rpc, .. } => {
+                Some((Rc::clone(rpc), u.prefs.servidor.clone(), u.project.clone()))
+            }
+            _ => None,
+        }
+    };
+    match conectado {
+        Some((rpc, url, aluno)) => abrir_projeto_remoto(ui, rpc, url, aluno),
+        None => ask_server(ui),
+    }
+}
+
+/// Shows `aluno`'s projects on `rpc`; the one chosen opens, after the usual
+/// question about unsaved tabs.
+fn abrir_projeto_remoto(ui: &UiRc, rpc: Rc<Rpc>, url: String, aluno: String) {
+    if ui.borrow().run.is_some() {
+        set_status(ui, "pare o programa antes de trocar de projeto");
+        return;
+    }
+    let projetos = match rpc.list_projects(&aluno) {
+        Ok(p) => p,
+        Err(e) => {
+            set_status(ui, &format!("projetos de {aluno}: {e}"));
+            return;
+        }
+    };
+    let (window, atual) = {
+        let u = ui.borrow();
+        let atual = match &u.files {
+            Files::Remote { projeto, .. } if u.project == aluno => projeto.clone(),
+            _ => u.prefs.projeto.clone(),
+        };
+        (u.window.clone(), atual)
+    };
+    let ui = Rc::clone(ui);
+    let titulo = aluno.clone();
+    escolher_projeto(
+        &window,
+        Rc::clone(&rpc),
+        &titulo,
+        projetos,
+        &atual,
+        move |projeto| {
+            let ui_c = Rc::clone(&ui);
+            after_unsaved(&ui, move || apply_remote(&ui_c, rpc, url, aluno, projeto));
+        },
+    );
+}
+
+fn apply_remote(ui: &UiRc, rpc: Rc<Rpc>, url: String, aluno: String, projeto: String) {
     close_project_tabs(ui);
-    let tip = format!("{url} — aula-data/{aluno}");
+    let tip = format!("{url} — aula-data/{aluno}/{projeto}");
     {
         let mut u = ui.borrow_mut();
         u.files.shutdown();
-        u.files = Files::Remote(rpc);
-        u.project = aluno.clone();
+        u.files = Files::Remote {
+            rpc,
+            projeto: projeto.clone(),
+        };
+        u.project = aluno;
         u.prefs.servidor = url;
+        u.prefs.projeto = projeto;
         u.prefs.save();
         u.file_cache.borrow_mut().clear();
     }
     set_project_path(ui, &tip, Some(&tip));
     finish_open(ui);
+}
+
+/// The student's projects: pick one (double-click, Enter or Abrir) or
+/// create a new one. Calls `done` with the chosen name; closing or
+/// Cancelar calls nothing. Does not block the GTK loop.
+fn escolher_projeto(
+    parent: &impl IsA<gtk::Window>,
+    rpc: Rc<Rpc>,
+    aluno: &str,
+    projetos: Vec<String>,
+    atual: &str,
+    done: impl FnOnce(String) + 'static,
+) {
+    let dialog = gtk::Window::builder()
+        .transient_for(parent)
+        .modal(true)
+        .title(format!("Projetos de {aluno}"))
+        .default_width(420)
+        .default_height(380)
+        .build();
+    let v = GtkBox::new(Orientation::Vertical, 10);
+    v.set_margin_start(16);
+    v.set_margin_end(16);
+    v.set_margin_top(16);
+    v.set_margin_bottom(16);
+    let info = Label::new(Some("Escolha um projeto ou crie um novo."));
+    info.set_xalign(0.0);
+    let lista = gtk::ListBox::new();
+    lista.set_selection_mode(gtk::SelectionMode::Single);
+    let rolagem = ScrolledWindow::builder()
+        .child(&lista)
+        .vexpand(true)
+        .min_content_height(160)
+        .build();
+    let novo = Entry::builder()
+        .placeholder_text("novo projeto (ex.: aula-03)")
+        .hexpand(true)
+        .build();
+    let criar = Button::with_label("Criar");
+    let linha_novo = GtkBox::new(Orientation::Horizontal, 8);
+    linha_novo.append(&novo);
+    linha_novo.append(&criar);
+    let aviso = Label::new(None);
+    aviso.set_xalign(0.0);
+    aviso.set_wrap(true);
+    let buttons = GtkBox::new(Orientation::Horizontal, 8);
+    buttons.set_halign(gtk::Align::End);
+    let cancelar = Button::with_label("Cancelar");
+    let abrir = Button::with_label("Abrir");
+    abrir.add_css_class("suggested-action");
+    buttons.append(&cancelar);
+    buttons.append(&abrir);
+    v.append(&info);
+    v.append(&rolagem);
+    v.append(&linha_novo);
+    v.append(&aviso);
+    v.append(&buttons);
+    dialog.set_child(Some(&v));
+
+    // Row i of `lista` is `nomes[i]`.
+    let nomes = Rc::new(RefCell::new(Vec::<String>::new()));
+    let preencher = Rc::new({
+        let lista = lista.clone();
+        let abrir = abrir.clone();
+        let nomes = Rc::clone(&nomes);
+        move |novos: Vec<String>, escolhido: &str| {
+            while let Some(row) = lista.first_child() {
+                lista.remove(&row);
+            }
+            for nome in &novos {
+                let label = Label::new(Some(nome));
+                label.set_xalign(0.0);
+                label.set_margin_top(6);
+                label.set_margin_bottom(6);
+                label.set_margin_start(8);
+                lista.append(&label);
+            }
+            let i = novos
+                .iter()
+                .position(|n| n == escolhido)
+                .or((!novos.is_empty()).then_some(0));
+            if let Some(i) = i {
+                lista.select_row(lista.row_at_index(i as i32).as_ref());
+            }
+            abrir.set_sensitive(i.is_some());
+            *nomes.borrow_mut() = novos;
+        }
+    });
+    let vazio = projetos.is_empty();
+    preencher(projetos, atual);
+    if vazio {
+        aviso.set_text("Você ainda não tem projetos: crie o primeiro.");
+    }
+
+    let done: RefCell<Option<Box<dyn FnOnce(String)>>> = RefCell::new(Some(Box::new(done)));
+    let escolher = Rc::new({
+        let lista = lista.clone();
+        let nomes = Rc::clone(&nomes);
+        let dialog = dialog.clone();
+        move || {
+            let Some(row) = lista.selected_row() else {
+                return;
+            };
+            let Some(nome) = nomes.borrow().get(row.index() as usize).cloned() else {
+                return;
+            };
+            dialog.close();
+            if let Some(done) = done.borrow_mut().take() {
+                done(nome);
+            }
+        }
+    });
+    {
+        let escolher = Rc::clone(&escolher);
+        abrir.connect_clicked(move |_| escolher());
+    }
+    lista.connect_row_activated(move |_, _| escolher());
+    {
+        let abrir = abrir.clone();
+        lista.connect_row_selected(move |_, row| abrir.set_sensitive(row.is_some()));
+    }
+
+    let criar_projeto = Rc::new({
+        let novo = novo.clone();
+        let aviso = aviso.clone();
+        let aluno = aluno.to_string();
+        move || {
+            let nome = novo.text().trim().to_string();
+            if !valid_aluno(&nome) {
+                aviso.set_text("nome do projeto: letras, números, _ e - (sem espaços)");
+                return;
+            }
+            let lista_nova = rpc
+                .create_project(&aluno, &nome)
+                .and_then(|()| rpc.list_projects(&aluno));
+            match lista_nova {
+                Ok(lista_nova) => {
+                    preencher(lista_nova, &nome);
+                    novo.set_text("");
+                    aviso.set_text(&format!("criado `{nome}`: aperte Abrir"));
+                }
+                Err(e) => aviso.set_text(&e),
+            }
+        }
+    });
+    {
+        let criar_projeto = Rc::clone(&criar_projeto);
+        criar.connect_clicked(move |_| criar_projeto());
+    }
+    novo.connect_activate(move |_| criar_projeto());
+    {
+        let dialog = dialog.clone();
+        cancelar.connect_clicked(move |_| dialog.close());
+    }
+    dialog.present();
+    if vazio {
+        novo.grab_focus();
+    } else {
+        lista.grab_focus();
+    }
 }
 
 fn after_unsaved(ui: &UiRc, then: impl FnOnce() + 'static) {
@@ -2359,7 +2602,9 @@ fn perguntar_servidor(
     v.set_margin_end(16);
     v.set_margin_top(16);
     v.set_margin_bottom(16);
-    let info = Label::new(Some("Os arquivos ficam em aula-data/aluno nesse servidor."));
+    let info = Label::new(Some(
+        "Depois de conectar, escolha um dos seus projetos ou crie um novo.",
+    ));
     info.set_wrap(true);
     info.set_xalign(0.0);
     let url_entry = Entry::builder().text(url).hexpand(true).build();
@@ -2429,7 +2674,9 @@ fn refresh_tree(ui: &UiRc) {
         let onde = match &u.files {
             Files::None => "sem pasta".to_string(),
             Files::Local(p) => p.display().to_string(),
-            Files::Remote(_) => format!("servidor {} \\ {}", u.prefs.servidor, projeto),
+            Files::Remote { .. } => {
+                format!("servidor {} \\ {}", u.prefs.servidor, nome_do_projeto(&u))
+            }
         };
         match u.files.list_tree(&projeto) {
             Ok(p) => (p, projeto, None, onde),
@@ -2653,6 +2900,35 @@ fn tree_popup(ui: &UiRc, x: f64, y: f64) {
     });
 }
 
+/// After a run: refresh what the program changed, and say what failed.
+/// Returns how many files could not be sent.
+fn mostrar_envio(ui: &UiRc, console: &Console, envio: exec::Envio) -> usize {
+    for (rel, texto) in &envio.enviados {
+        ui.borrow().file_cache.borrow_mut().remove(rel);
+        let (Some(doc), Some(texto)) = (doc_by_name(ui, rel), texto) else {
+            continue;
+        };
+        if doc.is_dirty() {
+            // Saving the tab now would replace what the program wrote.
+            console.stderr(&format!(
+                "aviso: o programa alterou `{rel}`, que tem alterações não salvas \
+                 na aba. Salvar a aba substitui o que o programa escreveu.\n"
+            ));
+        } else if doc.text() != *texto {
+            doc.recarregar(texto);
+        }
+    }
+    for erro in &envio.erros {
+        console.stderr(&format!(
+            "erro: o arquivo que o programa escreveu não foi salvo no projeto: {erro}\n"
+        ));
+    }
+    if !envio.enviados.is_empty() {
+        refresh_tree(ui);
+    }
+    envio.erros.len()
+}
+
 fn criar_arquivo(ui: &UiRc, dir: &str) {
     let window = ui.borrow().window.clone();
     let Some(name) = perguntar_linha(&window, "Nome do arquivo:") else {
@@ -2670,7 +2946,7 @@ fn criar_arquivo(ui: &UiRc, dir: &str) {
     let path = join_path(dir, &name);
     let result = {
         let u = ui.borrow();
-        u.files.write_file(&u.project, &path, "escreva(\"Olá\")\n")
+        u.files.create_file(&u.project, &path, "escreva(\"Olá\")\n")
     };
     match result {
         Ok(()) => {
