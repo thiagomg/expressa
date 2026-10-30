@@ -3,8 +3,10 @@
 // move to ListView/AlertDialog is in ajustes/05-aula-e-servidor.md.
 #![allow(deprecated)]
 
+mod abas;
 mod ajuda;
 mod assist;
+mod atalhos;
 mod cartesiano;
 mod console;
 mod docs;
@@ -13,6 +15,7 @@ mod exec;
 mod indent;
 mod janela_graf;
 mod lang;
+mod pares;
 mod prefs;
 mod rpc;
 mod store;
@@ -103,6 +106,8 @@ struct Ui {
     /// Bumped by each tree listing; an older listing that comes back late
     /// is dropped.
     geracao_arvore: u64,
+    /// Tabs the user closed (file, line), last one at the end: Ctrl+Shift+T.
+    abas_fechadas: Vec<(String, u32)>,
     ajuda_win: RefCell<Option<gtk::Window>>,
 }
 
@@ -265,6 +270,7 @@ fn build_ui(app: &Application) {
         ocupado: None,
         copia_execucao: None,
         geracao_arvore: 0,
+        abas_fechadas: Vec::new(),
         ajuda_win: RefCell::new(None),
     }));
     let help = make_help(&ui);
@@ -351,6 +357,32 @@ fn build_ui(app: &Application) {
     let btn_find_prev = Button::with_label("↑");
     search_bar.append(&btn_find_next);
     search_bar.append(&btn_find_prev);
+    {
+        // Search options, on the settings every tab's search shares.
+        let settings = ui.borrow().search_settings.clone();
+        let opcao = |rotulo: &str, dica: &str, f: fn(&SearchSettings, bool)| {
+            let b = gtk::ToggleButton::with_label(rotulo);
+            b.set_tooltip_text(Some(dica));
+            let settings = settings.clone();
+            b.connect_toggled(move |b| f(&settings, b.is_active()));
+            search_bar.append(&b);
+        };
+        opcao(
+            "Aa",
+            "Diferenciar maiúsculas de minúsculas",
+            SearchSettings::set_case_sensitive,
+        );
+        opcao(
+            "Palavra",
+            "Só a palavra inteira (`soma` não acha `somatorio`)",
+            SearchSettings::set_at_word_boundaries,
+        );
+        opcao(
+            ".*",
+            "Expressão regular (ex.: `nota[0-9]`)",
+            SearchSettings::set_regex_enabled,
+        );
+    }
     search_bar.append(&Label::new(Some("trocar:")));
     search_bar.append(&ui.borrow().replace_entry);
     let btn_repl = Button::with_label("Trocar");
@@ -484,6 +516,22 @@ fn build_ui(app: &Application) {
             k(&fkeys, accel, |ui| zoom(ui, -1));
         }
         k(&fkeys, "<Primary>0", |ui| zoom(ui, 0));
+        // Capture: the editor would take Ctrl+Tab to move focus out.
+        k(&fkeys, "<Primary>Tab", |ui| abas::vizinha(ui, 1));
+        k(&fkeys, "<Primary>Page_Down", |ui| abas::vizinha(ui, 1));
+        // Shift+Tab arrives as ISO_Left_Tab.
+        for accel in ["<Primary><Shift>Tab", "<Primary><Shift>ISO_Left_Tab"] {
+            k(&fkeys, accel, |ui| abas::vizinha(ui, -1));
+        }
+        k(&fkeys, "<Primary>Page_Up", |ui| abas::vizinha(ui, -1));
+        for n in 1..=9u32 {
+            let ui = Rc::clone(&ui);
+            add_shortcut(&fkeys, &format!("<Alt>{n}"), move || abas::numero(&ui, n));
+        }
+        k(&shortcuts, "<Primary><Shift>t", abas::reabrir);
+        k(&shortcuts, "<Primary>question", |ui| {
+            atalhos::mostrar(&ui.borrow().window)
+        });
         win.add_controller(fkeys);
         win.add_controller(shortcuts);
     }
@@ -812,6 +860,9 @@ fn install_menubar(
     add_win_action(win, ui, "letra-menor", |ui| zoom(ui, -1));
     add_win_action(win, ui, "letra-normal", |ui| zoom(ui, 0));
     add_win_action(win, ui, "ajuda", open_ajuda);
+    add_win_action(win, ui, "atalhos", |ui| {
+        atalhos::mostrar(&ui.borrow().window)
+    });
     add_win_action(win, ui, "tutoriais", |ui| {
         if let Err(e) = tutoriais::spawn_tutorial() {
             set_status(ui, &e);
@@ -917,6 +968,11 @@ fn install_menubar(
     let ajuda = gio::Menu::new();
     ajuda.append_item(&menu_item("_Tutoriais", "win.tutoriais", None));
     ajuda.append_item(&menu_item("_Funções nativas", "win.ajuda", Some("F1")));
+    ajuda.append_item(&menu_item(
+        "_Atalhos do teclado",
+        "win.atalhos",
+        Some("<Primary>question"),
+    ));
 
     let model = gio::Menu::new();
     model.append_submenu(Some("_Arquivo"), &arquivo);
@@ -1261,6 +1317,7 @@ fn open_doc(ui: &UiRc, path: Option<String>, text: &str) -> Rc<Doc> {
             }
         });
     }
+    abas::ligar(ui, &doc);
     {
         let (dark, scheme) = theme_scheme(ui);
         doc.set_theme(scheme.as_ref(), dark);
@@ -1441,14 +1498,20 @@ fn remove_tab(ui: &UiRc, doc: &Rc<Doc>) {
     refresh_diag_label(ui);
 }
 
+/// The user closes `doc` (asking about unsaved changes first). Unlike
+/// `remove_tab`, it can be reopened with Ctrl+Shift+T.
 fn close_doc(ui: &UiRc, doc: &Rc<Doc>) {
     if !doc.is_dirty() {
+        abas::lembrar_fechada(ui, doc);
         remove_tab(ui, doc);
         return;
     }
     let ui_c = Rc::clone(ui);
     let d = Rc::clone(doc);
-    confirm_unsaved(ui, vec![Rc::clone(doc)], move || remove_tab(&ui_c, &d));
+    confirm_unsaved(ui, vec![Rc::clone(doc)], move || {
+        abas::lembrar_fechada(&ui_c, &d);
+        remove_tab(&ui_c, &d);
+    });
 }
 
 /// Save one tab; an untitled one asks for a name. False if not saved.
@@ -2598,6 +2661,8 @@ fn after_unsaved(ui: &UiRc, then: impl FnOnce() + 'static) {
 }
 
 fn close_project_tabs(ui: &UiRc) {
+    // Paths of the project being left mean nothing in the next one.
+    ui.borrow_mut().abas_fechadas.clear();
     for d in all_docs(ui) {
         d.mark_saved();
         remove_tab(ui, &d);
@@ -2913,6 +2978,33 @@ fn parent_dir(path: &str, is_dir: bool) -> String {
     }
 }
 
+/// Select `rel` in the file tree, opening its folders and scrolling to it.
+#[allow(deprecated)]
+fn revelar_na_arvore(ui: &UiRc, rel: &str) {
+    let (tree, store) = {
+        let u = ui.borrow();
+        (u.tree.clone(), u.store.clone())
+    };
+    let model = store.upcast_ref::<gtk::TreeModel>();
+    let mut achado = None;
+    model.foreach(|m, path, iter| {
+        let caminho: String = m.get(iter, 1);
+        if exec::same_project_path(&caminho, rel) {
+            achado = Some(path.clone());
+            return true;
+        }
+        false
+    });
+    match achado {
+        Some(path) => {
+            tree.expand_to_path(&path);
+            tree.selection().select_path(&path);
+            tree.scroll_to_cell(Some(&path), None::<&TreeViewColumn>, true, 0.5, 0.0);
+        }
+        None => set_status(ui, &format!("`{rel}` não está na árvore")),
+    }
+}
+
 #[allow(deprecated)]
 fn selected_tree_entry(ui: &UiRc) -> (String, bool) {
     let u = ui.borrow();
@@ -2933,8 +3025,68 @@ fn tree_popup(ui: &UiRc, x: f64, y: f64) {
         tree.selection().select_path(&path);
     }
     let (rel, is_dir) = selected_tree_entry(ui);
+    let mut itens: Vec<(&str, Box<dyn FnOnce()>)> = Vec::new();
+    let dir = parent_dir(&rel, is_dir);
+    let novo_arq = if is_dir && !rel.is_empty() {
+        "Novo arquivo nesta pasta…"
+    } else {
+        "Novo arquivo…"
+    };
+    let nova_pasta = if is_dir && !rel.is_empty() {
+        "Nova pasta nesta pasta…"
+    } else {
+        "Nova pasta…"
+    };
+    itens.push((
+        novo_arq,
+        Box::new({
+            let ui = Rc::clone(ui);
+            let dir = dir.clone();
+            move || criar_arquivo(&ui, &dir)
+        }),
+    ));
+    itens.push((
+        nova_pasta,
+        Box::new({
+            let ui = Rc::clone(ui);
+            let dir = dir.clone();
+            move || criar_pasta(&ui, &dir)
+        }),
+    ));
+    if !rel.is_empty() {
+        itens.push((
+            "Renomear…",
+            Box::new({
+                let ui = Rc::clone(ui);
+                let rel = rel.clone();
+                move || renomear_entrada(&ui, &rel)
+            }),
+        ));
+        itens.push((
+            "Apagar",
+            Box::new({
+                let ui = Rc::clone(ui);
+                let rel = rel.clone();
+                move || confirmar_apagar(&ui, &rel)
+            }),
+        ));
+    }
+    mostrar_menu(ui, tree.upcast_ref(), x, y, itens);
+}
+
+/// A right-click menu at `(x, y)` of `widget`: one button per item, and the
+/// chosen item runs after the menu closes.
+fn mostrar_menu(
+    ui: &UiRc,
+    widget: &gtk::Widget,
+    x: f64,
+    y: f64,
+    itens: Vec<(&str, Box<dyn FnOnce()>)>,
+) {
     let window = ui.borrow().window.clone();
-    let (px, py) = tree.translate_coordinates(&window, x, y).unwrap_or((x, y));
+    let (px, py) = widget
+        .translate_coordinates(&window, x, y)
+        .unwrap_or((x, y));
     let pop = gtk::Popover::new();
     pop.add_css_class("menu");
     pop.set_parent(&window);
@@ -2954,7 +3106,7 @@ fn tree_popup(ui: &UiRc, x: f64, y: f64) {
         });
     }
     let box_ = GtkBox::new(Orientation::Vertical, 0);
-    let add_item = |box_: &GtkBox, label: &str, action: Box<dyn FnOnce() + 'static>| {
+    for (label, action) in itens {
         let btn = Button::with_label(label);
         btn.set_has_frame(false);
         btn.set_halign(gtk::Align::Start);
@@ -2968,55 +3120,6 @@ fn tree_popup(ui: &UiRc, x: f64, y: f64) {
             }
         });
         box_.append(&btn);
-    };
-    let dir = parent_dir(&rel, is_dir);
-    let novo_arq = if is_dir && !rel.is_empty() {
-        "Novo arquivo nesta pasta…"
-    } else {
-        "Novo arquivo…"
-    };
-    let nova_pasta = if is_dir && !rel.is_empty() {
-        "Nova pasta nesta pasta…"
-    } else {
-        "Nova pasta…"
-    };
-    add_item(
-        &box_,
-        novo_arq,
-        Box::new({
-            let ui = Rc::clone(ui);
-            let dir = dir.clone();
-            move || criar_arquivo(&ui, &dir)
-        }),
-    );
-    add_item(
-        &box_,
-        nova_pasta,
-        Box::new({
-            let ui = Rc::clone(ui);
-            let dir = dir.clone();
-            move || criar_pasta(&ui, &dir)
-        }),
-    );
-    if !rel.is_empty() {
-        add_item(
-            &box_,
-            "Renomear…",
-            Box::new({
-                let ui = Rc::clone(ui);
-                let rel = rel.clone();
-                move || renomear_entrada(&ui, &rel)
-            }),
-        );
-        add_item(
-            &box_,
-            "Apagar",
-            Box::new({
-                let ui = Rc::clone(ui);
-                let rel = rel.clone();
-                move || confirmar_apagar(&ui, &rel)
-            }),
-        );
     }
     pop.set_child(Some(&box_));
     glib::idle_add_local_once(move || {
@@ -3305,7 +3408,15 @@ fn search_next(ui: &UiRc) {
         d.buffer.select_range(&a, &b);
         d.view.scroll_to_iter(&mut a.clone(), 0.2, false, 0.0, 0.0);
     } else {
-        set_status(ui, "não encontrado");
+        set_status(ui, &nao_encontrado(&d));
+    }
+}
+
+/// Why a search found nothing: a broken regular expression says so.
+fn nao_encontrado(d: &Doc) -> String {
+    match d.search.regex_error() {
+        Some(e) => format!("expressão regular inválida: {e}"),
+        None => "não encontrado".to_string(),
     }
 }
 
@@ -3316,7 +3427,7 @@ fn search_prev(ui: &UiRc) {
         d.buffer.select_range(&a, &b);
         d.view.scroll_to_iter(&mut a.clone(), 0.2, false, 0.0, 0.0);
     } else {
-        set_status(ui, "não encontrado");
+        set_status(ui, &nao_encontrado(&d));
     }
 }
 

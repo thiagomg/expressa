@@ -79,11 +79,64 @@ pub struct Doc {
     diag_tag: TextTag,
     pub diag: RefCell<Option<Diag>>,
     diag_timer: RefCell<Option<glib::SourceId>>,
+    /// Marks the other places of the word under the cursor.
+    ocorrencia_tag: TextTag,
+    ocorrencia_timer: RefCell<Option<glib::SourceId>>,
     /// Called after each syntax check (status line).
     pub on_diag: RefCell<Option<Box<dyn Fn(&Doc)>>>,
 }
 
 const DIAG_DELAY_MS: u64 = 400;
+const OCORRENCIAS_DELAY_MS: u64 = 250;
+
+fn faz_parte_de_nome(c: char) -> bool {
+    c.is_alphanumeric() || c == '_'
+}
+
+/// Where the word around character `cursor` appears in `texto`, as
+/// character ranges, when it is a name worth marking: not a keyword, at
+/// least two letters, and in more than one place (one is just itself).
+pub fn ocorrencias_da_palavra(texto: &str, cursor: usize) -> Vec<(usize, usize)> {
+    // Big files: not worth scanning on every cursor move.
+    if texto.len() > 200_000 {
+        return Vec::new();
+    }
+    let chars: Vec<char> = texto.chars().collect();
+    let cursor = cursor.min(chars.len());
+    let mut ini = cursor;
+    while ini > 0 && faz_parte_de_nome(chars[ini - 1]) {
+        ini -= 1;
+    }
+    let mut fim = cursor;
+    while fim < chars.len() && faz_parte_de_nome(chars[fim]) {
+        fim += 1;
+    }
+    let palavra = &chars[ini..fim];
+    let nome: String = palavra.iter().collect();
+    if palavra.len() < 2
+        || palavra[0].is_numeric()
+        || crate::lang::KEYWORDS.contains(&nome.as_str())
+    {
+        return Vec::new();
+    }
+    let n = palavra.len();
+    let mut achadas = Vec::new();
+    let mut i = 0;
+    while i + n <= chars.len() {
+        let antes_ok = i == 0 || !faz_parte_de_nome(chars[i - 1]);
+        let depois_ok = i + n == chars.len() || !faz_parte_de_nome(chars[i + n]);
+        if antes_ok && depois_ok && chars[i..i + n] == *palavra {
+            achadas.push((i, i + n));
+            i += n;
+        } else {
+            i += 1;
+        }
+    }
+    if achadas.len() < 2 {
+        achadas.clear();
+    }
+    achadas
+}
 
 impl Doc {
     pub fn new(
@@ -107,7 +160,16 @@ impl Doc {
         let diag_tag = TextTag::new(Some("diag"));
         diag_tag.set_underline(gtk::pango::Underline::Error);
         diag_tag.set_underline_rgba(Some(&gtk::gdk::RGBA::new(0.9, 0.2, 0.2, 1.0)));
-        for t in [&debug_tag, &error_tag, &match_tag, &diag_tag] {
+        // Translucent grey: readable on the light and the dark theme.
+        let ocorrencia_tag = TextTag::new(Some("ocorrencia"));
+        ocorrencia_tag.set_background_rgba(Some(&gtk::gdk::RGBA::new(0.5, 0.5, 0.5, 0.25)));
+        for t in [
+            &debug_tag,
+            &error_tag,
+            &match_tag,
+            &diag_tag,
+            &ocorrencia_tag,
+        ] {
             table.add(t);
         }
         let view = SourceView::builder()
@@ -147,6 +209,7 @@ impl Doc {
         tab.append(&close_button);
 
         crate::indent::attach_electric(&buffer);
+        crate::pares::attach(&buffer);
         crate::editing::attach_plain_paste(&view);
         // Loading the file is not an undo step, and it is the saved state.
         buffer.begin_irreversible_action();
@@ -175,6 +238,8 @@ impl Doc {
             diag_tag,
             diag: RefCell::new(None),
             diag_timer: RefCell::new(None),
+            ocorrencia_tag,
+            ocorrencia_timer: RefCell::new(None),
             on_diag: RefCell::new(None),
         });
         doc.refresh_label();
@@ -204,6 +269,7 @@ impl Doc {
         self.buffer.connect_cursor_position_notify(move |_| {
             if let Some(d) = weak.upgrade() {
                 d.highlight_block();
+                d.agendar_ocorrencias();
             }
         });
     }
@@ -372,6 +438,40 @@ impl Doc {
 
     // ── Syntax errors while typing ─────────────────────────────────────────
 
+    /// Marks the word under the cursor everywhere in the file, shortly
+    /// after the cursor stops (not on every keystroke).
+    fn agendar_ocorrencias(self: &Rc<Self>) {
+        if let Some(id) = self.ocorrencia_timer.borrow_mut().take() {
+            id.remove();
+        }
+        let weak = Rc::downgrade(self);
+        let id = glib::timeout_add_local_once(
+            std::time::Duration::from_millis(OCORRENCIAS_DELAY_MS),
+            move || {
+                if let Some(d) = weak.upgrade() {
+                    d.ocorrencia_timer.borrow_mut().take();
+                    d.marcar_ocorrencias();
+                }
+            },
+        );
+        *self.ocorrencia_timer.borrow_mut() = Some(id);
+    }
+
+    fn marcar_ocorrencias(&self) {
+        let (s, e) = self.buffer.bounds();
+        self.buffer.remove_tag(&self.ocorrencia_tag, &s, &e);
+        if self.buffer.has_selection() {
+            return;
+        }
+        let texto = self.buffer.text(&s, &e, false);
+        let cursor = self.cursor().offset() as usize;
+        for (ini, fim) in ocorrencias_da_palavra(&texto, cursor) {
+            let a = self.buffer.iter_at_offset(ini as i32);
+            let b = self.buffer.iter_at_offset(fim as i32);
+            self.buffer.apply_tag(&self.ocorrencia_tag, &a, &b);
+        }
+    }
+
     fn schedule_check(self: &Rc<Self>) {
         if let Some(id) = self.diag_timer.borrow_mut().take() {
             id.remove();
@@ -454,6 +554,30 @@ pub fn dot_pixbuf((r, g, b): (u8, u8, u8)) -> gtk::gdk_pixbuf::Pixbuf {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn ocorrencias_so_de_nomes_inteiros() {
+        let t = "soma = 0\nsomatorio = soma + 1\nescreva(soma)\n";
+        let cursor = t.find("soma +").unwrap() + 2;
+        assert_eq!(
+            ocorrencias_da_palavra(t, cursor),
+            [(0, 4), (21, 25), (38, 42)]
+        );
+    }
+
+    #[test]
+    fn ocorrencias_nada_para_palavra_chave_numero_letra_ou_nome_unico() {
+        assert!(ocorrencias_da_palavra("se a {\n} se b {\n}", 0).is_empty());
+        assert!(ocorrencias_da_palavra("x = 10 + 10", 5).is_empty());
+        assert!(ocorrencias_da_palavra("a = a", 0).is_empty());
+        assert!(ocorrencias_da_palavra("contador = 1", 2).is_empty());
+    }
+
+    #[test]
+    fn ocorrencias_com_acento() {
+        let t = "posição = 1\nescreva(posição)";
+        assert_eq!(ocorrencias_da_palavra(t, 3).len(), 2);
+    }
 
     #[test]
     fn breakpoint_mark_survives_the_debug_line() {
