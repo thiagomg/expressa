@@ -25,6 +25,8 @@ pub enum DebugAction {
     Quit,
     /// Stop the program as a runtime error (used for time limits).
     Timeout,
+    /// Stop the program as a runtime error: the user asked (editor REPL).
+    Interrompido,
 }
 
 #[derive(Debug, Clone)]

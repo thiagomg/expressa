@@ -1,7 +1,7 @@
 //! One open file (a tab): buffer with its own undo history, view,
 //! breakpoints, search, block-match highlight and syntax check.
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::collections::BTreeSet;
 use std::rc::{Rc, Weak};
 
@@ -79,6 +79,10 @@ pub struct Doc {
     diag_tag: TextTag,
     pub diag: RefCell<Option<Diag>>,
     diag_timer: RefCell<Option<glib::SourceId>>,
+    /// Watches the file of a local project (`sessao::vigiar`).
+    pub vigia: RefCell<Option<gtk::gio::FileMonitor>>,
+    /// Hash of the text last copied aside while unsaved (`sessao.rs`).
+    pub resumo_da_copia: Cell<Option<u64>>,
     /// Marks the other places of the word under the cursor.
     ocorrencia_tag: TextTag,
     ocorrencia_timer: RefCell<Option<glib::SourceId>>,
@@ -238,6 +242,8 @@ impl Doc {
             diag_tag,
             diag: RefCell::new(None),
             diag_timer: RefCell::new(None),
+            vigia: RefCell::new(None),
+            resumo_da_copia: Cell::new(None),
             ocorrencia_tag,
             ocorrencia_timer: RefCell::new(None),
             on_diag: RefCell::new(None),

@@ -7,6 +7,49 @@ pub const DEFAULT_FONT: u32 = 11;
 const MIN_FONT: u32 = 7;
 const MAX_FONT: u32 = 40;
 
+/// How many recent projects are kept.
+const RECENTES_MAXIMO: usize = 10;
+
+/// A project opened before.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Recente {
+    /// A folder on this computer.
+    Local(String),
+    /// A student's project on a server.
+    Servidor {
+        url: String,
+        aluno: String,
+        projeto: String,
+    },
+}
+
+impl Recente {
+    /// One prefs line: fields separated by tabs (no field has one).
+    fn texto(&self) -> String {
+        match self {
+            Recente::Local(p) => format!("local\t{p}"),
+            Recente::Servidor {
+                url,
+                aluno,
+                projeto,
+            } => format!("servidor\t{url}\t{aluno}\t{projeto}"),
+        }
+    }
+
+    fn de_texto(s: &str) -> Option<Self> {
+        let partes: Vec<&str> = s.split('\t').collect();
+        match partes.as_slice() {
+            ["local", p] if !p.is_empty() => Some(Recente::Local(p.to_string())),
+            ["servidor", url, aluno, projeto] => Some(Recente::Servidor {
+                url: url.to_string(),
+                aluno: aluno.to_string(),
+                projeto: projeto.to_string(),
+            }),
+            _ => None,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Prefs {
     pub font_size: u32,
@@ -17,6 +60,8 @@ pub struct Prefs {
     pub servidor: String,
     /// Last project opened on the server; the project list selects it.
     pub projeto: String,
+    /// Projects opened before, most recent first (Arquivo → Recentes).
+    pub recentes: Vec<Recente>,
     /// Last file opened in the project (relative path).
     pub arquivo: String,
 }
@@ -29,6 +74,7 @@ impl Default for Prefs {
             pasta: String::new(),
             servidor: "http://127.0.0.1:50051".to_string(),
             projeto: String::new(),
+            recentes: Vec::new(),
             arquivo: String::new(),
         }
     }
@@ -57,6 +103,7 @@ impl Prefs {
                 "pasta" => p.pasta = v.trim().to_string(),
                 "servidor" => p.servidor = v.trim().to_string(),
                 "projeto" => p.projeto = v.trim().to_string(),
+                "recente" => p.recentes.extend(Recente::de_texto(v.trim())),
                 "arquivo" => p.arquivo = v.trim().to_string(),
                 _ => {}
             }
@@ -65,7 +112,7 @@ impl Prefs {
     }
 
     pub fn to_text(&self) -> String {
-        format!(
+        let mut t = format!(
             "fonte={}\ntema={}\npasta={}\nservidor={}\nprojeto={}\narquivo={}\n",
             self.font_size,
             if self.dark { "escuro" } else { "claro" },
@@ -73,7 +120,18 @@ impl Prefs {
             self.servidor,
             self.projeto,
             self.arquivo,
-        )
+        );
+        for r in &self.recentes {
+            t.push_str(&format!("recente={}\n", r.texto()));
+        }
+        t
+    }
+
+    /// `r` was just opened: first in the list, without repeating it.
+    pub fn lembrar_recente(&mut self, r: Recente) {
+        self.recentes.retain(|x| *x != r);
+        self.recentes.insert(0, r);
+        self.recentes.truncate(RECENTES_MAXIMO);
     }
 
     pub fn load() -> Self {
@@ -450,11 +508,23 @@ mod tests {
 
     #[test]
     fn parse_and_print() {
-        let p = Prefs::parse("fonte=18\ntema=escuro\nprojeto=aula-2\n");
+        let p = Prefs::parse(
+            "fonte=18\ntema=escuro\nprojeto=aula-2\n\
+             recente=servidor\thttp://s:1\tana\taula-2\nrecente=local\t/home/ana/x\n\
+             recente=lixo\n",
+        );
         let expect = Prefs {
             font_size: 18,
             dark: true,
             projeto: "aula-2".into(),
+            recentes: vec![
+                Recente::Servidor {
+                    url: "http://s:1".into(),
+                    aluno: "ana".into(),
+                    projeto: "aula-2".into(),
+                },
+                Recente::Local("/home/ana/x".into()),
+            ],
             ..Prefs::default()
         };
         assert_eq!(p, expect);
@@ -494,5 +564,23 @@ mod tests {
         assert_eq!(expand_tilde("~nao"), PathBuf::from("~nao"));
         let proj = home.join("proj");
         assert_eq!(path_for_display(&proj), "~/proj".to_string());
+    }
+
+    #[test]
+    fn recentes_sem_repetir_e_no_maximo_dez() {
+        let mut p = Prefs::default();
+        for i in 0..12 {
+            p.lembrar_recente(Recente::Local(format!("/p{i}")));
+        }
+        p.lembrar_recente(Recente::Local("/p5".into()));
+        assert_eq!(p.recentes.len(), RECENTES_MAXIMO);
+        assert_eq!(p.recentes[0], Recente::Local("/p5".into()));
+        assert_eq!(
+            p.recentes
+                .iter()
+                .filter(|r| **r == Recente::Local("/p5".into()))
+                .count(),
+            1
+        );
     }
 }

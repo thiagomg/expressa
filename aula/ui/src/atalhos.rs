@@ -38,6 +38,9 @@ const ATALHOS: &[(&str, &[(&str, &str)])] = &[
         &[
             ("Ctrl+F · Ctrl+H", "buscar e trocar no arquivo"),
             ("Ctrl+G", "ir para a linha"),
+            ("Ctrl+Shift+F", "buscar (e trocar) em todos os arquivos"),
+            ("Ctrl+P", "abrir um arquivo do projeto pelo nome"),
+            ("Ctrl+Shift+O", "ir para uma função do arquivo"),
             ("F12 · Ctrl+clique", "ir para a definição"),
             ("F1", "ajuda sobre o nome sob o cursor"),
         ],

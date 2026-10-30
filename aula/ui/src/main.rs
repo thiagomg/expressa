@@ -7,17 +7,22 @@ mod abas;
 mod ajuda;
 mod assist;
 mod atalhos;
+mod busca_projeto;
 mod cartesiano;
 mod console;
 mod docs;
 mod editing;
+mod escolher;
 mod exec;
 mod indent;
 mod janela_graf;
 mod lang;
+mod navegar;
+mod painel_repl;
 mod pares;
 mod prefs;
 mod rpc;
+mod sessao;
 mod store;
 mod tutoriais;
 
@@ -108,6 +113,13 @@ struct Ui {
     geracao_arvore: u64,
     /// Tabs the user closed (file, line), last one at the end: Ctrl+Shift+T.
     abas_fechadas: Vec<(String, u32)>,
+    /// The open project's session was restored (and its unsaved copies
+    /// dealt with): from now on it can be saved over (`sessao.rs`).
+    sessao_pronta: bool,
+    /// Below the editor: Saída (program output), Busca, REPL.
+    painel_inferior: gtk::Notebook,
+    busca: Option<Rc<busca_projeto::PainelBusca>>,
+    repl: Rc<painel_repl::PainelRepl>,
     ajuda_win: RefCell<Option<gtk::Window>>,
 }
 
@@ -271,10 +283,16 @@ fn build_ui(app: &Application) {
         copia_execucao: None,
         geracao_arvore: 0,
         abas_fechadas: Vec::new(),
+        sessao_pronta: false,
+        painel_inferior: gtk::Notebook::new(),
+        busca: None,
+        repl: painel_repl::PainelRepl::new(),
         ajuda_win: RefCell::new(None),
     }));
     let help = make_help(&ui);
     ui.borrow_mut().help = Some(help);
+    let busca = busca_projeto::PainelBusca::new(&ui);
+    ui.borrow_mut().busca = Some(busca);
 
     let btn_smaller = Button::with_label("A−");
     btn_smaller.set_tooltip_text(Some("Letra menor (Ctrl+-)"));
@@ -316,7 +334,14 @@ fn build_ui(app: &Application) {
     {
         let u = ui.borrow();
         bottom.append(&u.graficos.dock);
-        bottom.append(&output_scroll);
+        let painel = &u.painel_inferior;
+        painel.append_page(&output_scroll, Some(&Label::new(Some("Saída"))));
+        if let Some(b) = &u.busca {
+            painel.append_page(&b.widget, Some(&Label::new(Some("Busca"))));
+        }
+        painel.append_page(&u.repl.widget, Some(&Label::new(Some("REPL"))));
+        painel.set_vexpand(true);
+        bottom.append(painel);
     }
     let editor_col = Paned::new(Orientation::Vertical);
     editor_col.add_css_class("aula-paned");
@@ -529,6 +554,9 @@ fn build_ui(app: &Application) {
             add_shortcut(&fkeys, &format!("<Alt>{n}"), move || abas::numero(&ui, n));
         }
         k(&shortcuts, "<Primary><Shift>t", abas::reabrir);
+        k(&shortcuts, "<Primary>p", navegar::abrir_rapido);
+        k(&shortcuts, "<Primary><Shift>f", buscar_no_projeto);
+        k(&shortcuts, "<Primary><Shift>o", navegar::funcoes_do_arquivo);
         k(&shortcuts, "<Primary>question", |ui| {
             atalhos::mostrar(&ui.borrow().window)
         });
@@ -594,12 +622,16 @@ fn build_ui(app: &Application) {
         let ui_close = Rc::clone(&ui);
         win.connect_close_request(move |w| {
             if ui_close.borrow().closing {
+                sessao::salvar(&ui_close);
+                sessao::limpar_copias(&ui_close);
                 fechar_janelas_filhas(&ui_close);
                 ui_close.borrow_mut().files.shutdown();
                 return glib::Propagation::Proceed;
             }
             let dirty: Vec<Rc<Doc>> = dirty_docs(&ui_close);
             if dirty.is_empty() {
+                sessao::salvar(&ui_close);
+                sessao::limpar_copias(&ui_close);
                 fechar_janelas_filhas(&ui_close);
                 ui_close.borrow_mut().files.shutdown();
                 return glib::Propagation::Proceed;
@@ -614,6 +646,7 @@ fn build_ui(app: &Application) {
         });
     }
 
+    sessao::iniciar_copias(&ui);
     apply_theme(&ui);
     win.maximize();
     win.present();
@@ -848,6 +881,11 @@ fn install_menubar(
     });
     add_win_action(win, ui, "servidor", ask_server);
     add_win_action(win, ui, "trocar-projeto", trocar_projeto);
+    add_win_action(win, ui, "recentes", navegar::recentes);
+    add_win_action(win, ui, "buscar-projeto", buscar_no_projeto);
+    add_win_action(win, ui, "repl", mostrar_repl);
+    add_win_action(win, ui, "abrir-rapido", navegar::abrir_rapido);
+    add_win_action(win, ui, "funcoes", navegar::funcoes_do_arquivo);
     add_win_action(win, ui, "executar", |ui| executar(ui, false));
     add_win_action(win, ui, "depurar", |ui| executar(ui, true));
     add_win_action(win, ui, "parar", |ui| send_debug_cmd(ui, "terminar"));
@@ -917,6 +955,7 @@ fn install_menubar(
     projeto.append_item(&menu_item("_Pasta…", "win.pasta", None));
     projeto.append_item(&menu_item("Se_rvidor…", "win.servidor", None));
     projeto.append_item(&menu_item("_Trocar projeto…", "win.trocar-projeto", None));
+    projeto.append_item(&menu_item("Re_centes…", "win.recentes", None));
     arquivo.append_section(None, &projeto);
     let sair = gio::Menu::new();
     sair.append_item(&menu_item("Sa_ir", "win.encerrar", Some("<Primary>q")));
@@ -938,6 +977,22 @@ fn install_menubar(
     ver.append_item(&menu_item("_Arquivos", "win.mostrar-arquivos", Some("F7")));
     ver.append_item(&menu_item("_Painel", "win.mostrar-painel", Some("F8")));
     ver.append_item(&menu_item("_Buscar", "win.buscar", Some("<Primary>f")));
+    ver.append_item(&menu_item(
+        "Buscar no pro_jeto",
+        "win.buscar-projeto",
+        Some("<Primary><Shift>f"),
+    ));
+    ver.append_item(&menu_item("_REPL", "win.repl", None));
+    ver.append_item(&menu_item(
+        "Abrir arquivo do _projeto…",
+        "win.abrir-rapido",
+        Some("<Primary>p"),
+    ));
+    ver.append_item(&menu_item(
+        "_Funções do arquivo…",
+        "win.funcoes",
+        Some("<Primary><Shift>o"),
+    ));
     ver.append_item(&menu_item(
         "_Ir para linha",
         "win.ir-linha",
@@ -1148,6 +1203,7 @@ fn remember_arquivo(ui: &UiRc, doc: &Doc) {
         u.prefs.arquivo = path;
         u.prefs.save();
     }
+    sessao::salvar(ui);
 }
 
 fn parse_run_args(s: &str) -> Vec<String> {
@@ -1318,6 +1374,7 @@ fn open_doc(ui: &UiRc, path: Option<String>, text: &str) -> Rc<Doc> {
         });
     }
     abas::ligar(ui, &doc);
+    sessao::vigiar(ui, &doc);
     {
         let (dark, scheme) = theme_scheme(ui);
         doc.set_theme(scheme.as_ref(), dark);
@@ -1494,8 +1551,10 @@ fn remove_tab(ui: &UiRc, doc: &Rc<Doc>) {
     if let Some(n) = nb.page_num(&doc.page) {
         nb.remove_page(Some(n));
     }
+    doc.vigia.replace(None);
     refresh_title(ui);
     refresh_diag_label(ui);
+    sessao::salvar(ui);
 }
 
 /// The user closes `doc` (asking about unsaved changes first). Unlike
@@ -1565,6 +1624,10 @@ fn save_doc(ui: &UiRc, doc: &Rc<Doc>) -> bool {
 fn saved(ui: &UiRc, doc: &Rc<Doc>) -> bool {
     let name = doc.name();
     doc.mark_saved();
+    // A first save gives the tab a file to watch.
+    if doc.vigia.borrow().is_none() {
+        sessao::vigiar(ui, doc);
+    }
     ui.borrow().file_cache.borrow_mut().remove(&name);
     refresh_tree(ui);
     refresh_title(ui);
@@ -1985,6 +2048,7 @@ fn toggle_breakpoint_here(ui: &UiRc) {
 
 fn toggle_breakpoint(ui: &UiRc, doc: &Rc<Doc>, line: u32) {
     let on = doc.toggle_breakpoint(line);
+    sessao::salvar(ui);
     // While running, tell the debugger (it names files by their copy).
     let cmd = ui.borrow().run.as_ref().map(|run| {
         let file = run.ws_dir.join(doc.name()).to_string_lossy().into_owned();
@@ -2127,6 +2191,7 @@ fn iniciar_execucao(
 ) {
     let name = doc.name();
     let docs = all_docs(ui);
+    mostrar_pagina_inferior(ui, PaginaInferior::Saida);
     let bps: Vec<(String, u32)> = docs
         .iter()
         .flat_map(|d| {
@@ -2360,6 +2425,8 @@ fn apply_local(ui: &UiRc, path: PathBuf) {
         u.copia_execucao = None;
         u.project = name;
         u.prefs.pasta = shown.clone();
+        u.prefs
+            .lembrar_recente(prefs::Recente::Local(shown.clone()));
         u.prefs.save();
         u.file_cache.borrow_mut().clear();
     }
@@ -2473,6 +2540,11 @@ fn apply_remote(ui: &UiRc, rpc: Arc<Rpc>, url: String, aluno: String, projeto: S
             projeto: projeto.clone(),
         };
         u.copia_execucao = None;
+        u.prefs.lembrar_recente(prefs::Recente::Servidor {
+            url: url.clone(),
+            aluno: aluno.clone(),
+            projeto: projeto.clone(),
+        });
         u.project = aluno;
         u.prefs.servidor = url;
         u.prefs.projeto = projeto;
@@ -2661,8 +2733,16 @@ fn after_unsaved(ui: &UiRc, then: impl FnOnce() + 'static) {
 }
 
 fn close_project_tabs(ui: &UiRc) {
-    // Paths of the project being left mean nothing in the next one.
-    ui.borrow_mut().abas_fechadas.clear();
+    // Keep this project's tabs for next time. Its unsaved tabs were saved
+    // or discarded already, so their copies go.
+    sessao::salvar(ui);
+    sessao::limpar_copias(ui);
+    {
+        let mut u = ui.borrow_mut();
+        u.sessao_pronta = false;
+        // Paths of the project being left mean nothing in the next one.
+        u.abas_fechadas.clear();
+    }
     for d in all_docs(ui) {
         d.mark_saved();
         remove_tab(ui, &d);
@@ -2673,17 +2753,8 @@ fn close_project_tabs(ui: &UiRc) {
 fn finish_open(ui: &UiRc) {
     refresh_title(ui);
     refresh_diag_label(ui);
-    // Reopen the last file once the listing says it is there.
-    refresh_tree_e(ui, |ui| {
-        let arquivo = ui.borrow().prefs.arquivo.clone();
-        if arquivo.is_empty() {
-            return;
-        }
-        let known = ui.borrow().project_files.iter().any(|p| p == &arquivo);
-        if known {
-            let _ = open_path(ui, &arquivo);
-        }
-    });
+    // Reopen the tabs of last time once the listing says what is there.
+    refresh_tree_e(ui, sessao::restaurar);
 }
 
 fn normalize_url(url: &str) -> String {
@@ -3260,8 +3331,10 @@ fn renomear_entrada(ui: &UiRc, rel: &str) {
                 let n = d.name();
                 if n == rel {
                     d.set_path(to.clone());
+                    sessao::vigiar(ui, &d);
                 } else if let Some(rest) = n.strip_prefix(&format!("{rel}/")) {
                     d.set_path(format!("{to}/{rest}"));
+                    sessao::vigiar(ui, &d);
                 }
             }
             refresh_tree(ui);
@@ -3372,6 +3445,36 @@ fn ir_para_linha(ui: &UiRc) {
     win.set_child(Some(&row));
     win.present();
     entry.grab_focus();
+}
+
+/// Which tab of the panel below the editor shows.
+enum PaginaInferior {
+    Saida = 0,
+    Busca = 1,
+    Repl = 2,
+}
+
+fn mostrar_pagina_inferior(ui: &UiRc, p: PaginaInferior) {
+    ui.borrow().painel_inferior.set_current_page(Some(p as u32));
+}
+
+/// Ctrl+Shift+F: the Busca tab, starting from the selected text.
+fn buscar_no_projeto(ui: &UiRc) {
+    mostrar_pagina_inferior(ui, PaginaInferior::Busca);
+    let selecionado = current_doc(ui).and_then(|d| {
+        d.buffer
+            .selection_bounds()
+            .map(|(a, b)| d.buffer.text(&a, &b, false).to_string())
+    });
+    if let Some(b) = ui.borrow().busca.clone() {
+        b.focar(selecionado);
+    }
+}
+
+fn mostrar_repl(ui: &UiRc) {
+    mostrar_pagina_inferior(ui, PaginaInferior::Repl);
+    let repl = Rc::clone(&ui.borrow().repl);
+    repl.focar();
 }
 
 fn show_search(ui: &UiRc) {

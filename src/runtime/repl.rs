@@ -2,13 +2,15 @@ use std::io::{self, BufRead, IsTerminal, Write};
 use std::path::PathBuf;
 use std::process;
 use std::rc::Rc;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use rustyline::DefaultEditor;
 use rustyline::error::ReadlineError;
 
 use crate::parser::{needs_more_input, parse};
 
-use super::debug::NoopHook;
+use super::debug::{DebugAction, DebugCtx, DebugHook, NoopHook};
 use super::env::{Env, FrameKind};
 use super::error::{EvalError, RuntimeError};
 use super::eval::{LineInput, Vm};
@@ -36,10 +38,19 @@ impl<'a> ReplSession<'a> {
         out: &'a mut dyn Write,
         err: &'a mut dyn Write,
     ) -> Self {
+        Self::with_hook(input, out, err, Box::new(NoopHook))
+    }
+
+    fn with_hook(
+        input: &'a mut dyn LineInput,
+        out: &'a mut dyn Write,
+        err: &'a mut dyn Write,
+        hook: Box<dyn DebugHook>,
+    ) -> Self {
         let mut vm = Vm::new(
             "<repl>",
             "",
-            Box::new(NoopHook),
+            hook,
             input,
             out,
             err,
@@ -93,6 +104,86 @@ impl<'a> ReplSession<'a> {
                 stack: vec![],
             }),
             Err(EvalError::Runtime(e)) => Err(e),
+        }
+    }
+}
+
+/// What one piece of code sent to [`repl_por_canal`] did.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RespostaRepl {
+    /// What it printed (`escreva`, …), in order, both streams together.
+    pub saida: String,
+    /// Its value as the REPL shows it (`None` for `nada`), or the error.
+    pub resultado: Result<Option<String>, String>,
+}
+
+/// Output that the session writes and the loop below reads in between.
+#[derive(Clone, Default)]
+struct Saida(Rc<std::cell::RefCell<Vec<u8>>>);
+
+impl Write for Saida {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        self.0.borrow_mut().extend_from_slice(buf);
+        Ok(buf.len())
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
+}
+
+/// Stops the running line when the editor sets the flag.
+struct Parada(Arc<AtomicBool>);
+
+impl DebugHook for Parada {
+    fn before_stmt(&mut self, _ctx: &DebugCtx<'_>) -> DebugAction {
+        if self.0.swap(false, Ordering::SeqCst) {
+            DebugAction::Interrompido
+        } else {
+            DebugAction::Continue
+        }
+    }
+
+    fn interrupted(&mut self) -> bool {
+        self.0.load(Ordering::SeqCst)
+    }
+}
+
+/// A REPL for an editor panel, run on the calling thread (a worker): each
+/// message on `linhas` is complete code (see [`crate::parser::needs_more_input`]),
+/// and its output and value come back on `respostas`. Names defined stay
+/// for the next lines. Setting `parar` interrupts the line running now.
+/// Returns when `linhas` closes. `leia()` has no input here.
+pub fn repl_por_canal(
+    linhas: std::sync::mpsc::Receiver<String>,
+    respostas: std::sync::mpsc::Sender<RespostaRepl>,
+    parar: Arc<AtomicBool>,
+) {
+    let mut input = io::Cursor::new(String::new());
+    let saida = Saida::default();
+    let (mut out, mut err) = (saida.clone(), saida.clone());
+    let mut session = ReplSession::with_hook(
+        &mut input,
+        &mut out,
+        &mut err,
+        Box::new(Parada(parar.clone())),
+    );
+    for codigo in linhas {
+        // A stop already set (pressed right after sending) is for this line.
+        let resultado = match session.eval(&codigo) {
+            Ok(Value::Nada) => Ok(None),
+            Ok(v) => Ok(Some(v.repl_format(session.vm.numero_locale))),
+            Err(e) => Err(e.to_string()),
+        };
+        // One that came after the line ended is for no line.
+        parar.store(false, Ordering::SeqCst);
+        let texto = String::from_utf8_lossy(&saida.0.take()).into_owned();
+        let resposta = RespostaRepl {
+            saida: texto,
+            resultado,
+        };
+        if respostas.send(resposta).is_err() {
+            break;
         }
     }
 }
@@ -559,6 +650,68 @@ mod tests {
     fn repl_argumentos_is_empty() {
         let vals = eval_snippets(&["argumentos"]).unwrap();
         assert_eq!(vals, ["[]"]);
+    }
+
+    #[test]
+    fn repl_por_canal_guarda_nomes_e_devolve_saida() {
+        let (tx, rx) = std::sync::mpsc::channel();
+        let (rtx, rrx) = std::sync::mpsc::channel();
+        let parar = Arc::new(AtomicBool::new(false));
+        let t = std::thread::spawn(move || repl_por_canal(rx, rtx, parar));
+        tx.send("x = 20\n".into()).unwrap();
+        tx.send("escreva(\"oi\")\nx + 1\n".into()).unwrap();
+        tx.send("1 / 0\n".into()).unwrap();
+        drop(tx);
+        let r: Vec<RespostaRepl> = rrx.iter().collect();
+        t.join().unwrap();
+        assert_eq!(r[0].resultado, Ok(None));
+        assert_eq!(r[1].saida, "oi\n");
+        assert_eq!(r[1].resultado, Ok(Some("21".into())));
+        assert!(
+            r[2].resultado
+                .as_ref()
+                .unwrap_err()
+                .contains("divisão por zero")
+        );
+    }
+
+    #[test]
+    fn repl_por_canal_parada_logo_depois_de_enviar_vale_para_a_linha() {
+        let (tx, rx) = std::sync::mpsc::channel();
+        let (rtx, rrx) = std::sync::mpsc::channel();
+        let parar = Arc::new(AtomicBool::new(false));
+        let p = Arc::clone(&parar);
+        let t = std::thread::spawn(move || repl_por_canal(rx, rtx, p));
+        tx.send("enquanto verdadeiro { x = 1 }\n".into()).unwrap();
+        parar.store(true, Ordering::SeqCst);
+        let r = rrx.recv_timeout(std::time::Duration::from_secs(5)).unwrap();
+        assert!(r.resultado.unwrap_err().contains("interrompido"));
+        // The flag is spent: the next line runs.
+        tx.send("1\n".into()).unwrap();
+        let r = rrx.recv_timeout(std::time::Duration::from_secs(5)).unwrap();
+        assert_eq!(r.resultado, Ok(Some("1".into())));
+        drop(tx);
+        t.join().unwrap();
+    }
+
+    #[test]
+    fn repl_por_canal_interrompe_laco_sem_fim() {
+        let (tx, rx) = std::sync::mpsc::channel();
+        let (rtx, rrx) = std::sync::mpsc::channel();
+        let parar = Arc::new(AtomicBool::new(false));
+        let p = Arc::clone(&parar);
+        let t = std::thread::spawn(move || repl_por_canal(rx, rtx, p));
+        tx.send("enquanto verdadeiro { x = 1 }\n".into()).unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(100));
+        parar.store(true, Ordering::SeqCst);
+        let r = rrx.recv_timeout(std::time::Duration::from_secs(5)).unwrap();
+        assert!(r.resultado.unwrap_err().contains("interrompido"));
+        // The session goes on.
+        tx.send("2 + 2\n".into()).unwrap();
+        let r = rrx.recv_timeout(std::time::Duration::from_secs(5)).unwrap();
+        assert_eq!(r.resultado, Ok(Some("4".into())));
+        drop(tx);
+        t.join().unwrap();
     }
 
     #[test]

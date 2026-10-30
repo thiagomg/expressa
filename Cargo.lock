@@ -311,6 +311,7 @@ dependencies = [
  "gdk-pixbuf",
  "gtk4",
  "libc",
+ "regex",
  "sourceview5",
  "tokio",
  "tokio-stream",

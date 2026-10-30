@@ -1923,6 +1923,7 @@ impl<'a, 'c> Vm<'a, 'c> {
             DebugAction::Continue => Ok(()),
             DebugAction::Quit => Err(EvalError::Quit(0)),
             DebugAction::Timeout => Err(self.err("tempo esgotado", span)),
+            DebugAction::Interrompido => Err(self.err("interrompido", span)),
         }
     }
 
