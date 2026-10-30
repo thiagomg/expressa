@@ -275,6 +275,7 @@ g = tela_grafica::nova(320, 200) // pixels; (0,0) canto superior esquerdo
 g.tela_grafica::cor(:azul)
 g.tela_grafica::linha(10, 10, 310, 190)
 g.tela_grafica::circulo(160, 100, 40)
+g.tela_grafica::retangulo(10, 10, 40, 30) // preenchido, cantos inclusivos
 g.tela_grafica::texto(8, 8, "olá")  // canto superior esquerdo; tamanho 8
 g.tela_grafica::mostre()         // janela irmã; o próximo mostre atualiza
 ev = g.tela_grafica::evento(0.05) // clique / tecla / sair / nada
@@ -328,7 +329,7 @@ Módulos (`importe "…"`):
 | `matriz` | `matriz` `transposta` `det` `identidade` `zeros` `uns` `cheia` `nlinhas` `ncolunas` |
 | `arquivo` | `leia_arquivo` `salve_arquivo` `adicione_arquivo` `leia_csv` `salve_csv` |
 | `cartesiano` | `documento` `grafico` `eixos` `plotar` `adicione` `mostre` |
-| `tela_grafica` | `nova` `cor` `linha` `circulo` `ponto` `texto` `imagem` `apague` `pixel` `salve` `mostre` `evento` |
+| `tela_grafica` | `nova` `cor` `linha` `circulo` `ponto` `retangulo` `texto` `imagem` `apague` `pixel` `salve` `mostre` `evento` |
 | `imagem` | `carregue` `salve` `rotacione` `escala` `largura` `altura` |
 
 Nativas não podem ser reatribuídas (`escreva = 1` é erro).

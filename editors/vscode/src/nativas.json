@@ -1003,6 +1003,19 @@
       "doc": "Um pixel da caneta. Fora da tela, ignora.\n\nExemplo: g.ponto(5, 5)"
     },
     {
+      "name": "retangulo",
+      "aliases": [
+        "retângulo"
+      ],
+      "module": "tela_grafica",
+      "kind": "funcao",
+      "signatures": [
+        "retangulo(g, x1, y1, x2, y2)"
+      ],
+      "summary": "Retângulo preenchido da caneta, cantos (x1, y1) e (x2, y2) inclusivos. A ordem dos cantos não importa. Pixels fora da tela são recortados.",
+      "doc": "Retângulo preenchido da caneta, cantos (x1, y1) e (x2, y2) inclusivos.\nA ordem dos cantos não importa. Pixels fora da tela são recortados.\n\nExemplo: g.retangulo(10, 10, 40, 30)"
+    },
+    {
       "name": "texto",
       "aliases": [],
       "module": "tela_grafica",

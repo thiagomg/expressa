@@ -6,7 +6,7 @@ use std::path::Path;
 
 use super::folha::cor_rgb;
 use super::fonte8x8;
-use super::imagem::{Imagem, carimbar};
+use super::imagem::{carimbar, Imagem};
 
 pub const LARGURA_MAX: u32 = 2048;
 pub const ALTURA_MAX: u32 = 2048;
@@ -48,6 +48,15 @@ pub enum OpGraf {
         tamanho: i32,
         cor: String,
         texto: String,
+    },
+    /// Inclusive corners; filled with the pen. Order of the two
+    /// corners does not matter. Clips like `linha`.
+    Retangulo {
+        x1: i32,
+        y1: i32,
+        x2: i32,
+        y2: i32,
+        cor: String,
     },
 }
 
@@ -110,6 +119,15 @@ impl TelaGrafica {
                     texto,
                 } => {
                     texto_idx(&mut idx, w, h, *x, *y, *tamanho, texto, idx_cor(cor));
+                }
+                OpGraf::Retangulo {
+                    x1,
+                    y1,
+                    x2,
+                    y2,
+                    cor,
+                } => {
+                    retangulo_idx(&mut idx, w, h, *x1, *y1, *x2, *y2, idx_cor(cor));
                 }
                 OpGraf::Imagem { .. } => {}
             }
@@ -249,6 +267,27 @@ pub fn cor_graf_conhecida(nome: &str) -> bool {
             | "ciano"
             | "branco"
     )
+}
+
+fn retangulo_idx(idx: &mut [u8], w: u32, h: u32, x1: i32, y1: i32, x2: i32, y2: i32, cor: u8) {
+    if w == 0 || h == 0 {
+        return;
+    }
+    let (x1, x2) = if x1 <= x2 { (x1, x2) } else { (x2, x1) };
+    let (y1, y2) = if y1 <= y2 { (y1, y2) } else { (y2, y1) };
+    let x1 = x1.max(0);
+    let y1 = y1.max(0);
+    let x2 = x2.min(w as i32 - 1);
+    let y2 = y2.min(h as i32 - 1);
+    if x2 < x1 || y2 < y1 {
+        return;
+    }
+    for y in y1..=y2 {
+        let row = (y as u32 * w) as usize;
+        for x in x1..=x2 {
+            idx[row + x as usize] = cor;
+        }
+    }
 }
 
 fn plot_idx(idx: &mut [u8], w: u32, h: u32, x: i32, y: i32, cor: u8) {

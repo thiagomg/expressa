@@ -21,6 +21,7 @@ const OP_LINHA: u8 = 2;
 const OP_CIRCULO: u8 = 3;
 const OP_IMAGEM: u8 = 4;
 const OP_TEXTO: u8 = 5;
+const OP_RETANGULO: u8 = 6;
 
 pub const TIPO_NADA: u8 = 0;
 pub const TIPO_CLIQUE: u8 = 1;
@@ -102,6 +103,13 @@ pub enum OpMsg {
         tamanho: i32,
         cor: String,
         texto: String,
+    },
+    Retangulo {
+        x1: i32,
+        y1: i32,
+        x2: i32,
+        y2: i32,
+        cor: String,
     },
 }
 
@@ -210,6 +218,19 @@ pub fn mensagens_de(
                 cor: cor.clone(),
                 texto: texto.clone(),
             }),
+            OpGraf::Retangulo {
+                x1,
+                y1,
+                x2,
+                y2,
+                cor,
+            } => ops.push(OpMsg::Retangulo {
+                x1: *x1,
+                y1: *y1,
+                x2: *x2,
+                y2: *y2,
+                cor: cor.clone(),
+            }),
         }
     }
     out.push(Msg::Mostre { id: tela.id, ops });
@@ -278,6 +299,19 @@ pub fn tela_de_mostre(
                 tamanho: (*tamanho).clamp(1, 256),
                 cor: cor_ok(cor),
                 texto: texto.clone(),
+            }),
+            OpMsg::Retangulo {
+                x1,
+                y1,
+                x2,
+                y2,
+                cor,
+            } => out.push(OpGraf::Retangulo {
+                x1: *x1,
+                y1: *y1,
+                x2: *x2,
+                y2: *y2,
+                cor: cor_ok(cor),
             }),
         }
     }
@@ -443,6 +477,20 @@ fn encode_op(buf: &mut Vec<u8>, op: &OpMsg) {
             put_str(buf, cor);
             put_str(buf, texto);
         }
+        OpMsg::Retangulo {
+            x1,
+            y1,
+            x2,
+            y2,
+            cor,
+        } => {
+            buf.push(OP_RETANGULO);
+            put_i32(buf, *x1);
+            put_i32(buf, *y1);
+            put_i32(buf, *x2);
+            put_i32(buf, *y2);
+            put_str(buf, cor);
+        }
     }
 }
 
@@ -537,6 +585,13 @@ fn decode_op(p: &[u8], i: &mut usize) -> Option<OpMsg> {
             tamanho: get_i32(p, i)?,
             cor: get_str(p, i)?,
             texto: get_str(p, i)?,
+        }),
+        OP_RETANGULO => Some(OpMsg::Retangulo {
+            x1: get_i32(p, i)?,
+            y1: get_i32(p, i)?,
+            x2: get_i32(p, i)?,
+            y2: get_i32(p, i)?,
+            cor: get_str(p, i)?,
         }),
         _ => None,
     }
@@ -657,6 +712,13 @@ mod tests {
                     tamanho: 8,
                     cor: "preto".into(),
                     texto: "olá".into(),
+                },
+                OpMsg::Retangulo {
+                    x1: 1,
+                    y1: 2,
+                    x2: 5,
+                    y2: 6,
+                    cor: "verde".into(),
                 },
             ],
         });

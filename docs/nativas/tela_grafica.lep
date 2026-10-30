@@ -26,6 +26,12 @@ circulo = funcao(g, x, y, r) { 0 }
 /// Exemplo: g.ponto(5, 5)
 ponto = funcao(g, x, y) { 0 }
 
+/// Retângulo preenchido da caneta, cantos (x1, y1) e (x2, y2) inclusivos.
+/// A ordem dos cantos não importa. Pixels fora da tela são recortados.
+///
+/// Exemplo: g.retangulo(10, 10, 40, 30)
+retangulo = funcao(g, x1, y1, x2, y2) { 0 }
+
 /// texto(g, x, y, t)
 /// texto(g, x, y, t, tamanho)
 ///

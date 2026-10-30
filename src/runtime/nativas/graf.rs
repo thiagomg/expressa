@@ -116,6 +116,47 @@ impl Vm<'_, '_> {
         Ok(args[0].clone())
     }
 
+    pub(crate) fn bi_graf_retangulo(
+        &mut self,
+        args: &[Value],
+        span: Span,
+    ) -> Result<Value, EvalError> {
+        self.expect_arity(args, 5, span)?;
+        let mapa = expect_graf(&args[0], span, self)?;
+        let x1 = self.expect_px(&args[1], span)?;
+        let y1 = self.expect_px(&args[2], span)?;
+        let x2 = self.expect_px(&args[3], span)?;
+        let y2 = self.expect_px(&args[4], span)?;
+        let cor = pen(&mapa);
+        push_op(
+            &mapa,
+            Value::mapa(vec![
+                (
+                    MapKey::Texto("tipo".into()),
+                    Value::Texto("retangulo".into()),
+                ),
+                (
+                    MapKey::Texto("x1".into()),
+                    Value::Numero((x1 as f64).into()),
+                ),
+                (
+                    MapKey::Texto("y1".into()),
+                    Value::Numero((y1 as f64).into()),
+                ),
+                (
+                    MapKey::Texto("x2".into()),
+                    Value::Numero((x2 as f64).into()),
+                ),
+                (
+                    MapKey::Texto("y2".into()),
+                    Value::Numero((y2 as f64).into()),
+                ),
+                (MapKey::Texto("cor".into()), Value::Texto(cor)),
+            ]),
+        );
+        Ok(args[0].clone())
+    }
+
     pub(crate) fn bi_graf_texto(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
         if args.len() != 4 && args.len() != 5 {
             return Err(self.err(
@@ -267,7 +308,9 @@ impl Vm<'_, '_> {
                 span,
             ));
         }
-        let tela = tela_de(&args[0], span, self)?;
+        // Window id only: do not rebuild `:ops` (thousands of ponto maps
+        // on a Conway-style frame) just to wait for a click.
+        let tela = tela_para_evento(&args[0], span, self)?;
         let timeout_secs = if args.len() == 2 {
             let s = self.expect_f64(&args[1], span)?;
             if !s.is_finite() || s < 0.0 {
@@ -375,6 +418,24 @@ fn expect_graf(
     }
 }
 
+fn tela_para_evento(v: &Value, span: Span, vm: &Vm<'_, '_>) -> Result<TelaGrafica, EvalError> {
+    let mapa = expect_graf(v, span, vm)?;
+    let Value::Mapa(xs) = v else {
+        unreachable!();
+    };
+    let largura =
+        get_u32(&mapa, "largura").ok_or_else(|| vm.err("tela gráfica sem :largura", span))?;
+    let altura =
+        get_u32(&mapa, "altura").ok_or_else(|| vm.err("tela gráfica sem :altura", span))?;
+    Ok(TelaGrafica {
+        id: Rc::as_ptr(xs) as u64,
+        largura,
+        altura,
+        fundo: String::new(),
+        ops: Vec::new(),
+    })
+}
+
 fn tela_de(v: &Value, span: Span, vm: &Vm<'_, '_>) -> Result<TelaGrafica, EvalError> {
     let mapa = expect_graf(v, span, vm)?;
     let Value::Mapa(xs) = v else {
@@ -445,6 +506,13 @@ fn op_de(v: &Value, span: Span, vm: &Vm<'_, '_>) -> Result<OpGraf, EvalError> {
                 .clamp(1, fonte8x8::TAMANHO_MAX),
             cor,
             texto: get_texto(xs, "texto").unwrap_or_default(),
+        }),
+        "retangulo" | "retângulo" => Ok(OpGraf::Retangulo {
+            x1: get_i32(xs, "x1").unwrap_or(0),
+            y1: get_i32(xs, "y1").unwrap_or(0),
+            x2: get_i32(xs, "x2").unwrap_or(0),
+            y2: get_i32(xs, "y2").unwrap_or(0),
+            cor,
         }),
         other => Err(vm.err(
             format!("comando de tela gráfica desconhecido ({other})"),
@@ -670,6 +738,25 @@ g.apague()
 escreva(g.pixel(0, 0))
 "#);
         assert_eq!(out, "azul\nbranco\nbranco\n");
+    }
+
+    #[test]
+    fn retangulo_preenche_inclusivo_e_recorta() {
+        let out = run(r#"
+g = nova(8, 8)
+g.cor(:verde)
+g.retangulo(2, 2, 4, 3)
+escreva(g.pixel(2, 2))
+escreva(g.pixel(4, 3))
+escreva(g.pixel(5, 2))
+g.apague()
+g.cor(:azul)
+g.retângulo(6, 6, 20, 20)
+escreva(g.pixel(6, 6))
+escreva(g.pixel(7, 7))
+escreva(g.pixel(0, 0))
+"#);
+        assert_eq!(out, "verde\nverde\nbranco\nazul\nazul\nbranco\n");
     }
 
     #[test]

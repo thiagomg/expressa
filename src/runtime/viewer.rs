@@ -147,6 +147,9 @@ pub fn run_live_viewer() -> Result<(), String> {
     let mut stdin_fim = false;
     let mut ja_apareceu = false;
     let mut fila: VecDeque<Msg> = VecDeque::new();
+    let mut pixels_ok = false;
+    let mut buf_w = 0usize;
+    let mut buf_h = 0usize;
 
     loop {
         while let Ok(msg) = rx.try_recv() {
@@ -177,6 +180,7 @@ pub fn run_live_viewer() -> Result<(), String> {
                     tela = Some(graf_proto::tela_de_mostre(
                         nid, largura, altura, &fundo, &ops, &figuras,
                     ));
+                    pixels_ok = false;
                 }
                 Ok(Msg::Espere { timeout_ms, .. }) => {
                     let fim = if timeout_ms < 0 {
@@ -204,11 +208,16 @@ pub fn run_live_viewer() -> Result<(), String> {
             let (ww, wh) = win.get_size();
             let ww = ww.max(1);
             let wh = wh.max(1);
-            if let Some(t) = tela.as_ref() {
-                let pixels = t.rgb32();
-                buffer = scale_rgb32(&pixels, t.largura, t.altura, ww as u32, wh as u32);
-            } else if buffer.len() != ww * wh {
-                buffer = vec![0x00FFFFFF; ww * wh];
+            if !pixels_ok || buf_w != ww || buf_h != wh {
+                if let Some(t) = tela.as_ref() {
+                    let pixels = t.rgb32();
+                    buffer = scale_rgb32(&pixels, t.largura, t.altura, ww as u32, wh as u32);
+                } else if buffer.len() != ww * wh {
+                    buffer = vec![0x00FFFFFF; ww * wh];
+                }
+                pixels_ok = true;
+                buf_w = ww;
+                buf_h = wh;
             }
             if let Err(e) = win.update_with_buffer(&buffer, ww, wh) {
                 return Err(e.to_string());
