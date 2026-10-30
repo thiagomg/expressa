@@ -73,6 +73,14 @@ impl Aula {
     }
 }
 
+/// Modification time in nanoseconds since 1970, or 0 if the system has none.
+fn modificado_ns(meta: &fs::Metadata) -> i64 {
+    meta.modified()
+        .ok()
+        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+        .map_or(0, |d| d.as_nanos() as i64)
+}
+
 fn walk_tree(dir: &Path, out: &mut Vec<TreeEntry>, prefix: &Path) -> std::io::Result<()> {
     if !dir.exists() {
         return Ok(());
@@ -94,12 +102,16 @@ fn walk_tree(dir: &Path, out: &mut Vec<TreeEntry>, prefix: &Path) -> std::io::Re
             out.push(TreeEntry {
                 path: rel,
                 is_dir: true,
+                ..Default::default()
             });
             walk_tree(&path, out, prefix)?;
         } else {
+            let meta = entry.metadata()?;
             out.push(TreeEntry {
                 path: rel,
                 is_dir: false,
+                size: meta.len(),
+                modified_ns: modificado_ns(&meta),
             });
         }
     }
@@ -325,6 +337,28 @@ mod tests {
         assert_eq!(projetos(&aula, "ana").await, ["principal"]);
         assert_eq!(arquivos(&aula, "").await, ["a.lep"]);
         assert_eq!(arquivos(&aula, "principal").await, ["a.lep"]);
+        let _ = fs::remove_dir_all(&aula.root);
+    }
+
+    #[tokio::test]
+    async fn listagem_traz_tamanho_e_data_dos_arquivos() {
+        let aula = servidor("versao");
+        fs::create_dir_all(aula.root.join("ana/lib")).unwrap();
+        let entradas = aula
+            .list_files(Request::new(ListFilesRequest {
+                student: "ana".into(),
+                project: String::new(),
+            }))
+            .await
+            .unwrap()
+            .into_inner()
+            .entries;
+        let a = entradas.iter().find(|e| e.path == "a.lep").unwrap();
+        assert_eq!(a.size, "original".len() as u64);
+        assert!(a.modified_ns > 0);
+        let lib = entradas.iter().find(|e| e.path == "lib").unwrap();
+        assert!(lib.is_dir);
+        assert_eq!((lib.size, lib.modified_ns), (0, 0));
         let _ = fs::remove_dir_all(&aula.root);
     }
 

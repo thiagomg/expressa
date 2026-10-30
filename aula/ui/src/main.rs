@@ -22,6 +22,7 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::rc::{Rc, Weak};
+use std::sync::Arc;
 
 use gtk::gdk::Key;
 use gtk::gio::{self, prelude::*};
@@ -93,6 +94,15 @@ struct Ui {
     help: Option<Rc<Help>>,
     /// Unsaved changes were handled: the window may close now.
     closing: bool,
+    /// Work on the run copy happening off the GTK thread (preparing a run,
+    /// sending back what it wrote). Another run or a project change waits.
+    ocupado: Option<&'static str>,
+    /// The run copy the last run of this project left; the next run only
+    /// copies what changed (`Workspace::sync`).
+    copia_execucao: Option<Workspace>,
+    /// Bumped by each tree listing; an older listing that comes back late
+    /// is dropped.
+    geracao_arvore: u64,
     ajuda_win: RefCell<Option<gtk::Window>>,
 }
 
@@ -252,6 +262,9 @@ fn build_ui(app: &Application) {
         theme_css,
         help: None,
         closing: false,
+        ocupado: None,
+        copia_execucao: None,
+        geracao_arvore: 0,
         ajuda_win: RefCell::new(None),
     }));
     let help = make_help(&ui);
@@ -1101,11 +1114,32 @@ fn make_help(ui: &UiRc) -> Rc<Help> {
             if let Some(hit) = u.file_cache.borrow().get(path) {
                 return hit.clone();
             }
-            let text = u.files.read_file(&u.project, path).ok();
-            u.file_cache
-                .borrow_mut()
-                .insert(path.to_string(), text.clone());
-            text
+            if !u.files.is_remote() {
+                let text = u.files.read_file(&u.project, path).ok();
+                u.file_cache
+                    .borrow_mut()
+                    .insert(path.to_string(), text.clone());
+                return text;
+            }
+            // On a server, fetch it in the background: this hover goes
+            // without, the next one finds it in the cache.
+            u.file_cache.borrow_mut().insert(path.to_string(), None);
+            let (files, projeto, rel) = (u.files.clone(), u.project.clone(), path.to_string());
+            let chave = files.cache_key(&projeto);
+            drop(u);
+            let p = projeto.clone();
+            let r = rel.clone();
+            em_segundo_plano(
+                &ui,
+                move || files.read_file(&p, &r).ok(),
+                move |ui, text| {
+                    let u = ui.borrow();
+                    if u.files.cache_key(&u.project) == chave {
+                        u.file_cache.borrow_mut().insert(rel, text);
+                    }
+                },
+            );
+            None
         }),
         project_files: Box::new(move || {
             w2.upgrade()
@@ -1971,34 +2005,65 @@ fn executar(ui: &UiRc, debug: bool) {
         set_status(ui, "já tem um programa executando — aperte Parar primeiro");
         return;
     }
+    if let Some(o) = ui.borrow().ocupado {
+        set_status(ui, &format!("aguarde: {o}"));
+        return;
+    }
     let Some(doc) = current_doc(ui) else {
         set_status(ui, "abra um arquivo para executar");
         return;
     };
     let name = doc.name();
-    let docs = all_docs(ui);
-    let (project, args) = {
-        let u = ui.borrow();
-        (u.project.clone(), parse_run_args(&u.args_entry.text()))
+    let fonte = doc.text();
+    // The text of every open tab goes into the copy, so the program and its
+    // `importe`s run what is on screen (saved or not).
+    let textos: Vec<(String, String)> = all_docs(ui).iter().map(|d| (d.name(), d.text())).collect();
+    let (files, project, args, anterior) = {
+        let mut u = ui.borrow_mut();
+        u.ocupado = Some("copiando o projeto para executar");
+        let args = parse_run_args(&u.args_entry.text());
+        let anterior = u.copia_execucao.take();
+        (u.files.clone(), u.project.clone(), args, anterior)
     };
-    // Fresh copy of the project with the text of every open tab, so the
-    // program and its `importe`s run what is on screen (saved or not).
-    let ws = {
-        let u = ui.borrow();
-        Workspace::download(&u.files, &project).and_then(|mut ws| {
-            for d in &docs {
-                ws.write_editor_text(&d.name(), &d.text())?;
+    let chave = files.cache_key(&project);
+    set_status(ui, &format!("preparando {name}…"));
+    em_segundo_plano(
+        ui,
+        move || {
+            let mut ws = Workspace::sync(&files, &project, anterior)?;
+            for (n, t) in &textos {
+                ws.write_editor_text(n, t)?;
             }
-            Ok(ws)
-        })
-    };
-    let ws = match ws {
-        Ok(ws) => ws,
-        Err(e) => {
-            set_status(ui, &format!("não copiou o projeto: {e}"));
-            return;
-        }
-    };
+            Ok::<_, String>(ws)
+        },
+        move |ui, ws| {
+            let outro_projeto = {
+                let mut u = ui.borrow_mut();
+                u.ocupado = None;
+                u.files.cache_key(&u.project) != chave
+            };
+            if outro_projeto {
+                return;
+            }
+            match ws {
+                Ok(ws) => iniciar_execucao(ui, ws, &doc, fonte, debug, args),
+                Err(e) => set_status(ui, &format!("não copiou o projeto: {e}")),
+            }
+        },
+    );
+}
+
+/// Second half of [`executar`], once the copy is ready.
+fn iniciar_execucao(
+    ui: &UiRc,
+    ws: Workspace,
+    doc: &Rc<Doc>,
+    fonte: String,
+    debug: bool,
+    args: Vec<String>,
+) {
+    let name = doc.name();
+    let docs = all_docs(ui);
     let bps: Vec<(String, u32)> = docs
         .iter()
         .flat_map(|d| {
@@ -2032,7 +2097,7 @@ fn executar(ui: &UiRc, debug: bool) {
         );
     }
 
-    let run = exec::spawn(&ws, &name, doc.text(), debug, bps, args);
+    let run = exec::spawn(&ws, &name, fonte, debug, bps, args);
     telas_graf.set_eventos(Some(run.graf_eventos.clone()));
     ui.borrow_mut().run = Some(Run {
         debug_cmd: run.debug_cmd.clone(),
@@ -2041,6 +2106,8 @@ fn executar(ui: &UiRc, debug: bool) {
     set_debug_buttons(ui, false, true);
 
     let ui_ev = Rc::clone(ui);
+    // Taken when the run ends, to send back what the program wrote.
+    let mut ws = Some(ws);
     glib::timeout_add_local(std::time::Duration::from_millis(16), move || {
         for _ in 0..EVENTS_PER_TICK {
             match run.events.try_recv() {
@@ -2084,12 +2151,8 @@ fn executar(ui: &UiRc, debug: bool) {
                     set_debug_buttons(&ui_ev, false, false);
                     clear_debug_views(&ui_ev);
                     // Files the program wrote (salve_arquivo, …) go back to
-                    // the server.
-                    let envio = {
-                        let u = ui_ev.borrow();
-                        ws.upload_changes(&u.files, &project)
-                    };
-                    let nao_enviados = mostrar_envio(&ui_ev, &console, envio);
+                    // the project.
+                    enviar_depois_da_execucao(&ui_ev, &console, ws.take());
                     if f.ok {
                         set_status(&ui_ev, &format!("ok — {name}"));
                     } else {
@@ -2125,12 +2188,6 @@ fn executar(ui: &UiRc, debug: bool) {
                             goto_file_line(&ui_ev, &file, f.error_line);
                         }
                     }
-                    if nao_enviados > 0 {
-                        set_status(
-                            &ui_ev,
-                            &format!("não enviou {nao_enviados} arquivo(s): veja o console"),
-                        );
-                    }
                     return glib::ControlFlow::Break;
                 }
                 Err(std::sync::mpsc::TryRecvError::Empty) => break,
@@ -2142,11 +2199,7 @@ fn executar(ui: &UiRc, debug: bool) {
                     ui_ev.borrow_mut().run = None;
                     set_debug_buttons(&ui_ev, false, false);
                     clear_debug_views(&ui_ev);
-                    let envio = {
-                        let u = ui_ev.borrow();
-                        ws.upload_changes(&u.files, &project)
-                    };
-                    mostrar_envio(&ui_ev, &console, envio);
+                    enviar_depois_da_execucao(&ui_ev, &console, ws.take());
                     console.stderr(&format!(
                         "{}: a execução parou sem terminar.\n",
                         exec::ERRO_INTERNO
@@ -2241,6 +2294,7 @@ fn apply_local(ui: &UiRc, path: PathBuf) {
         let mut u = ui.borrow_mut();
         u.files.shutdown();
         u.files = Files::Local(path.clone());
+        u.copia_execucao = None;
         u.project = name;
         u.prefs.pasta = shown.clone();
         u.prefs.save();
@@ -2285,7 +2339,7 @@ fn ask_server(ui: &UiRc) {
     }
     let url = normalize_url(&url);
     match Rpc::connect(&url) {
-        Ok(rpc) => abrir_projeto_remoto(ui, Rc::new(rpc), url, aluno),
+        Ok(rpc) => abrir_projeto_remoto(ui, Arc::new(rpc), url, aluno),
         Err(e) => set_status(ui, &format!("servidor: {e}")),
     }
 }
@@ -2297,7 +2351,7 @@ fn trocar_projeto(ui: &UiRc) {
         let u = ui.borrow();
         match &u.files {
             Files::Remote { rpc, .. } => {
-                Some((Rc::clone(rpc), u.prefs.servidor.clone(), u.project.clone()))
+                Some((Arc::clone(rpc), u.prefs.servidor.clone(), u.project.clone()))
             }
             _ => None,
         }
@@ -2310,7 +2364,7 @@ fn trocar_projeto(ui: &UiRc) {
 
 /// Shows `aluno`'s projects on `rpc`; the one chosen opens, after the usual
 /// question about unsaved tabs.
-fn abrir_projeto_remoto(ui: &UiRc, rpc: Rc<Rpc>, url: String, aluno: String) {
+fn abrir_projeto_remoto(ui: &UiRc, rpc: Arc<Rpc>, url: String, aluno: String) {
     if ui.borrow().run.is_some() {
         set_status(ui, "pare o programa antes de trocar de projeto");
         return;
@@ -2334,7 +2388,7 @@ fn abrir_projeto_remoto(ui: &UiRc, rpc: Rc<Rpc>, url: String, aluno: String) {
     let titulo = aluno.clone();
     escolher_projeto(
         &window,
-        Rc::clone(&rpc),
+        Arc::clone(&rpc),
         &titulo,
         projetos,
         &atual,
@@ -2345,7 +2399,7 @@ fn abrir_projeto_remoto(ui: &UiRc, rpc: Rc<Rpc>, url: String, aluno: String) {
     );
 }
 
-fn apply_remote(ui: &UiRc, rpc: Rc<Rpc>, url: String, aluno: String, projeto: String) {
+fn apply_remote(ui: &UiRc, rpc: Arc<Rpc>, url: String, aluno: String, projeto: String) {
     close_project_tabs(ui);
     let tip = format!("{url} — aula-data/{aluno}/{projeto}");
     {
@@ -2355,6 +2409,7 @@ fn apply_remote(ui: &UiRc, rpc: Rc<Rpc>, url: String, aluno: String, projeto: St
             rpc,
             projeto: projeto.clone(),
         };
+        u.copia_execucao = None;
         u.project = aluno;
         u.prefs.servidor = url;
         u.prefs.projeto = projeto;
@@ -2370,7 +2425,7 @@ fn apply_remote(ui: &UiRc, rpc: Rc<Rpc>, url: String, aluno: String, projeto: St
 /// Cancelar calls nothing. Does not block the GTK loop.
 fn escolher_projeto(
     parent: &impl IsA<gtk::Window>,
-    rpc: Rc<Rpc>,
+    rpc: Arc<Rpc>,
     aluno: &str,
     projetos: Vec<String>,
     atual: &str,
@@ -2530,6 +2585,10 @@ fn after_unsaved(ui: &UiRc, then: impl FnOnce() + 'static) {
         set_status(ui, "pare o programa antes de trocar de projeto");
         return;
     }
+    if let Some(o) = ui.borrow().ocupado {
+        set_status(ui, &format!("aguarde: {o}"));
+        return;
+    }
     let dirty = dirty_docs(ui);
     if dirty.is_empty() {
         then();
@@ -2547,17 +2606,19 @@ fn close_project_tabs(ui: &UiRc) {
 
 /// Show the project tree. Reopens the last file of this project, if it is still there.
 fn finish_open(ui: &UiRc) {
-    refresh_tree(ui);
     refresh_title(ui);
     refresh_diag_label(ui);
-    let arquivo = ui.borrow().prefs.arquivo.clone();
-    if arquivo.is_empty() {
-        return;
-    }
-    let known = ui.borrow().project_files.iter().any(|p| p == &arquivo);
-    if known {
-        let _ = open_path(ui, &arquivo);
-    }
+    // Reopen the last file once the listing says it is there.
+    refresh_tree_e(ui, |ui| {
+        let arquivo = ui.borrow().prefs.arquivo.clone();
+        if arquivo.is_empty() {
+            return;
+        }
+        let known = ui.borrow().project_files.iter().any(|p| p == &arquivo);
+        if known {
+            let _ = open_path(ui, &arquivo);
+        }
+    });
 }
 
 fn normalize_url(url: &str) -> String {
@@ -2681,10 +2742,37 @@ fn perguntar_servidor(
     out.borrow_mut().take()
 }
 
+/// Runs `trabalho` (network, disk) on a worker thread and `depois` back on
+/// the GTK thread with its result, so the window keeps responding while a
+/// server is slow. Nothing runs if the window is gone by then.
+fn em_segundo_plano<T: Send + 'static>(
+    ui: &UiRc,
+    trabalho: impl FnOnce() -> T + Send + 'static,
+    depois: impl FnOnce(&UiRc, T) + 'static,
+) {
+    let ui = Rc::downgrade(ui);
+    let tarefa = gio::spawn_blocking(trabalho);
+    glib::spawn_future_local(async move {
+        let resultado = tarefa.await;
+        let Some(ui) = ui.upgrade() else { return };
+        match resultado {
+            Ok(r) => depois(&ui, r),
+            Err(_) => set_status(&ui, "erro interno ao falar com o servidor"),
+        }
+    });
+}
+
 fn refresh_tree(ui: &UiRc) {
-    let (entries, projeto, err, onde) = {
-        let u = ui.borrow();
-        let projeto = u.project.clone();
+    refresh_tree_e(ui, |_| {});
+}
+
+/// Lists the project off the GTK thread, then fills the tree and runs
+/// `depois`. A listing that comes back after a newer one started (another
+/// refresh, another project) is dropped.
+fn refresh_tree_e(ui: &UiRc, depois: impl FnOnce(&UiRc) + 'static) {
+    let (files, projeto, onde, geracao) = {
+        let mut u = ui.borrow_mut();
+        u.geracao_arvore += 1;
         let onde = match &u.files {
             Files::None => "sem pasta".to_string(),
             Files::Local(p) => p.display().to_string(),
@@ -2692,11 +2780,33 @@ fn refresh_tree(ui: &UiRc) {
                 format!("servidor {} \\ {}", u.prefs.servidor, nome_do_projeto(&u))
             }
         };
-        match u.files.list_tree(&projeto) {
-            Ok(p) => (p, projeto, None, onde),
-            Err(e) => (Vec::new(), projeto, Some(e), onde),
-        }
+        (u.files.clone(), u.project.clone(), onde, u.geracao_arvore)
     };
+    let p = projeto.clone();
+    em_segundo_plano(
+        ui,
+        move || files.list_tree(&p),
+        move |ui, listagem| {
+            if ui.borrow().geracao_arvore != geracao {
+                return;
+            }
+            let (entries, err) = match listagem {
+                Ok(p) => (p, None),
+                Err(e) => (Vec::new(), Some(e)),
+            };
+            mostrar_arvore(ui, &projeto, &entries, err, &onde);
+            depois(ui);
+        },
+    );
+}
+
+fn mostrar_arvore(
+    ui: &UiRc,
+    projeto: &str,
+    entries: &[expressa_aula_proto::TreeEntry],
+    err: Option<String>,
+    onde: &str,
+) {
     {
         let mut u = ui.borrow_mut();
         u.project_files = entries
@@ -2706,7 +2816,7 @@ fn refresh_tree(ui: &UiRc) {
             .collect();
         u.file_cache.borrow_mut().clear();
     }
-    preencher_arvore(ui, &projeto, &entries);
+    preencher_arvore(ui, projeto, entries);
     ui.borrow().tree.expand_all();
     // Long names must not leave the list scrolled sideways.
     {
@@ -2912,6 +3022,39 @@ fn tree_popup(ui: &UiRc, x: f64, y: f64) {
     glib::idle_add_local_once(move || {
         pop.popup();
     });
+}
+
+/// After a run: send what the program wrote back to the project off the
+/// GTK thread, then show it and keep the copy for the next run.
+fn enviar_depois_da_execucao(ui: &UiRc, console: &Rc<Console>, ws: Option<Workspace>) {
+    let Some(ws) = ws else { return };
+    let (files, project) = {
+        let mut u = ui.borrow_mut();
+        u.ocupado = Some("salvando os arquivos que o programa escreveu");
+        (u.files.clone(), u.project.clone())
+    };
+    let console = Rc::clone(console);
+    em_segundo_plano(
+        ui,
+        move || {
+            let envio = ws.upload_changes(&files, &project);
+            (ws, envio)
+        },
+        move |ui, (ws, envio)| {
+            {
+                let mut u = ui.borrow_mut();
+                u.ocupado = None;
+                u.copia_execucao = Some(ws);
+            }
+            let nao_enviados = mostrar_envio(ui, &console, envio);
+            if nao_enviados > 0 {
+                set_status(
+                    ui,
+                    &format!("não enviou {nao_enviados} arquivo(s): veja o console"),
+                );
+            }
+        },
+    );
 }
 
 /// After a run: refresh what the program changed, and say what failed.

@@ -44,9 +44,13 @@ message ListFilesRequest {
 }
 
 message TreeEntry {
-  // Path relative to the student folder, e.g. "lib" or "lib/mat.lep".
+  // Path relative to the project folder, e.g. "lib" or "lib/mat.lep".
   string path = 1;
   bool is_dir = 2;
+  // Files only. The editor copies a file again only when these change;
+  // both 0 (older servers) means "unknown, always copy".
+  uint64 size = 3;
+  int64 modified_ns = 4;
 }
 
 message ListFilesResponse {

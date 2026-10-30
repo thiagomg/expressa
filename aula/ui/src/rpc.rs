@@ -156,6 +156,11 @@ pub struct Rpc {
     spawned_server: Option<Child>,
 }
 
+/// Longest a single request may take. Most calls now run off the GTK thread,
+/// but the few that still block it (open, save, rename…) must not hang the
+/// window forever when the server stops answering.
+const TEMPO_POR_PEDIDO: std::time::Duration = std::time::Duration::from_secs(10);
+
 impl Rpc {
     pub fn connect(url: &str) -> Result<Self, String> {
         // The window is built only after this returns. Without a limit, a
@@ -173,6 +178,7 @@ impl Rpc {
             Endpoint::from_shared(url.to_string())
                 .map_err(|e| e.to_string())?
                 .connect_timeout(limit)
+                .timeout(TEMPO_POR_PEDIDO)
                 .connect()
                 .await
                 .map_err(|e| e.to_string())

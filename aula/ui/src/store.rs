@@ -5,20 +5,24 @@
 //! `{root}/{aluno}/{projeto}/`.
 
 use std::path::{Component, Path, PathBuf};
-use std::rc::Rc;
+use std::sync::Arc;
 
 use expressa_aula_proto::TreeEntry;
 
 use crate::rpc::Rpc;
 
+/// Cheap to clone (the connection is shared), and can be sent to a worker
+/// thread, so network and disk work can leave the GTK thread.
+#[derive(Clone)]
 pub enum Files {
     /// The window is open and no folder has been chosen yet.
     None,
     Local(PathBuf),
     /// `projeto` is the student's project the window has open. The
-    /// connection is shared with the project list (`escolher_projeto`).
+    /// connection is shared with the project list (`escolher_projeto`) and
+    /// with worker threads.
     Remote {
-        rpc: Rc<Rpc>,
+        rpc: Arc<Rpc>,
         projeto: String,
     },
 }
@@ -40,7 +44,7 @@ impl Files {
     /// Stop a server this window started. A remote connection did not.
     pub fn shutdown(&mut self) {
         if let Files::Remote { rpc, .. } = self
-            && let Some(rpc) = Rc::get_mut(rpc)
+            && let Some(rpc) = Arc::get_mut(rpc)
         {
             rpc.shutdown_spawned_server();
         }
@@ -217,6 +221,15 @@ pub fn pasta_larga(path: &Path) -> bool {
 
 const MAX_TREE_ENTRIES: usize = 20_000;
 
+/// Modification time in nanoseconds since 1970, or 0 if the system has none
+/// (same as the server sends).
+pub fn modificado_ns(meta: &std::fs::Metadata) -> i64 {
+    meta.modified()
+        .ok()
+        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+        .map_or(0, |d| d.as_nanos() as i64)
+}
+
 fn list_local(root: &Path) -> Result<Vec<TreeEntry>, String> {
     let root = root
         .canonicalize()
@@ -277,7 +290,20 @@ fn walk(dir: &Path, root: &Path, out: &mut Vec<TreeEntry>) -> Result<(), String>
         if out.len() >= MAX_TREE_ENTRIES {
             return Err("pasta grande demais para ser um projeto".into());
         }
-        out.push(TreeEntry { path: rel, is_dir });
+        let (size, modified_ns) = if is_dir {
+            (0, 0)
+        } else {
+            entry
+                .metadata()
+                .map(|m| (m.len(), modificado_ns(&m)))
+                .unwrap_or((0, 0))
+        };
+        out.push(TreeEntry {
+            path: rel,
+            is_dir,
+            size,
+            modified_ns,
+        });
         if is_dir {
             walk(&path, root, out)?;
         }
