@@ -238,3 +238,46 @@ junte = funcao(lista, separador) { 0 }
 ///
 /// Exemplo: limpe("  x  ")
 limpe = funcao(texto) { 0 }
+
+/// Valor da variável de ambiente (HOME, PATH, …) como texto.
+///
+/// Variável que não existe é erro; use se_falhar para ter um padrão.
+///
+/// Exemplo: editor = ambiente("EDITOR") se_falhar "vim"
+ambiente = funcao(nome) { 0 }
+
+/// Cópia da lista em ordem crescente. Com chave, ordena por chave(item).
+///
+/// Os itens (ou as chaves) têm que ser todos números ou todos textos,
+/// comparados como em <. Itens iguais mantêm a ordem original.
+/// Para ordem decrescente, use uma chave que inverte: funcao(x) { -x }.
+///
+/// Exemplo: ordene(pessoas, funcao(p) { p:idade })
+ordene = funcao(lista) { 0 }
+ordene = funcao(lista, chave) { 0 }
+
+/// Verdadeiro se o texto começa com o prefixo. Também começa_com.
+///
+/// Exemplo: comeca_com("relatorio.csv", "rel")
+comeca_com = funcao(texto, prefixo) { 0 }
+
+/// Verdadeiro se o texto termina com o sufixo.
+///
+/// Exemplo: termina_com("relatorio.csv", ".csv")
+termina_com = funcao(texto, sufixo) { 0 }
+
+/// Data e hora locais: mapa :ano, :mes, :dia, :hora, :minuto, :segundo.
+///
+/// Também :dia_da_semana (1 = domingo … 7 = sábado) e :epoch (segundos
+/// desde 1970). Fora do Linux/macOS o horário é UTC.
+///
+/// Exemplo: agora():ano
+agora = funcao() { 0 }
+
+/// Monta um texto com a data: %Y ano, %m mês, %d dia, %H hora, %M minuto, %S segundo.
+///
+/// A data é o mapa de agora() ou um número de segundos desde 1970 (:epoch).
+/// %% escreve %. Outra letra depois de % é erro.
+///
+/// Exemplo: formate_data(agora(), "backup-%Y-%m-%d.tar")
+formate_data = funcao(data, modelo) { 0 }

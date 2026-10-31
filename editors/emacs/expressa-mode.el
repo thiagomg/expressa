@@ -34,6 +34,10 @@
     "maiuscula" "minuscula" "sem_acento" "remova" "substitua" "procurar" "separe" "junte" "limpe"
     "leia_arquivo" "salve_arquivo" "adicione_arquivo"
     "leia_csv" "salve_csv"
+    "execute" "linhas_de"
+    "existe" "eh_pasta" "é_pasta" "liste" "crie_pasta" "apague_arquivo" "apague_pasta" "mova" "copie"
+    "junte_caminho" "nome_do_arquivo" "pasta_de" "extensao" "extensão" "pasta_atual"
+    "ambiente" "ordene" "comeca_com" "começa_com" "termina_com" "agora" "formate_data"
     "documento" "grafico" "eixos" "plotar" "adicione" "mostre"))
 
 (defconst expressa-constants

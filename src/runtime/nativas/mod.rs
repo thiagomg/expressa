@@ -16,7 +16,9 @@ mod imagem;
 mod mat;
 mod matriz;
 mod nucleo;
+mod processo;
 mod referencia;
+mod sistema;
 mod tela;
 
 pub use referencia::{BuiltinDoc, builtin_docs, lookup_alvo, lookup_builtin_doc, lookup_ficha};
@@ -137,6 +139,30 @@ pub const NATIVAS: &[Nativa] = &[
     },
     Nativa {
         names: &["conjunto"],
+        module: None,
+    },
+    Nativa {
+        names: &["ambiente"],
+        module: None,
+    },
+    Nativa {
+        names: &["ordene"],
+        module: None,
+    },
+    Nativa {
+        names: &["comeca_com", "começa_com"],
+        module: None,
+    },
+    Nativa {
+        names: &["termina_com"],
+        module: None,
+    },
+    Nativa {
+        names: &["agora"],
+        module: None,
+    },
+    Nativa {
+        names: &["formate_data"],
         module: None,
     },
     Nativa {
@@ -314,6 +340,66 @@ pub const NATIVAS: &[Nativa] = &[
     Nativa {
         names: &["salve_csv"],
         module: Some("arquivo"),
+    },
+    Nativa {
+        names: &["existe"],
+        module: Some("arquivo"),
+    },
+    Nativa {
+        names: &["eh_pasta", "é_pasta"],
+        module: Some("arquivo"),
+    },
+    Nativa {
+        names: &["liste"],
+        module: Some("arquivo"),
+    },
+    Nativa {
+        names: &["crie_pasta"],
+        module: Some("arquivo"),
+    },
+    Nativa {
+        names: &["apague_arquivo"],
+        module: Some("arquivo"),
+    },
+    Nativa {
+        names: &["apague_pasta"],
+        module: Some("arquivo"),
+    },
+    Nativa {
+        names: &["mova"],
+        module: Some("arquivo"),
+    },
+    Nativa {
+        names: &["copie"],
+        module: Some("arquivo"),
+    },
+    Nativa {
+        names: &["junte_caminho"],
+        module: Some("arquivo"),
+    },
+    Nativa {
+        names: &["nome_do_arquivo"],
+        module: Some("arquivo"),
+    },
+    Nativa {
+        names: &["pasta_de"],
+        module: Some("arquivo"),
+    },
+    Nativa {
+        names: &["extensao", "extensão"],
+        module: Some("arquivo"),
+    },
+    Nativa {
+        names: &["pasta_atual"],
+        module: Some("arquivo"),
+    },
+    Nativa {
+        names: &["execute"],
+        module: Some("processo"),
+    },
+    Nativa {
+        names: &["linhas_de"],
+        module: Some("processo"),
     },
     Nativa {
         names: &["documento"],
@@ -546,6 +632,27 @@ impl Vm<'_, '_> {
             "adicione_arquivo" => self.bi_adicione_arquivo(args, span),
             "leia_csv" => self.bi_leia_csv(args, span),
             "salve_csv" => self.bi_salve_csv(args, span),
+            "ambiente" => self.bi_ambiente(args, span),
+            "ordene" => self.bi_ordene(args, span, env),
+            "comeca_com" | "começa_com" => self.bi_comeca_com(args, span),
+            "termina_com" => self.bi_termina_com(args, span),
+            "agora" => self.bi_agora(args, span),
+            "formate_data" => self.bi_formate_data(args, span),
+            "existe" => self.bi_existe(args, span),
+            "eh_pasta" | "é_pasta" => self.bi_eh_pasta(args, span),
+            "liste" => self.bi_liste(args, span),
+            "crie_pasta" => self.bi_crie_pasta(args, span),
+            "apague_arquivo" => self.bi_apague_arquivo(args, span),
+            "apague_pasta" => self.bi_apague_pasta(args, span),
+            "mova" => self.bi_mova(args, span),
+            "copie" => self.bi_copie(args, span),
+            "junte_caminho" => self.bi_junte_caminho(args, span),
+            "nome_do_arquivo" => self.bi_nome_do_arquivo(args, span),
+            "pasta_de" => self.bi_pasta_de(args, span),
+            "extensao" | "extensão" => self.bi_extensao(args, span),
+            "pasta_atual" => self.bi_pasta_atual(args, span),
+            "execute" => self.bi_execute(args, span, env),
+            "linhas_de" => self.bi_linhas_de(args, span),
             "documento" => self.bi_documento(args, span),
             "grafico" => self.bi_grafico(args, span),
             "eixos" => self.bi_eixos(args, span),
@@ -809,7 +916,7 @@ escreva(tipo(f))"#),
         assert_eq!(run(r#"escreva(10.tipo())"#), "numero\n");
         assert_eq!(
             run(r#"escreva(tipos())"#),
-            "[\"numero\", \"texto\", \"bool\", \"lista\", \"par\", \"mapa\", \"conjunto\", \"matriz\", \"imagem\", \"funcao\", \"modulo\", \"nada\"]\n"
+            "[\"numero\", \"texto\", \"bool\", \"lista\", \"par\", \"mapa\", \"conjunto\", \"matriz\", \"imagem\", \"funcao\", \"modulo\", \"processo\", \"nada\"]\n"
         );
         assert_eq!(run(r#"escreva(tipos() contem "numero")"#), "verdadeiro\n");
         assert!(run_err("tipos(1)").contains("argumento"));

@@ -31,3 +31,85 @@ leia_csv = funcao(caminho) { 0 }
 ///
 /// Exemplo: salve_csv("saida.csv", [["Ana", 25]])
 salve_csv = funcao(caminho, dados) { 0 }
+
+/// Verdadeiro se o arquivo ou a pasta existe.
+///
+/// Exemplo: se nao existe("dados.txt") { sair(1) }
+existe = funcao(caminho) { 0 }
+
+/// Verdadeiro se o caminho é uma pasta. Também é_pasta.
+///
+/// Exemplo: eh_pasta("fotos")
+eh_pasta = funcao(caminho) { 0 }
+
+/// Nomes dentro da pasta (sem o caminho), em ordem. Inclui os ocultos.
+///
+/// Com padrão, só os nomes que casam: * é qualquer trecho, ? é um caractere.
+/// Pasta que não existe é erro.
+///
+/// Exemplo: liste("fotos", "*.png")
+liste = funcao(pasta) { 0 }
+liste = funcao(pasta, padrao) { 0 }
+
+/// Cria a pasta e as que faltarem no caminho. Já existir não é erro.
+///
+/// Exemplo: crie_pasta("saida/2024")
+crie_pasta = funcao(caminho) { 0 }
+
+/// Apaga um arquivo. Pasta é erro (use apague_pasta).
+///
+/// Exemplo: apague_arquivo("temp.txt") se_falhar nada
+apague_arquivo = funcao(caminho) { 0 }
+
+/// Apaga a pasta e tudo o que está dentro dela. Não há lixeira.
+///
+/// Recusa a raiz (/) e a pasta pessoal. Arquivo é erro (use apague_arquivo).
+///
+/// Exemplo: apague_pasta("build")
+apague_pasta = funcao(caminho) { 0 }
+
+/// Move ou renomeia. Se o destino é uma pasta, o arquivo vai para dentro dela.
+///
+/// Exemplo: mova("rascunho.txt", "arquivo/")
+mova = funcao(origem, destino) { 0 }
+
+/// Copia um arquivo (pastas não). Se o destino é uma pasta, copia para dentro.
+///
+/// Substitui o destino se ele já existe.
+///
+/// Exemplo: copie("config.txt", "config.bak")
+copie = funcao(origem, destino) { 0 }
+
+/// junte_caminho(parte, ...)
+///
+/// Junta pedaços de caminho com a barra do sistema. Só monta o texto.
+///
+/// Um pedaço absoluto (/tmp) recomeça o caminho.
+///
+/// Exemplo: junte_caminho(pasta_atual(), "dados", "a.txt")
+junte_caminho = funcao(parte) { 0 }
+
+/// Último pedaço do caminho: "fotos/a.png" dá "a.png". Só lê o texto.
+///
+/// Exemplo: nome_do_arquivo("fotos/a.png")
+nome_do_arquivo = funcao(caminho) { 0 }
+
+/// O caminho sem o último pedaço: "fotos/a.png" dá "fotos". Só lê o texto.
+///
+/// Sem pasta no caminho, devolve "".
+///
+/// Exemplo: pasta_de("fotos/a.png")
+pasta_de = funcao(caminho) { 0 }
+
+/// Extensão sem o ponto: "a.tar.gz" dá "gz"; sem extensão, "". Também extensão.
+///
+/// Exemplo: extensao("foto.png")
+extensao = funcao(caminho) { 0 }
+
+/// Pasta de onde o programa foi chamado (a do terminal).
+///
+/// Caminhos relativos nas funções de arquivo partem da pasta do .lep, não
+/// desta. Para um arquivo passado na linha de comando, junte as duas.
+///
+/// Exemplo: junte_caminho(pasta_atual(), argumentos[1])
+pasta_atual = funcao() { 0 }

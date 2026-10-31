@@ -28,7 +28,7 @@ Todo bloco (`inicio`/`fim` ou `{`/`}`) é uma expressão e retorna o valor da ú
 
 Tipos compostos: **lista**, **par**, **mapa**, **conjunto**, **matriz** e **imagem**.
 
-`tipo(valor)` devolve o nome do tipo como texto (`"numero"`, `"texto"`, `"bool"`, `"lista"`, `"par"`, `"mapa"`, `"conjunto"`, `"matriz"`, `"imagem"`, `"funcao"`, `"modulo"`, `"nada"`). Os nomes são os mesmos das mensagens de erro (sem acento). `escreva` e funções do aluno são `"funcao"`. `tipos()` lista esses nomes.
+`tipo(valor)` devolve o nome do tipo como texto (`"numero"`, `"texto"`, `"bool"`, `"lista"`, `"par"`, `"mapa"`, `"conjunto"`, `"matriz"`, `"imagem"`, `"funcao"`, `"modulo"`, `"processo"`, `"nada"`). Os nomes são os mesmos das mensagens de erro (sem acento). `escreva` e funções do aluno são `"funcao"`. `tipos()` lista esses nomes.
 
 ---
 
@@ -265,7 +265,11 @@ ultimo(numeros)                // 40
 numeros[2..3]                  // [20, 30]
 numeros[2..]                   // do 2 até o fim
 "b"[1..3]                      // "b" (corta no tamanho)
+ordene([3, 1, 2])              // [1, 2, 3] (cópia)
+ordene(pessoas, funcao(p) { p:idade })   // por chave
 ```
+
+`ordene` compara como `<`: itens (ou chaves) todos números ou todos textos; misturar é erro. Itens com a mesma chave mantêm a ordem original.
 
 Índices de **texto** também começam em **1** e falam de caracteres Unicode (não bytes). `t[2]` lê um caractere. `t[2] = "b"` troca esse caractere e reatribui o texto; o valor precisa ser um texto de tamanho 1. O tamanho do texto permanece o mesmo. `a = t` depois `t[1] = "x"` deixa `a` com o texto antigo.
 
@@ -346,6 +350,8 @@ substitua(nome, "Maria", "Ana")
 separe("a,b,c", ",")
 junte(["a", "b"], " - ")
 limpe(nome)
+comeca_com(nome, "  Ma")   // também começa_com
+termina_com(nome, "  ")
 formate("{:<8} {:>5}", "Ana", 10)   // < esquerda  > direita  ^ centro
                                // mapa com :_como_texto (função de 1 arg → texto) usa essa função
 nome[1]
@@ -397,6 +403,10 @@ Com `importe "tela"`: `cls()` (também `limpe_tela()`) limpa a tela; `casa()` ma
 `pinte(texto, frente)` e `pinte(texto, frente, fundo)` devolvem o texto com cor ANSI e reset no fim. `fundo(texto, cor)` pinta só o papel; `negrito(texto)` deixa em negrito. Cores: `normal`, `preto`, `vermelho`, `verde`, `amarelo`, `azul`, `magenta`, `ciano`, `branco`.  
 `durma(segundos)` espera; `durma(0.5)` é meio segundo.
 
+`ambiente(nome)` devolve a variável de ambiente como texto (`ambiente("HOME")`). Se ela não existe, é erro: `ambiente("EDITOR") se_falhar "vim"`.
+
+`agora()` é a data e a hora locais: mapa `:ano`, `:mes`, `:dia`, `:hora`, `:minuto`, `:segundo`, `:dia_da_semana` (1 = domingo … 7 = sábado) e `:epoch` (segundos desde 1970). Fora do Linux/macOS o horário é UTC. `formate_data(data, modelo)` monta um texto com `%Y`, `%m`, `%d`, `%H`, `%M`, `%S` (dois dígitos, ano com quatro) e `%%`; outra letra depois de `%` é erro. A data é o mapa de `agora()` (bastam `:ano` … `:segundo`) ou um número de segundos (`:epoch`).
+
 `sair()` encerra o programa com código 0. `sair(1)` encerra com falha (o shell vê o código). Não é capturado por `se_falhar`.
 
 Com `importe "cartesiano"`: `documento()` é a identidade da janela (um mapa `:graficos`). `grafico()` é um plano xy (`:xmin`… e `:curvas`). `eixos(g, xmin, xmax, ymin, ymax)` grava os limites (y para cima). `plotar(g, função, cor)` amostra ~400 pontos de xmin a xmax; y não finito vira um furo na linha. Cores: as da `tela`. `adicione(c, g)` copia o gráfico para a folha (congela). `mostre(c)` abre ou atualiza a janela daquele documento e traz o foco; não espera fechar. Folha vazia é erro. Dois `documento()` são duas janelas. `tipo(g)` continua `"mapa"`. Sem display, `mostre` falha (`se_falhar`). O CLI abre `expressa-grafico` (ou `expressa --grafico`). Na Aula o painel Gráficos (Destacar vira janela irmã).
@@ -437,6 +447,30 @@ dados = leia_csv("pessoas.csv")             // lista de listas
 salve_csv("saida.csv", dados)
 ```
 
+**Pastas e arquivos:**
+```text
+existe("dados.txt")              // arquivo ou pasta
+eh_pasta("fotos")                // também é_pasta
+liste("fotos")                   // nomes, em ordem, com os ocultos
+liste("fotos", "*.png")          // * qualquer trecho, ? um caractere
+crie_pasta("saida/2024")         // cria as que faltam; já existir não é erro
+apague_arquivo("temp.txt")       // pasta é erro
+apague_pasta("build")            // a pasta e tudo dentro; recusa / e a pasta pessoal
+mova("a.txt", "arquivo/")        // move ou renomeia; para dentro se o destino é pasta
+copie("a.txt", "a.bak")          // só arquivos; para dentro se o destino é pasta
+```
+
+**Caminhos** (só o texto, sem olhar o disco):
+```text
+junte_caminho("dados", "2024", "a.csv")   // "dados/2024/a.csv"; absoluto recomeça
+nome_do_arquivo("fotos/a.png")            // "a.png"
+pasta_de("fotos/a.png")                   // "fotos"; sem pasta, ""
+extensao("a.tar.gz")                      // "gz" (sem ponto; sem extensão, ""); também extensão
+pasta_atual()                             // pasta de onde o programa foi chamado
+```
+
+Caminhos relativos partem da **pasta do `.lep`**, não de `pasta_atual()`. Um arquivo passado na linha de comando, relativo ao terminal, vira `junte_caminho(pasta_atual(), argumentos[1])`. Falhas (arquivo que não existe, sem permissão) são erros (`se_falhar`). Na Aula, todo caminho tem que ficar na pasta do aluno.
+
 ---
 
 ## 15. Tratamento de Erros
@@ -457,7 +491,7 @@ item = lista[99] se_falhar "não existe"
 
 ## 16. Módulos / Importação
 
-A mesma forma vale para arquivos `.lep` e para os módulos nativos `matriz`, `arquivo`, `tela`, `mat` e `cartesiano`.
+A mesma forma vale para arquivos `.lep` e para os módulos nativos `matriz`, `arquivo`, `tela`, `mat`, `cartesiano` e `processo`.
 
 ```text
 mat = importe "matematica"     // alias: nomes em mat::
@@ -491,6 +525,80 @@ chmod +x ola.lep
 ```
 
 Valores depois do script chegam em `argumentos` (`./ola.lep Thiago` → `argumentos[1]` é `"Thiago"`).
+
+---
+
+## 18. Programas externos
+
+Funções do módulo `processo`. Rodam outros programas e encadeiam a saída deles com funções da Expressa. Só na linha de comando: na Aula (programa confinado à pasta do aluno) a chamada é erro.
+
+```text
+importe "processo"
+
+filtro = funcao(linha, oque) {
+    se linha contem oque { linha }
+}
+
+r = execute("ls", [filtro, ".txt"], ["wc", "-l"])
+r:saida          // ["2"]
+
+para linha em linhas_de("tail -f app.log") {
+    se linha contem "xxx" { escreva(linha) }
+    se linha contem "FIM" { pare }       // sai do laço e encerra o tail
+}
+```
+
+**Etapas.** `execute(comando, etapa, …)` e `linhas_de(comando, etapa, …)` recebem a mesma sequência. O **primeiro** argumento é um comando; os demais são comandos ou funções, e a saída de cada etapa entra na seguinte, linha a linha.
+
+| Etapa | Significado |
+|---|---|
+| `"wc -l"` | Comando em texto: palavras separadas por espaço; `"…"` e `'…'` guardam espaços; `\|` encadeia comandos (`"sort \| uniq"`) |
+| `["wc", "-l"]` | Comando em lista: cada texto é um argumento, exatamente (números viram texto) |
+| `filtro` / `maiuscula` | Função chamada com cada linha: `filtro(linha)` |
+| `[filtro, ".txt"]` | Função com argumentos extras: `filtro(linha, ".txt")` |
+
+Uma função de etapa devolve `nada` (a linha some), texto (troca a linha), número ou bool (vira texto) ou lista (várias linhas). Outro tipo é erro. Uma lista cujo primeiro item é função só tem esse sentido aqui.
+
+O texto do comando **não** passa por um shell. `*`, `?`, `>`, `<`, `&`, `;`, `$` e `` ` `` fora de aspas são erro, em vez de chegarem ao programa sem efeito. Com variáveis, prefira a lista: `["grep", busca, arquivo]`. Para um shell de verdade: `["sh", "-c", "ls *.txt"]`.
+
+Dois comandos seguidos, sem função no meio, ficam ligados direto pelo sistema (pipe). As linhas chegam sem `\n` (nem `\r`); bytes que não são UTF-8 viram `�`.
+
+**Opções.** Um `mapa` como **último** argumento. Mapa em outra posição é erro, e chave desconhecida também.
+
+| Chave | Valor | Sem ela |
+|---|---|---|
+| `:pasta` | Pasta onde os comandos rodam (relativa ao `.lep`) | Pasta do `.lep` |
+| `:entrada` | Texto ou lista de linhas para a entrada do primeiro comando | Entrada vazia |
+| `:ambiente` | `mapa` de variáveis de ambiente extras | Herda o ambiente |
+| `:tempo` | Segundos (> 0); passou, os comandos são encerrados e é erro | Sem limite próprio |
+| `:exija` | `verdadeiro`: código diferente de 0 vira erro (como `set -e`) | `falso` |
+| `:terminal` | `verdadeiro`: o comando usa o terminal (teclado, tela, cores) | `falso` |
+
+Com `:exija`, a mensagem traz o comando, o código e as últimas linhas da saída de erro: `'git push' falhou (código 1): fatal: …`. Em `linhas_de`, o erro vem no fim do laço; sair antes (`pare`) não é falha.
+
+Com `:terminal`, a entrada do primeiro comando é o teclado, e as saídas do último comando e os erros de todos vão direto para a tela, sem passar pelo programa: é o modo para `vim`, `ssh`, `sudo`, `less` e para ver as cores e o progresso de `cargo build`. `:saida` e `:erro` ficam vazios; `:codigo` vale. Só em `execute`, só com comandos (sem funções) e sem `:entrada`.
+
+```text
+execute(["vim", "notas.txt"], mapa([:terminal -> verdadeiro]))
+execute("cargo build --release", mapa([:terminal -> verdadeiro, :exija -> verdadeiro]))
+```
+
+**`execute`** espera todos os comandos terminarem e devolve um mapa:
+
+| Campo | Valor |
+|---|---|
+| `:codigo` | Primeiro código diferente de 0 entre os comandos, na ordem (como `pipefail`); 0 se todos deram certo |
+| `:ok` | `:codigo == 0` |
+| `:saida` | Lista das linhas que saíram da última etapa |
+| `:erro` | Lista das linhas da saída de erro de todos os comandos |
+
+Código diferente de 0 **não** é erro de execução; confira `:ok`. Um comando encerrado porque a etapa seguinte parou de ler (como `head -1`) não conta como falha.
+
+**`linhas_de`** devolve um valor do tipo `"processo"`: o comando já rodando. `para linha em …` recebe cada linha assim que ela passa por todas as etapas. Sair do laço por qualquer caminho (`pare`, `retorne`, erro, `sair()`) encerra os comandos; o laço termina sozinho quando eles terminam. A saída de erro vai direto para `escreva_erro`. Código de saída diferente de 0 não é erro (use `execute` para ler o código). Percorrer de novo um processo que já acabou não dá nenhuma volta. `tamanho`, `[i]` e outras funções de lista não aceitam processo.
+
+**Erros** (`se_falhar`): comando que não existe, sem permissão, `:pasta` que não existe, `:tempo` esgotado, etapa inválida, e erro dentro de uma função de etapa (que também encerra os comandos). `para` não aceita `se_falhar`; a chamada sim: `para l em linhas_de("x") se_falhar [] { … }`.
+
+Sem `:terminal`, programas que buscam o teclado (editor, senha) não funcionam: a entrada deles é `:entrada` ou vazia. Programas como `grep` guardam a saída em blocos quando ela não é um terminal; em `tail -f`, use `grep --line-buffered` ou filtre com uma função.
 
 ---
 

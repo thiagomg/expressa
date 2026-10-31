@@ -8,6 +8,7 @@ use crate::parser::{Block, Param};
 use super::env::Env;
 use super::imagem::Imagem;
 use super::numero::Numero;
+use super::processo::Processo;
 
 #[derive(Clone)]
 pub enum Value {
@@ -24,6 +25,8 @@ pub enum Value {
     Funcao(Rc<Closure>),
     Builtin(&'static str),
     Modulo(Rc<RefCell<Env>>),
+    /// `linhas_de`: a command still running, read with `para … em`.
+    Processo(Rc<RefCell<Processo>>),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -131,7 +134,7 @@ impl Value {
     /// Nomes que `tipo()` devolve e `tipos()` lista (iguais às mensagens de erro).
     pub const NOMES_DE_TIPO: &'static [&'static str] = &[
         "numero", "texto", "bool", "lista", "par", "mapa", "conjunto", "matriz", "imagem",
-        "funcao", "modulo", "nada",
+        "funcao", "modulo", "processo", "nada",
     ];
 
     pub fn type_name(&self) -> &'static str {
@@ -149,6 +152,7 @@ impl Value {
             Value::Funcao(_) => "funcao",
             Value::Builtin(_) => "funcao",
             Value::Modulo(_) => "modulo",
+            Value::Processo(_) => "processo",
         }
     }
 }
@@ -173,6 +177,7 @@ impl PartialEq for Value {
             (Value::Funcao(a), Value::Funcao(b)) => Rc::ptr_eq(a, b),
             (Value::Builtin(a), Value::Builtin(b)) => a == b,
             (Value::Modulo(a), Value::Modulo(b)) => Rc::ptr_eq(a, b),
+            (Value::Processo(a), Value::Processo(b)) => Rc::ptr_eq(a, b),
             _ => false,
         }
     }
@@ -237,6 +242,10 @@ impl fmt::Display for Value {
             Value::Funcao(c) => write!(f, "<funcao({})>", c.args_text()),
             Value::Builtin(name) => write!(f, "<funcao {name}>"),
             Value::Modulo(_) => write!(f, "<modulo>"),
+            Value::Processo(p) => match p.try_borrow() {
+                Ok(p) => write!(f, "<processo {}>", p.descricao),
+                Err(_) => write!(f, "<processo>"),
+            },
         }
     }
 }

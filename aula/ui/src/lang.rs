@@ -763,6 +763,7 @@ mod tests {
                 "imagem",
                 "mat",
                 "matriz",
+                "processo",
                 "tela",
                 "tela_grafica",
             ]

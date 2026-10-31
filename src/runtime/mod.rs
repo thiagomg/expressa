@@ -14,6 +14,7 @@ mod leia;
 mod nativas;
 mod numero;
 mod pilha;
+mod processo;
 mod repl;
 mod rng;
 mod value;

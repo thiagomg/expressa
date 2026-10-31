@@ -321,6 +321,7 @@ impl Objeto {
             | Value::Conjunto(_)
             | Value::Matriz(_)
             | Value::Imagem(_)
+            | Value::Processo(_)
             | Value::Builtin(_) => None,
         }
     }
