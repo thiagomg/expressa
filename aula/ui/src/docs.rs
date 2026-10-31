@@ -83,6 +83,8 @@ pub struct Doc {
     pub vigia: RefCell<Option<gtk::gio::FileMonitor>>,
     /// Hash of the text last copied aside while unsaved (`sessao.rs`).
     pub resumo_da_copia: Cell<Option<u64>>,
+    /// Exact copies owned by this tab; unrelated pending recoveries stay intact.
+    pub copia_recuperacao: RefCell<Option<crate::recuperacao::Backup>>,
     /// Marks the other places of the word under the cursor.
     ocorrencia_tag: TextTag,
     ocorrencia_timer: RefCell<Option<glib::SourceId>>,
@@ -244,6 +246,7 @@ impl Doc {
             diag_timer: RefCell::new(None),
             vigia: RefCell::new(None),
             resumo_da_copia: Cell::new(None),
+            copia_recuperacao: RefCell::new(None),
             ocorrencia_tag,
             ocorrencia_timer: RefCell::new(None),
             on_diag: RefCell::new(None),
@@ -309,7 +312,17 @@ impl Doc {
         } else {
             base
         });
-        self.tab.set_tooltip_text(Some(&name));
+        let tooltip = match self.copia_recuperacao.borrow().as_ref() {
+            Some(backup) if self.is_untitled() => format!(
+                "{name}\nRecuperado de {} — confira e salve",
+                backup
+                    .name
+                    .strip_prefix(crate::recuperacao::UNTITLED_PREFIX)
+                    .unwrap_or(&backup.name)
+            ),
+            _ => name,
+        };
+        self.tab.set_tooltip_text(Some(&tooltip));
     }
 
     pub fn set_path(&self, path: String) {

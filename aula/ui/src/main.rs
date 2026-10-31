@@ -23,6 +23,7 @@ mod navegar;
 mod painel_repl;
 mod pares;
 mod prefs;
+mod recuperacao;
 mod rpc;
 mod sessao;
 mod store;
@@ -120,6 +121,7 @@ struct Ui {
     /// The open project's session was restored (and its unsaved copies
     /// dealt with): from now on it can be saved over (`sessao.rs`).
     sessao_pronta: bool,
+    recuperacao_aberta: bool,
     /// Below the editor: Saída (program output), Busca, REPL.
     painel_inferior: gtk::Notebook,
     busca: Option<Rc<busca_projeto::PainelBusca>>,
@@ -288,6 +290,7 @@ fn build_ui(app: &Application) {
         geracao_arvore: 0,
         abas_fechadas: Vec::new(),
         sessao_pronta: false,
+        recuperacao_aberta: false,
         painel_inferior: gtk::Notebook::new(),
         busca: None,
         repl: painel_repl::PainelRepl::new(),
@@ -658,6 +661,10 @@ fn build_ui(app: &Application) {
     {
         let ui_p = Rc::clone(&ui);
         glib::timeout_add_local_once(std::time::Duration::from_millis(250), move || {
+            if sessao::restaurar_sem_projeto(&ui_p) {
+                set_project_path(&ui_p, "", None);
+                return;
+            }
             let pasta = ui_p.borrow().prefs.pasta.clone();
             let pasta_path = expand_tilde(&pasta);
             let opened =
@@ -886,6 +893,7 @@ fn install_menubar(
     add_win_action(win, ui, "servidor", ask_server);
     add_win_action(win, ui, "trocar-projeto", trocar_projeto);
     add_win_action(win, ui, "recentes", navegar::recentes);
+    add_win_action(win, ui, "recuperar", sessao::oferecer_copias_atual);
     add_win_action(win, ui, "buscar-projeto", buscar_no_projeto);
     add_win_action(win, ui, "repl", mostrar_repl);
     add_win_action(win, ui, "abrir-rapido", navegar::abrir_rapido);
@@ -950,6 +958,7 @@ fn install_menubar(
     let arquivo = gio::Menu::new();
     arquivo.append_item(&menu_item("_Novo", "win.novo", Some("<Primary>n")));
     arquivo.append_item(&menu_item("_Salvar", "win.salvar", Some("<Primary>s")));
+    arquivo.append_item(&menu_item("_Recuperar alterações…", "win.recuperar", None));
     arquivo.append_item(&menu_item(
         "_Fechar aba",
         "win.fechar-aba",
@@ -1558,6 +1567,11 @@ fn remove_tab(ui: &UiRc, doc: &Rc<Doc>) {
         nb.remove_page(Some(n));
     }
     doc.vigia.replace(None);
+    if let Err(e) = documentos::forget_recovery(doc) {
+        ui.borrow()
+            .console
+            .stderr(&format!("aviso: cópia de recuperação preservada: {e}\n"));
+    }
     refresh_title(ui);
     refresh_diag_label(ui);
     sessao::salvar(ui);
@@ -1588,8 +1602,18 @@ fn save_doc(ui: &UiRc, doc: &Rc<Doc>) -> bool {
         None
     };
     match with_documents(ui, |documents| documents.save(doc, new_name.as_deref())) {
-        Ok(SaveOutcome::Saved(name)) => {
+        Ok(SaveOutcome::Saved {
+            name,
+            recovery_warning,
+        }) => {
             saved(ui, doc, &name);
+            if let Some(warning) = recovery_warning {
+                set_status(
+                    ui,
+                    "arquivo salvo; não foi possível remover sua cópia de recuperação",
+                );
+                ui.borrow().console.stderr(&format!("aviso: {warning}\n"));
+            }
             true
         }
         Ok(SaveOutcome::Cancelled) => false,
@@ -2424,7 +2448,10 @@ fn open_local_project(ui: &UiRc, path: PathBuf) {
 }
 
 fn apply_local(ui: &UiRc, path: PathBuf) {
-    close_project_tabs(ui);
+    if !matches!(ui.borrow().files, Files::None) {
+        close_project_tabs(ui);
+    }
+    ui.borrow_mut().sessao_pronta = false;
     let name = path
         .file_name()
         .map(|s| s.to_string_lossy().into_owned())
@@ -2541,7 +2568,10 @@ fn abrir_projeto_remoto(ui: &UiRc, rpc: Arc<Rpc>, url: String, aluno: String) {
 }
 
 fn apply_remote(ui: &UiRc, rpc: Arc<Rpc>, url: String, aluno: String, projeto: String) {
-    close_project_tabs(ui);
+    if !matches!(ui.borrow().files, Files::None) {
+        close_project_tabs(ui);
+    }
+    ui.borrow_mut().sessao_pronta = false;
     let tip = format!("{url} — aula-data/{aluno}/{projeto}");
     {
         let mut u = ui.borrow_mut();
@@ -2728,6 +2758,12 @@ fn escolher_projeto(
 
 fn after_unsaved(ui: &UiRc, then: impl FnOnce() + 'static) {
     if !can_change_project(ui) {
+        return;
+    }
+    // Choosing the first project adopts scratch/recovered tabs instead of
+    // forcing a save to a repository that has not been selected yet.
+    if matches!(ui.borrow().files, Files::None) {
+        then();
         return;
     }
     let dirty = dirty_docs(ui);

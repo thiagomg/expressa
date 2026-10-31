@@ -45,6 +45,19 @@ A linha **argumentos** vai para `argumentos[1]…` no programa. `escreva_erro` a
 
 **Abas**: cada arquivo abre na sua aba, com desfazer (Ctrl+Z / Ctrl+Shift+Z) e pontos de parada próprios; `●` marca alterações não salvas. Ctrl+N abre uma aba nova, Ctrl+W fecha. Fechar uma aba, trocar de projeto ou fechar a janela com alterações pergunta se quer salvar.
 
+**Recuperação**: a cada cinco segundos, o editor guarda uma cópia das alterações,
+inclusive de abas sem título e antes de escolher um projeto. Ao reabrir, **Recuperar**
+abre essas alterações em abas marcadas como não salvas. Se o arquivo original não
+estiver disponível, o texto abre em uma nova aba; o nome original aparece na dica
+da aba. **Cancelar** ou fechar a pergunta preserva as cópias para outra tentativa,
+mesmo ao sair normalmente. **Arquivo → Recuperar alterações…** permite tentar de
+novo ou **Exportar…** para outra pasta, sem substituir arquivos existentes nem apagar
+as cópias. O menu também lista cópias de outros projetos, inclusive de servidores
+fora do ar; elas abrem em novas abas sem depender da conexão. Cópias com formato
+inválido podem ser exportadas no formato original.
+Salvar ou descartar uma aba remove somente as cópias dessa aba. Ao escolher o
+primeiro projeto, as abas que já estavam abertas continuam abertas para serem salvas.
+
 **Edição**: Tab indenta como no Emacs (com linhas selecionadas, desloca o bloco; Shift+Tab volta), Ctrl+Alt+\\ reindenta a seleção, Enter já indenta a linha nova e `}`/`fim` voltam sozinhos. Ctrl+/ comenta ou descomenta, Ctrl+D duplica a linha, Alt+↑/↓ move. O par `inicio`/`fim` ou `{`/`}` do cursor fica destacado. **Ctrl+F** busca (Esc fecha). Clique direito na árvore (arquivo, pasta ou área vazia): novo arquivo/pasta (na pasta clicada), renomear, apagar. Delete também apaga o item selecionado.
 
 **Ajuda da linguagem**: **Ajuda → Funções nativas** (ou **F1** fora de um nome) abre uma janela com todas as funções nativas (núcleo, `tela`, `mat`, `matriz`, `arquivo`, `cartesiano`) e a ficha de cada uma (`ajuda("matriz::zeros")`). Ao digitar aparecem as funções nativas, as do arquivo e as dos `importe` (escolher `pinte` acrescenta `importe "tela"`); dentro de `importe "` aparecem os módulos e os arquivos. Dentro dos parênteses, a assinatura mostra o argumento atual. Passar o mouse ou **F1** no nome mostra a ficha. **Esc** fecha o autocomplete; ao continuar digitando a lista volta. **Ctrl+clique** ou **F12** vai para a definição (inclusive em outro arquivo e no próprio `importe`). Erros de sintaxe aparecem sublinhados enquanto digita, com a mensagem na barra de baixo.
