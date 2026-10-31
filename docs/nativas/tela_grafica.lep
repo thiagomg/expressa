@@ -6,10 +6,17 @@
 /// Exemplo: g = nova(320, 200)
 nova = funcao(largura, altura) { mapa() }
 
-/// Caneta atual. Cores: as da tela (azul, vermelho, …). Padrão: preto.
+/// Caneta atual. Cores: as da tela (azul, vermelho, …) e transparente.
+/// Padrão: preto.
 ///
 /// Exemplo: g.cor(:azul)
 cor = funcao(g, cor) { 0 }
+
+/// Papel da tela. Padrão: branco. transparente deixa furos no
+/// como_imagem(); na janela o furo mostra branco.
+///
+/// Exemplo: g.fundo(:transparente)
+fundo = funcao(g, cor) { 0 }
 
 /// Reta da caneta. Pixels fora da tela são recortados.
 ///
@@ -26,6 +33,12 @@ circulo = funcao(g, x, y, r) { 0 }
 /// Exemplo: g.ponto(5, 5)
 ponto = funcao(g, x, y) { 0 }
 
+/// Retângulo preenchido da caneta, cantos (x1, y1) e (x2, y2) inclusivos.
+/// A ordem dos cantos não importa. Pixels fora da tela são recortados.
+///
+/// Exemplo: g.retangulo(10, 10, 40, 30)
+retangulo = funcao(g, x1, y1, x2, y2) { 0 }
+
 /// texto(g, x, y, t)
 /// texto(g, x, y, t, tamanho)
 ///
@@ -41,14 +54,15 @@ texto = funcao(g, x, y, t, tamanho) { 0 }
 /// imagem(g, img, x, y)
 ///
 /// Carimba uma imagem centrada em (x, y). O segundo argumento é um caminho
-/// PNG ou um valor de `importe "imagem"`. O arquivo é lido uma vez; os
-/// pixels ficam no comando. angulo é em graus, no sentido horário; 0 deixa
-/// o topo para cima. Pixels transparentes não cobrem o desenho.
+/// PNG, um valor de `importe "imagem"` ou outra tela gráfica (vira imagem
+/// na hora). O arquivo é lido uma vez; os pixels ficam no comando. angulo
+/// é em graus, no sentido horário; 0 deixa o topo para cima. Pixels
+/// transparentes não cobrem o desenho.
 ///
 /// Exemplo: g.imagem(img, 160, 100, 90)
 imagem = funcao(g, caminho, x, y, angulo) { 0 }
 
-/// Apaga o desenho. O fundo continua branco.
+/// Apaga o desenho. O papel continua a cor de fundo.
 ///
 /// Exemplo: g.apague()
 apague = funcao(g) { 0 }
@@ -58,7 +72,14 @@ apague = funcao(g) { 0 }
 /// Exemplo: escreva(g.pixel(10, 10))
 pixel = funcao(g, x, y) { 0 }
 
-/// Grava um PNG. Não precisa de janela. Caminho relativo ao .lep.
+/// Cópia em pixels (tipo imagem). transparente vira alpha 0; o resto
+/// é opaco. A tela original não muda.
+///
+/// Exemplo: sprite = g.como_imagem()
+como_imagem = funcao(g) { 0 }
+
+/// Grava um PNG (com transparência). Não precisa de janela. Caminho
+/// relativo ao .lep.
 ///
 /// Exemplo: g.salve("casa.png")
 salve = funcao(g, caminho) { 0 }

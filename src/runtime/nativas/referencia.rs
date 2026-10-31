@@ -273,6 +273,10 @@ mod tests {
         assert!(t.contains("zeros(n)"));
         assert!(t.contains("importe \"matriz\""));
         assert!(t.contains("Matriz só de zeros"));
+        let papel = lookup_ficha("tela_grafica::fundo").expect("fundo graf");
+        assert!(papel.contains("transparente"), "{papel}");
+        let ansi = lookup_ficha("tela::fundo").expect("fundo tela");
+        assert!(ansi.contains("ANSI"), "{ansi}");
     }
 
     #[test]

@@ -51,44 +51,46 @@ desenha = funcao(m) {
     escreva(borda)
 }
 
+pos_lin = função(m, l) {
+    se l < 1 { m.nlinhas() }
+    ou se l > m.nlinhas() { 1 }
+    senão { l }
+}
+
+pos_col = função(m, c) {
+    se c < 1 { m.ncolunas() }
+    ou se c > m.ncolunas() { 1 }
+    senão { c }
+}
+
+
 // Retorna uma matriz com a celula do meio e seus vizinhos
 // Caso a celula esteja em qualquer borda, os vizinhos serão do outro lado
 // já que tudo rotaciona como se fosse uma esfera
 vizinhos = função(m, l, c) {
-    pos_lin = função(l) {
-        se l < 1 { m.nlinhas() }
-        ou se l > m.nlinhas() { 1 }
-        senão { l }
-    }
-
-    pos_col = função(c) {
-        se c < 1 { m.ncolunas() }
-        ou se c > m.ncolunas() { 1 }
-        senão { c }
-    }
 
     v = zeros(3)
 
     // Noroeste
-    v[1,1] = m[ pos_lin(l-1), pos_col(c-1) ]
+    v[1,1] = m[ m.pos_lin(l-1), m.pos_col(c-1) ]
     // Norte
-    v[1,2] = m[ pos_lin(l-1), pos_col(c) ]
+    v[1,2] = m[ m.pos_lin(l-1), m.pos_col(c) ]
     // Nordeste
-    v[1,3] = m[ pos_lin(l-1), pos_col(c+1) ]
+    v[1,3] = m[ m.pos_lin(l-1), m.pos_col(c+1) ]
 
     // Oeste
-    v[2,1] = m[ pos_lin(l), pos_col(c-1) ]
+    v[2,1] = m[ m.pos_lin(l), m.pos_col(c-1) ]
     // Centro
     v[2,2] = m[l, c]
     // Leste
-    v[2,3] = m[ pos_lin(l), pos_col(c+1) ]
+    v[2,3] = m[ m.pos_lin(l), m.pos_col(c+1) ]
 
     // Sudoeste
-    v[3,1] = m[ pos_lin(l+1), pos_col(c-1) ]
+    v[3,1] = m[ m.pos_lin(l+1), m.pos_col(c-1) ]
     // Sul
-    v[3,2] = m[ pos_lin(l+1), pos_col(c) ]
+    v[3,2] = m[ m.pos_lin(l+1), m.pos_col(c) ]
     // Sudeste
-    v[3,3] = m[ pos_lin(l+1), pos_col(c+1) ]
+    v[3,3] = m[ m.pos_lin(l+1), m.pos_col(c+1) ]
 
     v
 }

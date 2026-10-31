@@ -1,0 +1,220 @@
+tela = importe "tela_grafica"
+importe "cartesiano"
+importe "matriz"
+importe "mat"
+
+inicia_jogo = funcao(m) {
+    para i de 1 até m.nlinhas() {
+        para j de 1 até m.ncolunas() {
+            m[i, j] = aleatorio(0, 1)
+        }
+    }
+}
+
+// Precisa ser multiplo de 2
+ser_tamanho = 16
+começo_y = 20
+ser_vivo = mapa()
+ser_morto = mapa()
+
+cria_ser = funcao(cel, cor) {
+    cs = cel:largura // colunas
+    ls = cel:altura // linhas
+    
+    cel.tela::fundo(:transparente)
+    cel.tela::cor(cor)
+    cel.tela::retangulo(0, 0, cs-1, ls-1)
+    cel.tela::cor(:transparente)
+
+    ponto_grande = funcao(cel, lo, co) {
+        para l de 0 ate 1 {
+            para c de 0 ate 1 {
+                cel.tela::ponto(c-co, l-lo)
+            }
+        }
+    }
+
+    cel.ponto_grande(0, 0)
+    cel.ponto_grande(0, -(cs - 2))
+    cel.ponto_grande(-(ls - 2), 0)
+    cel.ponto_grande(-(ls - 2), -(cs - 2))
+    cel.tela::cor(cor)
+    cel.tela::ponto(1, 1)
+    cel.tela::ponto(1, ls-2)
+    cel.tela::ponto(cs-2, 1)
+    cel.tela::ponto(cs-2, ls-2)
+}
+
+ser_grande = funcao(w, estado, x, y) {
+    // imagem centra o sprite; (px, py) é o meio da célula
+    meio = ser_tamanho / 2
+    px = (x - 1) * ser_tamanho + meio
+    py = começo_y + (y - 1) * ser_tamanho + meio
+    figura = se estado == :vivo { ser_vivo } senão { ser_morto }
+    w.tela::imagem(figura, px, py)
+}
+
+
+ser = funcao(w, x, y) {
+    w.tela::ponto(x, y)
+}
+
+desenha = funcao(w, m) {
+    para l de 1 até m.nlinhas() {
+        para c de 1 até m.ncolunas() {
+            estado = se m[l, c] == 0 {
+                :morto
+            } senao {
+                :vivo
+            }
+            // w.tela::cor(cor)
+            // w.ser(c, l)
+            w.ser_grande(estado, c, l)
+        }
+    }
+}
+
+pos_lin = função(m, l) {
+    se l < 1 { m.nlinhas() }
+    ou se l > m.nlinhas() { 1 }
+    senão { l }
+}
+
+pos_col = função(m, c) {
+    se c < 1 { m.ncolunas() }
+    ou se c > m.ncolunas() { 1 }
+    senão { c }
+}
+
+
+// Retorna uma matriz com a celula do meio e seus vizinhos
+// Caso a celula esteja em qualquer borda, os vizinhos serão do outro lado
+// já que tudo rotaciona como se fosse uma esfera
+vizinhos = função(m, l, c) {
+
+    v = zeros(3)
+
+    // Noroeste
+    v[1,1] = m[ m.pos_lin(l-1), m.pos_col(c-1) ]
+    // Norte
+    v[1,2] = m[ m.pos_lin(l-1), m.pos_col(c) ]
+    // Nordeste
+    v[1,3] = m[ m.pos_lin(l-1), m.pos_col(c+1) ]
+
+    // Oeste
+    v[2,1] = m[ m.pos_lin(l), m.pos_col(c-1) ]
+    // Centro
+    v[2,2] = m[l, c]
+    // Leste
+    v[2,3] = m[ m.pos_lin(l), m.pos_col(c+1) ]
+
+    // Sudoeste
+    v[3,1] = m[ m.pos_lin(l+1), m.pos_col(c-1) ]
+    // Sul
+    v[3,2] = m[ m.pos_lin(l+1), m.pos_col(c) ]
+    // Sudeste
+    v[3,3] = m[ m.pos_lin(l+1), m.pos_col(c+1) ]
+
+    v
+}
+
+// Conta a quantidade de vizinhos numa matrix 3x3
+// da celula na posição (2, 2)
+conta_vizinhos = função(m) {
+    se m.nlinhas() != 3 ou m.ncolunas() != 3 {
+        escreva_erro("a função conta_vizinhos só aceita matrizes de 3x3")
+        sair(1)
+    }
+
+    items = [
+        m[1,1], m[1,2], m[1,3], 
+        m[2,1], m[2,3], 
+        m[3,1], m[3,2], m[3,3], 
+    ]
+
+    total_vizinhos = 0
+    para item em items {
+        total_vizinhos += se item == 0 { 0 } senão { 1 }
+    }
+    total_vizinhos
+}
+
+// Executa uma nova geração do mundo e retorna em uma nova matriz
+nova_geracao = função(m) {
+    // Regras do jogo
+    // Toda célula viva com menos de dois vizinhos vivos morre por isolamento.
+    // Toda célula viva com mais de três vizinhos vivos morre por superpopulação.
+    // Toda célula viva com dois ou três vizinhos vivos permanece viva.[3]
+    // Toda célula morta com exatamente três vizinhos vivos torna-se viva (nascimento).
+
+    // Salvando o total de linhas e colunas pois eu não quero escrever nlinhas/ncolunas
+    // o tempo todo
+    tl = m.nlinhas()
+    tc = m.ncolunas()
+
+    // Nos precisamos criar uma nova matriz pois todas as mudanças são simulatâneas.
+    // Se eu mudar a matriz de origem, uma celula vai influenciar a outra
+    nm = zeros(tl, tc)
+
+    para i de 1 até m.nlinhas() {
+        para j de 1 até m.ncolunas() {
+            // Aqui vamos pegar os vizinhos de cada uma das celular da matriz de origem m
+            v = m.vizinhos(i, j)
+            // e vamos contas a quatidade de vizinhos para aplicar cada uma das regras
+            num_v = v.conta_vizinhos()
+
+            // 0 = morta, qualquer outro valor, viva
+            cel_viva = m[i, j]
+
+            nova_celula = se cel_viva != 0 {
+                // A celula está viva
+                se num_v < 2 {
+                    0 // Toda célula viva com menos de dois vizinhos vivos morre por isolamento.
+                } ou se num_v > 3 {
+                    0 // Toda célula viva com mais de três vizinhos vivos morre por superpopulação.
+                } senão { // Unica opção faltando - ou se num_v == 2 ou num_v == 3
+                    1 // Toda célula viva com dois ou três vizinhos vivos permanece viva.[3]
+                }
+            } senão {
+                // Celular está morta
+                se num_v == 3 {
+                    1 // Toda célula morta com exatamente três vizinhos vivos torna-se viva (nascimento).
+                } senão {
+                    0
+                }
+            }
+
+            // E agora vamos atualizar a nova matriz
+            nm[i, j] = nova_celula
+        }
+    }
+
+    nm
+}
+
+// w = tela::nova(480, 640)
+w = tela::nova(200, 200)
+
+m = zeros(10, 10)
+m.inicia_jogo()
+ser_vivo = tela::nova(ser_tamanho, ser_tamanho)
+ser_vivo.cria_ser(:verde)
+ser_morto = tela::nova(ser_tamanho, ser_tamanho)
+ser_morto.cria_ser(:branco)
+
+
+enquanto verdadeiro {
+    m = nova_geracao(m)
+    
+    w.tela::apague()
+    w.tela::cor(:azul)
+    w.tela::texto(1, 1, "Pressione q para terminar")
+    w.desenha(m)
+    w.tela::mostre()
+    
+    ev = w.tela::evento(0.05)
+    se ev:tipo == :sair { pare }
+    se ev:tipo == :tecla e ev:tecla == "q" { pare }
+}
+
+w.tela::mostre()

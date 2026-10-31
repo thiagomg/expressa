@@ -250,13 +250,39 @@ pub fn escala(img: &Imagem, fx: f64, fy: f64) -> Result<Imagem, String> {
     Imagem::nova(nw, nh, px)
 }
 
-/// Stamp `sprite` centered on `(cx, cy)`. `angulo` is degrees clockwise;
-/// 0 keeps the top of the image pointing up.
-pub fn carimbar(buf: &mut [u32], w: u32, h: u32, cx: i32, cy: i32, angulo: f64, sprite: &Imagem) {
-    let rad = angulo.to_radians();
-    let (cos, sin) = (rad.cos(), rad.sin());
+fn angulo_zero(angulo: f64) -> bool {
+    if !angulo.is_finite() {
+        return false;
+    }
+    let a = angulo.rem_euclid(360.0);
+    a < 1e-9 || (a - 360.0).abs() < 1e-9
+}
+
+/// Dest pixels of a stamp: `(dx, dy, byte index in sprite.px)`.
+fn cada_pixel_do_carimbo(
+    cx: i32,
+    cy: i32,
+    angulo: f64,
+    sprite: &Imagem,
+    mut f: impl FnMut(i32, i32, usize),
+) {
     let sw = sprite.largura as i32;
     let sh = sprite.altura as i32;
+    if angulo_zero(angulo) {
+        // Integer blit: even sizes keep both edges (round of (w-1)/2
+        // would drop one column and look like one-sided corners).
+        let x0 = cx - sw / 2;
+        let y0 = cy - sh / 2;
+        for iy in 0..sh {
+            for ix in 0..sw {
+                let i = ((iy as u32 * sprite.largura) + ix as u32) as usize * 4;
+                f(x0 + ix, y0 + iy, i);
+            }
+        }
+        return;
+    }
+    let rad = angulo.to_radians();
+    let (cos, sin) = (rad.cos(), rad.sin());
     let ox = (sprite.largura as f64 - 1.0) / 2.0;
     let oy = (sprite.altura as f64 - 1.0) / 2.0;
     let reach = ((sw * sw + sh * sh) as f64).sqrt() / 2.0 + 1.0;
@@ -268,30 +294,70 @@ pub fn carimbar(buf: &mut [u32], w: u32, h: u32, cx: i32, cy: i32, angulo: f64, 
             if ix < 0 || iy < 0 || ix >= sw || iy >= sh {
                 continue;
             }
-            let dx = cx + sx;
-            let dy = cy + sy;
-            if dx < 0 || dy < 0 || dx as u32 >= w || dy as u32 >= h {
-                continue;
-            }
             let i = ((iy as u32 * sprite.largura) + ix as u32) as usize * 4;
-            let a = sprite.px[i + 3] as u32;
-            if a < 16 {
-                continue;
-            }
-            let dest_i = (dy as u32 * w + dx as u32) as usize;
-            let dest = buf[dest_i];
-            let sr = sprite.px[i] as u32;
-            let sg = sprite.px[i + 1] as u32;
-            let sb = sprite.px[i + 2] as u32;
-            let dr = (dest >> 16) & 255;
-            let dg = (dest >> 8) & 255;
-            let db = dest & 255;
-            let rch = (sr * a + dr * (255 - a)) / 255;
-            let gch = (sg * a + dg * (255 - a)) / 255;
-            let bch = (sb * a + db * (255 - a)) / 255;
-            buf[dest_i] = (rch << 16) | (gch << 8) | bch;
+            f(cx + sx, cy + sy, i);
         }
     }
+}
+
+/// Stamp `sprite` centered on `(cx, cy)`. `angulo` is degrees clockwise;
+/// 0 keeps the top of the image pointing up.
+pub fn carimbar(buf: &mut [u32], w: u32, h: u32, cx: i32, cy: i32, angulo: f64, sprite: &Imagem) {
+    cada_pixel_do_carimbo(cx, cy, angulo, sprite, |dx, dy, i| {
+        if dx < 0 || dy < 0 || dx as u32 >= w || dy as u32 >= h {
+            return;
+        }
+        let a = sprite.px[i + 3] as u32;
+        if a < 16 {
+            return;
+        }
+        let dest_i = (dy as u32 * w + dx as u32) as usize;
+        let dest = buf[dest_i];
+        let sr = sprite.px[i] as u32;
+        let sg = sprite.px[i + 1] as u32;
+        let sb = sprite.px[i + 2] as u32;
+        let dr = (dest >> 16) & 255;
+        let dg = (dest >> 8) & 255;
+        let db = dest & 255;
+        let rch = (sr * a + dr * (255 - a)) / 255;
+        let gch = (sg * a + dg * (255 - a)) / 255;
+        let bch = (sb * a + db * (255 - a)) / 255;
+        buf[dest_i] = (rch << 16) | (gch << 8) | bch;
+    });
+}
+
+/// Same stamp as [`carimbar`], onto packed RGBA (`4` bytes per pixel).
+pub fn carimbar_rgba(
+    buf: &mut [u8],
+    w: u32,
+    h: u32,
+    cx: i32,
+    cy: i32,
+    angulo: f64,
+    sprite: &Imagem,
+) {
+    cada_pixel_do_carimbo(cx, cy, angulo, sprite, |dx, dy, i| {
+        if dx < 0 || dy < 0 || dx as u32 >= w || dy as u32 >= h {
+            return;
+        }
+        let a = sprite.px[i + 3] as u32;
+        if a < 16 {
+            return;
+        }
+        let di = (dy as u32 * w + dx as u32) as usize * 4;
+        let da = buf[di + 3] as u32;
+        let out_a = a + da * (255 - a) / 255;
+        if out_a == 0 {
+            buf[di..di + 4].copy_from_slice(&[0, 0, 0, 0]);
+            return;
+        }
+        for c in 0..3 {
+            let s = sprite.px[i + c] as u32 * a;
+            let d = buf[di + c] as u32 * da * (255 - a) / 255;
+            buf[di + c] = ((s + d) / out_a) as u8;
+        }
+        buf[di + 3] = out_a as u8;
+    });
 }
 
 #[cfg(test)]
@@ -323,5 +389,26 @@ mod tests {
         assert_eq!((d.largura, d.altura), (6, 6));
         assert_eq!(d.pixel(2, 0), Some([255, 0, 0, 255]));
         assert_eq!(d.pixel(3, 1), Some([255, 0, 0, 255]));
+    }
+
+    #[test]
+    fn carimbo_par_mantem_as_duas_bordas() {
+        let mut raw = vec![0u8; 4 * 4 * 4];
+        for y in 0..4 {
+            for x in 0..4 {
+                let i = (y * 4 + x) * 4;
+                if x == 0 {
+                    continue;
+                }
+                raw[i] = 255;
+                raw[i + 3] = 255;
+            }
+        }
+        let sprite = Imagem::nova(4, 4, raw).unwrap();
+        let mut buf = vec![0x00FFFFFFu32; 8 * 8];
+        carimbar(&mut buf, 8, 8, 2, 2, 0.0, &sprite);
+        assert_eq!(buf[0], 0x00FFFFFF, "coluna 0 do sprite é furo");
+        assert_eq!(buf[1], 0x00FF0000, "coluna 1 aparece");
+        assert_eq!(buf[3], 0x00FF0000, "borda direita não some");
     }
 }

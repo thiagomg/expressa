@@ -74,7 +74,7 @@ Visor → VM:
 
 O **handle** é um `u32` escolhido pela VM (contador, identidade = ponteiro do `Arc` de pixels). O visor não escolhe id. `CARREGUE` também não espera ACK: no mesmo pipe, `CARREGUE` imediatamente antes do `MOSTRE` que usa o handle chega em ordem.
 
-Ops no `MOSTRE`: `ponto`, `linha`, `circulo` (cor pelo nome), `texto x y tamanho cor t` e `imagem handle x y angulo` (graus, horário, 0 = topo para cima). O visor preenche o fundo, replay das ops, apresenta. `apague` no Expressa esvazia `:ops`; o handle da figura **continua** válido.
+Ops no `MOSTRE`: `ponto`, `linha`, `circulo` (cor pelo nome, inclusive `transparente`), `retangulo x1 y1 x2 y2` (preenchido, cantos inclusivos), `texto x y tamanho cor t` e `imagem handle x y angulo` (graus, horário, 0 = topo para cima). O visor preenche o fundo (transparente na janela vira papel branco), replay das ops, apresenta. `apague` no Expressa esvazia `:ops`; o handle da figura **continua** válido. `como_imagem` rasteriza na VM (RGBA) e não vai no pipe.
 
 ## Fluxo: abrir figura, girar, andar
 
@@ -145,6 +145,6 @@ Todos os inteiros little-endian. Depois do `u32` de tamanho, o primeiro byte é 
 | 4 | `ESPERE` — `u64 id`, `i32 timeout_ms` |
 | 5 | `EVENTO` — `u64 id`, `u8 tipo`, `i32 x`, `i32 y`, `u8 botao`, tecla (`u16` len + UTF-8) |
 
-Op: `u8` (`1` ponto, `2` linha, `3` circulo, `4` imagem) e campos `i32` / `f64` / cor UTF-8 / `u32` handle. Tipo de evento: `0` nada, `1` clique, `2` solte, `3` mova, `4` tecla, `5` sair. Botão: `0` nenhum, `1` esquerdo, `2` direito, `3` meio.
+Op: `u8` (`1` ponto, `2` linha, `3` circulo, `4` imagem, `5` texto, `6` retangulo) e campos `i32` / `f64` / cor UTF-8 / `u32` handle. Tipo de evento: `0` nada, `1` clique, `2` solte, `3` mova, `4` tecla, `5` sair. Botão: `0` nenhum, `1` esquerdo, `2` direito, `3` meio.
 
 Teto de payload: 32 MiB (cabe um PNG no máximo da API, 2048² RGBA).

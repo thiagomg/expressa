@@ -1,0 +1,17 @@
+// /// Uma telinha vira sprite: papel transparente, depois carimba na janela.
+
+tela_grafica = importe "tela_grafica"
+
+celula = tela_grafica::nova(16, 16)
+celula.tela_grafica::fundo(:transparente)
+celula.tela_grafica::cor(:verde)
+celula.tela_grafica::circulo(8, 8, 6)
+
+g = tela_grafica::nova(200, 80)
+g.tela_grafica::cor(:azul)
+g.tela_grafica::retangulo(0, 0, 199, 79)
+para i de 0 até 4 {
+    g.tela_grafica::imagem(celula, 24 + i * 40, 40)
+}
+g.tela_grafica::mostre()
+g.tela_grafica::salve("sprite.png")

@@ -24,7 +24,7 @@
   '("escreva" "escreva_erro" "sair" "cls" "limpe_tela" "casa" "quadro" "bloco" "escreva_em" "colunas" "linhas" "nova_linha" "durma" "pinte" "fundo" "negrito" "leia" "leia_linhas"
     "eh_terminal" "é_terminal" "argumentos"
     "numero" "número" "formato" "formate" "avaliar" "catalogo" "catálogo" "ajuda" "tipo" "tipos" "raiz" "aleatorio" "aleatório" "semente"
-    "nova" "linha" "circulo" "círculo" "ponto" "texto" "imagem" "apague" "pixel" "salve" "evento"
+    "nova" "linha" "circulo" "círculo" "ponto" "retangulo" "retângulo" "texto" "imagem" "apague" "pixel" "como_imagem" "salve" "evento"
     "carregue" "rotacione" "escala" "largura" "altura"
     "pi" "seno" "sen" "cosseno" "cos" "tangente" "tan" "arcoseno" "arcocosseno" "arcotangente" "arcotangente2"
     "radianos" "graus" "exp" "log" "log10" "potencia" "piso" "teto" "arredonde"

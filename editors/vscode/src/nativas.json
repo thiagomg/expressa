@@ -939,8 +939,7 @@
       "module": "cartesiano",
       "kind": "funcao",
       "signatures": [
-        "mostre(documento)",
-        "mostre(g)"
+        "mostre(documento)"
       ],
       "summary": "Abre ou atualiza a janela deste documento e devolve o foco. Não espera fechar.",
       "doc": "Abre ou atualiza a janela deste documento e devolve o foco. Não espera fechar.\n\nO primeiro mostre abre; os seguintes só atualizam a mesma janela. Folha vazia é erro.\n\nExemplo: c.mostre()"
@@ -964,8 +963,19 @@
       "signatures": [
         "cor(g, cor)"
       ],
-      "summary": "Caneta atual. Cores: as da tela (azul, vermelho, …). Padrão: preto.",
-      "doc": "Caneta atual. Cores: as da tela (azul, vermelho, …). Padrão: preto.\n\nExemplo: g.cor(:azul)"
+      "summary": "Caneta atual. Cores: as da tela (azul, vermelho, …) e transparente. Padrão: preto.",
+      "doc": "Caneta atual. Cores: as da tela (azul, vermelho, …) e transparente.\nPadrão: preto.\n\nExemplo: g.cor(:azul)"
+    },
+    {
+      "name": "fundo",
+      "aliases": [],
+      "module": "tela_grafica",
+      "kind": "funcao",
+      "signatures": [
+        "fundo(g, cor)"
+      ],
+      "summary": "Papel da tela. Padrão: branco. transparente deixa furos no como_imagem(); na janela o furo mostra branco.",
+      "doc": "Papel da tela. Padrão: branco. transparente deixa furos no\ncomo_imagem(); na janela o furo mostra branco.\n\nExemplo: g.fundo(:transparente)"
     },
     {
       "name": "linha",
@@ -1003,6 +1013,19 @@
       "doc": "Um pixel da caneta. Fora da tela, ignora.\n\nExemplo: g.ponto(5, 5)"
     },
     {
+      "name": "retangulo",
+      "aliases": [
+        "retângulo"
+      ],
+      "module": "tela_grafica",
+      "kind": "funcao",
+      "signatures": [
+        "retangulo(g, x1, y1, x2, y2)"
+      ],
+      "summary": "Retângulo preenchido da caneta, cantos (x1, y1) e (x2, y2) inclusivos. A ordem dos cantos não importa. Pixels fora da tela são recortados.",
+      "doc": "Retângulo preenchido da caneta, cantos (x1, y1) e (x2, y2) inclusivos.\nA ordem dos cantos não importa. Pixels fora da tela são recortados.\n\nExemplo: g.retangulo(10, 10, 40, 30)"
+    },
+    {
       "name": "texto",
       "aliases": [],
       "module": "tela_grafica",
@@ -1024,8 +1047,8 @@
         "imagem(g, img, x, y, angulo)",
         "imagem(g, img, x, y)"
       ],
-      "summary": "Carimba uma imagem centrada em (x, y). O segundo argumento é um caminho PNG ou um valor de `importe \"imagem\"`. O arquivo é lido uma vez; os pixels ficam no comando. angulo é em graus, no sentido horário; 0 deixa o topo para cima. Pixels transparentes não cobrem o desenho.",
-      "doc": "Carimba uma imagem centrada em (x, y). O segundo argumento é um caminho\nPNG ou um valor de `importe \"imagem\"`. O arquivo é lido uma vez; os\npixels ficam no comando. angulo é em graus, no sentido horário; 0 deixa\no topo para cima. Pixels transparentes não cobrem o desenho.\n\nExemplo: g.imagem(img, 160, 100, 90)"
+      "summary": "Carimba uma imagem centrada em (x, y). O segundo argumento é um caminho PNG, um valor de `importe \"imagem\"` ou outra tela gráfica (vira imagem na hora). O arquivo é lido uma vez; os pixels ficam no comando. angulo é em graus, no sentido horário; 0 deixa o topo para cima. Pixels transparentes não cobrem o desenho.",
+      "doc": "Carimba uma imagem centrada em (x, y). O segundo argumento é um caminho\nPNG, um valor de `importe \"imagem\"` ou outra tela gráfica (vira imagem\nna hora). O arquivo é lido uma vez; os pixels ficam no comando. angulo\né em graus, no sentido horário; 0 deixa o topo para cima. Pixels\ntransparentes não cobrem o desenho.\n\nExemplo: g.imagem(img, 160, 100, 90)"
     },
     {
       "name": "apague",
@@ -1035,8 +1058,8 @@
       "signatures": [
         "apague(g)"
       ],
-      "summary": "Apaga o desenho. O fundo continua branco.",
-      "doc": "Apaga o desenho. O fundo continua branco.\n\nExemplo: g.apague()"
+      "summary": "Apaga o desenho. O papel continua a cor de fundo.",
+      "doc": "Apaga o desenho. O papel continua a cor de fundo.\n\nExemplo: g.apague()"
     },
     {
       "name": "pixel",
@@ -1050,16 +1073,26 @@
       "doc": "Cor do pixel (texto). Fora da tela é erro. Rasteriza se precisar.\n\nExemplo: escreva(g.pixel(10, 10))"
     },
     {
+      "name": "como_imagem",
+      "aliases": [],
+      "module": "tela_grafica",
+      "kind": "funcao",
+      "signatures": [
+        "como_imagem(g)"
+      ],
+      "summary": "Cópia em pixels (tipo imagem). transparente vira alpha 0; o resto é opaco. A tela original não muda.",
+      "doc": "Cópia em pixels (tipo imagem). transparente vira alpha 0; o resto\né opaco. A tela original não muda.\n\nExemplo: sprite = g.como_imagem()"
+    },
+    {
       "name": "salve",
       "aliases": [],
       "module": "tela_grafica",
       "kind": "funcao",
       "signatures": [
-        "salve(g, caminho)",
-        "salve(img, caminho)"
+        "salve(g, caminho)"
       ],
-      "summary": "Grava um PNG. Não precisa de janela. Caminho relativo ao .lep.",
-      "doc": "Grava um PNG. Não precisa de janela. Caminho relativo ao .lep.\n\nExemplo: g.salve(\"casa.png\")"
+      "summary": "Grava um PNG (com transparência). Não precisa de janela. Caminho relativo ao .lep.",
+      "doc": "Grava um PNG (com transparência). Não precisa de janela. Caminho\nrelativo ao .lep.\n\nExemplo: g.salve(\"casa.png\")"
     },
     {
       "name": "mostre",
@@ -1067,11 +1100,10 @@
       "module": "tela_grafica",
       "kind": "funcao",
       "signatures": [
-        "mostre(documento)",
         "mostre(g)"
       ],
-      "summary": "Abre ou atualiza a janela deste documento e devolve o foco. Não espera fechar.",
-      "doc": "Abre ou atualiza a janela deste documento e devolve o foco. Não espera fechar.\n\nO primeiro mostre abre; os seguintes só atualizam a mesma janela. Folha vazia é erro.\n\nExemplo: c.mostre()"
+      "summary": "Abre ou atualiza a janela desta tela. Não espera fechar.",
+      "doc": "Abre ou atualiza a janela desta tela. Não espera fechar.\n\nO primeiro mostre abre; os seguintes só atualizam a mesma janela.\nCada nova() é uma janela. Não acopla na IDE.\n\nExemplo: g.mostre()"
     },
     {
       "name": "evento",
@@ -1102,11 +1134,10 @@
       "module": "imagem",
       "kind": "funcao",
       "signatures": [
-        "salve(g, caminho)",
         "salve(img, caminho)"
       ],
-      "summary": "Grava um PNG. Não precisa de janela. Caminho relativo ao .lep.",
-      "doc": "Grava um PNG. Não precisa de janela. Caminho relativo ao .lep.\n\nExemplo: g.salve(\"casa.png\")"
+      "summary": "Grava a imagem em PNG (com transparência). Caminho relativo ao .lep.",
+      "doc": "Grava a imagem em PNG (com transparência). Caminho relativo ao .lep.\n\nExemplo: img.salve(\"copia.png\")"
     },
     {
       "name": "rotacione",
