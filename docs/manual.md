@@ -45,6 +45,7 @@ Shebang: `#!/usr/bin/env expressa` na primeira linha, `chmod +x prog.lep`.
 | matriz | `matriz([[1, 2], [3, 4]])` | só números; `importe "matriz"` |
 | função | `função(x) { x + 1 }` | também `funcao` |
 | módulo | `importe "mat"` | |
+| processo | `linhas_de("ls")` | comando rodando; `importe "processo"` |
 | nada | — | sem literal; `escreva` devolve nada |
 
 `:nome` é o texto `"nome"`.
@@ -405,6 +406,22 @@ Tira espaços do começo e do fim.
 limpe("  x  ")    // "x"
 ```
 
+### `ordene(lista)` / `ordene(lista, chave)`
+
+Cópia em ordem crescente. Todos números ou todos textos. Com chave: `ordene(pessoas, funcao(p) { p:idade })`.
+
+### `comeca_com(texto, prefixo)` / `começa_com` · `termina_com(texto, sufixo)`
+
+Verdadeiro ou falso.
+
+### `ambiente(nome)`
+
+Variável de ambiente. Não existe → erro: `ambiente("EDITOR") se_falhar "vim"`.
+
+### `agora()` · `formate_data(data, modelo)`
+
+`agora()` é um mapa `:ano` `:mes` `:dia` `:hora` `:minuto` `:segundo` `:dia_da_semana` (1 = domingo) `:epoch`. `formate_data(agora(), "%Y-%m-%d %H:%M:%S")`.
+
 ### Listas e fatias
 
 ```text
@@ -649,6 +666,30 @@ Substitui o arquivo. Cria a pasta se faltar. Cada item vira uma linha.
 
 Acrescenta no fim (cria se não existir).
 
+### `existe(caminho)` · `eh_pasta(caminho)` / `é_pasta`
+
+Verdadeiro ou falso.
+
+### `liste(pasta)` / `liste(pasta, padrao)`
+
+Nomes dentro da pasta, em ordem, com os ocultos. Padrão: `*` qualquer trecho, `?` um caractere (`liste("fotos", "*.png")`).
+
+### `crie_pasta(caminho)` · `apague_arquivo(caminho)` · `apague_pasta(caminho)`
+
+`crie_pasta` cria as que faltam. `apague_pasta` apaga a pasta e tudo dentro (recusa `/` e a pasta pessoal).
+
+### `mova(origem, destino)` · `copie(origem, destino)`
+
+Se o destino é uma pasta, vai para dentro dela. `copie` só copia arquivos.
+
+### `junte_caminho(parte, …)` · `nome_do_arquivo` · `pasta_de` · `extensao` · `pasta_atual()`
+
+Só montam ou leem o texto do caminho. `pasta_atual()` é a pasta do terminal; os caminhos relativos das outras funções partem da pasta do `.lep`:
+
+```text
+entrada = junte_caminho(pasta_atual(), argumentos[1])
+```
+
 ### `leia_csv(caminho)` / `salve_csv(caminho, dados)`
 
 CSV simples (vírgula, sem aspas). Lista de listas de **texto**. `salve_csv` substitui o arquivo.
@@ -656,6 +697,39 @@ CSV simples (vírgula, sem aspas). Lista de listas de **texto**. `salve_csv` sub
 ```text
 dados = leia_csv("pessoas.csv")
 salve_csv("saida.csv", [["Ana", 25]])
+```
+
+---
+
+## `importe "processo"`
+
+Roda outros programas. Só na linha de comando (na Aula é erro). Opções também `:exija -> verdadeiro` (código diferente de 0 vira erro, como `set -e`) e `:terminal -> verdadeiro` (o comando usa o teclado e a tela: `vim`, `ssh`, cores; só em `execute`, só comandos). O primeiro argumento é um comando: texto (`"ls -l"`, `|` encadeia) ou lista (`["wc", "-l"]`). Depois vêm mais comandos ou funções; a saída de uma etapa entra na próxima. Uma função recebe cada linha: `nada` descarta, texto troca, lista vira várias. `[filtro, ".txt"]` chama `filtro(linha, ".txt")`. Não há shell: `*`, `>`, `$` e `&&` são erro (use `["sh", "-c", "…"]`). Último argumento opcional: `mapa([:pasta -> "…", :entrada -> linhas, :ambiente -> mapa([…]), :tempo -> segundos])`.
+
+### `execute(comando, etapa, …)`
+
+Espera terminar. Mapa `:codigo`, `:ok`, `:saida` (linhas), `:erro` (linhas). Código diferente de 0 não é erro: confira `:ok`.
+
+```text
+filtro = funcao(linha, oque) { se linha contem oque { linha } }
+n = execute("ls", [filtro, ".txt"], ["wc", "-l"]):saida[1]
+r = execute("git status --short")
+se nao r:ok { escreva_erro(r:erro) }
+```
+
+```text
+execute(["vim", "notas.txt"], mapa([:terminal -> verdadeiro]))
+execute("cargo build", mapa([:terminal -> verdadeiro, :exija -> verdadeiro]))
+```
+
+### `linhas_de(comando, etapa, …)`
+
+O comando rodando, lido com `para … em` enquanto as linhas chegam. Sair do laço encerra o comando. A saída de erro vai para a tela.
+
+```text
+para linha em linhas_de("tail -f app.log") {
+    se linha contem "xxx" { escreva(linha) }
+    se linha contem "FIM" { pare }
+}
 ```
 
 ---

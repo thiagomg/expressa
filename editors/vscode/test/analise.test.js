@@ -110,6 +110,7 @@ test('generated data covers the language', () => {
     'imagem',
     'mat',
     'matriz',
+    'processo',
     'tela',
     'tela_grafica',
   ]);

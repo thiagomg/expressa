@@ -49,6 +49,7 @@
     "imagem",
     "mat",
     "matriz",
+    "processo",
     "tela",
     "tela_grafica"
   ],
@@ -378,6 +379,75 @@
       ],
       "summary": "Monta um conjunto a partir de uma lista (valores únicos).",
       "doc": "Monta um conjunto a partir de uma lista (valores únicos).\n\nSem argumento (ou com []) o conjunto é vazio. Duplicatas caem; a ordem\nde inserção permanece. Elementos: texto, número inteiro ou bool.\n\nExemplo: conjunto([:ana, :bia])"
+    },
+    {
+      "name": "ambiente",
+      "aliases": [],
+      "module": null,
+      "kind": "funcao",
+      "signatures": [
+        "ambiente(nome)"
+      ],
+      "summary": "Valor da variável de ambiente (HOME, PATH, …) como texto.",
+      "doc": "Valor da variável de ambiente (HOME, PATH, …) como texto.\n\nVariável que não existe é erro; use se_falhar para ter um padrão.\n\nExemplo: editor = ambiente(\"EDITOR\") se_falhar \"vim\""
+    },
+    {
+      "name": "ordene",
+      "aliases": [],
+      "module": null,
+      "kind": "funcao",
+      "signatures": [
+        "ordene(lista)",
+        "ordene(lista, chave)"
+      ],
+      "summary": "Cópia da lista em ordem crescente. Com chave, ordena por chave(item).",
+      "doc": "Cópia da lista em ordem crescente. Com chave, ordena por chave(item).\n\nOs itens (ou as chaves) têm que ser todos números ou todos textos,\ncomparados como em <. Itens iguais mantêm a ordem original.\nPara ordem decrescente, use uma chave que inverte: funcao(x) { -x }.\n\nExemplo: ordene(pessoas, funcao(p) { p:idade })"
+    },
+    {
+      "name": "comeca_com",
+      "aliases": [
+        "começa_com"
+      ],
+      "module": null,
+      "kind": "funcao",
+      "signatures": [
+        "comeca_com(texto, prefixo)"
+      ],
+      "summary": "Verdadeiro se o texto começa com o prefixo. Também começa_com.",
+      "doc": "Verdadeiro se o texto começa com o prefixo. Também começa_com.\n\nExemplo: comeca_com(\"relatorio.csv\", \"rel\")"
+    },
+    {
+      "name": "termina_com",
+      "aliases": [],
+      "module": null,
+      "kind": "funcao",
+      "signatures": [
+        "termina_com(texto, sufixo)"
+      ],
+      "summary": "Verdadeiro se o texto termina com o sufixo.",
+      "doc": "Verdadeiro se o texto termina com o sufixo.\n\nExemplo: termina_com(\"relatorio.csv\", \".csv\")"
+    },
+    {
+      "name": "agora",
+      "aliases": [],
+      "module": null,
+      "kind": "funcao",
+      "signatures": [
+        "agora()"
+      ],
+      "summary": "Data e hora locais: mapa :ano, :mes, :dia, :hora, :minuto, :segundo.",
+      "doc": "Data e hora locais: mapa :ano, :mes, :dia, :hora, :minuto, :segundo.\n\nTambém :dia_da_semana (1 = domingo … 7 = sábado) e :epoch (segundos\ndesde 1970). Fora do Linux/macOS o horário é UTC.\n\nExemplo: agora():ano"
+    },
+    {
+      "name": "formate_data",
+      "aliases": [],
+      "module": null,
+      "kind": "funcao",
+      "signatures": [
+        "formate_data(data, modelo)"
+      ],
+      "summary": "Monta um texto com a data: %Y ano, %m mês, %d dia, %H hora, %M minuto, %S segundo.",
+      "doc": "Monta um texto com a data: %Y ano, %m mês, %d dia, %H hora, %M minuto, %S segundo.\n\nA data é o mapa de agora() ou um número de segundos desde 1970 (:epoch).\n%% escreve %. Outra letra depois de % é erro.\n\nExemplo: formate_data(agora(), \"backup-%Y-%m-%d.tar\")"
     },
     {
       "name": "cls",
@@ -877,6 +947,180 @@
       ],
       "summary": "Grava uma lista de listas como CSV.",
       "doc": "Grava uma lista de listas como CSV.\n\nSubstitui o arquivo. Células viram texto e são unidas por vírgula.\n\nExemplo: salve_csv(\"saida.csv\", [[\"Ana\", 25]])"
+    },
+    {
+      "name": "existe",
+      "aliases": [],
+      "module": "arquivo",
+      "kind": "funcao",
+      "signatures": [
+        "existe(caminho)"
+      ],
+      "summary": "Verdadeiro se o arquivo ou a pasta existe.",
+      "doc": "Verdadeiro se o arquivo ou a pasta existe.\n\nExemplo: se nao existe(\"dados.txt\") { sair(1) }"
+    },
+    {
+      "name": "eh_pasta",
+      "aliases": [
+        "é_pasta"
+      ],
+      "module": "arquivo",
+      "kind": "funcao",
+      "signatures": [
+        "eh_pasta(caminho)"
+      ],
+      "summary": "Verdadeiro se o caminho é uma pasta. Também é_pasta.",
+      "doc": "Verdadeiro se o caminho é uma pasta. Também é_pasta.\n\nExemplo: eh_pasta(\"fotos\")"
+    },
+    {
+      "name": "liste",
+      "aliases": [],
+      "module": "arquivo",
+      "kind": "funcao",
+      "signatures": [
+        "liste(pasta)",
+        "liste(pasta, padrao)"
+      ],
+      "summary": "Nomes dentro da pasta (sem o caminho), em ordem. Inclui os ocultos.",
+      "doc": "Nomes dentro da pasta (sem o caminho), em ordem. Inclui os ocultos.\n\nCom padrão, só os nomes que casam: * é qualquer trecho, ? é um caractere.\nPasta que não existe é erro.\n\nExemplo: liste(\"fotos\", \"*.png\")"
+    },
+    {
+      "name": "crie_pasta",
+      "aliases": [],
+      "module": "arquivo",
+      "kind": "funcao",
+      "signatures": [
+        "crie_pasta(caminho)"
+      ],
+      "summary": "Cria a pasta e as que faltarem no caminho. Já existir não é erro.",
+      "doc": "Cria a pasta e as que faltarem no caminho. Já existir não é erro.\n\nExemplo: crie_pasta(\"saida/2024\")"
+    },
+    {
+      "name": "apague_arquivo",
+      "aliases": [],
+      "module": "arquivo",
+      "kind": "funcao",
+      "signatures": [
+        "apague_arquivo(caminho)"
+      ],
+      "summary": "Apaga um arquivo. Pasta é erro (use apague_pasta).",
+      "doc": "Apaga um arquivo. Pasta é erro (use apague_pasta).\n\nExemplo: apague_arquivo(\"temp.txt\") se_falhar nada"
+    },
+    {
+      "name": "apague_pasta",
+      "aliases": [],
+      "module": "arquivo",
+      "kind": "funcao",
+      "signatures": [
+        "apague_pasta(caminho)"
+      ],
+      "summary": "Apaga a pasta e tudo o que está dentro dela. Não há lixeira.",
+      "doc": "Apaga a pasta e tudo o que está dentro dela. Não há lixeira.\n\nRecusa a raiz (/) e a pasta pessoal. Arquivo é erro (use apague_arquivo).\n\nExemplo: apague_pasta(\"build\")"
+    },
+    {
+      "name": "mova",
+      "aliases": [],
+      "module": "arquivo",
+      "kind": "funcao",
+      "signatures": [
+        "mova(origem, destino)"
+      ],
+      "summary": "Move ou renomeia. Se o destino é uma pasta, o arquivo vai para dentro dela.",
+      "doc": "Move ou renomeia. Se o destino é uma pasta, o arquivo vai para dentro dela.\n\nExemplo: mova(\"rascunho.txt\", \"arquivo/\")"
+    },
+    {
+      "name": "copie",
+      "aliases": [],
+      "module": "arquivo",
+      "kind": "funcao",
+      "signatures": [
+        "copie(origem, destino)"
+      ],
+      "summary": "Copia um arquivo (pastas não). Se o destino é uma pasta, copia para dentro.",
+      "doc": "Copia um arquivo (pastas não). Se o destino é uma pasta, copia para dentro.\n\nSubstitui o destino se ele já existe.\n\nExemplo: copie(\"config.txt\", \"config.bak\")"
+    },
+    {
+      "name": "junte_caminho",
+      "aliases": [],
+      "module": "arquivo",
+      "kind": "funcao",
+      "signatures": [
+        "junte_caminho(parte, ...)"
+      ],
+      "summary": "Junta pedaços de caminho com a barra do sistema. Só monta o texto.",
+      "doc": "Junta pedaços de caminho com a barra do sistema. Só monta o texto.\n\nUm pedaço absoluto (/tmp) recomeça o caminho.\n\nExemplo: junte_caminho(pasta_atual(), \"dados\", \"a.txt\")"
+    },
+    {
+      "name": "nome_do_arquivo",
+      "aliases": [],
+      "module": "arquivo",
+      "kind": "funcao",
+      "signatures": [
+        "nome_do_arquivo(caminho)"
+      ],
+      "summary": "Último pedaço do caminho: \"fotos/a.png\" dá \"a.png\". Só lê o texto.",
+      "doc": "Último pedaço do caminho: \"fotos/a.png\" dá \"a.png\". Só lê o texto.\n\nExemplo: nome_do_arquivo(\"fotos/a.png\")"
+    },
+    {
+      "name": "pasta_de",
+      "aliases": [],
+      "module": "arquivo",
+      "kind": "funcao",
+      "signatures": [
+        "pasta_de(caminho)"
+      ],
+      "summary": "O caminho sem o último pedaço: \"fotos/a.png\" dá \"fotos\". Só lê o texto.",
+      "doc": "O caminho sem o último pedaço: \"fotos/a.png\" dá \"fotos\". Só lê o texto.\n\nSem pasta no caminho, devolve \"\".\n\nExemplo: pasta_de(\"fotos/a.png\")"
+    },
+    {
+      "name": "extensao",
+      "aliases": [
+        "extensão"
+      ],
+      "module": "arquivo",
+      "kind": "funcao",
+      "signatures": [
+        "extensao(caminho)"
+      ],
+      "summary": "Extensão sem o ponto: \"a.tar.gz\" dá \"gz\"; sem extensão, \"\". Também extensão.",
+      "doc": "Extensão sem o ponto: \"a.tar.gz\" dá \"gz\"; sem extensão, \"\". Também extensão.\n\nExemplo: extensao(\"foto.png\")"
+    },
+    {
+      "name": "pasta_atual",
+      "aliases": [],
+      "module": "arquivo",
+      "kind": "funcao",
+      "signatures": [
+        "pasta_atual()"
+      ],
+      "summary": "Pasta de onde o programa foi chamado (a do terminal).",
+      "doc": "Pasta de onde o programa foi chamado (a do terminal).\n\nCaminhos relativos nas funções de arquivo partem da pasta do .lep, não\ndesta. Para um arquivo passado na linha de comando, junte as duas.\n\nExemplo: junte_caminho(pasta_atual(), argumentos[1])"
+    },
+    {
+      "name": "execute",
+      "aliases": [],
+      "module": "processo",
+      "kind": "funcao",
+      "signatures": [
+        "execute(comando, etapa, ...)",
+        "execute(comando, etapa, ..., opcoes)",
+        "execute(comando, etapa)"
+      ],
+      "summary": "Roda o comando, espera terminar e devolve o mapa :codigo, :ok, :saida, :erro.",
+      "doc": "Roda o comando, espera terminar e devolve o mapa :codigo, :ok, :saida, :erro.\n\nO primeiro argumento é um comando: texto (\"ls -l\", com | para encadear)\nou lista de textos ([\"wc\", \"-l\"]). As etapas seguintes são comandos ou\nfunções. Uma função recebe cada linha: devolver nada descarta a linha,\num texto troca a linha, uma lista vira várias linhas. [filtro, \".txt\"]\nchama filtro(linha, \".txt\"). O texto do comando não passa por um shell:\n*, >, $ e && dão erro; use aspas ou [\"sh\", \"-c\", \"…\"].\n:saida e :erro são listas de linhas. :codigo é o primeiro código diferente\nde 0 entre os comandos; código diferente de 0 não é erro (veja :ok).\nOpções no último argumento: mapa([:pasta -> \"…\", :entrada -> linhas,\n:ambiente -> mapa([…]), :tempo -> segundos, :exija -> verdadeiro,\n:terminal -> verdadeiro]). :exija faz código diferente de 0 virar erro.\n:terminal liga o comando ao terminal (vim, ssh, cores): :saida fica vazia.\nErros (se_falhar): comando que não existe, tempo esgotado, falha com :exija.\nSó na linha de comando.\n\nExemplo: execute(\"ls\", [filtro, \".txt\"], [\"wc\", \"-l\"]):saida"
+    },
+    {
+      "name": "linhas_de",
+      "aliases": [],
+      "module": "processo",
+      "kind": "funcao",
+      "signatures": [
+        "linhas_de(comando, etapa, ...)",
+        "linhas_de(comando, etapa, ..., opcoes)",
+        "linhas_de(comando, etapa)"
+      ],
+      "summary": "O comando rodando, para ler linha a linha com para … em, enquanto chegam.",
+      "doc": "O comando rodando, para ler linha a linha com para … em, enquanto chegam.\n\nAceita as mesmas etapas e opções de execute, menos :terminal. Sair do\nlaço (pare, retorne, erro) encerra o comando. A saída de erro do comando\nvai direto para a tela. Com :exija, código diferente de 0 é erro no fim.\ntipo() é \"processo\"; tamanho() e [i] não valem: use execute para ter a lista.\nErros (se_falhar): comando que não existe. Só na linha de comando.\n\nExemplo: para linha em linhas_de(\"tail -f app.log\") { escreva(linha) }"
     },
     {
       "name": "documento",

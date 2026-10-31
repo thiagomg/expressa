@@ -776,6 +776,23 @@ impl<'a, 'c> Vm<'a, 'c> {
                 var, iter, body, ..
             } => {
                 let seq = self.eval_expr(iter, env)?;
+                if let Value::Processo(p) = &seq {
+                    // Lines as they arrive; leaving the loop stops the command.
+                    let p = Rc::clone(p);
+                    let r = self.eval_in_child(env, FrameKind::Block, |vm, loop_env| {
+                        while let Some(linha) = vm.processo_proxima(&p, iter.span(), loop_env)? {
+                            loop_env
+                                .borrow_mut()
+                                .define(var.clone(), Value::Texto(linha));
+                            if vm.eval_loop_body(&body.stmts, loop_env)? {
+                                break;
+                            }
+                        }
+                        Ok(Value::Nada)
+                    });
+                    p.borrow_mut().encerre();
+                    return r;
+                }
                 let items = self.iter_items(&seq, iter.span())?;
                 self.eval_in_child(env, FrameKind::Block, |vm, loop_env| {
                     for item in items {
@@ -1822,6 +1839,21 @@ impl<'a, 'c> Vm<'a, 'c> {
                 ),
                 span,
             ));
+        }
+        Ok(())
+    }
+
+    /// Child processes (`importe "processo"`) would escape the folder a
+    /// confined program (Aula, fuzz) must stay in, so they are off there.
+    pub(crate) fn processos_permitidos(&self) -> bool {
+        self.workspace_root.is_none()
+    }
+
+    /// Time limit and Parar, polled while waiting on a child process.
+    pub(crate) fn check_espera(&mut self, span: Span) -> Result<(), EvalError> {
+        self.check_deadline(span)?;
+        if self.hook.interrupted() {
+            return Err(EvalError::Quit(0));
         }
         Ok(())
     }

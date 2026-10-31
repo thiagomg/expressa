@@ -186,6 +186,30 @@
       <keyword>adicione_arquivo</keyword>
       <keyword>leia_csv</keyword>
       <keyword>salve_csv</keyword>
+      <keyword>execute</keyword>
+      <keyword>linhas_de</keyword>
+      <keyword>existe</keyword>
+      <keyword>eh_pasta</keyword>
+      <keyword>é_pasta</keyword>
+      <keyword>liste</keyword>
+      <keyword>crie_pasta</keyword>
+      <keyword>apague_arquivo</keyword>
+      <keyword>apague_pasta</keyword>
+      <keyword>mova</keyword>
+      <keyword>copie</keyword>
+      <keyword>junte_caminho</keyword>
+      <keyword>nome_do_arquivo</keyword>
+      <keyword>pasta_de</keyword>
+      <keyword>extensao</keyword>
+      <keyword>extensão</keyword>
+      <keyword>pasta_atual</keyword>
+      <keyword>ambiente</keyword>
+      <keyword>ordene</keyword>
+      <keyword>comeca_com</keyword>
+      <keyword>começa_com</keyword>
+      <keyword>termina_com</keyword>
+      <keyword>agora</keyword>
+      <keyword>formate_data</keyword>
       <keyword>imagem</keyword>
       <keyword>carregue</keyword>
       <keyword>rotacione</keyword>

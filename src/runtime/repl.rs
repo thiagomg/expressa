@@ -475,6 +475,7 @@ fn print_help_funcoes() {
         ("tela", r#"Módulo tela — importe "tela":"#),
         ("mat", r#"Módulo mat — importe "mat":"#),
         ("imagem", r#"Módulo imagem — importe "imagem":"#),
+        ("processo", r#"Módulo processo — importe "processo":"#),
     ] {
         println!("\n{title}\n");
         print_docs_for(Some(mod_name));

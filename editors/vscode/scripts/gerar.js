@@ -85,6 +85,7 @@ function readDocs() {
     'cartesiano.lep': 'cartesiano',
     'tela_grafica.lep': 'tela_grafica',
     'imagem.lep': 'imagem',
+    'processo.lep': 'processo',
   };
   const sections = {};
   for (const [f, module] of Object.entries(files)) {

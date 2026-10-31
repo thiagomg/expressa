@@ -286,6 +286,16 @@ g.tela_grafica::salve("casa.png")
 escreva(g.tela_grafica::pixel(10, 10))
 ```
 
+```text
+importe "processo"               // só na linha de comando
+r = execute("ls", [filtro, ".txt"], ["wc", "-l"])   // filtro(linha, ".txt")
+r:saida  r:erro  r:codigo  r:ok  // linhas, linhas, número, bool
+execute("sort", mapa([:entrada -> nomes, :pasta -> "dados", :tempo -> 5]))
+execute("make", mapa([:exija -> verdadeiro]))       // código != 0 é erro
+execute(["vim", "a.txt"], mapa([:terminal -> verdadeiro]))   // teclado e tela
+para l em linhas_de("tail -f app.log") { se l contem "FIM" { pare } }
+```
+
 Caminhos relativos: pasta do `.lep`, não a pasta de onde você chamou `expressa`.
 
 ---
@@ -304,7 +314,7 @@ matriz = importe "matriz"      // alias: matriz::zeros, A.matriz::transposta()
 importe "./matriz"             // arquivo local se o nativo colidir
 ```
 
-Nativos: `matriz`, `arquivo`, `tela`, `mat`, `cartesiano`, `tela_grafica`, `imagem`. Nome nu sem `/` nem `.lep` procura o nativo; se existir também `matriz.lep` no mesmo diretório, `importe "matriz"` é erro.
+Nativos: `matriz`, `arquivo`, `tela`, `mat`, `cartesiano`, `tela_grafica`, `imagem`, `processo`. Nome nu sem `/` nem `.lep` procura o nativo; se existir também `matriz.lep` no mesmo diretório, `importe "matriz"` é erro.
 
 ---
 
@@ -321,6 +331,8 @@ Núcleo (sempre no escopo):
 | `mapa` `conjunto` | construtores |
 | `tamanho` `primeiro` `ultimo` | coleção |
 | `maiuscula` `minuscula` `sem_acento` `remova` `substitua` `procurar` `separe` `junte` `limpe` `formate` | texto / lista / mapa / conjunto |
+| `ordene` `comeca_com` `termina_com` | ordem; começo e fim de texto |
+| `ambiente` `agora` `formate_data` | variável de ambiente; data e hora |
 
 Módulos (`importe "…"`):
 
@@ -329,10 +341,11 @@ Módulos (`importe "…"`):
 | `tela` | `cls` `casa` `eh_terminal` `pinte` `fundo` `negrito` `colunas` `linhas` `quadro` `bloco` `escreva_em` `nova_linha` |
 | `mat` | `pi` `raiz` `aleatorio` `semente` `seno` `cosseno` `tangente` `arcoseno` `arcocosseno` `arcotangente` `arcotangente2` `radianos` `graus` `exp` `log` `log10` `potencia` `piso` `teto` `arredonde` |
 | `matriz` | `matriz` `transposta` `det` `identidade` `zeros` `uns` `cheia` `nlinhas` `ncolunas` |
-| `arquivo` | `leia_arquivo` `salve_arquivo` `adicione_arquivo` `leia_csv` `salve_csv` |
+| `arquivo` | `leia_arquivo` `salve_arquivo` `adicione_arquivo` `leia_csv` `salve_csv` `existe` `eh_pasta` `liste` `crie_pasta` `apague_arquivo` `apague_pasta` `mova` `copie` `junte_caminho` `nome_do_arquivo` `pasta_de` `extensao` `pasta_atual` |
 | `cartesiano` | `documento` `grafico` `eixos` `plotar` `adicione` `mostre` |
 | `tela_grafica` | `nova` `cor` `fundo` `linha` `circulo` `ponto` `retangulo` `texto` `imagem` `apague` `pixel` `como_imagem` `salve` `mostre` `evento` |
 | `imagem` | `carregue` `salve` `rotacione` `escala` `largura` `altura` |
+| `processo` | `execute` `linhas_de` (só na linha de comando) |
 
 Nativas não podem ser reatribuídas (`escreva = 1` é erro).
 

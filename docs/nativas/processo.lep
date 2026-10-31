@@ -1,0 +1,38 @@
+/// execute(comando, etapa, ...)
+/// execute(comando, etapa, ..., opcoes)
+///
+/// Roda o comando, espera terminar e devolve o mapa :codigo, :ok, :saida, :erro.
+///
+/// O primeiro argumento é um comando: texto ("ls -l", com | para encadear)
+/// ou lista de textos (["wc", "-l"]). As etapas seguintes são comandos ou
+/// funções. Uma função recebe cada linha: devolver nada descarta a linha,
+/// um texto troca a linha, uma lista vira várias linhas. [filtro, ".txt"]
+/// chama filtro(linha, ".txt"). O texto do comando não passa por um shell:
+/// *, >, $ e && dão erro; use aspas ou ["sh", "-c", "…"].
+/// :saida e :erro são listas de linhas. :codigo é o primeiro código diferente
+/// de 0 entre os comandos; código diferente de 0 não é erro (veja :ok).
+/// Opções no último argumento: mapa([:pasta -> "…", :entrada -> linhas,
+/// :ambiente -> mapa([…]), :tempo -> segundos, :exija -> verdadeiro,
+/// :terminal -> verdadeiro]). :exija faz código diferente de 0 virar erro.
+/// :terminal liga o comando ao terminal (vim, ssh, cores): :saida fica vazia.
+/// Erros (se_falhar): comando que não existe, tempo esgotado, falha com :exija.
+/// Só na linha de comando.
+///
+/// Exemplo: execute("ls", [filtro, ".txt"], ["wc", "-l"]):saida
+execute = funcao(comando) { 0 }
+execute = funcao(comando, etapa) { 0 }
+
+/// linhas_de(comando, etapa, ...)
+/// linhas_de(comando, etapa, ..., opcoes)
+///
+/// O comando rodando, para ler linha a linha com para … em, enquanto chegam.
+///
+/// Aceita as mesmas etapas e opções de execute, menos :terminal. Sair do
+/// laço (pare, retorne, erro) encerra o comando. A saída de erro do comando
+/// vai direto para a tela. Com :exija, código diferente de 0 é erro no fim.
+/// tipo() é "processo"; tamanho() e [i] não valem: use execute para ter a lista.
+/// Erros (se_falhar): comando que não existe. Só na linha de comando.
+///
+/// Exemplo: para linha em linhas_de("tail -f app.log") { escreva(linha) }
+linhas_de = funcao(comando) { 0 }
+linhas_de = funcao(comando, etapa) { 0 }
