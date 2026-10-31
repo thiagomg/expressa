@@ -94,3 +94,38 @@ cancelling close, saving on close, switching projects, running, stopping, and
 debugging an import. Include preparation failure and upload failure.
 Record known recovery failures as follow-up cases for item 01 rather than making
 the current faulty behavior a permanent test expectation.
+
+## Implementation ready for review
+
+Step 00 is implemented in the working tree, without a Git commit. Items 01–03
+remain separate work.
+
+- `aula/ui/src/documentos.rs` owns open/reuse decisions, save outcomes and name
+  validation, close decisions, and save/discard/cancel policy. It borrows explicit
+  document and storage inputs; it does not own or borrow `UiRc`.
+- `main.rs` delegates those decisions while retaining dialogs, tab attachment,
+  file monitoring, and visible status updates.
+- `aula/ui/src/execution_state.rs` owns availability and valid lifecycle transitions.
+  Run/project-switch guards use it; run handles and workspace data keep their
+  existing owners. The busy-flag inventory found only preparation and upload uses.
+- New tests cover document outcomes without the complete window, invalid lifecycle
+  transitions, actual worker success/error/stop, failed preparation/upload, and an
+  unsaved imported module with a breakpoint.
+- The GTK test harness requires successful display initialization and caches failure
+  without retrying initialization on other threads. A negative check confirmed that
+  an unavailable display fails explicitly rather than skipping tests or crashing.
+- The PNG workspace test uses a temporary cache, and home-path tests receive their
+  home directory explicitly rather than changing process-wide `HOME`.
+
+Verification: the baseline was 73 IDE tests and 22 server tests passing. After the
+extraction, 78 IDE tests and 22 server tests pass, with GTK assertions confirmed
+under the desktop display. Clippy passes for IDE/server targets with warnings denied.
+Changed Rust files pass formatting checks and the diff passes whitespace checks.
+The initial workspace-wide formatting check also found
+pre-existing differences in `src/runtime/graf.rs` and `src/runtime/nativas/graf.rs`;
+those unrelated files were left unchanged.
+
+Automated tests exercise document and worker workflows; a manual walkthrough of
+the complete desktop application, including project switching and keyboard/focus
+behavior, remains a review check. See `aula/README.md` for test commands and display
+requirements.

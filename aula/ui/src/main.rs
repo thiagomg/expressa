@@ -11,9 +11,11 @@ mod busca_projeto;
 mod cartesiano;
 mod console;
 mod docs;
+mod documentos;
 mod editing;
 mod escolher;
 mod exec;
+mod execution_state;
 mod indent;
 mod janela_graf;
 mod lang;
@@ -46,7 +48,9 @@ use sourceview5::{LanguageManager, SearchSettings, StyleSchemeManager};
 use assist::{Help, Target, ViewHelp};
 use console::Console;
 use docs::Doc;
+use documentos::{CloseDecision, Documents, OpenDocument, SaveOutcome, UnsavedChoice};
 use exec::{ExecEvent, Workspace};
+use execution_state::{Event as ExecutionEvent, ExecutionState, Unavailable};
 use prefs::{FontCss, Prefs, ThemeCss, expand_tilde, path_for_display};
 use rpc::Rpc;
 use store::{Files, valid_aluno};
@@ -102,9 +106,9 @@ struct Ui {
     help: Option<Rc<Help>>,
     /// Unsaved changes were handled: the window may close now.
     closing: bool,
-    /// Work on the run copy happening off the GTK thread (preparing a run,
-    /// sending back what it wrote). Another run or a project change waits.
-    ocupado: Option<&'static str>,
+    /// Availability shared by run and project-switch actions. Run resources
+    /// stay in `run` and `copia_execucao`, not in the lifecycle model.
+    execution: ExecutionState,
     /// The run copy the last run of this project left; the next run only
     /// copies what changed (`Workspace::sync`).
     copia_execucao: Option<Workspace>,
@@ -279,7 +283,7 @@ fn build_ui(app: &Application) {
         theme_css,
         help: None,
         closing: false,
-        ocupado: None,
+        execution: ExecutionState::default(),
         copia_execucao: None,
         geracao_arvore: 0,
         abas_fechadas: Vec::new(),
@@ -1281,11 +1285,17 @@ fn current_doc(ui: &UiRc) -> Option<Rc<Doc>> {
 }
 
 fn doc_by_name(ui: &UiRc, name: &str) -> Option<Rc<Doc>> {
-    ui.borrow()
-        .docs
-        .iter()
-        .find(|(d, _)| exec::same_project_path(&d.name(), name))
-        .map(|(d, _)| Rc::clone(d))
+    documentos::find_by_name(&all_docs(ui), name)
+}
+
+/// Release the UI borrow before storage calls or buffer notifications.
+fn with_documents<T>(ui: &UiRc, f: impl FnOnce(Documents<'_>) -> T) -> T {
+    let (files, project) = {
+        let u = ui.borrow();
+        (u.files.clone(), u.project.clone())
+    };
+    let docs = all_docs(ui);
+    f(Documents::new(&files, &project, &docs))
 }
 
 fn view_help(ui: &UiRc, doc: &Rc<Doc>) -> Option<Rc<ViewHelp>> {
@@ -1509,17 +1519,13 @@ fn new_untitled_tab(ui: &UiRc) {
 
 /// Open `path` from the project (or switch to its tab).
 fn open_path(ui: &UiRc, path: &str) -> Option<Rc<Doc>> {
-    if let Some(d) = doc_by_name(ui, path) {
-        switch_to(ui, &d);
-        return Some(d);
-    }
-    let result = {
-        let u = ui.borrow();
-        u.files.read_file(&u.project, path)
-    };
-    match result {
-        Ok(src) => {
-            let doc = open_doc(ui, Some(path.to_string()), &src);
+    match with_documents(ui, |documents| documents.open(path)) {
+        Ok(OpenDocument::Existing(doc)) => {
+            switch_to(ui, &doc);
+            Some(doc)
+        }
+        Ok(OpenDocument::Loaded { path, text }) => {
+            let doc = open_doc(ui, Some(path.clone()), &text);
             set_status(ui, &format!("aberto {path}"));
             Some(doc)
         }
@@ -1560,7 +1566,7 @@ fn remove_tab(ui: &UiRc, doc: &Rc<Doc>) {
 /// The user closes `doc` (asking about unsaved changes first). Unlike
 /// `remove_tab`, it can be reopened with Ctrl+Shift+T.
 fn close_doc(ui: &UiRc, doc: &Rc<Doc>) {
-    if !doc.is_dirty() {
+    if documentos::close_decision(doc) == CloseDecision::Close {
         abas::lembrar_fechada(ui, doc);
         remove_tab(ui, doc);
         return;
@@ -1575,64 +1581,35 @@ fn close_doc(ui: &UiRc, doc: &Rc<Doc>) {
 
 /// Save one tab; an untitled one asks for a name. False if not saved.
 fn save_doc(ui: &UiRc, doc: &Rc<Doc>) -> bool {
-    if doc.is_untitled() {
+    let new_name = if doc.is_untitled() {
         let window = ui.borrow().window.clone();
-        let Some(name) = perguntar_linha(&window, &format!("Salvar `{}` como:", doc.untitled))
-        else {
-            return false;
-        };
-        let name = name.trim().trim_start_matches('/').to_string();
-        if name.is_empty() {
-            return false;
-        }
-        let name = if name.contains('.') {
-            name
-        } else {
-            format!("{name}.lep")
-        };
-        if doc_by_name(ui, &name).is_some() {
-            set_status(ui, &format!("`{name}` já está aberto em outra aba"));
-            return false;
-        }
-        // A new name must not replace a file that is not open.
-        let result = {
-            let u = ui.borrow();
-            u.files.create_file(&u.project, &name, &doc.text())
-        };
-        if let Err(e) = result {
-            set_status(ui, &format!("erro ao salvar {name}: {e}"));
-            return false;
-        }
-        doc.set_path(name);
-        return saved(ui, doc);
-    }
-    let name = doc.name();
-    let result = {
-        let u = ui.borrow();
-        u.files.write_file(&u.project, &name, &doc.text())
+        perguntar_linha(&window, &format!("Salvar `{}` como:", doc.untitled))
+    } else {
+        None
     };
-    match result {
-        Ok(()) => saved(ui, doc),
+    match with_documents(ui, |documents| documents.save(doc, new_name.as_deref())) {
+        Ok(SaveOutcome::Saved(name)) => {
+            saved(ui, doc, &name);
+            true
+        }
+        Ok(SaveOutcome::Cancelled) => false,
         Err(e) => {
-            set_status(ui, &format!("erro ao salvar {name}: {e}"));
+            set_status(ui, &e);
             false
         }
     }
 }
 
-/// Bookkeeping after `doc` was written. Always true.
-fn saved(ui: &UiRc, doc: &Rc<Doc>) -> bool {
-    let name = doc.name();
-    doc.mark_saved();
+/// UI bookkeeping after the document controller completed a save.
+fn saved(ui: &UiRc, doc: &Rc<Doc>, name: &str) {
     // A first save gives the tab a file to watch.
     if doc.vigia.borrow().is_none() {
         sessao::vigiar(ui, doc);
     }
-    ui.borrow().file_cache.borrow_mut().remove(&name);
+    ui.borrow().file_cache.borrow_mut().remove(name);
     refresh_tree(ui);
     refresh_title(ui);
     set_status(ui, &format!("salvo {name}"));
-    true
 }
 
 /// Unsaved changes in `docs`: Salvar (all), Descartar or Cancelar. `then`
@@ -1679,11 +1656,12 @@ fn confirm_unsaved(ui: &UiRc, docs: Vec<Rc<Doc>>, then: impl FnOnce() + 'static)
     #[allow(deprecated)]
     dlg.connect_response(move |d, resp| {
         d.close();
-        let go = match resp {
-            gtk::ResponseType::Reject => true,
-            gtk::ResponseType::Accept => docs.iter().all(|doc| save_doc(&ui_c, doc)),
-            _ => false,
+        let choice = match resp {
+            gtk::ResponseType::Reject => UnsavedChoice::Discard,
+            gtk::ResponseType::Accept => UnsavedChoice::Save,
+            _ => UnsavedChoice::Cancel,
         };
+        let go = documentos::resolve_unsaved(choice, &docs, |doc| save_doc(&ui_c, doc));
         if go && let Some(f) = then.borrow_mut().take() {
             f();
         }
@@ -2127,13 +2105,26 @@ fn show_pause(ui: &UiRc, p: &expressa::runtime::DebugPaused) {
 /// cannot freeze the window. The rest wait in the (bounded) channel.
 const EVENTS_PER_TICK: usize = 200;
 
+fn execution_available(ui: &UiRc, running_message: &str) -> bool {
+    let availability = ui.borrow().execution.availability();
+    let message = match availability {
+        Ok(()) => return true,
+        Err(Unavailable::Running) => running_message.to_string(),
+        Err(Unavailable::Preparing) => "aguarde: copiando o projeto para executar".to_string(),
+        Err(Unavailable::Uploading) => {
+            "aguarde: salvando os arquivos que o programa escreveu".to_string()
+        }
+    };
+    set_status(ui, &message);
+    false
+}
+
+fn can_change_project(ui: &UiRc) -> bool {
+    execution_available(ui, "pare o programa antes de trocar de projeto")
+}
+
 fn executar(ui: &UiRc, debug: bool) {
-    if ui.borrow().run.is_some() {
-        set_status(ui, "já tem um programa executando — aperte Parar primeiro");
-        return;
-    }
-    if let Some(o) = ui.borrow().ocupado {
-        set_status(ui, &format!("aguarde: {o}"));
+    if !execution_available(ui, "já tem um programa executando — aperte Parar primeiro") {
         return;
     }
     let Some(doc) = current_doc(ui) else {
@@ -2147,7 +2138,9 @@ fn executar(ui: &UiRc, debug: bool) {
     let textos: Vec<(String, String)> = all_docs(ui).iter().map(|d| (d.name(), d.text())).collect();
     let (files, project, args, anterior) = {
         let mut u = ui.borrow_mut();
-        u.ocupado = Some("copiando o projeto para executar");
+        u.execution
+            .transition(ExecutionEvent::Prepare)
+            .expect("idle before preparing a run");
         let args = parse_run_args(&u.args_entry.text());
         let anterior = u.copia_execucao.take();
         (u.files.clone(), u.project.clone(), args, anterior)
@@ -2165,16 +2158,25 @@ fn executar(ui: &UiRc, debug: bool) {
         },
         move |ui, ws| {
             let outro_projeto = {
-                let mut u = ui.borrow_mut();
-                u.ocupado = None;
+                let u = ui.borrow();
                 u.files.cache_key(&u.project) != chave
             };
             if outro_projeto {
+                ui.borrow_mut()
+                    .execution
+                    .transition(ExecutionEvent::PreparationFailed)
+                    .expect("preparation abandoned after a project change");
                 return;
             }
             match ws {
                 Ok(ws) => iniciar_execucao(ui, ws, &doc, fonte, debug, args),
-                Err(e) => set_status(ui, &format!("não copiou o projeto: {e}")),
+                Err(e) => {
+                    ui.borrow_mut()
+                        .execution
+                        .transition(ExecutionEvent::PreparationFailed)
+                        .expect("preparing before a preparation failure");
+                    set_status(ui, &format!("não copiou o projeto: {e}"));
+                }
             }
         },
     );
@@ -2227,10 +2229,16 @@ fn iniciar_execucao(
 
     let run = exec::spawn(&ws, &name, fonte, debug, bps, args);
     telas_graf.set_eventos(Some(run.graf_eventos.clone()));
-    ui.borrow_mut().run = Some(Run {
-        debug_cmd: run.debug_cmd.clone(),
-        ws_dir: ws.dir.clone(),
-    });
+    {
+        let mut u = ui.borrow_mut();
+        u.execution
+            .transition(ExecutionEvent::Started)
+            .expect("prepared before starting a run");
+        u.run = Some(Run {
+            debug_cmd: run.debug_cmd.clone(),
+            ws_dir: ws.dir.clone(),
+        });
+    }
     set_debug_buttons(ui, false, true);
 
     let ui_ev = Rc::clone(ui);
@@ -2275,12 +2283,15 @@ fn iniciar_execucao(
                 Ok(ExecEvent::Finished(f)) => {
                     console.cancel_input();
                     telas_graf.set_eventos(None);
-                    ui_ev.borrow_mut().run = None;
                     set_debug_buttons(&ui_ev, false, false);
                     clear_debug_views(&ui_ev);
                     // Files the program wrote (salve_arquivo, …) go back to
                     // the project.
-                    enviar_depois_da_execucao(&ui_ev, &console, ws.take());
+                    enviar_depois_da_execucao(
+                        &ui_ev,
+                        &console,
+                        ws.take().expect("workspace belongs to the finishing run"),
+                    );
                     if f.ok {
                         set_status(&ui_ev, &format!("ok — {name}"));
                     } else {
@@ -2324,10 +2335,13 @@ fn iniciar_execucao(
                     // same way, and say it instead of stopping silently.
                     console.cancel_input();
                     telas_graf.set_eventos(None);
-                    ui_ev.borrow_mut().run = None;
                     set_debug_buttons(&ui_ev, false, false);
                     clear_debug_views(&ui_ev);
-                    enviar_depois_da_execucao(&ui_ev, &console, ws.take());
+                    enviar_depois_da_execucao(
+                        &ui_ev,
+                        &console,
+                        ws.take().expect("workspace belongs to the finishing run"),
+                    );
                     console.stderr(&format!(
                         "{}: a execução parou sem terminar.\n",
                         exec::ERRO_INTERNO
@@ -2361,8 +2375,7 @@ fn open_shipped_exemplos(ui: &UiRc) -> bool {
 
 /// Ask for a local project folder. Does not block the GTK loop.
 fn choose_local_folder(ui: &UiRc) {
-    if ui.borrow().run.is_some() {
-        set_status(ui, "pare o programa antes de trocar de projeto");
+    if !can_change_project(ui) {
         return;
     }
     pause_raise();
@@ -2437,8 +2450,7 @@ fn apply_local(ui: &UiRc, path: PathBuf) {
 /// URL and student name, then the student's project (`escolher_projeto`).
 /// Files on that server live in `aula-data/aluno/projeto`.
 fn ask_server(ui: &UiRc) {
-    if ui.borrow().run.is_some() {
-        set_status(ui, "pare o programa antes de trocar de projeto");
+    if !can_change_project(ui) {
         return;
     }
     let (url, aluno) = {
@@ -2495,8 +2507,7 @@ fn trocar_projeto(ui: &UiRc) {
 /// Shows `aluno`'s projects on `rpc`; the one chosen opens, after the usual
 /// question about unsaved tabs.
 fn abrir_projeto_remoto(ui: &UiRc, rpc: Arc<Rpc>, url: String, aluno: String) {
-    if ui.borrow().run.is_some() {
-        set_status(ui, "pare o programa antes de trocar de projeto");
+    if !can_change_project(ui) {
         return;
     }
     let projetos = match rpc.list_projects(&aluno) {
@@ -2716,12 +2727,7 @@ fn escolher_projeto(
 }
 
 fn after_unsaved(ui: &UiRc, then: impl FnOnce() + 'static) {
-    if ui.borrow().run.is_some() {
-        set_status(ui, "pare o programa antes de trocar de projeto");
-        return;
-    }
-    if let Some(o) = ui.borrow().ocupado {
-        set_status(ui, &format!("aguarde: {o}"));
+    if !can_change_project(ui) {
         return;
     }
     let dirty = dirty_docs(ui);
@@ -3200,11 +3206,13 @@ fn mostrar_menu(
 
 /// After a run: send what the program wrote back to the project off the
 /// GTK thread, then show it and keep the copy for the next run.
-fn enviar_depois_da_execucao(ui: &UiRc, console: &Rc<Console>, ws: Option<Workspace>) {
-    let Some(ws) = ws else { return };
+fn enviar_depois_da_execucao(ui: &UiRc, console: &Rc<Console>, ws: Workspace) {
     let (files, project) = {
         let mut u = ui.borrow_mut();
-        u.ocupado = Some("salvando os arquivos que o programa escreveu");
+        u.execution
+            .transition(ExecutionEvent::Finished)
+            .expect("running before uploading its files");
+        u.run = None;
         (u.files.clone(), u.project.clone())
     };
     let console = Rc::clone(console);
@@ -3217,7 +3225,9 @@ fn enviar_depois_da_execucao(ui: &UiRc, console: &Rc<Console>, ws: Option<Worksp
         move |ui, (ws, envio)| {
             {
                 let mut u = ui.borrow_mut();
-                u.ocupado = None;
+                u.execution
+                    .transition(ExecutionEvent::Uploaded)
+                    .expect("uploading before completing uploads");
                 u.copia_execucao = Some(ws);
             }
             let nao_enviados = mostrar_envio(ui, &console, envio);
@@ -3583,7 +3593,8 @@ mod gtk_test {
 
     type Job = (Box<dyn FnOnce() + Send>, Sender<std::thread::Result<()>>);
 
-    /// Runs `f` on the GTK thread; skips (returns) when there is no display.
+    /// Runs `f` on the GTK thread. A display is required: never report an
+    /// unexecuted GTK assertion as a passing test.
     pub fn run(f: impl FnOnce() + Send + 'static) {
         static JOBS: OnceLock<Option<Mutex<Sender<Job>>>> = OnceLock::new();
         let jobs = JOBS.get_or_init(|| {
@@ -3598,9 +3609,18 @@ mod gtk_test {
                     }
                 }
             });
-            ready_rx.recv().unwrap_or(false).then(|| Mutex::new(tx))
+            if ready_rx.recv().unwrap_or(false) {
+                eprintln!("GTK initialized: executing GUI test assertions");
+                Some(Mutex::new(tx))
+            } else {
+                None
+            }
         });
-        let Some(jobs) = jobs else { return };
+        // Cache initialization failure too: retrying GTK on different threads
+        // after a failure is unsafe and can crash the rest of the test process.
+        let jobs = jobs.as_ref().expect(
+            "GTK tests require a working display; run with a desktop display or a virtual display",
+        );
         let (done_tx, done_rx) = channel();
         jobs.lock().unwrap().send((Box::new(f), done_tx)).unwrap();
         if let Err(panic) = done_rx.recv().unwrap() {

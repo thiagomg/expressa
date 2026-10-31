@@ -616,6 +616,140 @@ pub fn spawn(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::execution_state::{Event, ExecutionState, Unavailable};
+
+    struct RunProject {
+        root: PathBuf,
+        files: Files,
+        project: String,
+        cache: PathBuf,
+    }
+
+    impl RunProject {
+        fn new(name: &str) -> Self {
+            let (root, files, project, cache) = projeto_para_sync(name);
+            Self {
+                root,
+                files,
+                project,
+                cache,
+            }
+        }
+
+        fn workspace(&self) -> Workspace {
+            Workspace::sync_em(&self.cache, &self.files, &self.project, None).unwrap()
+        }
+    }
+
+    impl Drop for RunProject {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.cache);
+            let _ = std::fs::remove_dir_all(&self.root);
+        }
+    }
+
+    #[test]
+    fn lifecycle_with_worker_completion_error_and_stop() {
+        let project = RunProject::new("lifecycle");
+        let mut state = ExecutionState::default();
+        state.transition(Event::Prepare).unwrap();
+        assert!(Workspace::sync_em(&project.cache, &Files::None, "", None).is_err());
+        state.transition(Event::PreparationFailed).unwrap();
+        assert_eq!(state.availability(), Ok(()));
+
+        for (source, stop, succeeds) in [
+            ("escreva(1)\n", false, true),
+            ("escreva(nome_inexistente)\n", false, false),
+            ("leia(\"nome: \")\n", true, true),
+        ] {
+            state.transition(Event::Prepare).unwrap();
+            let mut ws = project.workspace();
+            ws.write_editor_text("a.lep", source).unwrap();
+            let run = spawn(&ws, "a.lep", source.into(), false, vec![], vec![]);
+            state.transition(Event::Started).unwrap();
+            let mut stopped = false;
+            loop {
+                match run
+                    .events
+                    .recv_timeout(Duration::from_secs(5))
+                    .expect("run should finish or request input")
+                {
+                    ExecEvent::Leia(_) => {
+                        assert!(stop);
+                        assert_eq!(state.availability(), Err(Unavailable::Running));
+                        run.debug_cmd.send("terminar".into()).unwrap();
+                        stopped = true;
+                    }
+                    ExecEvent::Finished(finished) => {
+                        if !stop {
+                            assert_eq!(finished.ok, succeeds, "{}", finished.error_message);
+                        }
+                        assert_eq!(stopped, stop);
+                        state.transition(Event::Finished).unwrap();
+                        break;
+                    }
+                    _ => {}
+                }
+            }
+            assert_eq!(state.availability(), Err(Unavailable::Uploading));
+            // Failed uploads still finish this lifecycle; durable retry is item 03.
+            write_file(&ws.dir.join("generated.txt"), "output from the run").unwrap();
+            let failed = ws.upload_changes(&Files::None, "");
+            assert!(!failed.erros.is_empty());
+            state.transition(Event::Uploaded).unwrap();
+            assert_eq!(state.availability(), Ok(()));
+        }
+    }
+
+    #[test]
+    fn debug_uses_unsaved_import_and_project_relative_breakpoint() {
+        let project = RunProject::new("debug-import");
+        let mut ws = project.workspace();
+        let source = "importe \"lib/b\"\nescreva(dobro(3))\n";
+        ws.write_editor_text("a.lep", source).unwrap();
+        ws.write_editor_text("lib/b.lep", "dobro = funcao(x) {\n    retorne x * 2\n}\n")
+            .unwrap();
+        let run = spawn(
+            &ws,
+            "a.lep",
+            source.into(),
+            true,
+            vec![("lib/b.lep".into(), 2)],
+            vec![],
+        );
+        let mut paused_in_import = false;
+        let mut output = String::new();
+        loop {
+            match run
+                .events
+                .recv_timeout(Duration::from_secs(5))
+                .expect("debugger should pause or finish")
+            {
+                ExecEvent::Paused(pause) => {
+                    assert!(pause.error.is_none(), "{:?}", pause.error);
+                    // Import evaluation can also pause at the module's first
+                    // statement. The breakpoint must still pause inside the call.
+                    if pause.file == "lib/b.lep" && pause.line == 2 {
+                        assert_eq!(pause.source_line.trim(), "retorne x * 2");
+                        paused_in_import = true;
+                    }
+                    run.debug_cmd.send("continuar".into()).unwrap();
+                }
+                ExecEvent::Stdout(text) => output.push_str(&text),
+                ExecEvent::Finished(finished) => {
+                    assert!(finished.ok, "{}", finished.error_message);
+                    break;
+                }
+                _ => {}
+            }
+        }
+        assert!(paused_in_import);
+        assert_eq!(output, "6\n");
+        assert_eq!(
+            std::fs::read_to_string(project.root.join("lib/b.lep")).unwrap(),
+            "b"
+        );
+    }
 
     #[test]
     fn cache_name_keeps_letters_and_replaces_the_rest() {
@@ -653,7 +787,8 @@ mod tests {
         std::fs::write(root.join("tela_grafica/casa.png"), png).unwrap();
         let files = Files::Local(root.clone());
         let name = format!("png{}", std::process::id());
-        let ws = Workspace::sync(&files, &name, None).unwrap();
+        let cache = root.with_extension("cache");
+        let ws = Workspace::sync_em(&cache, &files, &name, None).unwrap();
         assert_eq!(
             std::fs::read_to_string(ws.dir.join("jogos/estrela.lep")).unwrap(),
             "escreva(1)\n"
@@ -662,7 +797,7 @@ mod tests {
             std::fs::read(ws.dir.join("tela_grafica/casa.png")).unwrap(),
             png
         );
-        let _ = std::fs::remove_dir_all(&ws.dir);
+        let _ = std::fs::remove_dir_all(&cache);
         let _ = std::fs::remove_dir_all(&root);
     }
 

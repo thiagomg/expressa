@@ -166,12 +166,16 @@ fn home_dir() -> Option<PathBuf> {
 
 /// `~` and `~/…` become the user home directory. `~nome` is left as-is.
 pub fn expand_tilde(path: &str) -> PathBuf {
+    expand_tilde_with_home(path, home_dir())
+}
+
+fn expand_tilde_with_home(path: &str, home: Option<PathBuf>) -> PathBuf {
     if path == "~" {
-        return home_dir().unwrap_or_else(|| PathBuf::from("~"));
+        return home.unwrap_or_else(|| PathBuf::from("~"));
     }
     let rest = path.strip_prefix("~/").or_else(|| path.strip_prefix("~\\"));
     if let Some(rest) = rest
-        && let Some(home) = home_dir()
+        && let Some(home) = home
     {
         return home.join(rest);
     }
@@ -180,8 +184,12 @@ pub fn expand_tilde(path: &str) -> PathBuf {
 
 /// `/home/ana/proj` → `~/proj` when the prefix is this user’s home.
 pub fn path_for_display(path: &Path) -> String {
+    path_for_display_with_home(path, home_dir())
+}
+
+fn path_for_display_with_home(path: &Path, home: Option<PathBuf>) -> String {
     let shown = path.display().to_string();
-    let Some(home) = home_dir() else {
+    let Some(home) = home else {
         return shown;
     };
     let home = home.canonicalize().unwrap_or(home);
@@ -557,13 +565,17 @@ mod tests {
     #[test]
     fn tilde_becomes_home() {
         let home = std::env::temp_dir().join("expressa-aula-tilde-home");
-        unsafe { std::env::set_var("HOME", &home) };
-        assert_eq!(expand_tilde("~"), home);
-        assert_eq!(expand_tilde("~/proj/a"), home.join("proj/a"));
-        assert_eq!(expand_tilde("/abs"), PathBuf::from("/abs"));
-        assert_eq!(expand_tilde("~nao"), PathBuf::from("~nao"));
+        let expand = |path| expand_tilde_with_home(path, Some(home.clone()));
+        assert_eq!(expand("~"), home);
+        assert_eq!(expand("~/proj/a"), home.join("proj/a"));
+        assert_eq!(expand("/abs"), PathBuf::from("/abs"));
+        assert_eq!(expand("~nao"), PathBuf::from("~nao"));
         let proj = home.join("proj");
-        assert_eq!(path_for_display(&proj), "~/proj".to_string());
+        assert_eq!(
+            path_for_display_with_home(&proj, Some(home)),
+            format!("~{}proj", std::path::MAIN_SEPARATOR)
+        );
+        assert_eq!(expand_tilde_with_home("~", None), PathBuf::from("~"));
     }
 
     #[test]

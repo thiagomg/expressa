@@ -64,3 +64,22 @@ expressa --marcador-leia arquivo.lep
 ```
 
 Em casa: o servidor escuta no loopback, aluno `local`. Na sala: um servidor no computador do professor; os clientes GTK falam por RPC.
+
+## Testes
+
+```bash
+cargo test -p expressa-aula -p expressa-aula-server
+cargo clippy -p expressa-aula -p expressa-aula-server --all-targets -- -D warnings
+```
+
+Os testes GTK precisam de uma tela disponível e falham explicitamente quando não
+conseguem inicializá-la. Em Linux sem sessão gráfica, com Xvfb instalado:
+
+```bash
+xvfb-run -a cargo test -p expressa-aula -p expressa-aula-server
+```
+
+Com `-- --nocapture`, a mensagem `GTK initialized: executing GUI test assertions`
+confirma que o corpo dos testes GTK foi executado. Os testes do controlador de
+documentos usam arquivos temporários e dispensam a janela completa da aplicação;
+os testes de `execution_state` dispensam também o GTK.
