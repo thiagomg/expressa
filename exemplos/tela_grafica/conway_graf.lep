@@ -191,7 +191,8 @@ nova_geracao = função(m) {
 
     nm
 }
-//w = tela::nova(480, 640)
+
+// w = tela::nova(480, 640)
 w = tela::nova(200, 200)
 
 m = zeros(10, 10)
@@ -199,7 +200,7 @@ m.inicia_jogo()
 ser_vivo = tela::nova(ser_tamanho, ser_tamanho)
 ser_vivo.cria_ser(:verde)
 ser_morto = tela::nova(ser_tamanho, ser_tamanho)
-ser_morto.cria_ser(:preto)
+ser_morto.cria_ser(:branco)
 
 
 enquanto verdadeiro {
