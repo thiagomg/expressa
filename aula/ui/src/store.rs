@@ -36,13 +36,30 @@ pub enum Files {
 }
 
 impl Files {
-    /// Name of the local run copy (see `exec::Workspace`): one per student
-    /// and project on a server, one per folder name locally.
-    pub fn cache_key(&self, student: &str) -> String {
+    pub fn identity(&self, student: &str) -> Result<crate::identidade::ProjectIdentity, String> {
+        use crate::identidade::ProjectIdentity;
         match self {
-            Files::Remote { projeto, .. } => format!("{student}-{projeto}"),
-            _ => student.to_string(),
+            Self::None => Err("escolha uma pasta para o projeto".into()),
+            Self::Local(root) => {
+                let root = root
+                    .canonicalize()
+                    .map_err(|e| format!("{}: {e}", root.display()))?;
+                if root.to_str().is_none() {
+                    return Err("o caminho do projeto precisa estar em UTF-8".into());
+                }
+                Ok(ProjectIdentity::Local { root })
+            }
+            Self::Remote { rpc, projeto } => Ok(ProjectIdentity::Remote {
+                endpoint: rpc.endpoint.clone(),
+                student: student.into(),
+                project: projeto.clone(),
+            }),
         }
+    }
+
+    /// Full identity hash, for rejecting late callbacks from another project.
+    pub fn cache_key(&self, student: &str) -> Option<String> {
+        self.identity(student).ok().map(|id| id.key())
     }
 
     pub fn is_remote(&self) -> bool {

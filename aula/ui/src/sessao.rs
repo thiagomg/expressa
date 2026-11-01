@@ -197,7 +197,9 @@ pub fn restaurar(ui: &UiRc) {
         remember_arquivo(ui, &doc);
     }
     ui.borrow_mut().sessao_pronta = true;
-    oferecer_copias(ui, &chave);
+    if !ui.borrow().files.is_remote() {
+        oferecer_copias(ui, &chave);
+    }
 }
 
 /// Untitled work has a recovery scope even before a project is chosen.
@@ -215,7 +217,27 @@ pub fn restaurar_sem_projeto(ui: &UiRc) -> bool {
     oferecer_copias(ui, "sem-projeto")
 }
 
-pub fn oferecer_copias_atual(ui: &UiRc) {
+pub fn synchronization_context(ui: &UiRc) -> Option<(RecoveryStore, Vec<PathBuf>)> {
+    let u = ui.borrow();
+    if !u.files.is_remote() {
+        return None;
+    }
+    let key = chave(&u)?;
+    drop(u);
+    Some((RecoveryStore(pasta_das_copias(&key)), copias_abertas(ui)))
+}
+
+pub fn review_sync_edits(ui: &UiRc) {
+    if ui.borrow().files.is_remote() {
+        revisar_copias(ui, true);
+    }
+}
+
+fn oferecer_copias_atual(ui: &UiRc) {
+    revisar_copias(ui, false);
+}
+
+fn revisar_copias(ui: &UiRc, somente_atual: bool) {
     // Retry failed autosaves too, not only copies left by a previous session.
     copiar_nao_salvos(ui);
     let key = chave_das_copias(&ui.borrow());
@@ -227,6 +249,10 @@ pub fn oferecer_copias_atual(ui: &UiRc) {
         mostrar_falhas(ui, store, vec![
             "Não foi possível guardar todas as alterações abertas. Tente novamente ou exporte o texto para outra pasta.".to_string(),
         ]);
+        return;
+    }
+    if somente_atual {
+        oferecer_copias(ui, &key);
         return;
     }
     let owned = copias_abertas(ui);
@@ -250,11 +276,11 @@ pub fn oferecer_copias_atual(ui: &UiRc) {
                 detalhe: "alterações guardadas neste computador".into(),
             })
             .collect();
-        let window = ui.borrow().window.clone();
+        let window = crate::sincronizacao::parent(ui);
         let ui = Rc::clone(ui);
         crate::escolher::mostrar(
             &window,
-            "Recuperar alterações",
+            "Revisar edições guardadas",
             "projeto de origem",
             items,
             move |i| {
@@ -328,7 +354,7 @@ fn oferecer_copias(ui: &UiRc, key: &str) -> bool {
         .map(|copy| sem_prefixo(&copy.backup.name))
         .collect();
     let detail = format!(
-        "Origem: {key}\n{}\n\nRecuperar abre as alterações sem salvá-las. Cancelar mantém as cópias para depois.{}",
+        "Origem: {key}\n{}\n\nAbrir o texto em abas permite revisar suas edições antes de salvá-las. Depois mantém as cópias guardadas.{}",
         names.join(", "),
         if scan.errors.is_empty() {
             String::new()
@@ -341,14 +367,14 @@ fn oferecer_copias(ui: &UiRc, key: &str) -> bool {
     );
     let dialog = gtk::AlertDialog::builder()
         .modal(true)
-        .message("Há alterações que não foram salvas")
+        .message("Há texto das abas guardado neste computador")
         .detail(detail)
         .buttons([
-            "Cancelar",
-            "Descartar",
-            "Recuperar",
-            "Exportar…",
-            "Tentar novamente",
+            "Depois",
+            "Descartar cópias",
+            "Abrir texto em abas",
+            "Salvar cópias em outra pasta…",
+            "Verificar novamente",
         ])
         .cancel_button(resposta::CANCELAR)
         .default_button(if scan.copies.is_empty() {
@@ -357,7 +383,7 @@ fn oferecer_copias(ui: &UiRc, key: &str) -> bool {
             resposta::RECUPERAR
         })
         .build();
-    let window = ui.borrow().window.clone();
+    let window = crate::sincronizacao::parent(ui);
     ui.borrow_mut().recuperacao_aberta = true;
     let ui = Rc::clone(ui);
     let key = key.to_string();
@@ -432,7 +458,7 @@ fn oferecer_copias(ui: &UiRc, key: &str) -> bool {
             _ => {
                 set_status(
                     &ui,
-                    "cópias preservadas; use Arquivo → Recuperar alterações… para tentar novamente",
+                    "edições preservadas neste computador; você poderá revisá-las ao abrir o projeto ou em Sincronização, para projetos no servidor",
                 );
                 return;
             }
@@ -455,7 +481,7 @@ fn mostrar_falhas(ui: &UiRc, store: RecoveryStore, errors: Vec<String>) {
         .cancel_button(resposta::FECHAR)
         .default_button(resposta::TENTAR_NOVAMENTE)
         .build();
-    let window = ui.borrow().window.clone();
+    let window = crate::sincronizacao::parent(ui);
     let ui = Rc::clone(ui);
     dialog.choose(
         Some(&window),
@@ -474,7 +500,7 @@ fn exportar_copias(ui: &UiRc, store: RecoveryStore) {
         .accept_label("Exportar")
         .modal(false)
         .build();
-    let window = ui.borrow().window.clone();
+    let window = crate::sincronizacao::parent(ui);
     let ui = Rc::clone(ui);
     dialog.select_folder(Some(&window), None::<&gio::Cancellable>, move |result| {
         let Some(folder) = result.ok().and_then(|file| file.path()) else {
@@ -597,7 +623,7 @@ pub fn copiar_nao_salvos(ui: &UiRc) {
             set_status(
                 ui,
                 &format!(
-                    "não foi possível guardar as alterações de `{}`; tente Arquivo → Recuperar alterações…",
+                    "não foi possível guardar a cópia de segurança de `{}`; salve a aba ou exporte seu texto",
                     doc.name()
                 ),
             );

@@ -97,8 +97,8 @@ the current faulty behavior a permanent test expectation.
 
 ## Implementation ready for review
 
-Step 00 is implemented in the working tree, without a Git commit. Items 01–03
-remain separate work.
+Step 00 is implemented in commit `d96e442`. Items 01–03 were delivered separately;
+see the [current status](README.md#current-status).
 
 - `aula/ui/src/documentos.rs` owns open/reuse decisions, save outcomes and name
   validation, close decisions, and save/discard/cancel policy. It borrows explicit

@@ -1,7 +1,7 @@
 # IDE improvement plan
 
 These documents turn the source review into separate, reviewable work items.
-They describe proposed work; they do not indicate that fixes have been implemented.
+The status below records delivered work; each document retains its scope and verification notes.
 Items 01–10 preserve the order of the original review, rather than prescribing the
 implementation order. Step 00 defines the initial extraction and item 11 covers
 verification. Each document includes its own acceptance criteria.
@@ -20,6 +20,18 @@ verification. Each document includes its own acceptance criteria.
 | [09](09-repl-streaming.md) | Bounded REPL output and session lifecycle | High |
 | [10](10-architecture-and-ownership.md) | Controllers, ownership, and explicit application states | Incremental foundation |
 | [11](11-testing-and-verification.md) | Isolated tests and meaningful GUI verification | Cross-cutting |
+
+## Current status
+
+- 00 implemented: commit `d96e442`.
+- 01 implemented: commit `dfadefa`.
+- 02 implemented: commit `9289114`.
+- 03 implemented in the working tree, ready for review; no commit created.
+- 04–10 remain separate planned work; 11 supplies cross-cutting verification practices.
+
+The earlier items still have manual desktop walkthroughs and native Windows
+verification outstanding. Those checks are not blockers for implementing 03;
+they remain review/release checks. See each item's verification section.
 
 ## Should item 10 come first?
 

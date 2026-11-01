@@ -17,16 +17,20 @@ mod editing;
 mod escolher;
 mod exec;
 mod execution_state;
+mod identidade;
 mod indent;
 mod janela_graf;
 mod lang;
 mod navegar;
 mod painel_repl;
 mod pares;
+mod pendencias;
+mod pendencias_ui;
 mod prefs;
 mod recuperacao;
 mod rpc;
 mod sessao;
+mod sincronizacao;
 mod store;
 mod tutoriais;
 
@@ -109,11 +113,8 @@ struct Ui {
     /// Unsaved changes were handled: the window may close now.
     closing: bool,
     /// Availability shared by run and project-switch actions. Run resources
-    /// stay in `run` and `copia_execucao`, not in the lifecycle model.
+    /// stay in `run`, not in the lifecycle model.
     execution: ExecutionState,
-    /// The run copy the last run of this project left; the next run only
-    /// copies what changed (`Workspace::sync`).
-    copia_execucao: Option<Workspace>,
     /// Bumped by each tree listing; an older listing that comes back late
     /// is dropped.
     geracao_arvore: u64,
@@ -123,6 +124,7 @@ struct Ui {
     /// dealt with): from now on it can be saved over (`sessao.rs`).
     sessao_pronta: bool,
     recuperacao_aberta: bool,
+    sync_window: Option<gtk::Window>,
     /// Below the editor: Saída (program output), Busca, REPL.
     painel_inferior: gtk::Notebook,
     busca: Option<Rc<busca_projeto::PainelBusca>>,
@@ -138,6 +140,20 @@ fn main() {
     let app = Application::builder().application_id(APP_ID).build();
     app.connect_activate(build_ui);
     app.run();
+}
+
+/// Keep the bottom notebook's input controls above the status bar when resized.
+fn editor_panes(editor: &impl IsA<gtk::Widget>, bottom: &impl IsA<gtk::Widget>) -> Paned {
+    let pane = Paned::new(Orientation::Vertical);
+    pane.add_css_class("aula-paned");
+    pane.set_wide_handle(false);
+    pane.set_start_child(Some(editor));
+    pane.set_end_child(Some(bottom));
+    pane.set_resize_start_child(true);
+    pane.set_resize_end_child(false);
+    pane.set_shrink_start_child(true);
+    pane.set_shrink_end_child(false);
+    pane
 }
 
 fn build_ui(app: &Application) {
@@ -287,11 +303,11 @@ fn build_ui(app: &Application) {
         help: None,
         closing: false,
         execution: ExecutionState::default(),
-        copia_execucao: None,
         geracao_arvore: 0,
         abas_fechadas: Vec::new(),
         sessao_pronta: false,
         recuperacao_aberta: false,
+        sync_window: None,
         painel_inferior: gtk::Notebook::new(),
         busca: None,
         repl: painel_repl::PainelRepl::new(),
@@ -351,15 +367,7 @@ fn build_ui(app: &Application) {
         painel.set_vexpand(true);
         bottom.append(painel);
     }
-    let editor_col = Paned::new(Orientation::Vertical);
-    editor_col.add_css_class("aula-paned");
-    editor_col.set_wide_handle(false);
-    editor_col.set_start_child(Some(&ui.borrow().notebook));
-    editor_col.set_end_child(Some(&bottom));
-    editor_col.set_resize_start_child(true);
-    editor_col.set_resize_end_child(false);
-    editor_col.set_shrink_start_child(true);
-    editor_col.set_shrink_end_child(true);
+    let editor_col = editor_panes(&ui.borrow().notebook, &bottom);
 
     let main_split = Paned::new(Orientation::Horizontal);
     main_split.add_css_class("aula-paned");
@@ -894,7 +902,8 @@ fn install_menubar(
     add_win_action(win, ui, "servidor", ask_server);
     add_win_action(win, ui, "trocar-projeto", trocar_projeto);
     add_win_action(win, ui, "recentes", navegar::recentes);
-    add_win_action(win, ui, "recuperar", sessao::oferecer_copias_atual);
+    add_win_action(win, ui, "sincronizacao", sincronizacao::show)
+        .set_enabled(ui.borrow().files.is_remote());
     add_win_action(win, ui, "buscar-projeto", buscar_no_projeto);
     add_win_action(win, ui, "repl", mostrar_repl);
     add_win_action(win, ui, "abrir-rapido", navegar::abrir_rapido);
@@ -959,7 +968,9 @@ fn install_menubar(
     let arquivo = gio::Menu::new();
     arquivo.append_item(&menu_item("_Novo", "win.novo", Some("<Primary>n")));
     arquivo.append_item(&menu_item("_Salvar", "win.salvar", Some("<Primary>s")));
-    arquivo.append_item(&menu_item("_Recuperar alterações…", "win.recuperar", None));
+    let sync_item = menu_item("_Sincronização…", "win.sincronizacao", None);
+    sync_item.set_attribute_value("hidden-when", Some(&"action-disabled".to_variant()));
+    arquivo.append_item(&sync_item);
     arquivo.append_item(&menu_item(
         "_Fechar aba",
         "win.fechar-aba",
@@ -1731,6 +1742,7 @@ fn refresh_title(ui: &UiRc) {
         None => format!("{projeto} — Expressa Aula"),
     };
     u.window.set_title(Some(&title));
+    set_action_enabled(&u.window, "sincronizacao", u.files.is_remote());
 }
 
 fn refresh_diag_label(ui: &UiRc) {
@@ -2192,24 +2204,24 @@ fn executar(ui: &UiRc, debug: bool) {
             },
         })
         .collect();
-    let (files, project, args, anterior) = {
+    let (files, project, args) = {
         let mut u = ui.borrow_mut();
         u.execution
             .transition(ExecutionEvent::Prepare)
             .expect("idle before preparing a run");
         let args = parse_run_args(&u.args_entry.text());
-        let anterior = u.copia_execucao.take();
-        (u.files.clone(), u.project.clone(), args, anterior)
+        (u.files.clone(), u.project.clone(), args)
     };
     let chave = files.cache_key(&project);
     set_status(ui, &format!("preparando {name}…"));
     em_segundo_plano(
         ui,
         move || {
-            let mut ws = Workspace::sync(&files, &project, anterior)?;
+            let mut ws = Workspace::sync(&files, &project)?;
             for source in &textos {
                 ws.write_editor_source(source)?;
             }
+            ws.arm()?;
             Ok::<_, String>(ws)
         },
         move |ui, ws| {
@@ -2232,6 +2244,9 @@ fn executar(ui: &UiRc, debug: bool) {
                         .transition(ExecutionEvent::PreparationFailed)
                         .expect("preparing before a preparation failure");
                     set_status(ui, &format!("não copiou o projeto: {e}"));
+                    if !ui.borrow().files.is_remote() {
+                        pendencias_ui::notify_local_failure(ui);
+                    }
                 }
             }
         },
@@ -2480,6 +2495,7 @@ fn open_local_project(ui: &UiRc, path: PathBuf) {
 }
 
 fn apply_local(ui: &UiRc, path: PathBuf) {
+    sincronizacao::close(ui);
     if !matches!(ui.borrow().files, Files::None) {
         close_project_tabs(ui);
     }
@@ -2494,7 +2510,6 @@ fn apply_local(ui: &UiRc, path: PathBuf) {
         let mut u = ui.borrow_mut();
         u.files.shutdown();
         u.files = Files::Local(path.clone());
-        u.copia_execucao = None;
         u.project = name;
         u.prefs.pasta = shown.clone();
         u.prefs
@@ -2600,6 +2615,7 @@ fn abrir_projeto_remoto(ui: &UiRc, rpc: Arc<Rpc>, url: String, aluno: String) {
 }
 
 fn apply_remote(ui: &UiRc, rpc: Arc<Rpc>, url: String, aluno: String, projeto: String) {
+    sincronizacao::close(ui);
     if !matches!(ui.borrow().files, Files::None) {
         close_project_tabs(ui);
     }
@@ -2612,7 +2628,6 @@ fn apply_remote(ui: &UiRc, rpc: Arc<Rpc>, url: String, aluno: String, projeto: S
             rpc,
             projeto: projeto.clone(),
         };
-        u.copia_execucao = None;
         u.prefs.lembrar_recente(prefs::Recente::Servidor {
             url: url.clone(),
             aluno: aluno.clone(),
@@ -2828,7 +2843,10 @@ fn finish_open(ui: &UiRc) {
     refresh_title(ui);
     refresh_diag_label(ui);
     // Reopen the tabs of last time once the listing says what is there.
-    refresh_tree_e(ui, sessao::restaurar);
+    refresh_tree_e(ui, |ui| {
+        sessao::restaurar(ui);
+        sincronizacao::notify(ui);
+    });
 }
 
 fn normalize_url(url: &str) -> String {
@@ -3273,7 +3291,7 @@ fn mostrar_menu(
 }
 
 /// After a run: send what the program wrote back to the project off the
-/// GTK thread, then show it and keep the copy for the next run.
+/// GTK thread; failures remain in the durable journal for explicit retry.
 fn enviar_depois_da_execucao(ui: &UiRc, console: &Rc<Console>, ws: Workspace) {
     let (files, project) = {
         let mut u = ui.borrow_mut();
@@ -3286,20 +3304,19 @@ fn enviar_depois_da_execucao(ui: &UiRc, console: &Rc<Console>, ws: Workspace) {
     let console = Rc::clone(console);
     em_segundo_plano(
         ui,
-        move || {
-            let envio = ws.upload_changes(&files, &project);
-            (ws, envio)
-        },
-        move |ui, (ws, envio)| {
+        move || ws.upload_changes(&files, &project),
+        move |ui, envio| {
             {
                 let mut u = ui.borrow_mut();
                 u.execution
                     .transition(ExecutionEvent::Uploaded)
                     .expect("uploading before completing uploads");
-                u.copia_execucao = Some(ws);
             }
             let nao_enviados = mostrar_envio(ui, &console, envio);
             if nao_enviados > 0 {
+                if !ui.borrow().files.is_remote() {
+                    pendencias_ui::show(ui);
+                }
                 set_status(
                     ui,
                     &format!("não enviou {nao_enviados} arquivo(s): veja o console"),
@@ -3312,6 +3329,17 @@ fn enviar_depois_da_execucao(ui: &UiRc, console: &Rc<Console>, ws: Workspace) {
 /// After a run: refresh what the program changed, and say what failed.
 /// Returns how many files could not be sent.
 fn mostrar_envio(ui: &UiRc, console: &Console, envio: exec::Envio) -> usize {
+    if let Some(path) = &envio.pending_dir {
+        let help = if ui.borrow().files.is_remote() {
+            "Revise os arquivos em Arquivo → Sincronização…"
+        } else {
+            "As cópias foram preservadas para tentar salvar novamente ou exportar."
+        };
+        console.stderr(&format!(
+            "arquivos que não puderam ser salvos foram preservados em {}. {help}\n",
+            path.display()
+        ));
+    }
     for (rel, texto) in &envio.enviados {
         ui.borrow().file_cache.borrow_mut().remove(rel);
         let (Some(doc), Some(texto)) = (doc_by_name(ui, rel), texto) else {
@@ -3344,13 +3372,8 @@ fn mostrar_envio(ui: &UiRc, console: &Console, envio: exec::Envio) -> usize {
             )));
             sessao::copiar_nao_salvos(ui);
         } else {
-            let root = glib::user_data_dir()
-                .join("expressa-aula")
-                .join("conflitos-execucao");
-            match expressa_aula_storage::preserve_output(&root, &conflict.path, &conflict.bytes) {
-                Ok(path) => console.stderr(&format!("saída binária preservada em {}\n", path.display())),
-                Err(e) => console.stderr(&format!("não foi possível guardar a saída binária: {e}; exporte a cópia de execução antes de executar novamente\n")),
-            }
+            console
+                .stderr("arquivo binário preservado; você pode salvar uma cópia em outra pasta.\n");
         }
     }
     for erro in &envio.erros {

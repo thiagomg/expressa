@@ -45,7 +45,7 @@ when execution uploads a file that the user edited during the run.
 
 ## Implementation ready for review
 
-Step 02 is implemented in the working tree, without a Git commit.
+Step 02 is implemented in commit `9289114`.
 
 - The shared `expressa-aula-storage` crate provides content revisions, typed
   expectations/errors, same-directory staging, file synchronization, exclusive
@@ -79,7 +79,7 @@ Step 02 is implemented in the working tree, without a Git commit.
 Validated locally: 94 IDE tests, 22 server tests and 7 storage tests passed.
 The ignored storage helper is invoked explicitly by the cross-process test.
 Clippy passed for these crates and all targets with warnings denied; the offline
-workspace check and `git diff --check` also passed. No Git commit was created.
+workspace check and `git diff --check` also passed before review.
 
 Regression coverage includes failure injection before publication, competing threads
 and processes, real concurrent RPC requests, legacy update rejection, unchanged-size

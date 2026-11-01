@@ -44,8 +44,8 @@ startup after a simulated interrupted recovery.
 
 ## Implementation ready for review
 
-Step 01 is implemented in the working tree, without a Git commit. Step 02's
-project-file save protocol and conflict detection remain separate work.
+Step 01 is implemented in commit `dfadefa`. Step 02's project-file save protocol
+and conflict detection were delivered separately in `9289114`.
 
 - `documentos.rs` returns per-copy recovery outcomes, explicitly marks restored
   documents dirty, and recovers missing originals or conflicts with dirty tabs
@@ -66,7 +66,9 @@ project-file save protocol and conflict detection remain separate work.
 - Scratch tabs have a recovery scope before a project exists. Startup offers those
   copies before reopening the last project, and selecting the first project adopts
   the tabs. Their copies migrate only after a new snapshot is safely published.
-- **Arquivo → Recuperar alterações…** provides retry and export. Export includes
+- Remote projects expose review/retry/export under **Arquivo → Sincronização… →
+  Edições não salvas**. Local recovery remains automatic on reopening after a
+  failure, without a synchronization menu. Export includes
   current unsaved buffers when autosave fails, preserves malformed records as raw
   files when readable, and never overwrites destination files or retires backups.
 - The manual recovery menu discovers pending scopes without opening their projects

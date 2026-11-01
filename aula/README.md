@@ -22,7 +22,13 @@ IDE integrada para ser usada por alunos
 
 ## Execução dos programas
 
-O editor executa e depura os programas; o servidor só guarda arquivos. Em Executar/Depurar o editor copia o projeto inteiro para `~/.cache/expressa-aula/{projeto}/` (`$XDG_CACHE_HOME` se estiver definido), grava o texto do editor por cima do arquivo aberto e roda ali. Quando o programa termina, arquivos novos ou alterados (o fonte que rodou, `salve_arquivo`, `salve_csv`, …) voltam para o servidor.
+O editor executa e depura os programas; o servidor só guarda arquivos. Em Executar/Depurar o editor cria uma pasta exclusiva em `execucoes/`, dentro dos dados locais de `expressa-aula` (`~/.local/share/expressa-aula/` no Linux, respeitando `$XDG_DATA_HOME`). Copia o projeto inteiro e sobrepõe os textos das abas abertas. A identidade usa o caminho canônico local ou o endereço normalizado do servidor, aluno e projeto; nomes de exibição iguais não compartilham a pasta. Cada execução faz uma cópia nova, sem reutilizar ou apagar a de outra execução.
+
+Quando o programa termina, arquivos novos ou alterados (`salve_arquivo`, `salve_csv`, …) voltam ao projeto com a revisão original. Falhas ficam preservadas com a origem e o motivo, inclusive após outra execução ou reinício. Em projetos no servidor, **Arquivo → Sincronização…** abre uma janela com duas áreas: **Arquivos ainda não enviados ao servidor**, para arquivos que o programa gerou ou alterou, e **Edições não salvas**, para o texto das abas guardado neste computador. As listas mostram somente o projeto aberto. Você pode tentar salvar novamente, exportar uma cópia para outra pasta ou descartar as cópias após confirmação; as tentativas não substituem versões mais recentes. Registros danificados também podem ser exportados como cópias brutas.
+
+Projetos locais não exibem o menu nem a janela de sincronização. As cópias de segurança continuam automáticas. Se um arquivo gerado não puder ser gravado na pasta do projeto, a IDE avisa e oferece tentar salvar novamente ou exportar. Ao reabrir o projeto, arquivos preservados por uma falha anterior também podem ser revisados.
+
+Execuções sem pendências são removidas. Novas execuções são recusadas quando há pelo menos 100 execuções retidas ou 512 MiB de dados retidos verificáveis, até que o usuário gerencie os arquivos preservados. Esses limites controlam a admissão de novas execuções, não são uma cota de escrita para o programa em execução. Não há expiração nem remoção automática de arquivos ainda não salvos. Cópias antigas sem registro, em `~/.cache/expressa-aula/`, não são apagadas ou reenviadas automaticamente; confira essas pastas manualmente.
 
 A execução não lê nem grava fora da pasta do projeto (`..`, caminhos absolutos). Não há limite de tempo: jogos e outros laços infinitos (`exemplos/jogos/conway_jogo_da_vida.lep`) continuam até **Parar**. O painel de saída guarda as últimas 5000 linhas; depois de `cls()`/`casa()` funciona como um terminal (cada linha substitui o quadro anterior).
 
@@ -56,25 +62,18 @@ fechamento; depois de resolvê-lo, feche novamente.
 
 Substituir no projeto e os arquivos gerados pela execução também verificam a versão
 lida. Uma saída de programa em conflito não sobrescreve o projeto: texto abre em
-uma aba nova com cópia de recuperação; saídas binárias ficam fora da cópia descartável
-de execução, no caminho mostrado no console. Falhas ao preservar essas cópias são
-informadas no console. O transporte de arquivos binários remotos continua pendente.
+uma aba nova com cópia de recuperação; os resultados também permanecem no registro
+de arquivos ainda não salvos. Arquivos binários podem ser exportados pela janela
+de sincronização, em projetos no servidor, ou pelo aviso de falha local. O transporte
+de arquivos binários remotos continua pendente: arquivos binários gerados localmente
+por uma execução de projeto remoto são preservados para exportação.
 
 Atualize editor e servidor juntos. O servidor recusa atualizações sem revisão de
 editores antigos; o editor novo recusa gravar em servidores sem o método de gravação
 protegida, preservando a aba. A compilação da IDE e do servidor requer Rust 1.89 ou
 mais recente.
 
-**Recuperação**: a cada cinco segundos, o editor guarda uma cópia das alterações,
-inclusive de abas sem título e antes de escolher um projeto. Ao reabrir, **Recuperar**
-abre essas alterações em abas marcadas como não salvas. Se o arquivo original não
-estiver disponível, o texto abre em uma nova aba; o nome original aparece na dica
-da aba. **Cancelar** ou fechar a pergunta preserva as cópias para outra tentativa,
-mesmo ao sair normalmente. **Arquivo → Recuperar alterações…** permite tentar de
-novo ou **Exportar…** para outra pasta, sem substituir arquivos existentes nem apagar
-as cópias. O menu também lista cópias de outros projetos, inclusive de servidores
-fora do ar; elas abrem em novas abas sem depender da conexão. Cópias com formato
-inválido podem ser exportadas no formato original.
+**Proteção das edições**: a cada cinco segundos, o editor guarda uma cópia do texto alterado, inclusive de abas sem título e antes de escolher um projeto. Em projetos locais, ao reabrir após uma interrupção, a IDE oferece **Abrir texto em abas** para conferir e salvar. Em projetos no servidor, essas cópias ficam em **Arquivo → Sincronização… → Edições não salvas**, sem abrir perguntas automaticamente. Abrir uma cópia não envia nem substitui arquivos. Se o original não estiver disponível, o texto abre em uma nova aba, com o nome original na dica da aba. **Depois** ou fechar a pergunta mantém as cópias para outra tentativa, mesmo ao sair normalmente. Também é possível salvar cópias em outra pasta, sem substituir arquivos existentes ou apagar as cópias de segurança. Registros com formato inválido podem ser exportados no formato original.
 Salvar ou descartar uma aba remove somente as cópias dessa aba. Ao escolher o
 primeiro projeto, as abas que já estavam abertas continuam abertas para serem salvas.
 

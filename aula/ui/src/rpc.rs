@@ -150,6 +150,7 @@ unsafe extern "system" fn on_console_ctrl(ctrl: u32) -> i32 {
 }
 
 pub struct Rpc {
+    pub endpoint: String,
     rt: tokio::runtime::Runtime,
     channel: Channel,
     /// Set only when this client started `expressa-aula-server`.
@@ -170,12 +171,13 @@ impl Rpc {
     }
 
     fn connect_within(url: &str, limit: std::time::Duration) -> Result<Self, String> {
+        let normalized = crate::identidade::normalize_endpoint(url)?;
         let rt = tokio::runtime::Builder::new_multi_thread()
             .enable_all()
             .build()
             .map_err(|e| e.to_string())?;
         let channel = rt.block_on(async {
-            Endpoint::from_shared(url.to_string())
+            Endpoint::from_shared(normalized.clone())
                 .map_err(|e| e.to_string())?
                 .connect_timeout(limit)
                 .timeout(TEMPO_POR_PEDIDO)
@@ -184,6 +186,7 @@ impl Rpc {
                 .map_err(|e| e.to_string())
         })?;
         Ok(Self {
+            endpoint: normalized,
             rt,
             channel,
             spawned_server: None,

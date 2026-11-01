@@ -322,6 +322,49 @@ mod tests {
     }
 
     #[test]
+    fn repl_input_stays_above_status_bar_when_bottom_pane_is_collapsed() {
+        crate::gtk_test::run(|| {
+            let p = PainelRepl::new();
+            let notebook = gtk::Notebook::new();
+            notebook.append_page(&p.widget, Some(&Label::new(Some("REPL"))));
+            let editor = ScrolledWindow::builder().child(&TextView::new()).build();
+            let pane = crate::editor_panes(&editor, &notebook);
+            pane.set_vexpand(true);
+            let status = Label::new(Some("status"));
+            let root = GtkBox::new(Orientation::Vertical, 6);
+            root.append(&pane);
+            root.append(&status);
+            let window = gtk::Window::builder()
+                .default_width(800)
+                .default_height(360)
+                .child(&root)
+                .build();
+            window.present();
+            girar_ate(|| p.entrada.is_mapped() && pane.height() > 0);
+            pane.set_position(i32::MAX);
+            // Process a frame after forcing the bottom pane to its smallest size.
+            let allocated = Rc::new(Cell::new(false));
+            let ready = allocated.clone();
+            pane.add_tick_callback(move |_, _| {
+                ready.set(true);
+                glib::ControlFlow::Break
+            });
+            girar_ate(|| allocated.get());
+            let input = p.entrada.compute_bounds(&window).unwrap();
+            let bar = status.compute_bounds(&window).unwrap();
+            let (_, natural, _, _) = p.entrada.measure(Orientation::Vertical, -1);
+            let visible = input.y() >= 0.0
+                && input.y() + input.height() <= bar.y()
+                && input.height() >= natural as f32;
+            window.close();
+            assert!(
+                visible,
+                "REPL input {input:?} (natural height {natural}) overlaps status {bar:?}"
+            );
+        });
+    }
+
+    #[test]
     fn repl_no_painel() {
         crate::gtk_test::run(|| {
             let p = PainelRepl::new();

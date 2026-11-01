@@ -1,8 +1,8 @@
 //! Runs and debugs programs in this process. The server is only a file
 //! repository: before a run the student's project is copied into a local
-//! cache folder, and files the program created or changed are sent back.
+//! durable run folder, and files the program created or changed are sent back.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{Receiver, Sender, SyncSender};
@@ -13,7 +13,7 @@ use expressa::runtime::{
     LeiaHost, StopHook, TelaGrafica, run_with_hosts,
 };
 
-use crate::store::{Expected, Files, SaveError};
+use crate::store::{Expected, Files};
 
 /// Start of the message for a crash inside the interpreter.
 pub const ERRO_INTERNO: &str =
@@ -73,6 +73,7 @@ pub struct Envio {
     pub erros: Vec<String>,
     pub avisos: Vec<String>,
     pub conflitos: Vec<UploadConflict>,
+    pub pending_dir: Option<PathBuf>,
 }
 
 pub struct UploadConflict {
@@ -86,161 +87,81 @@ pub struct EditorSource {
     pub expected: Expected,
 }
 
-/// Size and modification time of a file.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-struct Versao {
-    tamanho: u64,
-    modificado_ns: i64,
-}
-
-impl Versao {
-    /// The local file's version, or `None` if it is not there.
-    fn de(path: &Path) -> Option<Self> {
-        let meta = std::fs::metadata(path).ok()?;
-        Some(Self {
-            tamanho: meta.len(),
-            modificado_ns: crate::store::modificado_ns(&meta),
-        })
-    }
-}
-
+/// Each execution owns a unique durable directory. Journals remain after a
+/// crash or failed upload and are never synchronized over by a later run.
 pub struct Workspace {
     pub dir: PathBuf,
-    /// Text supplied to the run (downloads plus editor overlays), to detect
-    /// changes made by the program without implicitly saving unsaved tabs.
-    snapshot: HashMap<String, String>,
-    /// The repository baseline, separate from unsaved text overlaid for a run.
     revisions: HashMap<String, Expected>,
-    /// For each file copied from the project: its version there, and the
-    /// copy's version right after writing it. The next run of the same
-    /// project skips the file when neither changed (see [`Workspace::sync`]).
-    copiados: HashMap<String, (Versao, Versao)>,
-}
-
-fn cache_root() -> PathBuf {
-    std::env::var_os("XDG_CACHE_HOME")
-        .map(PathBuf::from)
-        .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".cache")))
-        .unwrap_or_else(std::env::temp_dir)
-        .join("expressa-aula")
-}
-
-/// Cache folder name. Local directories may contain spaces; remote student
-/// names are already a single path segment.
-fn cache_name(project: &str) -> String {
-    let s: String = project
-        .chars()
-        .map(|c| {
-            if c.is_ascii_alphanumeric() || c == '_' || c == '-' {
-                c
-            } else {
-                '_'
-            }
-        })
-        .collect();
-    if s.is_empty() || s.chars().all(|c| c == '_') {
-        "projeto".to_string()
-    } else {
-        s
-    }
+    journal: crate::pendencias::Journal,
 }
 
 impl Workspace {
-    /// Bring the local copy up to date with the project. `anterior` is the
-    /// copy the previous run of this project left: a file whose version in
-    /// the project and whose copy are both as it left them is not copied
-    /// again, and files gone from the project are removed. Without it (or
-    /// for another project) the copy starts over.
-    ///
-    /// Runs off the GTK thread: on a server every copied file is a request.
-    pub fn sync(files: &Files, project: &str, anterior: Option<Self>) -> Result<Self, String> {
-        Self::sync_em(&cache_root(), files, project, anterior)
+    pub fn sync(files: &Files, project: &str) -> Result<Self, String> {
+        Self::sync_em(&crate::pendencias::root(), files, project, None)
     }
 
-    /// [`Workspace::sync`] with the copies under `raiz` (tests use their
-    /// own folder: `cache_root` depends on `HOME`, which tests change).
     fn sync_em(
-        raiz: &Path,
+        root: &Path,
         files: &Files,
         project: &str,
         anterior: Option<Self>,
     ) -> Result<Self, String> {
-        let dir = raiz.join(cache_name(&files.cache_key(project)));
-        let anterior = anterior.filter(|a| dir.canonicalize().ok().as_ref() == Some(&a.dir));
-        if anterior.is_none() && dir.exists() {
-            std::fs::remove_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
-        }
-        std::fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
-        let dir = dir.canonicalize().map_err(|e| e.to_string())?;
-        let (mut texto_antes, copiado_antes, mut revisions_before) = anterior
-            .map(|a| (a.snapshot, a.copiados, a.revisions))
-            .unwrap_or_default();
-
-        let mut snapshot = HashMap::new();
+        // Release only our old lease. Its outputs remain durable and are
+        // discovered independently; this run never writes into that directory.
+        drop(anterior);
+        let identity = files.identity(project)?;
+        let journal = crate::pendencias::Journal::create(root, identity)?;
+        let dir = journal.dir().canonicalize().map_err(|e| e.to_string())?;
         let mut revisions = HashMap::new();
-        let mut copiados = HashMap::new();
-        let mut no_projeto = HashSet::new();
         for entry in files.list_tree(project)? {
-            no_projeto.insert(entry.path.clone());
+            if !crate::pendencias::valid_relative(&entry.path) {
+                return Err(format!("caminho inválido no projeto: {}", entry.path));
+            }
             let local = dir.join(&entry.path);
             if entry.is_dir {
                 std::fs::create_dir_all(&local).map_err(|e| e.to_string())?;
-                continue;
-            }
-            let origem = Versao {
-                tamanho: entry.size,
-                modificado_ns: entry.modified_ns,
-            };
-            // 0 is an older server that does not say: always copy.
-            let igual = origem.modificado_ns != 0
-                && copiado_antes
-                    .get(&entry.path)
-                    .is_some_and(|&(o, c)| o == origem && Versao::de(&local) == Some(c));
-            if igual {
-                if let Some(revision) = revisions_before.remove(&entry.path) {
-                    revisions.insert(entry.path.clone(), revision);
-                }
-                if let Some(texto) = texto_antes.remove(&entry.path) {
-                    snapshot.insert(entry.path.clone(), texto);
-                }
-                copiados.insert(entry.path.clone(), copiado_antes[&entry.path]);
-                continue;
-            }
-            if let Some((source, expected)) =
-                copy_project_file(files, project, &entry.path, &local)?
-            {
+            } else if let Some(expected) = copy_project_file(files, project, &entry.path, &local)? {
                 revisions.insert(entry.path.clone(), expected);
-                if let Some(source) = source {
-                    snapshot.insert(entry.path.clone(), source);
-                }
-            }
-            if let Some(copia) = Versao::de(&local) {
-                copiados.insert(entry.path, (origem, copia));
             }
         }
-        remover_sobras(&dir, &dir, &no_projeto).map_err(|e| e.to_string())?;
+        journal.baseline(&revisions)?;
         Ok(Self {
             dir,
-            snapshot,
             revisions,
-            copiados,
+            journal,
         })
     }
 
     /// Put the editor's text of `rel` in the copy (open tabs, saved or not).
     /// Only subsequent program changes are uploaded. Repository revisions stay
     /// separate: unsaved text never grants permission to replace newer files.
+    #[cfg(test)]
     pub fn write_editor_text(&mut self, rel: &str, source: &str) -> Result<(), String> {
-        write_file(&self.dir.join(rel), source)?;
-        self.snapshot.insert(rel.to_string(), source.to_string());
-        Ok(())
+        if !crate::pendencias::valid_relative(rel) {
+            return Err("caminho de aba inválido".into());
+        }
+        let expected = self
+            .revisions
+            .get(rel)
+            .cloned()
+            .unwrap_or(Expected::Missing);
+        self.journal.overlay(rel, source.as_bytes(), &expected)?;
+        self.arm()
     }
 
     pub fn write_editor_source(&mut self, source: &EditorSource) -> Result<(), String> {
-        self.write_editor_text(&source.path, &source.text)?;
+        if !crate::pendencias::valid_relative(&source.path) {
+            return Err("caminho de aba inválido".into());
+        }
+        self.journal
+            .overlay(&source.path, source.text.as_bytes(), &source.expected)?;
         self.revisions
             .insert(source.path.clone(), source.expected.clone());
         Ok(())
+    }
+
+    pub fn arm(&self) -> Result<(), String> {
+        self.journal.arm()
     }
 
     /// Absolute path of `rel` in the copy, as the interpreter names files.
@@ -251,64 +172,23 @@ impl Workspace {
     /// Send files that are new or differ from the download. One file that
     /// fails does not stop the others: every failure is reported.
     pub fn upload_changes(&self, files: &Files, project: &str) -> Envio {
-        let mut envio = Envio::default();
-        let mut paths = Vec::new();
-        if let Err(e) = walk(&self.dir, &mut paths) {
-            envio.erros.push(format!("{}: {e}", self.dir.display()));
+        let delivery = self.journal.retry(files, project);
+        let pending_dir = if delivery.errors.is_empty() && delivery.conflicts.is_empty() {
+            None
+        } else {
+            Some(self.journal.run_dir.clone())
+        };
+        Envio {
+            enviados: delivery.sent,
+            erros: delivery.errors,
+            avisos: delivery.warnings,
+            conflitos: delivery
+                .conflicts
+                .into_iter()
+                .map(|(path, bytes)| UploadConflict { path, bytes })
+                .collect(),
+            pending_dir,
         }
-        for path in paths {
-            let rel = self.relative(&path);
-            let bytes = match std::fs::read(&path) {
-                Ok(b) => b,
-                Err(e) => {
-                    envio.erros.push(format!("{rel}: {e}"));
-                    continue;
-                }
-            };
-            let text = std::str::from_utf8(&bytes).ok().map(str::to_owned);
-            if text
-                .as_ref()
-                .is_some_and(|source| self.snapshot.get(&rel) == Some(source))
-            {
-                continue;
-            }
-            if text.is_none() && files.is_remote() {
-                continue;
-            } // Binary RPC is item 04.
-            let expected = self
-                .revisions
-                .get(&rel)
-                .cloned()
-                .unwrap_or(Expected::Missing);
-            if text.is_none()
-                && expected == Expected::Revision(expressa_aula_storage::revision(&bytes))
-            {
-                continue;
-            }
-            let result = if let Some(source) = &text {
-                files.write_file(project, &rel, source, &expected)
-            } else {
-                files.write_bytes(&rel, &bytes, &expected)
-            };
-            match result {
-                Ok(saved) => {
-                    if let Some(warning) = saved.warning {
-                        envio.avisos.push(format!("{rel}: {warning}"));
-                    }
-                    envio.enviados.push((rel, text));
-                }
-                Err(SaveError::Conflict | SaveError::AlreadyExists | SaveError::Unsupported) => {
-                    envio.conflitos.push(UploadConflict { path: rel, bytes });
-                }
-                Err(e) => envio.erros.push(format!("{rel}: {e}")),
-            }
-        }
-        envio
-    }
-
-    /// `/cache/ana/lib/m.lep` -> `lib/m.lep`; other paths unchanged.
-    pub fn relative(&self, path: &Path) -> String {
-        display_path(&self.dir, &path.to_string_lossy())
     }
 }
 
@@ -329,54 +209,28 @@ pub fn same_project_path(a: &str, b: &str) -> bool {
     a.replace('\\', "/") == b.replace('\\', "/")
 }
 
-/// Copy one project file into the cache. Text is returned for the snapshot.
-/// A PNG (or anything else that is not UTF-8) is copied as bytes and omitted
-/// from the snapshot. On a remote project the file API is text-only, so a
-/// binary file is skipped instead of failing the whole run.
-/// Deletes what is in the copy but no longer in the project (`no_projeto`
-/// holds project-relative paths of files and folders).
-fn remover_sobras(dir: &Path, raiz: &Path, no_projeto: &HashSet<String>) -> io::Result<()> {
-    for entry in std::fs::read_dir(dir)? {
-        let path = entry?.path();
-        let rel = display_path(raiz, &path.to_string_lossy());
-        let pasta = path.is_dir();
-        if !no_projeto.contains(&rel) {
-            if pasta {
-                std::fs::remove_dir_all(&path)?;
-            } else {
-                std::fs::remove_file(&path)?;
-            }
-        } else if pasta {
-            remover_sobras(&path, raiz, no_projeto)?;
-        }
-    }
-    Ok(())
-}
-
+/// Download text and local binary data, preserving the repository revision.
+/// Binary download from a server remains item 04.
 fn copy_project_file(
     files: &Files,
     project: &str,
     rel: &str,
     dest: &Path,
-) -> Result<Option<(Option<String>, Expected)>, String> {
+) -> Result<Option<Expected>, String> {
     if !files.is_remote() {
         let snapshot = files.read_bytes_snapshot(rel)?;
         write_bytes(dest, &snapshot.bytes)?;
-        return Ok(Some((
-            String::from_utf8(snapshot.bytes).ok(),
-            Expected::Revision(snapshot.revision),
-        )));
+        return Ok(Some(Expected::Revision(snapshot.revision)));
     }
     match files.current_text(project, rel) {
         Ok(Some(snapshot)) => {
             write_file(dest, &snapshot.text)?;
-            Ok(Some((
-                Some(snapshot.text),
+            Ok(Some(
                 snapshot
                     .revision
                     .map(Expected::Revision)
                     .unwrap_or(Expected::Unversioned),
-            )))
+            ))
         }
         Ok(None) => Err(format!("arquivo `{rel}` foi removido durante a cópia")),
         Err(e) if e.to_lowercase().contains("utf-8") => Ok(None),
@@ -393,18 +247,6 @@ fn write_bytes(path: &Path, bytes: &[u8]) -> Result<(), String> {
 
 fn write_file(path: &Path, source: &str) -> Result<(), String> {
     write_bytes(path, source.as_bytes())
-}
-
-fn walk(dir: &Path, out: &mut Vec<PathBuf>) -> io::Result<()> {
-    for entry in std::fs::read_dir(dir)? {
-        let path = entry?.path();
-        if path.is_dir() {
-            walk(&path, out)?;
-        } else {
-            out.push(path);
-        }
-    }
-    Ok(())
 }
 
 struct ChannelLeia {
@@ -559,7 +401,9 @@ pub fn spawn(
         });
     }
 
+    let lease = ws.journal.lease();
     std::thread::spawn(move || {
+        let _lease = lease; // Keep the run owned even if its window closes.
         let mut host = ChannelLeia {
             prompts: event_tx.clone(),
             lines: line_rx,
@@ -691,7 +535,9 @@ mod tests {
         }
 
         fn workspace(&self) -> Workspace {
-            Workspace::sync_em(&self.cache, &self.files, &self.project, None).unwrap()
+            let ws = Workspace::sync_em(&self.cache, &self.files, &self.project, None).unwrap();
+            ws.arm().unwrap();
+            ws
         }
     }
 
@@ -746,7 +592,7 @@ mod tests {
                 }
             }
             assert_eq!(state.availability(), Err(Unavailable::Uploading));
-            // Failed uploads still finish this lifecycle; durable retry is item 03.
+            // Failed uploads finish the lifecycle while the journal retains output.
             write_file(&ws.dir.join("generated.txt"), "output from the run").unwrap();
             let failed = ws.upload_changes(&Files::None, "");
             assert!(!failed.erros.is_empty());
@@ -852,6 +698,7 @@ mod tests {
             expected: Expected::Revision(old_revision),
         })
         .unwrap();
+        ws.arm().unwrap();
         std::fs::write(ws.dir.join("a.lep"), "program changed stale editor text").unwrap();
         let upload = ws.upload_changes(&project.files, &project.project);
         assert_eq!(upload.conflitos.len(), 1);
@@ -859,15 +706,6 @@ mod tests {
             std::fs::read_to_string(project.root.join("a.lep")).unwrap(),
             "external update before F5"
         );
-    }
-
-    #[test]
-    fn cache_name_keeps_letters_and_replaces_the_rest() {
-        assert_eq!(cache_name("ana"), "ana");
-        assert_eq!(cache_name("turma-1_b"), "turma-1_b");
-        assert_eq!(cache_name("Meu Projeto"), "Meu_Projeto");
-        assert_eq!(cache_name(""), "projeto");
-        assert_eq!(cache_name("../x"), "___x");
     }
 
     #[test]
@@ -925,79 +763,76 @@ mod tests {
         (root.clone(), Files::Local(root), projeto, cache)
     }
 
-    fn versao(path: &Path) -> Versao {
-        Versao::de(path).unwrap()
-    }
-
-    /// Time moves on enough for a new write to get a new modification time.
-    fn espera() {
-        std::thread::sleep(std::time::Duration::from_millis(20));
-    }
-
     #[test]
-    fn sync_nao_copia_de_novo_o_que_nao_mudou() {
-        let (root, files, projeto, cache) = projeto_para_sync("igual");
-        let ws = Workspace::sync_em(&cache, &files, &projeto, None).unwrap();
-        let a = versao(&ws.dir.join("a.lep"));
-        espera();
-        let ws = Workspace::sync_em(&cache, &files, &projeto, Some(ws)).unwrap();
-        assert_eq!(versao(&ws.dir.join("a.lep")), a, "a.lep was copied again");
-        // The snapshot still knows the text, so a program's change is seen.
-        assert_eq!(ws.snapshot.get("a.lep").map(String::as_str), Some("a"));
-        let _ = std::fs::remove_dir_all(&cache);
-        let _ = std::fs::remove_dir_all(&root);
-    }
-
-    #[test]
-    fn sync_copia_o_que_mudou_no_projeto_ou_na_copia() {
-        let (root, files, projeto, cache) = projeto_para_sync("mudou");
-        let mut ws = Workspace::sync_em(&cache, &files, &projeto, None).unwrap();
-        espera();
-        std::fs::write(root.join("a.lep"), "a2").unwrap(); // changed in the project
-        ws.write_editor_text("lib/b.lep", "aba").unwrap(); // a tab's text in the copy
-        std::fs::write(root.join("c.lep"), "c").unwrap(); // new
-        let ws = Workspace::sync_em(&cache, &files, &projeto, Some(ws)).unwrap();
-        let ler = |rel: &str| std::fs::read_to_string(ws.dir.join(rel)).unwrap();
-        assert_eq!(ler("a.lep"), "a2");
-        assert_eq!(
-            ler("lib/b.lep"),
-            "b",
-            "the tab's text from the last run stays"
+    fn sync_always_uses_a_fresh_directory() {
+        let project = RunProject::new("fresh");
+        let first = project.workspace();
+        let first_dir = first.dir.clone();
+        let second = project.workspace();
+        assert_ne!(first.dir, second.dir);
+        assert!(
+            first_dir.join("a.lep").exists(),
+            "another run deleted the active copy"
         );
-        assert_eq!(ler("c.lep"), "c");
-        let _ = std::fs::remove_dir_all(&cache);
-        let _ = std::fs::remove_dir_all(&root);
+        assert_eq!(first.journal.identity(), second.journal.identity());
     }
 
     #[test]
-    fn sync_apaga_da_copia_o_que_saiu_do_projeto() {
-        let (root, files, projeto, cache) = projeto_para_sync("saiu");
-        let ws = Workspace::sync_em(&cache, &files, &projeto, None).unwrap();
-        std::fs::write(ws.dir.join("lixo.txt"), "do programa").unwrap();
-        std::fs::remove_dir_all(root.join("lib")).unwrap();
-        let ws = Workspace::sync_em(&cache, &files, &projeto, Some(ws)).unwrap();
-        assert!(ws.dir.join("a.lep").exists());
-        assert!(!ws.dir.join("lib").exists());
-        assert!(!ws.dir.join("lixo.txt").exists());
-        let _ = std::fs::remove_dir_all(&cache);
-        let _ = std::fs::remove_dir_all(&root);
+    fn sync_refreshes_sources_without_touching_prior_output() {
+        let project = RunProject::new("refresh");
+        let first = project.workspace();
+        let first_dir = first.dir.clone();
+        std::fs::write(first.dir.join("new.txt"), "not uploaded").unwrap();
+        std::fs::write(project.root.join("a.lep"), "a2").unwrap();
+        let second = Workspace::sync_em(
+            &project.cache,
+            &project.files,
+            &project.project,
+            Some(first),
+        )
+        .unwrap();
+        assert_eq!(
+            std::fs::read_to_string(second.dir.join("a.lep")).unwrap(),
+            "a2"
+        );
+        assert!(!second.dir.join("new.txt").exists());
+        assert_eq!(
+            std::fs::read_to_string(first_dir.join("new.txt")).unwrap(),
+            "not uploaded"
+        );
+        let scan = crate::pendencias::scan(&project.cache);
+        assert!(scan.errors.is_empty(), "{:?}", scan.errors);
+        assert_eq!(scan.runs.len(), 1);
+        assert_eq!(scan.runs[0].files[0].0, "new.txt");
     }
 
     #[test]
-    fn sync_sem_versao_do_servidor_sempre_copia() {
-        // An older server sends 0: nothing is trusted, everything is copied.
-        let (root, files, projeto, cache) = projeto_para_sync("sem-versao");
-        let mut ws = Workspace::sync_em(&cache, &files, &projeto, None).unwrap();
-        for (origem, _) in ws.copiados.values_mut() {
-            origem.modificado_ns = 0;
+    fn identical_folder_names_in_distinct_locations_have_distinct_identities() {
+        let temp = tempfile::tempdir().unwrap();
+        let a = temp.path().join("one/project");
+        let b = temp.path().join("two/project");
+        std::fs::create_dir_all(&a).unwrap();
+        std::fs::create_dir_all(&b).unwrap();
+        let first = Files::Local(a.clone());
+        let second = Files::Local(b);
+        assert_ne!(first.cache_key("project"), second.cache_key("project"));
+        assert_eq!(
+            first.cache_key("display name"),
+            Files::Local(a.join(".")).cache_key("other display name")
+        );
+        #[cfg(unix)]
+        {
+            let alias = temp.path().join("alias");
+            std::os::unix::fs::symlink(&a, &alias).unwrap();
+            assert_eq!(first.cache_key("a"), Files::Local(alias).cache_key("b"));
         }
-        std::fs::write(ws.dir.join("a.lep"), "estragado").unwrap();
-        let antes = ws.copiados["lib/b.lep"];
-        let ws = Workspace::sync_em(&cache, &files, &projeto, Some(ws)).unwrap();
-        assert_eq!(std::fs::read_to_string(ws.dir.join("a.lep")).unwrap(), "a");
-        assert_ne!(ws.copiados["lib/b.lep"].0, antes.0);
-        let _ = std::fs::remove_dir_all(&cache);
-        let _ = std::fs::remove_dir_all(&root);
+        let cache = temp.path().join("runs");
+        let wa = Workspace::sync_em(&cache, &first, "project", None).unwrap();
+        let wb = Workspace::sync_em(&cache, &second, "project", None).unwrap();
+        assert_ne!(
+            wa.dir.parent().unwrap().parent(),
+            wb.dir.parent().unwrap().parent()
+        );
     }
 
     #[test]
@@ -1018,38 +853,21 @@ mod tests {
 
     #[test]
     fn upload_changes_continua_depois_de_uma_falha() {
-        let base = std::env::temp_dir().join(format!("expressa-envio-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&base);
-        let (projeto, copia) = (base.join("projeto"), base.join("copia"));
-        std::fs::create_dir_all(&projeto).unwrap();
-        // `sub` is a file in the project, so `sub/d.lep` cannot be written.
-        std::fs::write(projeto.join("sub"), "").unwrap();
-        for (rel, texto) in [("a.lep", "igual"), ("b.lep", "novo"), ("sub/d.lep", "x")] {
-            write_file(&copia.join(rel), texto).unwrap();
-        }
-        let ws = Workspace {
-            dir: copia,
-            snapshot: HashMap::from([("a.lep".to_string(), "igual".to_string())]),
-            copiados: HashMap::new(),
-            revisions: HashMap::new(),
-        };
-
-        let envio = ws.upload_changes(&Files::Local(projeto.clone()), "");
-
-        assert_eq!(
-            envio.enviados,
-            [("b.lep".to_string(), Some("novo".to_string()))]
-        );
+        let project = RunProject::new("upload-partial");
+        std::fs::write(project.root.join("sub"), "blocker").unwrap();
+        let ws = project.workspace();
+        write_file(&ws.dir.join("b.lep"), "novo").unwrap();
+        std::fs::remove_file(ws.dir.join("sub")).unwrap();
+        write_file(&ws.dir.join("sub/d.lep"), "x").unwrap();
+        let envio = ws.upload_changes(&project.files, &project.project);
+        assert_eq!(envio.enviados, [("b.lep".into(), Some("novo".into()))]);
         assert_eq!(envio.erros.len(), 1, "{:?}", envio.erros);
-        assert!(envio.erros[0].starts_with("sub/d.lep"), "{:?}", envio.erros);
+        assert!(envio.erros[0].starts_with("sub/d.lep"));
         assert_eq!(
-            std::fs::read_to_string(projeto.join("b.lep")).unwrap(),
-            "novo"
+            std::fs::read_to_string(project.root.join("a.lep")).unwrap(),
+            "a"
         );
-        assert!(
-            !projeto.join("a.lep").exists(),
-            "unchanged files are not sent"
-        );
-        let _ = std::fs::remove_dir_all(&base);
+        assert!(envio.pending_dir.is_some());
+        assert_eq!(ws.journal.outputs().unwrap().len(), 1);
     }
 }
