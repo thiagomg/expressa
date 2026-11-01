@@ -643,9 +643,10 @@ pub fn vigiar(ui: &UiRc, doc: &Rc<Doc>) {
             return;
         }
     };
-    let caminho = raiz.join(doc.name());
+    let nome = doc.name();
+    let caminho = raiz.join(&nome);
     let Ok(monitor) = gio::File::for_path(&caminho)
-        .monitor_file(gio::FileMonitorFlags::NONE, gio::Cancellable::NONE)
+        .monitor_file(gio::FileMonitorFlags::WATCH_MOVES, gio::Cancellable::NONE)
     else {
         return;
     };
@@ -654,11 +655,16 @@ pub fn vigiar(ui: &UiRc, doc: &Rc<Doc>) {
     monitor.connect_changed(move |_, _, _, evento| {
         if !matches!(
             evento,
-            gio::FileMonitorEvent::ChangesDoneHint | gio::FileMonitorEvent::Created
+            gio::FileMonitorEvent::ChangesDoneHint
+                | gio::FileMonitorEvent::Created
+                | gio::FileMonitorEvent::Renamed
+                | gio::FileMonitorEvent::MovedIn
         ) {
             return;
         }
-        if let (Some(ui), Some(doc)) = (ui_w.upgrade(), doc_w.upgrade()) {
+        if let (Some(ui), Some(doc)) = (ui_w.upgrade(), doc_w.upgrade())
+            && doc.name() == nome
+        {
             mudou_fora(&ui, &doc, &caminho);
         }
     });
@@ -669,15 +675,17 @@ fn mudou_fora(ui: &UiRc, doc: &Rc<Doc>, caminho: &Path) {
     let Ok(texto) = std::fs::read_to_string(caminho) else {
         return;
     };
-    // Our own save, or a run's output already reloaded.
-    if texto == doc.text() {
+    // A write-access check can emit a close-write event without changing bytes.
+    // Do not mistake that, our own save, or a repeated event for an outside edit.
+    let revision = expressa_aula_storage::revision(texto.as_bytes());
+    if doc.revision.borrow().as_ref() == Some(&revision) || texto == doc.text() {
         return;
     }
     let nome = doc.name();
     if doc.is_dirty() {
         set_status(
             ui,
-            &format!("`{nome}` mudou fora do editor; salvar a aba substitui essa mudança"),
+            &format!("`{nome}` mudou fora do editor; salvar exigirá resolver o conflito"),
         );
     } else {
         doc.recarregar(&texto);

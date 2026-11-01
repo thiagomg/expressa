@@ -9,6 +9,7 @@ mod assist;
 mod atalhos;
 mod busca_projeto;
 mod cartesiano;
+mod conflitos;
 mod console;
 mod docs;
 mod documentos;
@@ -1533,8 +1534,13 @@ fn open_path(ui: &UiRc, path: &str) -> Option<Rc<Doc>> {
             switch_to(ui, &doc);
             Some(doc)
         }
-        Ok(OpenDocument::Loaded { path, text }) => {
+        Ok(OpenDocument::Loaded {
+            path,
+            text,
+            revision,
+        }) => {
             let doc = open_doc(ui, Some(path.clone()), &text);
+            *doc.revision.borrow_mut() = revision;
             set_status(ui, &format!("aberto {path}"));
             Some(doc)
         }
@@ -1595,28 +1601,39 @@ fn close_doc(ui: &UiRc, doc: &Rc<Doc>) {
 
 /// Save one tab; an untitled one asks for a name. False if not saved.
 fn save_doc(ui: &UiRc, doc: &Rc<Doc>) -> bool {
+    let original_name = doc.name();
     let new_name = if doc.is_untitled() {
         let window = ui.borrow().window.clone();
         perguntar_linha(&window, &format!("Salvar `{}` como:", doc.untitled))
     } else {
         None
     };
-    match with_documents(ui, |documents| documents.save(doc, new_name.as_deref())) {
-        Ok(SaveOutcome::Saved {
-            name,
-            recovery_warning,
-        }) => {
+    if doc.name() != original_name || !all_docs(ui).iter().any(|d| Rc::ptr_eq(d, doc)) {
+        return false;
+    }
+    let outcome = with_documents(ui, |documents| documents.save(doc, new_name.as_deref()));
+    finish_save(ui, doc, outcome)
+}
+
+fn finish_save(ui: &UiRc, doc: &Rc<Doc>, outcome: Result<SaveOutcome, String>) -> bool {
+    match outcome {
+        Ok(SaveOutcome::Saved { name, warning }) => {
             saved(ui, doc, &name);
-            if let Some(warning) = recovery_warning {
-                set_status(
-                    ui,
-                    "arquivo salvo; não foi possível remover sua cópia de recuperação",
-                );
+            if let Some(warning) = warning {
+                set_status(ui, "arquivo salvo com aviso — veja o console");
                 ui.borrow().console.stderr(&format!("aviso: {warning}\n"));
             }
             true
         }
         Ok(SaveOutcome::Cancelled) => false,
+        Ok(SaveOutcome::Conflict { name }) => {
+            set_status(
+                ui,
+                &format!("conflito ao salvar {name}; a aba foi preservada"),
+            );
+            conflitos::mostrar(ui, doc);
+            false
+        }
         Err(e) => {
             set_status(ui, &e);
             false
@@ -2159,7 +2176,22 @@ fn executar(ui: &UiRc, debug: bool) {
     let fonte = doc.text();
     // The text of every open tab goes into the copy, so the program and its
     // `importe`s run what is on screen (saved or not).
-    let textos: Vec<(String, String)> = all_docs(ui).iter().map(|d| (d.name(), d.text())).collect();
+    let textos: Vec<exec::EditorSource> = all_docs(ui)
+        .iter()
+        .map(|doc| exec::EditorSource {
+            path: doc.name(),
+            text: doc.text(),
+            expected: if doc.is_untitled() {
+                store::Expected::Missing
+            } else {
+                doc.revision
+                    .borrow()
+                    .clone()
+                    .map(store::Expected::Revision)
+                    .unwrap_or(store::Expected::Unversioned)
+            },
+        })
+        .collect();
     let (files, project, args, anterior) = {
         let mut u = ui.borrow_mut();
         u.execution
@@ -2175,8 +2207,8 @@ fn executar(ui: &UiRc, debug: bool) {
         ui,
         move || {
             let mut ws = Workspace::sync(&files, &project, anterior)?;
-            for (n, t) in &textos {
-                ws.write_editor_text(n, t)?;
+            for source in &textos {
+                ws.write_editor_source(source)?;
             }
             Ok::<_, String>(ws)
         },
@@ -3289,10 +3321,36 @@ fn mostrar_envio(ui: &UiRc, console: &Console, envio: exec::Envio) -> usize {
             // Saving the tab now would replace what the program wrote.
             console.stderr(&format!(
                 "aviso: o programa alterou `{rel}`, que tem alterações não salvas \
-                 na aba. Salvar a aba substitui o que o programa escreveu.\n"
+                 na aba. Salvar exigirá resolver o conflito.\n"
             ));
         } else if doc.text() != *texto {
             doc.recarregar(texto);
+        }
+    }
+    for warning in &envio.avisos {
+        console.stderr(&format!("aviso: {warning}\n"));
+    }
+    for conflict in &envio.conflitos {
+        console.stderr(&format!(
+            "conflito: `{}` mudou no projeto; a saída do programa não substituiu o arquivo.\n",
+            conflict.path
+        ));
+        if let Ok(source) = std::str::from_utf8(&conflict.bytes) {
+            let recovered = open_doc(ui, None, source);
+            recovered.buffer.set_modified(true);
+            recovered.tab.set_tooltip_text(Some(&format!(
+                "Saída do programa para {} — salva como uma nova cópia",
+                conflict.path
+            )));
+            sessao::copiar_nao_salvos(ui);
+        } else {
+            let root = glib::user_data_dir()
+                .join("expressa-aula")
+                .join("conflitos-execucao");
+            match expressa_aula_storage::preserve_output(&root, &conflict.path, &conflict.bytes) {
+                Ok(path) => console.stderr(&format!("saída binária preservada em {}\n", path.display())),
+                Err(e) => console.stderr(&format!("não foi possível guardar a saída binária: {e}; exporte a cópia de execução antes de executar novamente\n")),
+            }
         }
     }
     for erro in &envio.erros {
@@ -3303,7 +3361,7 @@ fn mostrar_envio(ui: &UiRc, console: &Console, envio: exec::Envio) -> usize {
     if !envio.enviados.is_empty() {
         refresh_tree(ui);
     }
-    envio.erros.len()
+    envio.erros.len() + envio.conflitos.len()
 }
 
 fn criar_arquivo(ui: &UiRc, dir: &str) {

@@ -9,6 +9,7 @@ workspace = true
 
 [dependencies]
 expressa-aula-proto = { workspace = true }
+expressa-aula-storage = { workspace = true }
 tonic = { workspace = true }
 tokio = { workspace = true }
 prost = { workspace = true }

@@ -69,6 +69,12 @@ pub fn student_file(
         return Err("caminho vazio".into());
     }
     let rel_path = Path::new(rel);
+    if rel_path
+        .components()
+        .any(|part| expressa_aula_storage::is_internal(part.as_os_str()))
+    {
+        return Err("nome reservado para salvamento".into());
+    }
     if rel_path.is_absolute() {
         return Err("caminho absoluto não é permitido".into());
     }

@@ -64,6 +64,8 @@ const SCROLL_MARK: &str = "aula-scroll";
 pub struct Doc {
     /// Project-relative path; `None` until the first save.
     pub path: RefCell<Option<String>>,
+    /// Revision of the saved bytes this buffer was based on (never refreshed on save failure).
+    pub revision: RefCell<Option<String>>,
     pub untitled: String,
     pub buffer: SourceBuffer,
     pub view: SourceView,
@@ -227,8 +229,12 @@ impl Doc {
         let search = SearchContext::new(&buffer, Some(search_settings));
         search.set_highlight(true);
 
+        let revision = path
+            .as_ref()
+            .map(|_| expressa_aula_storage::revision(text.as_bytes()));
         let doc = Rc::new(Self {
             path: RefCell::new(path),
+            revision: RefCell::new(revision),
             untitled,
             buffer,
             view,
@@ -342,6 +348,7 @@ impl Doc {
             .iter_at_line(linha)
             .unwrap_or_else(|| self.buffer.end_iter());
         self.buffer.place_cursor(&iter);
+        *self.revision.borrow_mut() = Some(expressa_aula_storage::revision(text.as_bytes()));
         self.mark_saved();
     }
 

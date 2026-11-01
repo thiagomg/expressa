@@ -10,6 +10,14 @@ use std::sync::Arc;
 use expressa_aula_proto::TreeEntry;
 
 use crate::rpc::Rpc;
+use expressa_aula_storage as storage;
+pub use expressa_aula_storage::{Expected, SaveError, Saved};
+
+#[derive(Debug, Clone)]
+pub struct TextSnapshot {
+    pub text: String,
+    pub revision: Option<String>,
+}
 
 /// Cheap to clone (the connection is shared), and can be sent to a worker
 /// thread, so network and disk work can leave the GTK thread.
@@ -58,83 +66,90 @@ impl Files {
         }
     }
 
+    pub fn current_text(&self, student: &str, path: &str) -> Result<Option<TextSnapshot>, String> {
+        match self {
+            Files::None => Err("escolha uma pasta para o projeto".into()),
+            Files::Local(root) => {
+                let path = local_file(root, path)?;
+                match storage::read(&path) {
+                    Ok(snapshot) => Ok(Some(TextSnapshot {
+                        text: String::from_utf8(snapshot.bytes).map_err(|e| e.to_string())?,
+                        revision: Some(snapshot.revision),
+                    })),
+                    Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
+                    Err(e) => Err(format!("{}: {e}", path.display())),
+                }
+            }
+            Files::Remote { rpc, projeto } => rpc.current_text(student, projeto, path),
+        }
+    }
+
     pub fn read_file(&self, student: &str, path: &str) -> Result<String, String> {
-        match self {
-            Files::None => Err("escolha uma pasta para o projeto".into()),
-            Files::Local(root) => {
-                let path = local_file(root, path)?;
-                std::fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))
-            }
-            Files::Remote { rpc, projeto } => rpc.read_file(student, projeto, path),
-        }
+        self.current_text(student, path)?
+            .map(|s| s.text)
+            .ok_or_else(|| format!("arquivo `{path}` não existe"))
     }
 
-    /// Raw bytes of a local file. Remote projects only carry text.
-    pub fn read_bytes(&self, _student: &str, path: &str) -> Result<Vec<u8>, String> {
+    /// Remote binary transport remains item 04; local copies carry revisions.
+    pub fn read_bytes_snapshot(&self, path: &str) -> Result<storage::Snapshot, String> {
         match self {
             Files::Local(root) => {
                 let path = local_file(root, path)?;
-                std::fs::read(&path).map_err(|e| format!("{}: {e}", path.display()))
+                storage::read(&path).map_err(|e| format!("{}: {e}", path.display()))
             }
             Files::None => Err("escolha uma pasta para o projeto".into()),
             Files::Remote { .. } => Err("arquivo binário no servidor não é suportado".into()),
         }
     }
 
-    pub fn write_bytes(&self, _student: &str, path: &str, bytes: &[u8]) -> Result<(), String> {
+    pub fn write_bytes(
+        &self,
+        path: &str,
+        bytes: &[u8],
+        expected: &Expected,
+    ) -> Result<Saved, SaveError> {
         match self {
             Files::Local(root) => {
-                let path = local_file(root, path)?;
-                if let Some(parent) = path.parent() {
-                    std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
-                }
-                std::fs::write(&path, bytes).map_err(|e| format!("{}: {e}", path.display()))
+                let path = local_file(root, path).map_err(SaveError::Other)?;
+                storage::save(&path, bytes, expected)
             }
-            Files::None => Err("escolha uma pasta para o projeto".into()),
-            Files::Remote { .. } => Err("arquivo binário no servidor não é suportado".into()),
+            Files::None => Err(SaveError::Other("escolha uma pasta para o projeto".into())),
+            Files::Remote { .. } => Err(SaveError::Other(
+                "arquivo binário no servidor não é suportado".into(),
+            )),
         }
     }
 
-    pub fn write_file(&self, student: &str, path: &str, source: &str) -> Result<(), String> {
+    pub fn write_file(
+        &self,
+        student: &str,
+        path: &str,
+        source: &str,
+        expected: &Expected,
+    ) -> Result<Saved, SaveError> {
         match self {
-            Files::None => Err("escolha uma pasta para o projeto".into()),
-            Files::Local(root) => {
-                let path = local_file(root, path)?;
-                if let Some(parent) = path.parent() {
-                    std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
-                }
-                std::fs::write(&path, source).map_err(|e| format!("{}: {e}", path.display()))
+            Files::Remote { rpc, projeto } => {
+                rpc.write_file(student, projeto, path, source, expected)
             }
-            Files::Remote { rpc, projeto } => rpc.write_file(student, projeto, path, source),
+            _ => self.write_bytes(path, source.as_bytes(), expected),
         }
     }
 
-    /// Create `path` with `source`; never replaces an existing file.
+    /// Exclusive creation also stages the complete contents before publication.
     pub fn create_file(&self, student: &str, path: &str, source: &str) -> Result<(), String> {
-        match self {
-            Files::None => Err("escolha uma pasta para o projeto".into()),
-            Files::Local(root) => {
-                use std::io::Write;
-                let full = local_file(root, path)?;
-                if let Some(parent) = full.parent() {
-                    std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+        self.write_file(student, path, source, &Expected::Missing)
+            .map(|_| ())
+            .map_err(|e| {
+                if matches!(e, SaveError::AlreadyExists) {
+                    ja_existe(path)
+                } else {
+                    e.to_string()
                 }
-                let mut file = std::fs::OpenOptions::new()
-                    .write(true)
-                    .create_new(true)
-                    .open(&full)
-                    .map_err(|e| match e.kind() {
-                        std::io::ErrorKind::AlreadyExists => ja_existe(path),
-                        _ => format!("{}: {e}", full.display()),
-                    })?;
-                file.write_all(source.as_bytes())
-                    .map_err(|e| format!("{}: {e}", full.display()))
-            }
-            Files::Remote { rpc, projeto } => rpc.create_file(student, projeto, path, source),
-        }
+            })
     }
 
     pub fn delete_file(&self, student: &str, path: &str) -> Result<(), String> {
+        let _mutation = storage::mutation_lock();
         match self {
             Files::None => Err("escolha uma pasta para o projeto".into()),
             Files::Local(root) => {
@@ -161,6 +176,7 @@ impl Files {
     }
 
     pub fn rename(&self, student: &str, from: &str, to: &str) -> Result<(), String> {
+        let _mutation = storage::mutation_lock();
         match self {
             Files::None => Err("escolha uma pasta para o projeto".into()),
             Files::Local(root) => {
@@ -317,6 +333,12 @@ fn local_file(root: &Path, rel: &str) -> Result<PathBuf, String> {
         return Err("caminho vazio".into());
     }
     let rel_path = Path::new(&rel);
+    if rel_path
+        .components()
+        .any(|part| storage::is_internal(part.as_os_str()))
+    {
+        return Err("nome reservado para salvamento".into());
+    }
     // A leading slash is a root (`/etc`, `\Windows`). `C:foo` has a drive
     // prefix and is not absolute, but it still leaves the project folder.
     if rel_path.is_absolute()
@@ -421,7 +443,7 @@ mod tests {
         std::fs::create_dir_all(root.join("lib")).unwrap();
         let files = Files::Local(root.clone());
         files
-            .write_file("", "lib/oi.lep", "escreva(\"oi\")\n")
+            .write_file("", "lib/oi.lep", "escreva(\"oi\")\n", &Expected::Missing)
             .unwrap();
         let tree = files.list_tree("").unwrap();
         assert!(tree.iter().any(|e| e.path == "lib/oi.lep"));

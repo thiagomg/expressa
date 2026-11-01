@@ -400,28 +400,46 @@ fn aplicar_troca(ui: &UiRc, painel: &Rc<PainelBusca>, padrao: Padrao, por: Strin
         move || {
             let mut trocas = 0;
             let mut erros = Vec::new();
+            let mut avisos = Vec::new();
             for f in outros {
-                let Ok(texto) = files.read_file(&projeto, &f) else {
-                    continue;
+                let snapshot = match files.current_text(&projeto, &f) {
+                    Ok(Some(snapshot)) => snapshot,
+                    Ok(None) => continue,
+                    Err(e) => {
+                        erros.push(format!("{f}: {e}"));
+                        continue;
+                    }
                 };
-                let (novo, n) = trocar_em(&texto, &p, &por);
+                let (novo, n) = trocar_em(&snapshot.text, &p, &por);
                 if n == 0 {
                     continue;
                 }
-                match files.write_file(&projeto, &f, &novo) {
-                    Ok(()) => trocas += n,
+                let expected = snapshot
+                    .revision
+                    .map(crate::store::Expected::Revision)
+                    .unwrap_or(crate::store::Expected::Unversioned);
+                match files.write_file(&projeto, &f, &novo, &expected) {
+                    Ok(saved) => {
+                        trocas += n;
+                        if let Some(warning) = saved.warning {
+                            avisos.push(format!("{f}: {warning}"));
+                        }
+                    }
                     Err(e) => erros.push(format!("{f}: {e}")),
                 }
             }
-            (trocas, erros)
+            (trocas, erros, avisos)
         },
-        move |ui, (trocas, erros)| {
+        move |ui, (trocas, erros, avisos)| {
             let mut msg = format!("trocou {} ocorrência(s)", trocas + nos_abertos);
             if nos_abertos > 0 {
                 msg.push_str(" — salve as abas alteradas");
             }
             if !erros.is_empty() {
                 msg.push_str(&format!("; não gravou: {}", erros.join(", ")));
+            }
+            if !avisos.is_empty() {
+                msg.push_str(&format!("; avisos: {}", avisos.join(", ")));
             }
             set_status(ui, &msg);
             ui.borrow().file_cache.borrow_mut().clear();

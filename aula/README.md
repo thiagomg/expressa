@@ -6,6 +6,7 @@ IDE integrada para ser usada por alunos
 |-------|--------|
 | `expressa` (raiz do repositório) | Linguagem: analisador léxico, analisador sintático, executor |
 | `expressa-aula-proto` | protobuf do gRPC |
+| `expressa-aula-storage` | gravação atômica e revisões dos arquivos do projeto |
 | `expressa-aula-server` | Repositório de arquivos: diretórios dos estudantes e local |
 | `expressa-aula` (`aula/ui`) | editor de texto: lista, Executar (F5) / Depurar (F6) no próprio processo |
 
@@ -45,6 +46,25 @@ A linha **argumentos** vai para `argumentos[1]…` no programa. `escreva_erro` a
 
 **Abas**: cada arquivo abre na sua aba, com desfazer (Ctrl+Z / Ctrl+Shift+Z) e pontos de parada próprios; `●` marca alterações não salvas. Ctrl+N abre uma aba nova, Ctrl+W fecha. Fechar uma aba, trocar de projeto ou fechar a janela com alterações pergunta se quer salvar.
 
+**Salvar e conflitos**: salvar grava uma cópia completa antes de substituir o arquivo.
+Se outra pessoa ou programa alterou o arquivo desde a leitura, a aba continua com
+suas alterações e oferece **Comparar**, **Recarregar**, **Salvar como…** ou **Substituir**.
+Mesmo **Substituir** verifica novamente a versão comparada. Se o arquivo mudou
+outra vez, aparece outro conflito. Recarregar descarta explicitamente as alterações
+da aba; Cancelar as preserva. Um conflito durante Salvar ao fechar interrompe o
+fechamento; depois de resolvê-lo, feche novamente.
+
+Substituir no projeto e os arquivos gerados pela execução também verificam a versão
+lida. Uma saída de programa em conflito não sobrescreve o projeto: texto abre em
+uma aba nova com cópia de recuperação; saídas binárias ficam fora da cópia descartável
+de execução, no caminho mostrado no console. Falhas ao preservar essas cópias são
+informadas no console. O transporte de arquivos binários remotos continua pendente.
+
+Atualize editor e servidor juntos. O servidor recusa atualizações sem revisão de
+editores antigos; o editor novo recusa gravar em servidores sem o método de gravação
+protegida, preservando a aba. A compilação da IDE e do servidor requer Rust 1.89 ou
+mais recente.
+
 **Recuperação**: a cada cinco segundos, o editor guarda uma cópia das alterações,
 inclusive de abas sem título e antes de escolher um projeto. Ao reabrir, **Recuperar**
 abre essas alterações em abas marcadas como não salvas. Se o arquivo original não
@@ -81,8 +101,8 @@ Em casa: o servidor escuta no loopback, aluno `local`. Na sala: um servidor no c
 ## Testes
 
 ```bash
-cargo test -p expressa-aula -p expressa-aula-server
-cargo clippy -p expressa-aula -p expressa-aula-server --all-targets -- -D warnings
+cargo test -p expressa-aula -p expressa-aula-server -p expressa-aula-storage
+cargo clippy -p expressa-aula -p expressa-aula-server -p expressa-aula-storage --all-targets -- -D warnings
 ```
 
 Os testes GTK precisam de uma tela disponível e falham explicitamente quando não

@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = [".", "aula/proto", "aula/server", "aula/ui", "aula/tutorial"]
+members = [".", "aula/proto", "aula/storage", "aula/server", "aula/ui", "aula/tutorial"]
 # Built by cargo-fuzz with nightly; see fuzz/README.md.
 exclude = ["fuzz"]
 
@@ -13,6 +13,7 @@ authors = ["Thiago Massari Guedes"]
 [workspace.dependencies]
 expressa = { path = "." }
 expressa-aula-proto = { path = "aula/proto" }
+expressa-aula-storage = { path = "aula/storage" }
 tonic = "0.13"
 prost = "0.13"
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "net", "signal"] }

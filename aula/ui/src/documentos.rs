@@ -9,21 +9,28 @@ use std::rc::Rc;
 use crate::docs::Doc;
 use crate::exec::same_project_path;
 use crate::recuperacao::{Copy, UNTITLED_PREFIX};
-use crate::store::Files;
+use crate::store::{Expected, Files, SaveError};
 use gtk::prelude::*;
 
 pub enum OpenDocument {
     Existing(Rc<Doc>),
-    Loaded { path: String, text: String },
+    Loaded {
+        path: String,
+        text: String,
+        revision: Option<String>,
+    },
 }
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum SaveOutcome {
     Saved {
         name: String,
-        recovery_warning: Option<String>,
+        warning: Option<String>,
     },
     Cancelled,
+    Conflict {
+        name: String,
+    },
 }
 
 pub struct RecoveredDocument {
@@ -64,10 +71,14 @@ impl<'a> Documents<'a> {
         if let Some(doc) = find_by_name(self.docs, path) {
             return Ok(OpenDocument::Existing(doc));
         }
-        let text = self.files.read_file(self.project, path)?;
+        let snapshot = self
+            .files
+            .current_text(self.project, path)?
+            .ok_or_else(|| format!("arquivo `{path}` não existe"))?;
         Ok(OpenDocument::Loaded {
             path: path.to_string(),
-            text,
+            text: snapshot.text,
+            revision: snapshot.revision,
         })
     }
 
@@ -81,7 +92,15 @@ impl<'a> Documents<'a> {
         } else {
             match self.open(&copy.backup.name) {
                 Ok(OpenDocument::Existing(doc)) if !doc.is_dirty() => (doc, None),
-                Ok(OpenDocument::Loaded { path, text }) => (create(Some(path), &text)?, None),
+                Ok(OpenDocument::Loaded {
+                    path,
+                    text,
+                    revision,
+                }) => {
+                    let doc = create(Some(path), &text)?;
+                    *doc.revision.borrow_mut() = revision;
+                    (doc, None)
+                }
                 Ok(OpenDocument::Existing(_)) => (
                     create(None, &copy.text)?,
                     Some("a aba original tem alterações não salvas".to_string()),
@@ -106,10 +125,38 @@ impl<'a> Documents<'a> {
         Ok(RecoveredDocument { doc, warning })
     }
 
-    /// `new_name` is the answer to the UI's save-as prompt, if needed.
-    /// A cancelled or failed save leaves both the path and dirty state intact.
+    /// A cancelled/conflicting/failed save keeps buffer contents and recovery copies.
     pub fn save(&self, doc: &Doc, new_name: Option<&str>) -> Result<SaveOutcome, String> {
-        let name = if doc.is_untitled() {
+        self.save_to(doc, new_name, doc.is_untitled(), None)
+    }
+
+    pub fn save_as(&self, doc: &Doc, name: &str) -> Result<SaveOutcome, String> {
+        self.save_to(doc, Some(name), true, None)
+    }
+
+    /// Explicit overwrite is still conditional on the revision shown to the user.
+    pub fn overwrite(&self, doc: &Doc, expected: &Expected) -> Result<SaveOutcome, String> {
+        self.save_to(doc, None, false, Some(expected))
+    }
+
+    pub fn reload(&self, doc: &Doc) -> Result<Option<String>, String> {
+        let snapshot = self
+            .files
+            .current_text(self.project, &doc.name())?
+            .ok_or("o arquivo foi removido; a aba foi preservada")?;
+        doc.recarregar(&snapshot.text);
+        *doc.revision.borrow_mut() = snapshot.revision;
+        Ok(forget_recovery(doc).err())
+    }
+
+    fn save_to(
+        &self,
+        doc: &Doc,
+        new_name: Option<&str>,
+        creating: bool,
+        explicit: Option<&Expected>,
+    ) -> Result<SaveOutcome, String> {
+        let name = if creating {
             let Some(name) = new_name else {
                 return Ok(SaveOutcome::Cancelled);
             };
@@ -122,26 +169,55 @@ impl<'a> Documents<'a> {
             } else {
                 format!("{name}.lep")
             };
-            if find_by_name(self.docs, &name).is_some() {
+            if self.docs.iter().any(|other| {
+                !std::ptr::eq(other.as_ref(), doc) && same_project_path(&other.name(), &name)
+            }) {
                 return Err(format!("`{name}` já está aberto em outra aba"));
             }
-            self.files
-                .create_file(self.project, &name, &doc.text())
-                .map_err(|e| format!("erro ao salvar {name}: {e}"))?;
-            doc.set_path(name.clone());
             name
         } else {
-            let name = doc.name();
-            self.files
-                .write_file(self.project, &name, &doc.text())
-                .map_err(|e| format!("erro ao salvar {name}: {e}"))?;
-            name
+            doc.name()
         };
+        let expected = if creating {
+            Expected::Missing
+        } else {
+            explicit.cloned().unwrap_or_else(|| {
+                doc.revision
+                    .borrow()
+                    .clone()
+                    .map(Expected::Revision)
+                    .unwrap_or(Expected::Unversioned)
+            })
+        };
+        let receipt = match self
+            .files
+            .write_file(self.project, &name, &doc.text(), &expected)
+        {
+            Ok(receipt) => receipt,
+            Err(SaveError::Conflict) => {
+                doc.buffer.set_modified(true);
+                return Ok(SaveOutcome::Conflict { name });
+            }
+            Err(SaveError::AlreadyExists) if !creating => {
+                doc.buffer.set_modified(true);
+                return Ok(SaveOutcome::Conflict { name });
+            }
+            Err(e) => return Err(format!("erro ao salvar {name}: {e}")),
+        };
+        if creating {
+            doc.vigia.replace(None);
+            doc.set_path(name.clone());
+        }
+        *doc.revision.borrow_mut() = Some(receipt.revision);
         doc.mark_saved();
-        let recovery_warning = forget_recovery(doc).err();
+        let warnings: Vec<_> = receipt
+            .warning
+            .into_iter()
+            .chain(forget_recovery(doc).err())
+            .collect();
         Ok(SaveOutcome::Saved {
             name,
-            recovery_warning,
+            warning: (!warnings.is_empty()).then(|| warnings.join("\n")),
         })
     }
 }
@@ -236,7 +312,7 @@ mod tests {
                 panic!("should reuse the open tab");
             };
             assert!(Rc::ptr_eq(&open, &found));
-            let OpenDocument::Loaded { path, text } = controller.open("existing.lep").unwrap()
+            let OpenDocument::Loaded { path, text, .. } = controller.open("existing.lep").unwrap()
             else {
                 panic!("should read the unopened file");
             };
@@ -264,7 +340,7 @@ mod tests {
                 controller.save(&untitled, Some(" /novo ")),
                 Ok(SaveOutcome::Saved {
                     name: "novo.lep".into(),
-                    recovery_warning: None
+                    warning: None
                 })
             );
             assert_eq!(untitled.name(), "novo.lep");
@@ -280,7 +356,7 @@ mod tests {
                 controller.save(&untitled, None),
                 Ok(SaveOutcome::Saved {
                     name: "novo.lep".into(),
-                    recovery_warning: None
+                    warning: None
                 })
             );
             assert_eq!(
@@ -318,6 +394,152 @@ mod tests {
                 true
             }));
             assert_eq!(attempts, [open.name(), untitled.name()]);
+        });
+    }
+
+    #[test]
+    fn conflicting_save_retains_buffer_backup_and_requires_fresh_overwrite_consent() {
+        crate::gtk_test::run(|| {
+            let project = Project::new();
+            let files = Files::Local(project.0.clone());
+            let path = project.0.join("a.lep");
+            std::fs::write(&path, "base").unwrap();
+            let edited = doc(Some("a.lep"), "base");
+            edited.buffer.set_text("mine");
+            let store = crate::recuperacao::RecoveryStore(project.0.join("recovery"));
+            let backup = store.save("a.lep", "mine", None).unwrap();
+            *edited.copia_recuperacao.borrow_mut() = Some(backup.clone());
+            let docs = [edited.clone()];
+            let controller = Documents::new(&files, "local", &docs);
+            std::fs::write(&path, "disk").unwrap(); // Same length as the base.
+            assert_eq!(
+                controller.save(&edited, None).unwrap(),
+                SaveOutcome::Conflict {
+                    name: "a.lep".into()
+                }
+            );
+            assert_eq!(edited.text(), "mine");
+            assert!(edited.is_dirty() && backup.paths[0].exists());
+            let compared = files.current_text("", "a.lep").unwrap().unwrap();
+            std::fs::write(&path, "changed again").unwrap();
+            assert!(matches!(
+                controller
+                    .overwrite(&edited, &Expected::Revision(compared.revision.unwrap()))
+                    .unwrap(),
+                SaveOutcome::Conflict { .. }
+            ));
+            assert_eq!(std::fs::read_to_string(&path).unwrap(), "changed again");
+            assert!(edited.is_dirty() && backup.paths[0].exists());
+            let confirmed = files.current_text("", "a.lep").unwrap().unwrap();
+            assert!(matches!(
+                controller
+                    .overwrite(&edited, &Expected::Revision(confirmed.revision.unwrap()))
+                    .unwrap(),
+                SaveOutcome::Saved { .. }
+            ));
+            assert_eq!(std::fs::read_to_string(path).unwrap(), "mine");
+            assert!(!edited.is_dirty());
+            assert!(!backup.paths[0].exists());
+        });
+    }
+
+    #[test]
+    fn untitled_document_can_use_its_own_tab_name_but_not_replace_an_existing_file() {
+        crate::gtk_test::run(|| {
+            let project = Project::new();
+            let files = Files::Local(project.0.clone());
+            let edited = doc(None, "escreva(1)\n");
+            edited.buffer.set_modified(true);
+            let docs = [edited.clone()];
+            let controller = Documents::new(&files, "local", &docs);
+            assert!(matches!(
+                controller.save(&edited, Some(&edited.name())).unwrap(),
+                SaveOutcome::Saved { .. }
+            ));
+            assert!(!edited.is_untitled());
+            let other = doc(None, "escreva(2)\n");
+            other.buffer.set_modified(true);
+            let docs = [other.clone()];
+            assert!(
+                Documents::new(&files, "local", &docs)
+                    .save(&other, Some(&other.name()))
+                    .is_err()
+            );
+            assert!(other.is_untitled() && other.is_dirty());
+            assert_eq!(
+                std::fs::read_to_string(project.0.join(edited.name())).unwrap(),
+                "escreva(1)\n"
+            );
+        });
+    }
+
+    #[test]
+    fn save_as_and_reload_preserve_the_other_version_until_explicit_choice() {
+        crate::gtk_test::run(|| {
+            let project = Project::new();
+            let files = Files::Local(project.0.clone());
+            std::fs::write(project.0.join("a.lep"), "newer on disk").unwrap();
+            let edited = doc(Some("a.lep"), "base");
+            edited.buffer.set_text("mine");
+            let docs = [edited.clone()];
+            let controller = Documents::new(&files, "local", &docs);
+            assert!(matches!(
+                controller.save(&edited, None).unwrap(),
+                SaveOutcome::Conflict { .. }
+            ));
+            assert!(matches!(
+                controller.save_as(&edited, "copy.lep").unwrap(),
+                SaveOutcome::Saved { .. }
+            ));
+            assert_eq!(
+                std::fs::read_to_string(project.0.join("a.lep")).unwrap(),
+                "newer on disk"
+            );
+            assert_eq!(
+                std::fs::read_to_string(project.0.join("copy.lep")).unwrap(),
+                "mine"
+            );
+            assert_eq!(edited.name(), "copy.lep");
+            let other = doc(Some("a.lep"), "base");
+            other.buffer.set_text("unsaved");
+            controller.reload(&other).unwrap();
+            assert_eq!(other.text(), "newer on disk");
+            assert!(!other.is_dirty());
+            other.buffer.set_text("after reload");
+            assert!(matches!(
+                controller.save(&other, None).unwrap(),
+                SaveOutcome::Saved { .. }
+            ));
+        });
+    }
+
+    #[test]
+    fn deleted_files_and_unversioned_documents_cannot_be_silently_upserted() {
+        crate::gtk_test::run(|| {
+            let project = Project::new();
+            let files = Files::Local(project.0.clone());
+            let edited = doc(Some("missing.lep"), "base");
+            edited.buffer.set_text("mine");
+            let controller = Documents::new(&files, "local", &[]);
+            assert!(matches!(
+                controller.save(&edited, None).unwrap(),
+                SaveOutcome::Conflict { .. }
+            ));
+            assert!(!project.0.join("missing.lep").exists());
+            // The file can reappear while the overwrite dialog is open.
+            std::fs::write(project.0.join("missing.lep"), "reappeared").unwrap();
+            assert!(matches!(
+                controller.overwrite(&edited, &Expected::Missing).unwrap(),
+                SaveOutcome::Conflict { .. }
+            ));
+            assert_eq!(
+                std::fs::read_to_string(project.0.join("missing.lep")).unwrap(),
+                "reappeared"
+            );
+            *edited.revision.borrow_mut() = None;
+            assert!(controller.save(&edited, None).is_err());
+            assert!(edited.is_dirty());
+            assert_eq!(edited.text(), "mine");
         });
     }
 
@@ -363,7 +585,7 @@ mod tests {
                 saved,
                 SaveOutcome::Saved {
                     name: "lição.lep".into(),
-                    recovery_warning: None
+                    warning: None
                 }
             );
             assert_eq!(

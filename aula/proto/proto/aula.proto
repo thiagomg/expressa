@@ -16,6 +16,8 @@ service Turma {
   rpc ListFiles(ListFilesRequest) returns (ListFilesResponse);
   rpc ReadFile(ReadFileRequest) returns (ReadFileResponse);
   rpc WriteFile(WriteFileRequest) returns (WriteFileResponse);
+  // New editors use this method so an old server cannot silently ignore CAS.
+  rpc WriteFileChecked(WriteFileRequest) returns (WriteFileResponse);
   rpc DeleteFile(DeleteFileRequest) returns (DeleteFileResponse);
   rpc Mkdir(MkdirRequest) returns (MkdirResponse);
   rpc Rename(RenameRequest) returns (RenameResponse);
@@ -65,6 +67,7 @@ message ReadFileRequest {
 
 message ReadFileResponse {
   string source = 1;
+  string revision = 2;
 }
 
 message WriteFileRequest {
@@ -74,9 +77,15 @@ message WriteFileRequest {
   // Only create: fail with ALREADY_EXISTS instead of replacing a file.
   bool create_new = 4;
   string project = 5;
+  // Required for replacement. Empty is accepted only with create_new=true.
+  string expected_revision = 6;
 }
 
-message WriteFileResponse {}
+message WriteFileResponse {
+  string revision = 1;
+  // The file was committed; a later flush/cleanup failed.
+  string warning = 2;
+}
 
 message DeleteFileRequest {
   string student = 1;

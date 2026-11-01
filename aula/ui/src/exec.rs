@@ -13,7 +13,7 @@ use expressa::runtime::{
     LeiaHost, StopHook, TelaGrafica, run_with_hosts,
 };
 
-use crate::store::Files;
+use crate::store::{Expected, Files, SaveError};
 
 /// Start of the message for a crash inside the interpreter.
 pub const ERRO_INTERNO: &str =
@@ -71,6 +71,19 @@ pub struct Envio {
     pub enviados: Vec<(String, Option<String>)>,
     /// Files that could not be sent, as messages for the console.
     pub erros: Vec<String>,
+    pub avisos: Vec<String>,
+    pub conflitos: Vec<UploadConflict>,
+}
+
+pub struct UploadConflict {
+    pub path: String,
+    pub bytes: Vec<u8>,
+}
+
+pub struct EditorSource {
+    pub path: String,
+    pub text: String,
+    pub expected: Expected,
 }
 
 /// Size and modification time of a file.
@@ -93,8 +106,11 @@ impl Versao {
 
 pub struct Workspace {
     pub dir: PathBuf,
-    /// Contents as downloaded, to find what the run changed.
+    /// Text supplied to the run (downloads plus editor overlays), to detect
+    /// changes made by the program without implicitly saving unsaved tabs.
     snapshot: HashMap<String, String>,
+    /// The repository baseline, separate from unsaved text overlaid for a run.
+    revisions: HashMap<String, Expected>,
     /// For each file copied from the project: its version there, and the
     /// copy's version right after writing it. The next run of the same
     /// project skips the file when neither changed (see [`Workspace::sync`]).
@@ -156,11 +172,12 @@ impl Workspace {
         }
         std::fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
         let dir = dir.canonicalize().map_err(|e| e.to_string())?;
-        let (mut texto_antes, copiado_antes) = anterior
-            .map(|a| (a.snapshot, a.copiados))
+        let (mut texto_antes, copiado_antes, mut revisions_before) = anterior
+            .map(|a| (a.snapshot, a.copiados, a.revisions))
             .unwrap_or_default();
 
         let mut snapshot = HashMap::new();
+        let mut revisions = HashMap::new();
         let mut copiados = HashMap::new();
         let mut no_projeto = HashSet::new();
         for entry in files.list_tree(project)? {
@@ -180,14 +197,22 @@ impl Workspace {
                     .get(&entry.path)
                     .is_some_and(|&(o, c)| o == origem && Versao::de(&local) == Some(c));
             if igual {
+                if let Some(revision) = revisions_before.remove(&entry.path) {
+                    revisions.insert(entry.path.clone(), revision);
+                }
                 if let Some(texto) = texto_antes.remove(&entry.path) {
                     snapshot.insert(entry.path.clone(), texto);
                 }
                 copiados.insert(entry.path.clone(), copiado_antes[&entry.path]);
                 continue;
             }
-            if let Some(source) = copy_project_file(files, project, &entry.path, &local)? {
-                snapshot.insert(entry.path.clone(), source);
+            if let Some((source, expected)) =
+                copy_project_file(files, project, &entry.path, &local)?
+            {
+                revisions.insert(entry.path.clone(), expected);
+                if let Some(source) = source {
+                    snapshot.insert(entry.path.clone(), source);
+                }
             }
             if let Some(copia) = Versao::de(&local) {
                 copiados.insert(entry.path, (origem, copia));
@@ -197,16 +222,24 @@ impl Workspace {
         Ok(Self {
             dir,
             snapshot,
+            revisions,
             copiados,
         })
     }
 
     /// Put the editor's text of `rel` in the copy (open tabs, saved or not).
-    /// It counts as already on the server: only what the program itself
-    /// writes is uploaded afterwards.
+    /// Only subsequent program changes are uploaded. Repository revisions stay
+    /// separate: unsaved text never grants permission to replace newer files.
     pub fn write_editor_text(&mut self, rel: &str, source: &str) -> Result<(), String> {
         write_file(&self.dir.join(rel), source)?;
         self.snapshot.insert(rel.to_string(), source.to_string());
+        Ok(())
+    }
+
+    pub fn write_editor_source(&mut self, source: &EditorSource) -> Result<(), String> {
+        self.write_editor_text(&source.path, &source.text)?;
+        self.revisions
+            .insert(source.path.clone(), source.expected.clone());
         Ok(())
     }
 
@@ -232,30 +265,41 @@ impl Workspace {
                     continue;
                 }
             };
-            let result = match String::from_utf8(bytes) {
-                Ok(source) => {
-                    if self.snapshot.get(&rel) == Some(&source) {
-                        continue;
-                    }
-                    files
-                        .write_file(project, &rel, &source)
-                        .map(|()| Some(source))
-                }
-                Err(err) => {
-                    // PNG and other binaries are not in the text snapshot.
-                    // A remote project has no byte API, so leave them there.
-                    if files.is_remote() {
-                        continue;
-                    }
-                    let bytes = err.into_bytes();
-                    if files.read_bytes(project, &rel).ok().as_ref() == Some(&bytes) {
-                        continue;
-                    }
-                    files.write_bytes(project, &rel, &bytes).map(|()| None)
-                }
+            let text = std::str::from_utf8(&bytes).ok().map(str::to_owned);
+            if text
+                .as_ref()
+                .is_some_and(|source| self.snapshot.get(&rel) == Some(source))
+            {
+                continue;
+            }
+            if text.is_none() && files.is_remote() {
+                continue;
+            } // Binary RPC is item 04.
+            let expected = self
+                .revisions
+                .get(&rel)
+                .cloned()
+                .unwrap_or(Expected::Missing);
+            if text.is_none()
+                && expected == Expected::Revision(expressa_aula_storage::revision(&bytes))
+            {
+                continue;
+            }
+            let result = if let Some(source) = &text {
+                files.write_file(project, &rel, source, &expected)
+            } else {
+                files.write_bytes(&rel, &bytes, &expected)
             };
             match result {
-                Ok(texto) => envio.enviados.push((rel, texto)),
+                Ok(saved) => {
+                    if let Some(warning) = saved.warning {
+                        envio.avisos.push(format!("{rel}: {warning}"));
+                    }
+                    envio.enviados.push((rel, text));
+                }
+                Err(SaveError::Conflict | SaveError::AlreadyExists | SaveError::Unsupported) => {
+                    envio.conflitos.push(UploadConflict { path: rel, bytes });
+                }
                 Err(e) => envio.erros.push(format!("{rel}: {e}")),
             }
         }
@@ -314,18 +358,28 @@ fn copy_project_file(
     project: &str,
     rel: &str,
     dest: &Path,
-) -> Result<Option<String>, String> {
+) -> Result<Option<(Option<String>, Expected)>, String> {
     if !files.is_remote() {
-        let bytes = files.read_bytes(project, rel)?;
-        write_bytes(dest, &bytes)?;
-        return Ok(String::from_utf8(bytes).ok());
+        let snapshot = files.read_bytes_snapshot(rel)?;
+        write_bytes(dest, &snapshot.bytes)?;
+        return Ok(Some((
+            String::from_utf8(snapshot.bytes).ok(),
+            Expected::Revision(snapshot.revision),
+        )));
     }
-    match files.read_file(project, rel) {
-        Ok(source) => {
-            write_file(dest, &source)?;
-            Ok(Some(source))
+    match files.current_text(project, rel) {
+        Ok(Some(snapshot)) => {
+            write_file(dest, &snapshot.text)?;
+            Ok(Some((
+                Some(snapshot.text),
+                snapshot
+                    .revision
+                    .map(Expected::Revision)
+                    .unwrap_or(Expected::Unversioned),
+            )))
         }
-        Err(e) if e.contains("valid UTF-8") => Ok(None),
+        Ok(None) => Err(format!("arquivo `{rel}` foi removido durante a cópia")),
+        Err(e) if e.to_lowercase().contains("utf-8") => Ok(None),
         Err(e) => Err(e),
     }
 }
@@ -752,6 +806,62 @@ mod tests {
     }
 
     #[test]
+    fn uploads_detect_changes_to_text_binary_and_new_file_destinations() {
+        let project = RunProject::new("upload-conflicts");
+        std::fs::write(project.root.join("asset.bin"), [0xff, 0x01]).unwrap();
+        let ws = project.workspace();
+        std::fs::write(ws.dir.join("a.lep"), "program output").unwrap();
+        std::fs::write(ws.dir.join("asset.bin"), [0xff, 0x02]).unwrap();
+        std::fs::write(ws.dir.join("new.lep"), "new program output").unwrap();
+        // A user/editor changes all three destination files during execution.
+        std::fs::write(project.root.join("a.lep"), "user text").unwrap();
+        std::fs::write(project.root.join("asset.bin"), [0xff, 0x03]).unwrap();
+        std::fs::write(project.root.join("new.lep"), "user creation").unwrap();
+        let upload = ws.upload_changes(&project.files, &project.project);
+        assert!(upload.enviados.is_empty());
+        assert_eq!(upload.conflitos.len(), 3);
+        assert_eq!(
+            std::fs::read_to_string(project.root.join("a.lep")).unwrap(),
+            "user text"
+        );
+        assert_eq!(
+            std::fs::read(project.root.join("asset.bin")).unwrap(),
+            [0xff, 0x03]
+        );
+        assert_eq!(
+            std::fs::read_to_string(project.root.join("new.lep")).unwrap(),
+            "user creation"
+        );
+        assert!(
+            upload
+                .conflitos
+                .iter()
+                .any(|c| c.bytes == b"program output")
+        );
+    }
+
+    #[test]
+    fn editor_overlay_keeps_its_original_revision_even_if_preparation_reads_newer_disk_text() {
+        let project = RunProject::new("stale-editor");
+        let old_revision = expressa_aula_storage::revision(b"a");
+        std::fs::write(project.root.join("a.lep"), "external update before F5").unwrap();
+        let mut ws = project.workspace();
+        ws.write_editor_source(&EditorSource {
+            path: "a.lep".into(),
+            text: "unsaved editor text".into(),
+            expected: Expected::Revision(old_revision),
+        })
+        .unwrap();
+        std::fs::write(ws.dir.join("a.lep"), "program changed stale editor text").unwrap();
+        let upload = ws.upload_changes(&project.files, &project.project);
+        assert_eq!(upload.conflitos.len(), 1);
+        assert_eq!(
+            std::fs::read_to_string(project.root.join("a.lep")).unwrap(),
+            "external update before F5"
+        );
+    }
+
+    #[test]
     fn cache_name_keeps_letters_and_replaces_the_rest() {
         assert_eq!(cache_name("ana"), "ana");
         assert_eq!(cache_name("turma-1_b"), "turma-1_b");
@@ -921,6 +1031,7 @@ mod tests {
             dir: copia,
             snapshot: HashMap::from([("a.lep".to_string(), "igual".to_string())]),
             copiados: HashMap::new(),
+            revisions: HashMap::new(),
         };
 
         let envio = ws.upload_changes(&Files::Local(projeto.clone()), "");

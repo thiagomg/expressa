@@ -1,5 +1,4 @@
 use std::fs;
-use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
@@ -10,6 +9,7 @@ use expressa_aula_proto::{
     MkdirResponse, ReadFileRequest, ReadFileResponse, RenameRequest, RenameResponse, TreeEntry,
     WriteFileRequest, WriteFileResponse,
 };
+use expressa_aula_storage::{self as storage, Expected, SaveError};
 use tonic::{Request, Response, Status};
 
 use crate::{paths, projetos};
@@ -29,6 +29,8 @@ pub struct Aula {
     /// Held while a student folder is laid out (`projetos::preparar`), so
     /// two requests never move the same files at once.
     preparando: Arc<Mutex<()>>,
+    /// Serialize mutations (including rename/delete) with revision checks.
+    arquivos: Arc<Mutex<()>>,
 }
 
 impl Aula {
@@ -36,6 +38,7 @@ impl Aula {
         Self {
             root,
             preparando: Arc::new(Mutex::new(())),
+            arquivos: Arc::new(Mutex::new(())),
         }
     }
 
@@ -96,6 +99,9 @@ fn walk_tree(dir: &Path, out: &mut Vec<TreeEntry>, prefix: &Path) -> std::io::Re
         }
     });
     for entry in entries {
+        if storage::is_internal(&entry.file_name()) {
+            continue;
+        }
         let path = entry.path();
         let rel = paths::relative_to(prefix, &path);
         if path.is_dir() {
@@ -167,8 +173,19 @@ impl Turma for Aula {
     ) -> Result<Response<ReadFileResponse>, Status> {
         let req = request.into_inner();
         let path = self.file(&req.student, &req.project, &req.path)?;
-        let source = fs::read_to_string(&path).map_err(|e| Status::not_found(e.to_string()))?;
-        Ok(Response::new(ReadFileResponse { source }))
+        let snapshot = storage::read(&path).map_err(|e| {
+            if e.kind() == std::io::ErrorKind::NotFound {
+                Status::not_found(e.to_string())
+            } else {
+                interno(e)
+            }
+        })?;
+        let source = String::from_utf8(snapshot.bytes)
+            .map_err(|e| Status::invalid_argument(e.to_string()))?;
+        Ok(Response::new(ReadFileResponse {
+            source,
+            revision: snapshot.revision,
+        }))
     }
 
     async fn write_file(
@@ -176,25 +193,35 @@ impl Turma for Aula {
         request: Request<WriteFileRequest>,
     ) -> Result<Response<WriteFileResponse>, Status> {
         let req = request.into_inner();
+        let _vez = self.arquivos.lock().unwrap_or_else(|e| e.into_inner());
         let path = self.file(&req.student, &req.project, &req.path)?;
-        if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent).map_err(|e| Status::internal(e.to_string()))?;
-        }
-        if req.create_new {
-            let mut file = fs::OpenOptions::new()
-                .write(true)
-                .create_new(true)
-                .open(&path)
-                .map_err(|e| match e.kind() {
-                    std::io::ErrorKind::AlreadyExists => ja_existe(&req.path),
-                    _ => Status::internal(e.to_string()),
-                })?;
-            file.write_all(req.source.as_bytes())
-                .map_err(|e| Status::internal(e.to_string()))?;
+        let expected = if req.create_new {
+            Expected::Missing
         } else {
-            fs::write(&path, req.source.as_bytes()).map_err(|e| Status::internal(e.to_string()))?;
-        }
-        Ok(Response::new(WriteFileResponse {}))
+            if req.expected_revision.is_empty() {
+                return Err(Status::failed_precondition(
+                    "atualize o editor: salvar exige a revisão lida anteriormente",
+                ));
+            }
+            Expected::Revision(req.expected_revision)
+        };
+        let saved =
+            storage::save(&path, req.source.as_bytes(), &expected).map_err(|e| match e {
+                SaveError::Conflict => Status::aborted("o arquivo mudou desde que foi lido"),
+                SaveError::AlreadyExists => ja_existe(&req.path),
+                other => Status::internal(other.to_string()),
+            })?;
+        Ok(Response::new(WriteFileResponse {
+            revision: saved.revision,
+            warning: saved.warning.unwrap_or_default(),
+        }))
+    }
+
+    async fn write_file_checked(
+        &self,
+        request: Request<WriteFileRequest>,
+    ) -> Result<Response<WriteFileResponse>, Status> {
+        self.write_file(request).await
     }
 
     async fn delete_file(
@@ -202,6 +229,7 @@ impl Turma for Aula {
         request: Request<DeleteFileRequest>,
     ) -> Result<Response<DeleteFileResponse>, Status> {
         let req = request.into_inner();
+        let _vez = self.arquivos.lock().unwrap_or_else(|e| e.into_inner());
         let path = self.file(&req.student, &req.project, &req.path)?;
         if path.is_dir() {
             fs::remove_dir_all(&path).map_err(|e| Status::internal(e.to_string()))?;
@@ -226,6 +254,7 @@ impl Turma for Aula {
         request: Request<RenameRequest>,
     ) -> Result<Response<RenameResponse>, Status> {
         let req = request.into_inner();
+        let _vez = self.arquivos.lock().unwrap_or_else(|e| e.into_inner());
         let from = self.file(&req.student, &req.project, &req.from)?;
         let to = self.file(&req.student, &req.project, &req.to)?;
         if from == to {
@@ -286,6 +315,11 @@ mod tests {
             path: rel.into(),
             source: source.into(),
             create_new,
+            expected_revision: if create_new {
+                String::new()
+            } else {
+                storage::revision(b"original")
+            },
         })
     }
 
@@ -438,7 +472,7 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(ler(&aula, "b.lep"), "novo");
-        // A plain save still replaces.
+        // A save carrying the original revision can replace that version.
         aula.write_file(escrever("a.lep", "salvo", false))
             .await
             .unwrap();
@@ -449,7 +483,7 @@ mod tests {
     #[tokio::test]
     async fn renomear_nao_substitui_destino() {
         let aula = servidor("rename");
-        aula.write_file(escrever("b.lep", "outro", false))
+        aula.write_file(escrever("b.lep", "outro", true))
             .await
             .unwrap();
         let err = aula.rename(renomear("b.lep", "a.lep")).await.unwrap_err();
@@ -516,6 +550,7 @@ mod tests {
             path: "a.lep".into(),
             source: "novo".into(),
             create_new: true,
+            ..Default::default()
         })
         .await
         .unwrap();
@@ -536,6 +571,47 @@ mod tests {
             fs::read_to_string(root.join("ana/aula-2/a.lep")).unwrap(),
             "novo"
         );
+
+        // Two clients read the same revision, then compete to replace it.
+        let revision = c
+            .read_file(ReadFileRequest {
+                student: "ana".into(),
+                path: "a.lep".into(),
+                ..Default::default()
+            })
+            .await
+            .unwrap()
+            .into_inner()
+            .revision;
+        assert!(!revision.is_empty());
+        let request = |source: &str| WriteFileRequest {
+            student: "ana".into(),
+            path: "a.lep".into(),
+            source: source.into(),
+            expected_revision: revision.clone(),
+            ..Default::default()
+        };
+        let mut other = c.clone();
+        let (first, second) = tokio::join!(
+            c.write_file_checked(request("first writer")),
+            other.write_file_checked(request("second writer"))
+        );
+        assert_eq!(usize::from(first.is_ok()) + usize::from(second.is_ok()), 1);
+        let refusal = first.err().or_else(|| second.err()).unwrap();
+        assert_eq!(refusal.code(), Code::Aborted);
+        let saved = fs::read(root.join("ana/principal/a.lep")).unwrap();
+        // An old editor cannot bypass the new policy through the legacy method.
+        let refusal = c
+            .write_file(WriteFileRequest {
+                student: "ana".into(),
+                path: "a.lep".into(),
+                source: "legacy overwrite".into(),
+                ..Default::default()
+            })
+            .await
+            .unwrap_err();
+        assert_eq!(refusal.code(), Code::FailedPrecondition);
+        assert_eq!(fs::read(root.join("ana/principal/a.lep")).unwrap(), saved);
 
         servidor.abort();
         let _ = fs::remove_dir_all(&root);

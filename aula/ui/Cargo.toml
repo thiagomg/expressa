@@ -15,6 +15,7 @@ winresource = "0.1"
 [dependencies]
 expressa = { workspace = true }
 expressa-aula-proto = { workspace = true }
+expressa-aula-storage = { workspace = true }
 tonic = { workspace = true }
 tokio = { workspace = true }
 tokio-stream = { workspace = true }
