@@ -404,12 +404,12 @@ g = grafico()
 g.eixos(-1, 1, -1, 1)
 g.plotar(função(x) { x }, :azul)
 escreva(tamanho(g:curvas))
-escreva(tamanho(g:curvas[1]:pontos))
+escreva(tamanho(g:curvas[0]:pontos))
 c = documento()
 c.adicione(g)
 g.plotar(função(x) { 0 }, :vermelho)
 escreva(tamanho(g:curvas))
-escreva(tamanho(c:graficos[1]:curvas))
+escreva(tamanho(c:graficos[0]:curvas))
 "#);
         assert_eq!(out, format!("1\n{}\n2\n1\n", super::AMOSTRAS));
     }
@@ -561,7 +561,7 @@ c.mostre()
 g = grafico()
 g.eixos(-1, 1, -1, 1)
 g.plotar(função(x) { x }, :azul)
-escreva(g:curvas[1]:cor)
+escreva(g:curvas[0]:cor)
 "#);
         assert_eq!(out, "azul\n");
     }

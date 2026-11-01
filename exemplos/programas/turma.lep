@@ -55,7 +55,7 @@ fim
 nomes = ["Ana", "Bruno", "Carla", "Davi"]
 notas = [8.5, 4.5, 6, 9]
 
-i = 1
+i = 0
 aprovados = []
 repita tamanho(nomes) vezes
 inicio

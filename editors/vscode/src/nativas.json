@@ -161,7 +161,7 @@
         "formate(modelo, valor)"
       ],
       "summary": "Monta um texto: {} valor, {:<n} esquerda, {:>n} direita, {:^n} centro.",
-      "doc": "Monta um texto: {} valor, {:<n} esquerda, {:>n} direita, {:^n} centro.\n\nCada {} (ou {1}, {2}, …) é substituído pelo valor correspondente.\nSem < > ^, texto encosta à esquerda e número à direita: {:8}.\nSe o valor já é mais largo que n, entra inteiro. {1} é o primeiro valor.\n{{ e }} escrevem { e }. Números seguem o formato atual.\nMapa com :_como_texto (função de um argumento que devolve texto) usa essa função.\n\nExemplo: formate(\"{:<8} {:>5}\", \"Ana\", 10)"
+      "doc": "Monta um texto: {} valor, {:<n} esquerda, {:>n} direita, {:^n} centro.\n\nCada {} (ou {0}, {1}, …) é substituído pelo valor correspondente.\nSem < > ^, texto encosta à esquerda e número à direita: {:8}.\nSe o valor já é mais largo que n, entra inteiro. {0} é o primeiro valor.\n{{ e }} escrevem { e }. Números seguem o formato atual.\nMapa com :_como_texto (função de um argumento que devolve texto) usa essa função.\n\nExemplo: formate(\"{:<8} {:>5}\", \"Ana\", 10)"
     },
     {
       "name": "avaliar",
@@ -240,8 +240,8 @@
       "signatures": [
         "primeiro(lista)"
       ],
-      "summary": "Primeiro elemento da lista (índice 1). Erro se vazia.",
-      "doc": "Primeiro elemento da lista (índice 1). Erro se vazia.\n\nExemplo: primeiro([10, 20])"
+      "summary": "Primeiro elemento da lista (índice 0). Erro se vazia.",
+      "doc": "Primeiro elemento da lista (índice 0). Erro se vazia.\n\nExemplo: primeiro([10, 20])"
     },
     {
       "name": "ultimo",
@@ -297,8 +297,8 @@
         "remova(lista, a, b)",
         "remova(mapa, chave)"
       ],
-      "summary": "Devolve uma cópia sem o índice/faixa (1…n) ou sem a chave do mapa.",
-      "doc": "Devolve uma cópia sem o índice/faixa (1…n) ou sem a chave do mapa.\n\nÍndices começam em 1; a faixa é inclusiva. No conjunto, o elemento some.\n\nExemplo: xs = xs.remova(2)"
+      "summary": "Devolve uma cópia sem o índice/faixa (0…n−1) ou sem a chave do mapa.",
+      "doc": "Devolve uma cópia sem o índice/faixa (0…n−1) ou sem a chave do mapa.\n\nÍndices começam em 0; a faixa é inclusiva. No conjunto, o elemento some.\n\nExemplo: xs = xs.remova(2)"
     },
     {
       "name": "substitua",
@@ -320,8 +320,8 @@
         "procurar(texto, trecho)",
         "procurar(lista, item)"
       ],
-      "summary": "Índice (1…n) da primeira ocorrência; 0 se não achar.",
-      "doc": "Índice (1…n) da primeira ocorrência; 0 se não achar.\n\nNo texto, trecho é um pedaço. Na lista, compara o item com ==.\nTrecho vazio (\"\") é erro.\n\nExemplo: procurar(\"onde\", \"n\")"
+      "summary": "Índice (0…n−1) da primeira ocorrência; -1 se não achar.",
+      "doc": "Índice (0…n−1) da primeira ocorrência; -1 se não achar.\n\nNo texto, trecho é um pedaço. Na lista, compara o item com ==.\nTrecho vazio (\"\") é erro.\n\nExemplo: procurar(\"onde\", \"n\")"
     },
     {
       "name": "separe",
@@ -561,8 +561,8 @@
       "signatures": [
         "bloco(linha, coluna)"
       ],
-      "summary": "Cursor de um bloco: mapa {:linha, :coluna}, 1-based.",
-      "doc": "Cursor de um bloco: mapa {:linha, :coluna}, 1-based.\n\nNão desenha. Passe o mapa a escreva_em. A coluna fica fixa; cada\nescreva_em anda uma linha.\n\nExemplo: b = bloco(1, 28)"
+      "summary": "Cursor de um bloco: mapa {:linha, :coluna}, base zero.",
+      "doc": "Cursor de um bloco: mapa {:linha, :coluna}, base zero.\n\nNão desenha. Passe o mapa a escreva_em. A coluna fica fixa; cada\nescreva_em anda uma linha.\n\nExemplo: b = bloco(0, 27)"
     },
     {
       "name": "escreva_em",
@@ -801,7 +801,7 @@
         "matriz(linhas)"
       ],
       "summary": "Monta uma matriz a partir de uma lista de listas de números.",
-      "doc": "Monta uma matriz a partir de uma lista de listas de números.\n\nTodas as linhas precisam ter o mesmo comprimento. Índices em 1: A[1, 2].\nA[1] é a linha como lista.\n\nExemplo: matriz([[1, 2], [3, 4]])"
+      "doc": "Monta uma matriz a partir de uma lista de listas de números.\n\nTodas as linhas precisam ter o mesmo comprimento. Índices em 0: A[0, 1].\nA[0] é a linha como lista.\n\nExemplo: matriz([[1, 2], [3, 4]])"
     },
     {
       "name": "transposta",
@@ -1094,7 +1094,7 @@
         "pasta_atual()"
       ],
       "summary": "Pasta de onde o programa foi chamado (a do terminal).",
-      "doc": "Pasta de onde o programa foi chamado (a do terminal).\n\nCaminhos relativos nas funções de arquivo partem da pasta do .lep, não\ndesta. Para um arquivo passado na linha de comando, junte as duas.\n\nExemplo: junte_caminho(pasta_atual(), argumentos[1])"
+      "doc": "Pasta de onde o programa foi chamado (a do terminal).\n\nCaminhos relativos nas funções de arquivo partem da pasta do .lep, não\ndesta. Para um arquivo passado na linha de comando, junte as duas.\n\nExemplo: junte_caminho(pasta_atual(), argumentos[0])"
     },
     {
       "name": "execute",
@@ -1434,8 +1434,8 @@
       "module": null,
       "kind": "valor",
       "signatures": [],
-      "summary": "Lista dos valores após o .lep na linha de comando (argumentos[1], …).",
-      "doc": "Lista dos valores após o .lep na linha de comando (argumentos[1], …).\n\nNão é uma função: é uma lista já definida em todo programa.\nNo REPL a lista é []. Não dá para fazer argumentos = ….\n\nExemplo: escreva(argumentos[1])"
+      "summary": "Lista dos valores após o .lep na linha de comando (argumentos[0], …).",
+      "doc": "Lista dos valores após o .lep na linha de comando (argumentos[0], …).\n\nNão é uma função: é uma lista já definida em todo programa.\nNo REPL a lista é []. Não dá para fazer argumentos = ….\n\nExemplo: escreva(argumentos[0])"
     },
     {
       "name": "nova_linha",

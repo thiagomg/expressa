@@ -63,7 +63,7 @@ pub(crate) fn formate_with(
                 if idx >= args.len() {
                     return Err(format!(
                         "índice {} fora do intervalo (há {} valor(es))",
-                        idx + 1,
+                        idx,
                         args.len()
                     ));
                 }
@@ -86,10 +86,7 @@ pub(crate) fn formate_with(
     }
 
     if let Some(i) = used.iter().position(|u| !*u) {
-        return Err(format!(
-            "valor extra na posição {} (o modelo não usa)",
-            i + 1
-        ));
+        return Err(format!("valor extra na posição {} (o modelo não usa)", i));
     }
     Ok(out)
 }
@@ -126,7 +123,7 @@ fn render_placeholder(
     if idx >= args.len() {
         return Err(format!(
             "índice {} fora do intervalo (há {} valor(es))",
-            idx + 1,
+            idx,
             args.len()
         ));
     }
@@ -145,7 +142,7 @@ fn set_indexing(slot: &mut Option<Indexing>, got: Indexing) -> Result<(), String
         None => *slot = Some(got),
         Some(prev) if prev == got => {}
         Some(_) => {
-            return Err("não misture {} e {1} no mesmo modelo".into());
+            return Err("não misture {} e {0} no mesmo modelo".into());
         }
     }
     Ok(())
@@ -158,10 +155,7 @@ fn parse_manual_index(s: &str) -> Result<usize, String> {
     let n: usize = s
         .parse()
         .map_err(|_| format!("especificação inválida `{{{s}}}`"))?;
-    if n < 1 {
-        return Err("índice 0 deve ser >= 1 (o primeiro valor é {1})".into());
-    }
-    Ok(n - 1)
+    Ok(n)
 }
 
 fn apply_spec(spec: &str, text: &str, value: &Value) -> Result<String, String> {
@@ -270,9 +264,9 @@ mod tests {
     }
 
     #[test]
-    fn one_based_manual_index() {
-        assert_eq!(f("{1} {1}", &[t("x")]), "x x");
-        assert_eq!(f("{2} {1}", &[t("a"), t("b")]), "b a");
+    fn zero_based_manual_index() {
+        assert_eq!(f("{0} {0}", &[t("x")]), "x x");
+        assert_eq!(f("{1} {0}", &[t("a"), t("b")]), "b a");
     }
 
     #[test]
@@ -297,8 +291,8 @@ mod tests {
         assert!(err("}", &[]).contains("sem abrir"));
         assert!(err("{}", &[]).contains("espera pelo menos 1"));
         assert!(err("{}", &[t("a"), t("b")]).contains("valor extra"));
-        assert!(err("{0}", &[t("a")]).contains(">= 1"));
-        assert!(err("{} {1}", &[t("a")]).contains("não misture"));
+        assert!(err("{1}", &[t("a")]).contains("fora do intervalo"));
+        assert!(err("{} {0}", &[t("a")]).contains("não misture"));
         assert!(err("{:z}", &[t("a")]).contains("inválida"));
     }
 }

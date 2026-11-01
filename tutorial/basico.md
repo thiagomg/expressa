@@ -38,7 +38,7 @@ Neste repositório, os arquivos das aulas estão em `tutorial/exemplos/`:
 expressa tutorial/exemplos/01_ola.lep
 ```
 
-Índices começam em **1**: `"Ana"[1] == "A"`.
+Índices começam em **0**: `"Ana"[0] == "A"`.
 
 ---
 
@@ -192,11 +192,11 @@ Arquivo: `exemplos/06_lista.lep`
 
 ```text
 notas = [7, 8, 6.5, 9]
-escreva("primeira: " + notas[1])
+escreva("primeira: " + notas[0])
 escreva("quantidade: " + tamanho(notas))
 ```
 
-`notas[1]` retorna o primeiro item. `tamanho` retorna a quantidade.
+`notas[0]` retorna o primeiro item. `tamanho` retorna a quantidade.
 
 Para **cada** nota, some:
 
@@ -315,7 +315,7 @@ Erros comuns no começo:
 - aspas só de um lado: `"Olá`
 - `escreva(Olá)` sem aspas — a linguagem acha que `Olá` é um nome
 - `se nota > 7` sem `{` ou `inicio` no bloco
-- `notas[0]` — não existe; o primeiro é `notas[1]`
+- `notas[-1]` — não existe; o primeiro é `notas[0]`
 
 ---
 

@@ -599,7 +599,7 @@ fn print_help_linguagem() {
          enquanto cond {{ … }}\n  \
          repita n vezes {{ … }}\n  \
          pare / continue         sai do laço / próxima volta\n  \
-         argumentos[1]           primeiro argumento após o .lep\n  \
+         argumentos[0]           primeiro argumento após o .lep\n  \
          funcao(a, b) {{ … }}            último valor é o resultado\n  \
          expr se_falhar outro            captura erro (divisão, arquivo, índice)\n  \
          :nome                           o texto \"nome\" (chave de mapa)\n  \
@@ -610,7 +610,7 @@ fn print_help_linguagem() {
          seno(radianos(30))              módulo mat; pi é valor\n  \
          avaliar(\"2 + 3 * 4\")          executa o texto no escopo atual\n  \
          \"HP\".pinte(:verde)            cor no terminal (módulo tela)\n  \
-         lista[1]  t[2] = \"x\"  texto[1..3]  t[2..]   fatia corta no fim; t[2] fora ainda é erro\n  \
+         lista[0]  t[1] = \"x\"  texto[0..2]  t[1..]   fatia corta no fim; t[1] fora ainda é erro\n  \
          pessoa:nome                     chave de mapa (pessoa[\"nome\"])\n  \
          mat::soma(1, 2)                 nome em um módulo\n  \
          xs.tamanho()                    igual a tamanho(xs)\n  \

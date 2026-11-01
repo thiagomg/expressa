@@ -15,7 +15,7 @@ inicio
     fim
     para i de 1 ate tam
     inicio
-        para j de 1 ate tam - 1
+        para j de 0 ate tam - 2
         inicio
             se copia[j] > copia[j + 1]
             inicio
@@ -44,11 +44,11 @@ inicio
     tam = tamanho(ordenada)
     se tam % 2 == 1
     inicio
-        ordenada[(tam + 1) / 2]
+        ordenada[(tam - 1) / 2]
     fim
     senao
     inicio
-        (ordenada[tam / 2] + ordenada[tam / 2 + 1]) / 2
+        (ordenada[tam / 2 - 1] + ordenada[tam / 2]) / 2
     fim
 fim
 

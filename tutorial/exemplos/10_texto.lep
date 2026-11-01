@@ -1,8 +1,8 @@
-// Texto: fatia, procurar, partir e juntar. Índice 1 é a primeira letra.
+// Texto: fatia, procurar, partir e juntar. Índice 0 é a primeira letra.
 
 s = "Expressa"
-escreva(s[1])
-escreva(s[1..4])
+escreva(s[0])
+escreva(s[0..3])
 escreva(tamanho(s))
 escreva(s contem "press")
 escreva(procurar(s, "s"))

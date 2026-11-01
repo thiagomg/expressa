@@ -9,14 +9,13 @@ separa_args = função(args, ops) {
 
     i = 0
     enquanto i < args.tamanho() {
-        i += 1
         a = args[i]
-        se a.tamanho() > 1 e a[1] == "-" {
+        se a.tamanho() > 1 e a[0] == "-" {
             // é uma opção. Se estiver na lista, vamos pegar o próximo valor, senão vamos colocar branco
-            nome_op = se a[1..2] == "--" {
-                a[3..]
-            } senao {
+            nome_op = se a[0..1] == "--" {
                 a[2..]
+            } senao {
+                a[1..]
             }
             
             valor = se ops contem nome_op {
@@ -31,6 +30,7 @@ separa_args = função(args, ops) {
         } senão {
             args_pos += [a]
         }
+        i += 1
     }
 
     mapa([

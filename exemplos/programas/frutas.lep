@@ -4,8 +4,8 @@ importe "tela"
 // Retorna maior valor de uma matriz
 maior_valor = função(m) {
     mv = 0
-    para l de 1 até nlinhas(m) {
-        para c de 1 até ncolunas(m) {
+    para l de 0 até nlinhas(m) - 1 {
+        para c de 0 até ncolunas(m) - 1 {
             // Valor da célula posicionada em (l, c)
             lc_val = m[l, c]
             se lc_val > mv { mv = lc_val }
@@ -31,16 +31,16 @@ somar_linhas_colunas = função(m) {
     
     colunas = []
     // Vamos criar as colunas para soma
-    para c de 1 até ncolunas(m) {
+    para c de 0 até ncolunas(m) - 1 {
         colunas += [0]
     }
 
     escreva(linha)
-    para l de 1 até nlinhas(m) {
+    para l de 0 até nlinhas(m) - 1 {
         // Para somar a linha, é necessário usar somente uma variável
         linha_total = 0
         s_linha = "| "
-        para c de 1 até ncolunas(m) {
+        para c de 0 até ncolunas(m) - 1 {
             // Valor da célula posicionada em (l, c)
             lc_val = m[l, c]
             s_linha += formate(fmt, lc_val)
@@ -54,7 +54,7 @@ somar_linhas_colunas = função(m) {
 
     s_cols = "  "
     
-    para c de 1 até colunas.tamanho() {
+    para c de 0 até colunas.tamanho() - 1 {
         s_cols += colunas[c] + " "
     }
     escreva(s_cols)

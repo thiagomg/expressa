@@ -2,7 +2,7 @@
 
 Linguagem de programação em **português brasileiro**, para quem quer aprender a escrever código com uma passagem mais simples do que já se sabe da escola para a programação.
 
-Arquivos `.lep`. Índices começam em **1**. Inspirada em SML, Rust, Lua, C, Pascal, D e algumas ideias próprias.
+Arquivos `.lep`. Índices começam em **0**. Inspirada em SML, Rust, Lua, C, Pascal, D e algumas ideias próprias.
 
 - **Um tipo número** — não há `i16`, `i32`, `i64`, `f32`, `f64`. Contas de caderno são: `0.1 + 0.2` é `0.3`.
 - **Pouca ambiguidade** — uma leitura, um significado; o par de bloco combina (`{` com `}`, `inicio` com `fim`).

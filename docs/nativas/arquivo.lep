@@ -111,5 +111,5 @@ extensao = funcao(caminho) { 0 }
 /// Caminhos relativos nas funções de arquivo partem da pasta do .lep, não
 /// desta. Para um arquivo passado na linha de comando, junte as duas.
 ///
-/// Exemplo: junte_caminho(pasta_atual(), argumentos[1])
+/// Exemplo: junte_caminho(pasta_atual(), argumentos[0])
 pasta_atual = funcao() { 0 }

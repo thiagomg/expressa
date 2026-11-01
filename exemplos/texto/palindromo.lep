@@ -4,9 +4,9 @@ inverta = funcao(texto)
 inicio
     saida = ""
     n = tamanho(texto)
-    para i de 1 ate n
+    para i de 0 ate n - 1
     inicio
-        saida = saida + texto[n - i + 1]
+        saida = saida + texto[n - i - 1]
     fim
     saida
 fim

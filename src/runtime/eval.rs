@@ -1764,10 +1764,15 @@ impl<'a, 'c> Vm<'a, 'c> {
         span: Span,
     ) -> Result<usize, EvalError> {
         let n = self.expect_int(index, span)?;
-        if n < 1 {
-            return Err(self.err(format!("índice deve ser >= 1, encontrado {n}"), span));
+        if n < 0 {
+            return Err(self.err(format!("índice deve ser >= 0, encontrado {n}"), span));
         }
-        let i = (n as usize) - 1;
+        let i = usize::try_from(n).map_err(|_| {
+            self.err(
+                format!("índice {n} fora do intervalo (tamanho {len})"),
+                span,
+            )
+        })?;
         if i >= len {
             return Err(self.err(
                 format!("índice {n} fora do intervalo (tamanho {len})"),
@@ -1785,27 +1790,27 @@ impl<'a, 'c> Vm<'a, 'c> {
         span: Span,
     ) -> Result<(usize, usize), EvalError> {
         let s = self.expect_int(start, span)?;
-        if s < 1 {
-            return Err(self.err("índices de fatia devem ser >= 1", span));
+        if s < 0 {
+            return Err(self.err("índices de fatia devem ser >= 0", span));
         }
         let e = match end {
             None => len as i64,
             Some(v) => {
                 let e = self.expect_int(v, span)?;
-                if e < 1 {
-                    return Err(self.err("índices de fatia devem ser >= 1", span));
+                if e < 0 {
+                    return Err(self.err("índices de fatia devem ser >= 0", span));
                 }
-                e
+                e.saturating_add(1)
             }
         };
-        if len == 0 || s > len as i64 {
+        if len == 0 || s >= len as i64 {
             return Ok((0, 0));
         }
         let e = e.min(len as i64);
         if s > e {
             return Ok((0, 0));
         }
-        Ok((s as usize - 1, e as usize))
+        Ok((s as usize, e as usize))
     }
 
     fn assign_name(
@@ -2623,7 +2628,7 @@ escreva(nome)
 xs = [1, 2]
 xs += [3]
 escreva(xs)
-xs[1] += 10
+xs[0] += 10
 escreva(xs)
 "#),
             "12\nAna Silva\n[1, 2, 3]\n[11, 2, 3]\n"
@@ -2702,7 +2707,7 @@ f()
 s = "ABC"
 f = funcao()
 inicio
-    s[1] = "x"
+    s[0] = "x"
 fim
 f()
 "#,
@@ -2749,7 +2754,7 @@ res = mapa([
     :op -> opções,
     :args -> args_pos,
 ])
-escreva(res:args[1])
+escreva(res:args[0])
 "#),
             "a\n"
         );
@@ -2763,17 +2768,17 @@ A = matriz([
     [1, 2],
     [3, 4],
 ])
-escreva(A[1, 2])
+escreva(A[0, 1])
 escreva(tamanho(A))
-escreva(tamanho(A[1]))
+escreva(tamanho(A[0]))
 escreva(nlinhas(A))
 escreva(ncolunas(A))
 escreva(det(A))
 B = transposta(A)
-escreva(B[1, 2])
+escreva(B[0, 1])
 I = identidade(2)
 C = A * I
-escreva(C[2, 2])
+escreva(C[1, 1])
 "#;
         assert_eq!(run(src), "2\n2\n2\n2\n2\n-2\n3\n4\n");
     }
@@ -2850,15 +2855,102 @@ escreva(t)
     }
 
     #[test]
-    fn list_index_is_one_based() {
+    fn list_index_is_zero_based() {
         let src = r#"
 a = [10, 20, 30, 40]
-escreva(a[1])
-escreva(a[2..3])
-a[1] = 99
-escreva(a[1])
+escreva(a[0])
+escreva(a[1..2])
+a[0] = 99
+escreva(a[0])
 "#;
         assert_eq!(run(src), "10\n[20, 30]\n99\n");
+    }
+
+    #[test]
+    fn zero_based_boundaries_and_map_keys() {
+        assert_eq!(
+            run("a = [10, 20]\na[1] = 99\nescreva(a[0], a[1])"),
+            "10 99\n"
+        );
+        assert_eq!(run(r#"escreva("ação"[0], "ação"[3])"#), "a o\n");
+        assert_eq!(
+            run(r#"m = mapa([0 -> "zero", 1 -> "um"])
+escreva(m[0], m[1])"#),
+            "zero um\n"
+        );
+        for source in [
+            "[10][-1]",
+            "[10][1]",
+            "[][0]",
+            r#"""[0]"#,
+            "[10][9223372036854775807]",
+            "[10][0.5]",
+        ] {
+            assert!(!run_err(source).is_empty(), "{source}");
+        }
+    }
+
+    #[test]
+    fn zero_based_slices_and_removal_keep_inclusive_ends() {
+        assert_eq!(
+            run(r#"
+xs = [10, 20, 30]
+escreva(xs[0..0], xs[1..2], xs[3..], xs[2..0], [][0..])
+escreva(xs[0..9223372036854775807])
+escreva(xs.remova(0), xs.remova(2), xs.remova(0, 2))
+escreva("ação"[0..1], "ação".remova(0), "ação".remova(3))
+"#),
+            "[10] [20, 30] [] [] []\n[10, 20, 30]\n[20, 30] [10, 20] []\naç ção açã\n"
+        );
+        for source in ["[10][-1..0]", "[10][0..-1]", "[10].remova(-1)"] {
+            assert!(run_err(source).contains(">= 0"), "{source}");
+        }
+    }
+
+    #[test]
+    fn migrated_argument_parser_handles_first_last_and_empty() {
+        let lib = include_str!("../../exemplos/unix/lib/linha_cmd.lep");
+        let source = format!(
+            r#"{lib}
+r = separa_args(["primeiro", "--nome", "Ana", "-v", "ultimo"], ["nome"])
+escreva(r:pos[0], r:pos[1], r:op:nome, r:op:v)
+escreva(separa_args([], []):pos)
+"#
+        );
+        assert_eq!(run(&source), "primeiro ultimo Ana \n[]\n");
+    }
+
+    #[test]
+    fn migrated_games_accept_first_and_last_letters() {
+        let termo = include_str!("../../exemplos/jogos/termo.lep")
+            .split("// Para trocar a palavra secreta")
+            .next()
+            .unwrap();
+        assert_eq!(
+            run(&format!(
+                r#"{termo}
+escreva(remove_letra("ABC", 0), remove_letra("ABC", 2))
+escreva(compara_palavra("ABC", "ABC")[0]:valor)
+escreva(compara_palavra("ABC", "CAB")[0]:valor)
+escreva(como_lista(""))
+"#
+            )),
+            "BC AB\nverde\namarelo\n[]\n"
+        );
+        let forca = include_str!("../../exemplos/jogos/forca.lep")
+            .split("// Troque a lista ou passe a palavra")
+            .next()
+            .unwrap();
+        assert_eq!(
+            run(&format!(
+                r#"{forca}
+escreva(e_letra("A"), e_letra("Z"), e_letra("?"))
+escreva(ganhou("AZ", conjunto(["A", "Z"])))
+escreva(tamanho(figura(0)) > 0, tamanho(figura(6)) > 0)
+"#
+            )),
+            "verdadeiro verdadeiro falso\nverdadeiro\nverdadeiro verdadeiro\n"
+        );
     }
 
     #[test]
@@ -3013,14 +3105,14 @@ fim
     }
 
     #[test]
-    fn text_index_and_slice_are_one_based() {
-        assert_eq!(run(r#"escreva("abc"[1])"#), "a\n");
-        assert_eq!(run(r#"escreva("abc"[2..3])"#), "bc\n");
-        assert_eq!(run(r#"escreva("b"[1..3])"#), "b\n");
-        assert_eq!(run(r#"escreva("bacia"[2..])"#), "acia\n");
-        assert_eq!(run(r#"escreva("abc"[5..])"#), "\n");
-        assert_eq!(run(r#"escreva([10, 20][1..9])"#), "[10, 20]\n");
-        assert!(run_err(r#"escreva("b"[2])"#).contains("fora do intervalo"));
+    fn text_index_and_slice_are_zero_based() {
+        assert_eq!(run(r#"escreva("abc"[0])"#), "a\n");
+        assert_eq!(run(r#"escreva("abc"[1..2])"#), "bc\n");
+        assert_eq!(run(r#"escreva("b"[0..2])"#), "b\n");
+        assert_eq!(run(r#"escreva("bacia"[1..])"#), "acia\n");
+        assert_eq!(run(r#"escreva("abc"[4..])"#), "\n");
+        assert_eq!(run(r#"escreva([10, 20][0..8])"#), "[10, 20]\n");
+        assert!(run_err(r#"escreva("b"[1])"#).contains("fora do intervalo"));
     }
 
     #[test]
@@ -3028,7 +3120,7 @@ fim
         assert_eq!(
             run(r#"
 s = "ABCDE"
-s[2] = "b"
+s[1] = "b"
 escreva(s)
 "#),
             "AbCDE\n"
@@ -3036,7 +3128,7 @@ escreva(s)
         assert_eq!(
             run(r#"
 s = "ação"
-s[2] = "Ç"
+s[1] = "Ç"
 escreva(s)
 "#),
             "aÇão\n"
@@ -3044,7 +3136,7 @@ escreva(s)
         assert_eq!(
             run(r#"
 linhas = ["ABC", "DEF"]
-linhas[1][2] = "x"
+linhas[0][1] = "x"
 escreva(linhas)
 "#),
             "[\"AxC\", \"DEF\"]\n"
@@ -3052,7 +3144,7 @@ escreva(linhas)
         assert_eq!(
             run(r#"
 m = mapa([:s -> "ABC"])
-m:s[2] = "x"
+m:s[1] = "x"
 escreva(m:s)
 "#),
             "AxC\n"
@@ -3061,7 +3153,7 @@ escreva(m:s)
             run(r#"
 s = "ABC"
 a = s
-s[1] = "x"
+s[0] = "x"
 escreva(a)
 escreva(s)
 "#),
@@ -3071,7 +3163,7 @@ escreva(s)
             run_err(
                 r#"
 s = "ABC"
-s[2] = "ab"
+s[1] = "ab"
 "#
             )
             .contains("tamanho 1")
@@ -3080,7 +3172,7 @@ s[2] = "ab"
             run_err(
                 r#"
 s = "ABC"
-s[2] = ""
+s[1] = ""
 "#
             )
             .contains("tamanho 1")
@@ -3089,26 +3181,26 @@ s[2] = ""
             run_err(
                 r#"
 s = "ABC"
-s[2] = 1
+s[1] = 1
 "#
             )
             .contains("caractere")
         );
-        assert!(run_err(r#""ABC"[2] = "b""#).contains("literal"));
+        assert!(run_err(r#""ABC"[1] = "b""#).contains("literal"));
         assert!(
             run_err(
                 r#"
 s = "ABC"
-s[0] = "x"
+s[-1] = "x"
 "#
             )
-            .contains(">= 1")
+            .contains(">= 0")
         );
         assert!(
             run_err(
                 r#"
 s = "ABC"
-s[4] = "x"
+s[3] = "x"
 "#
             )
             .contains("fora do intervalo")
@@ -3117,7 +3209,7 @@ s[4] = "x"
 
     #[test]
     fn se_falhar_catches_undefined_and_bad_index() {
-        assert_eq!(run(r#"escreva(lista[1] se_falhar "não")"#), "não\n");
+        assert_eq!(run(r#"escreva(lista[0] se_falhar "não")"#), "não\n");
         assert_eq!(run(r#"escreva([1][99] se_falhar 0)"#), "0\n");
     }
 
@@ -3194,9 +3286,9 @@ escreva(tamanho(conjunto()))
             run(r#"
 importe "matriz"
 A = matriz([[1, 2], [3, 4]])
-escreva(A.transposta()[1, 2])
+escreva(A.transposta()[0, 1])
 m = importe "matriz"
-escreva(A.m::transposta()[1, 2])
+escreva(A.m::transposta()[0, 1])
 escreva(m::nlinhas(A))
 "#),
             "3\n3\n2\n"
@@ -3205,7 +3297,7 @@ escreva(m::nlinhas(A))
             run(r#"
 matriz = importe "matriz"
 A = matriz::matriz([[1, 2], [3, 4]])
-escreva(A.matriz::transposta()[1, 2])
+escreva(A.matriz::transposta()[0, 1])
 "#),
             "3\n"
         );
@@ -3296,7 +3388,7 @@ escreva(x)
              a[\"eu\"] = a\n\
              escreva(a)\n\
              xs = [1, 2]\n\
-             xs[1] = xs\n\
+             xs[0] = xs\n\
              escreva(xs)\n\
              escreva(a == a, xs == xs, xs contem xs)\n\
              b = mapa([:x -> 1])\n\
@@ -3544,11 +3636,11 @@ escreva(x)
         let out = run("guardadas = [0]\n\
              registra = funcao(xs) {\n\
              \x20   g = funcao(n) { se n == 0 { 0 } senao { g(n - 1) } }\n\
-             \x20   xs[1] = g\n\
+             \x20   xs[0] = g\n\
              \x20   0\n\
              }\n\
              registra(guardadas)\n\
-             escreva(guardadas[1](3))\n");
+             escreva(guardadas[0](3))\n");
         assert_eq!(out, "0\n");
     }
 
@@ -3568,7 +3660,7 @@ escreva(x)
              \x20   g = funcao(n) { se n == 0 { 0 } senao { g(n - 1) } }\n\
              \x20   retorne [g]\n\
              }\n\
-             escreva(faz()[1](3))\n");
+             escreva(faz()[0](3))\n");
         assert_eq!(out, "0\n");
     }
 
@@ -4045,10 +4137,10 @@ escreva(leia_linhas())
     }
 
     #[test]
-    fn argumentos_are_one_based() {
+    fn argumentos_are_zero_based() {
         assert_eq!(run(r#"escreva(argumentos)"#), "[]\n");
         assert_eq!(
-            run_args(r#"escreva(argumentos[1])"#, &["Thiago"], ""),
+            run_args(r#"escreva(argumentos[0])"#, &["Thiago"], ""),
             "Thiago\n"
         );
         assert_eq!(
@@ -4062,7 +4154,7 @@ escreva(leia_linhas())
     #[test]
     fn grep_filter_with_args_and_leia_linhas() {
         let src = r#"
-busca = argumentos[1]
+busca = argumentos[0]
 para linha em leia_linhas()
 inicio
     se linha contem busca

@@ -4,8 +4,8 @@ importe "mat"
 
 // Cria um novo jogo aleatório
 inicia_jogo = funcao(m) {
-    para i de 1 até m.nlinhas() {
-        para j de 1 até m.ncolunas() {
+    para i de 0 até m.nlinhas() - 1 {
+        para j de 0 até m.ncolunas() - 1 {
             m[i, j] = aleatorio(0, 1)
         }
     }
@@ -14,16 +14,16 @@ inicia_jogo = funcao(m) {
 // Cria um novo jogo com um padrão pré definido
 predefinido = função(m) {
     // planador
+    m[1, 2] = 1
     m[2, 3] = 1
-    m[3, 4] = 1
-    m[4, 2] = 1
-    m[4, 3] = 1
-    m[4, 4] = 1
+    m[3, 1] = 1
+    m[3, 2] = 1
+    m[3, 3] = 1
 
     // pisca-pisca
-    m[8, 20] = 1
-    m[8, 21] = 1
-    m[8, 22] = 1    
+    m[7, 19] = 1
+    m[7, 20] = 1
+    m[7, 21] = 1
 }
 
 // Desenha o mundo definido pela matriz m
@@ -34,15 +34,15 @@ desenha = funcao(m) {
     
     // borda to topo e executapé - +- linhas -+
     borda = "+"
-    para i de 1 até m.ncolunas() {
+    para i de 0 até m.ncolunas() - 1 {
         borda += "-"
     }    
     borda += "+"
     
     escreva(borda)
-    para i de 1 até m.nlinhas() {
+    para i de 0 até m.nlinhas() - 1 {
         l = "|"
-        para j de 1 até m.ncolunas() {
+        para j de 0 até m.ncolunas() - 1 {
             l += se m[i, j] == 0 { espaço } senao { ser }
         }
         l += "|"
@@ -52,14 +52,14 @@ desenha = funcao(m) {
 }
 
 pos_lin = função(m, l) {
-    se l < 1 { m.nlinhas() }
-    ou se l > m.nlinhas() { 1 }
+    se l < 0 { m.nlinhas() - 1 }
+    ou se l >= m.nlinhas() { 0 }
     senão { l }
 }
 
 pos_col = função(m, c) {
-    se c < 1 { m.ncolunas() }
-    ou se c > m.ncolunas() { 1 }
+    se c < 0 { m.ncolunas() - 1 }
+    ou se c >= m.ncolunas() { 0 }
     senão { c }
 }
 
@@ -72,31 +72,31 @@ vizinhos = função(m, l, c) {
     v = zeros(3)
 
     // Noroeste
-    v[1,1] = m[ m.pos_lin(l-1), m.pos_col(c-1) ]
+    v[0,0] = m[ m.pos_lin(l-1), m.pos_col(c-1) ]
     // Norte
-    v[1,2] = m[ m.pos_lin(l-1), m.pos_col(c) ]
+    v[0,1] = m[ m.pos_lin(l-1), m.pos_col(c) ]
     // Nordeste
-    v[1,3] = m[ m.pos_lin(l-1), m.pos_col(c+1) ]
+    v[0,2] = m[ m.pos_lin(l-1), m.pos_col(c+1) ]
 
     // Oeste
-    v[2,1] = m[ m.pos_lin(l), m.pos_col(c-1) ]
+    v[1,0] = m[ m.pos_lin(l), m.pos_col(c-1) ]
     // Centro
-    v[2,2] = m[l, c]
+    v[1,1] = m[l, c]
     // Leste
-    v[2,3] = m[ m.pos_lin(l), m.pos_col(c+1) ]
+    v[1,2] = m[ m.pos_lin(l), m.pos_col(c+1) ]
 
     // Sudoeste
-    v[3,1] = m[ m.pos_lin(l+1), m.pos_col(c-1) ]
+    v[2,0] = m[ m.pos_lin(l+1), m.pos_col(c-1) ]
     // Sul
-    v[3,2] = m[ m.pos_lin(l+1), m.pos_col(c) ]
+    v[2,1] = m[ m.pos_lin(l+1), m.pos_col(c) ]
     // Sudeste
-    v[3,3] = m[ m.pos_lin(l+1), m.pos_col(c+1) ]
+    v[2,2] = m[ m.pos_lin(l+1), m.pos_col(c+1) ]
 
     v
 }
 
 // Conta a quantidade de vizinhos numa matrix 3x3
-// da celula na posição (2, 2)
+// da celula na posição (1, 1)
 conta_vizinhos = função(m) {
     se m.nlinhas() != 3 ou m.ncolunas() != 3 {
         escreva_erro("a função conta_vizinhos só aceita matrizes de 3x3")
@@ -104,9 +104,9 @@ conta_vizinhos = função(m) {
     }
 
     items = [
-        m[1,1], m[1,2], m[1,3], 
-        m[2,1], m[2,3], 
-        m[3,1], m[3,2], m[3,3], 
+        m[0,0], m[0,1], m[0,2],
+        m[1,0], m[1,2],
+        m[2,0], m[2,1], m[2,2],
     ]
 
     total_vizinhos = 0
@@ -133,8 +133,8 @@ nova_geracao = função(m) {
     // Se eu mudar a matriz de origem, uma celula vai influenciar a outra
     nm = zeros(tl, tc)
 
-    para i de 1 até m.nlinhas() {
-        para j de 1 até m.ncolunas() {
+    para i de 0 até m.nlinhas() - 1 {
+        para j de 0 até m.ncolunas() - 1 {
             // Aqui vamos pegar os vizinhos de cada uma das celular da matriz de origem m
             v = m.vizinhos(i, j)
             // e vamos contas a quatidade de vizinhos para aplicar cada uma das regras

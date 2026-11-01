@@ -115,7 +115,7 @@ resultado = { 10 + 5 }    // igual
 
 ## 5.1. Matrizes
 
-Retangulares, só números. Vêm do módulo `matriz`. Índices começam em 1: `A[linha, coluna]`. `A[i]` devolve a linha como lista.
+Retangulares, só números. Vêm do módulo `matriz`. Índices começam em 0: `A[linha, coluna]`. `A[i]` devolve a linha como lista.
 
 ```text
 importe "matriz"
@@ -125,7 +125,7 @@ A = matriz([
     [4, 5, 6],
 ])
 
-A[1, 2]          // 2
+A[0, 1]          // 2
 A + B            // mesma ordem
 3 * A
 A * B            // produto de matrizes
@@ -247,36 +247,36 @@ x = se n >= 7 { "ok" } senao { "não" }     // ok
 
 ## 9. Listas
 
-- Indexação começa em **1**
+- Indexação começa em **0**
 - Criação: `[1, 2, 3]`
 
 ```text
 numeros = [10, 20, 30, 40]
 
 tamanho(numeros)               // 4
-numeros[1]                     // 10
+numeros[0]                     // 10
 numeros + [50]                 // [10, 20, 30, 40, 50]
 numeros += [50]                // igual a numeros = numeros + [50]
-numeros.remova(2)              // sem o 2º item (cópia)
+numeros.remova(1)              // sem o 2º item (cópia)
 numeros.remova(2, 3)           // sem os índices 2 e 3
 numeros contem 20              // verdadeiro
 primeiro(numeros)              // 10
 ultimo(numeros)                // 40
-numeros[2..3]                  // [20, 30]
-numeros[2..]                   // do 2 até o fim
-"b"[1..3]                      // "b" (corta no tamanho)
+numeros[1..2]                  // [20, 30]
+numeros[1..]                   // do índice 1 até o fim
+"b"[0..2]                      // "b" (corta no tamanho)
 ordene([3, 1, 2])              // [1, 2, 3] (cópia)
 ordene(pessoas, funcao(p) { p:idade })   // por chave
 ```
 
 `ordene` compara como `<`: itens (ou chaves) todos números ou todos textos; misturar é erro. Itens com a mesma chave mantêm a ordem original.
 
-Índices de **texto** também começam em **1** e falam de caracteres Unicode (não bytes). `t[2]` lê um caractere. `t[2] = "b"` troca esse caractere e reatribui o texto; o valor precisa ser um texto de tamanho 1. O tamanho do texto permanece o mesmo. `a = t` depois `t[1] = "x"` deixa `a` com o texto antigo.
+Índices de **texto** também começam em **0** e falam de caracteres Unicode (não bytes). `t[1]` lê um caractere. `t[1] = "b"` troca esse caractere e reatribui o texto; o valor precisa ser um texto de tamanho 1. O tamanho do texto permanece o mesmo. `a = t` depois `t[0] = "x"` deixa `a` com o texto antigo.
 
 ```text
 s = "ABCDE"
-s[2] = "b"                     // "AbCDE"
-linhas[1][2] = "x"             // se linhas[1] é texto, reescreve o caractere
+s[1] = "b"                     // "AbCDE"
+linhas[0][1] = "x"             // se linhas[0] é texto, reescreve o caractere
 ```
 
 ---
@@ -336,16 +336,16 @@ Lista e mapa **não** viram conjunto sozinhos. `remova` no conjunto é o element
 
 ```text
 nome = "  Maria Silva  "
-nome[1]                    // um caractere
-nome[2..4]                 // inclusive; se o fim passar do tamanho, corta
-nome[2..]                  // até o último
+nome[0]                    // um caractere
+nome[1..3]                 // inclusive; se o fim passar do tamanho, corta
+nome[1..]                  // até o último
 
 tamanho(nome)
 maiuscula(nome)
 sem_acento("olá")          // "ola"
 minuscula(nome)
 nome contem "Silva"
-procurar(nome, "Silva")    // índice 1…n; 0 se não achar
+procurar(nome, "Silva")    // índice 0…n−1; -1 se não achar
 substitua(nome, "Maria", "Ana")
 separe("a,b,c", ",")
 junte(["a", "b"], " - ")
@@ -354,8 +354,8 @@ comeca_com(nome, "  Ma")   // também começa_com
 termina_com(nome, "  ")
 formate("{:<8} {:>5}", "Ana", 10)   // < esquerda  > direita  ^ centro
                                // mapa com :_como_texto (função de 1 arg → texto) usa essa função
-nome[1]
-nome[1..5]
+nome[0]
+nome[0..4]
 ```
 
 ---
@@ -375,7 +375,7 @@ Fim da entrada (Ctrl+D / Ctrl+Z) é um erro, tratável com `se_falhar`.
 `leia_linhas()` lê **todas** as linhas restantes da entrada padrão e devolve uma lista (arquivo vazio → `[]`). Não é erro chegar ao fim.
 
 ```text
-busca = argumentos[1]
+busca = argumentos[0]
 para linha em leia_linhas()
 inicio
     se linha contem busca
@@ -391,7 +391,7 @@ cat nomes.txt | expressa grep.lep Thiago
 
 `eh_terminal()` (também `é_terminal()`), no módulo `tela`, é `verdadeiro` se a entrada é o teclado, `falso` se é um pipe ou um arquivo.
 
-`argumentos` é a lista dos valores depois do `.lep` na linha de comando (`argumentos[1]` é o primeiro; índices começam em 1). Sem argumentos extras, a lista é `[]`. Não dá para reatribuir `argumentos`.
+`argumentos` é a lista dos valores depois do `.lep` na linha de comando (`argumentos[0]` é o primeiro; índices começam em 0). Sem argumentos extras, a lista é `[]`. Não dá para reatribuir `argumentos`.
 
 `avaliar(texto)` executa o texto como código Expressa no escopo atual e devolve o último valor. `avaliar("2 + 3 * 4")` vale `14`. Erros de sintaxe ou de execução (por exemplo divisão por zero) são capturáveis com `se_falhar`.
 
@@ -399,7 +399,7 @@ cat nomes.txt | expressa grep.lep Thiago
 
 `escreva` vai para a saída padrão (stdout). `escreva_erro` vai para a saída de erro (stderr).  
 Com `importe "tela"`: `cls()` (também `limpe_tela()`) limpa a tela; `casa()` manda o cursor ao canto sem apagar — use no lugar de `cls()` em animações para não piscar.  
-`colunas()` e `linhas()` são o tamanho da tela em caracteres (80×24 se não houver TTY). `nova_linha` é o texto `"\n"` no Unix e `"\r\n"` no Windows (valor, não função). `quadro(texto)` volta ao canto, escreve o texto, apaga o resto de cada linha e o que sobrar embaixo; as quebras viram `nova_linha` na saída. `bloco(linha, coluna)` devolve o mapa `{:linha, :coluna}` (1-based); `escreva_em(bloco, texto)` (UFCS `b.escreva_em("…")`) escreve uma linha nessa coluna, anda `:linha` e devolve o mesmo mapa. Sem `"\n"` no texto.  
+`colunas()` e `linhas()` são o tamanho da tela em caracteres (80×24 se não houver TTY). `nova_linha` é o texto `"\n"` no Unix e `"\r\n"` no Windows (valor, não função). `quadro(texto)` volta ao canto, escreve o texto, apaga o resto de cada linha e o que sobrar embaixo; as quebras viram `nova_linha` na saída. `bloco(linha, coluna)` devolve o mapa `{:linha, :coluna}` (base zero); `escreva_em(bloco, texto)` (UFCS `b.escreva_em("…")`) escreve uma linha nessa coluna, anda `:linha` e devolve o mesmo mapa. Sem `"\n"` no texto.
 `pinte(texto, frente)` e `pinte(texto, frente, fundo)` devolvem o texto com cor ANSI e reset no fim. `fundo(texto, cor)` pinta só o papel; `negrito(texto)` deixa em negrito. Cores: `normal`, `preto`, `vermelho`, `verde`, `amarelo`, `azul`, `magenta`, `ciano`, `branco`.  
 `durma(segundos)` espera; `durma(0.5)` é meio segundo.
 
@@ -469,7 +469,7 @@ extensao("a.tar.gz")                      // "gz" (sem ponto; sem extensão, "")
 pasta_atual()                             // pasta de onde o programa foi chamado
 ```
 
-Caminhos relativos partem da **pasta do `.lep`**, não de `pasta_atual()`. Um arquivo passado na linha de comando, relativo ao terminal, vira `junte_caminho(pasta_atual(), argumentos[1])`. Falhas (arquivo que não existe, sem permissão) são erros (`se_falhar`). Na Aula, todo caminho tem que ficar na pasta do aluno.
+Caminhos relativos partem da **pasta do `.lep`**, não de `pasta_atual()`. Um arquivo passado na linha de comando, relativo ao terminal, vira `junte_caminho(pasta_atual(), argumentos[0])`. Falhas (arquivo que não existe, sem permissão) são erros (`se_falhar`). Na Aula, todo caminho tem que ficar na pasta do aluno.
 
 ---
 
@@ -524,7 +524,7 @@ chmod +x ola.lep
 ./ola.lep
 ```
 
-Valores depois do script chegam em `argumentos` (`./ola.lep Thiago` → `argumentos[1]` é `"Thiago"`).
+Valores depois do script chegam em `argumentos` (`./ola.lep Thiago` → `argumentos[0]` é `"Thiago"`).
 
 ---
 

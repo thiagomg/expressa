@@ -1,3 +1,6 @@
+// Search must distinguish the first index (0) from absence.
+const SEARCH_NOT_FOUND: i64 = -1;
+
 use std::cell::RefCell;
 use std::collections::HashSet;
 use std::rc::Rc;
@@ -392,8 +395,8 @@ impl Vm<'_, '_> {
                     return Err(self.err("procurar espera um trecho não vazio", span));
                 }
                 let pos = match s.find(&needle) {
-                    Some(byte_i) => (s[..byte_i].chars().count() as i64) + 1,
-                    None => 0,
+                    Some(byte_i) => s[..byte_i].chars().count() as i64,
+                    None => SEARCH_NOT_FOUND,
                 };
                 Ok(Value::Numero(pos.into()))
             }
@@ -402,8 +405,8 @@ impl Vm<'_, '_> {
                     .borrow()
                     .iter()
                     .position(|x| x == &args[1])
-                    .map(|i| (i + 1) as i64)
-                    .unwrap_or(0);
+                    .map(|i| i as i64)
+                    .unwrap_or(SEARCH_NOT_FOUND);
                 Ok(Value::Numero(pos.into()))
             }
             other => Err(self.err(

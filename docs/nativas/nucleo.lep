@@ -60,12 +60,12 @@ leia = funcao(prompt) { 0 }
 /// Exemplo: para linha em leia_linhas() { escreva(linha) }
 leia_linhas = funcao() { 0 }
 
-/// Lista dos valores após o .lep na linha de comando (argumentos[1], …).
+/// Lista dos valores após o .lep na linha de comando (argumentos[0], …).
 ///
 /// Não é uma função: é uma lista já definida em todo programa.
 /// No REPL a lista é []. Não dá para fazer argumentos = ….
 ///
-/// Exemplo: escreva(argumentos[1])
+/// Exemplo: escreva(argumentos[0])
 argumentos = []
 
 /// Transforma texto em número (aceita 3.14 ou 3,14). Também número().
@@ -95,9 +95,9 @@ formato = funcao(padrao) { 0 }
 ///
 /// Monta um texto: {} valor, {:<n} esquerda, {:>n} direita, {:^n} centro.
 ///
-/// Cada {} (ou {1}, {2}, …) é substituído pelo valor correspondente.
+/// Cada {} (ou {0}, {1}, …) é substituído pelo valor correspondente.
 /// Sem < > ^, texto encosta à esquerda e número à direita: {:8}.
-/// Se o valor já é mais largo que n, entra inteiro. {1} é o primeiro valor.
+/// Se o valor já é mais largo que n, entra inteiro. {0} é o primeiro valor.
 /// {{ e }} escrevem { e }. Números seguem o formato atual.
 /// Mapa com :_como_texto (função de um argumento que devolve texto) usa essa função.
 ///
@@ -172,7 +172,7 @@ tipos = funcao() { 0 }
 /// Exemplo: tamanho("olá")
 tamanho = funcao(valor) { 0 }
 
-/// Primeiro elemento da lista (índice 1). Erro se vazia.
+/// Primeiro elemento da lista (índice 0). Erro se vazia.
 ///
 /// Exemplo: primeiro([10, 20])
 primeiro = funcao(lista) { 0 }
@@ -197,9 +197,9 @@ minuscula = funcao(texto) { 0 }
 /// Exemplo: sem_acento("São Paulo")
 sem_acento = funcao(texto) { 0 }
 
-/// Devolve uma cópia sem o índice/faixa (1…n) ou sem a chave do mapa.
+/// Devolve uma cópia sem o índice/faixa (0…n−1) ou sem a chave do mapa.
 ///
-/// Índices começam em 1; a faixa é inclusiva. No conjunto, o elemento some.
+/// Índices começam em 0; a faixa é inclusiva. No conjunto, o elemento some.
 ///
 /// Exemplo: xs = xs.remova(2)
 remova = funcao(lista, i) { 0 }
@@ -211,7 +211,7 @@ remova = funcao(mapa, chave) { 0 }
 /// Exemplo: substitua("aa", "a", "b")
 substitua = funcao(texto, antigo, novo) { 0 }
 
-/// Índice (1…n) da primeira ocorrência; 0 se não achar.
+/// Índice (0…n−1) da primeira ocorrência; -1 se não achar.
 ///
 /// No texto, trecho é um pedaço. Na lista, compara o item com ==.
 /// Trecho vazio ("") é erro.

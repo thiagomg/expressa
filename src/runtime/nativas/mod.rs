@@ -1115,14 +1115,14 @@ escreva(m::cosseno(0))"#),
         assert_eq!(
             run(r#"
 xs = [10, 20, 30, 40]
-escreva(xs.remova(2))
+escreva(xs.remova(1))
 escreva(xs)
-escreva(xs.remova(2, 3))
+escreva(xs.remova(1, 2))
 "#),
             "[10, 30, 40]\n[10, 20, 30, 40]\n[10, 40]\n"
         );
-        assert_eq!(run(r#"escreva("abcd".remova(2, 3))"#), "ad\n");
-        assert_eq!(run(r#"escreva("olá".remova(2))"#), "oá\n");
+        assert_eq!(run(r#"escreva("abcd".remova(1, 2))"#), "ad\n");
+        assert_eq!(run(r#"escreva("olá".remova(1))"#), "oá\n");
         assert_eq!(
             run(r#"
 p = mapa([
@@ -1177,7 +1177,7 @@ escreva(p:nome)
             run(r#"escreva(formate("{:<8} {:>6}", "Ana", 7.5))"#),
             "Ana         7,5\n"
         );
-        assert_eq!(run(r#"escreva("{1} {1}".formate("oi"))"#), "oi oi\n");
+        assert_eq!(run(r#"escreva("{0} {0}".formate("oi"))"#), "oi oi\n");
         assert!(run_err(r#"formate("{}")"#).contains("espera pelo menos"));
         assert!(run_err(r#"formate(10, "x")"#).contains("texto"));
     }
@@ -1265,23 +1265,23 @@ escreva("b")
         assert!(run_err("nova_linha()").contains("chamar"));
         assert_eq!(
             run(r#"
-b = bloco(1, 8)
+b = bloco(0, 7)
 escreva(b:linha)
 escreva(b:coluna)
 b.escreva_em("X")
 escreva(b:linha)
 "#),
-            "1\n8\n\x1b[1;8HX\x1b[K2\n"
+            "0\n7\n\x1b[1;8HX\x1b[K1\n"
         );
         assert_eq!(
             run(r#"
-b = bloco(2, 3)
+b = bloco(1, 2)
 b.escreva_em("A").escreva_em("B")
 escreva(b:linha)
 "#),
-            "\x1b[2;3HA\x1b[K\x1b[3;3HB\x1b[K4\n"
+            "\x1b[2;3HA\x1b[K\x1b[3;3HB\x1b[K3\n"
         );
-        assert!(run_err("bloco(0, 1)").contains(">= 1"));
+        assert!(run_err("bloco(-1, 0)").contains(">= 0"));
         assert!(run_err(r#"escreva_em(1, "a")"#).contains("mapa"));
         assert!(run_err(r#"bloco(1, 1).escreva_em("a\nb")"#).contains("uma linha"));
     }
@@ -1343,16 +1343,16 @@ escreva_erro("falhou")"#,
 Z = zeros(2, 3)
 escreva(nlinhas(Z))
 escreva(ncolunas(Z))
-escreva(Z[1, 1])
-escreva(Z[2, 3])
+escreva(Z[0, 0])
+escreva(Z[1, 2])
 Q = zeros(2)
 escreva(ncolunas(Q))
 U = uns(1, 4)
-escreva(U[1, 4])
+escreva(U[0, 3])
 C = cheia(2, 3, 7)
-escreva(C[2, 1])
-C[1, 2] = 9
-escreva(C[1, 2])
+escreva(C[1, 0])
+C[0, 1] = 9
+escreva(C[0, 1])
 "#),
             "2\n3\n0\n0\n2\n1\n7\n9\n"
         );
@@ -1421,15 +1421,23 @@ escreva(A.ncolunas())
     }
 
     #[test]
-    fn procurar_first_index_or_zero() {
-        assert_eq!(run(r#"escreva(procurar("onde", "n"))"#), "2\n");
-        assert_eq!(run(r#"escreva("onde".procurar("n"))"#), "2\n");
-        assert_eq!(run(r#"escreva(procurar("onde", "a"))"#), "0\n");
-        assert_eq!(run(r#"escreva(procurar("banana", "na"))"#), "3\n");
-        assert_eq!(run(r#"escreva(procurar("ação", "ç"))"#), "2\n");
-        assert_eq!(run(r#"escreva(procurar("abc", "abc"))"#), "1\n");
-        assert_eq!(run(r#"escreva(procurar([10, 20, 30], 20))"#), "2\n");
-        assert_eq!(run(r#"escreva(procurar([10, 20], 99))"#), "0\n");
+    fn procurar_first_index_or_minus_one() {
+        assert_eq!(
+            run(r#"escreva(procurar([10, 20], 10), procurar([], 10))"#),
+            "0 -1\n"
+        );
+        assert_eq!(
+            run(r#"escreva(procurar("á😀z", "😀"), procurar("", "z"))"#),
+            "1 -1\n"
+        );
+        assert_eq!(run(r#"escreva(procurar("onde", "n"))"#), "1\n");
+        assert_eq!(run(r#"escreva("onde".procurar("n"))"#), "1\n");
+        assert_eq!(run(r#"escreva(procurar("onde", "a"))"#), "-1\n");
+        assert_eq!(run(r#"escreva(procurar("banana", "na"))"#), "2\n");
+        assert_eq!(run(r#"escreva(procurar("ação", "ç"))"#), "1\n");
+        assert_eq!(run(r#"escreva(procurar("abc", "abc"))"#), "0\n");
+        assert_eq!(run(r#"escreva(procurar([10, 20, 30], 20))"#), "1\n");
+        assert_eq!(run(r#"escreva(procurar([10, 20], 99))"#), "-1\n");
         assert!(run_err(r#"procurar("onde", "")"#).contains("não vazio"));
         assert!(run_err("procurar(10, 1)").contains("texto ou lista"));
         assert!(run_err(r#"procurar("onde", 1)"#).contains("esperado texto"));
@@ -1619,8 +1627,8 @@ escreva(junte(linhas, "|"))
             r#"
 salve_csv("pessoas.csv", [["Ana", 25], ["Bruno", 30]])
 dados = leia_csv("pessoas.csv")
+escreva(dados[0][0])
 escreva(dados[1][1])
-escreva(dados[2][2])
 "#,
         );
         assert_eq!(out, "Ana\n30\n");
