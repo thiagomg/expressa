@@ -64,7 +64,7 @@ inicio
         n = tamanho(g:ops)
         se n >= t:marca
         inicio
-            g:ops = remova(g:ops, n - t:marca + 1, n)
+            g:ops = remova(g:ops, n - t:marca, n - 1)
         fim
         t:marca = 0
     fim

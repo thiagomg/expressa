@@ -2393,14 +2393,16 @@ t.tartaruga::ande(6)
 g = t:tela
 escreva(ultimo(g:ops):tipo)
 n = tamanho(g:ops)
-g:ops = remova(g:ops, n, n)
+escreva(n)
+g:ops = remova(g:ops, n - 1, n - 1)
+escreva(tamanho(g:ops))
 escreva(g.tela_grafica::pixel(10, 10))
 escreva(g.tela_grafica::pixel(10, 4))
 escreva(g.tela_grafica::pixel(11, 10))
 escreva(t:y)
 "#;
         let out = run_to_string(src, "exemplos/jogos/t.lep").unwrap_or_else(|e| panic!("{e}"));
-        assert_eq!(out, "imagem\nazul\nazul\nbranco\n4\n");
+        assert_eq!(out, "imagem\n4\n3\nazul\nazul\nbranco\n4\n");
     }
 
     #[test]
