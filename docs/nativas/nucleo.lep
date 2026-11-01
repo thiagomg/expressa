@@ -22,14 +22,14 @@ escreva = funcao(valor) { 0 }
 escreva_erro = funcao() { 0 }
 escreva_erro = funcao(valor) { 0 }
 
-/// Encerra o programa. Sem argumento, código 0; sair(1) indica falha.
+/// Encerra o programa. Sem argumento, código 0; saia(1) indica falha.
 ///
 /// Nada depois da chamada executa. Não é capturado por se_falhar.
-/// No REPL, a linha sair (sem parênteses) sai do interpretador; sair() encerra o processo.
+/// No REPL, a linha sair (sem parênteses) sai do interpretador; saia() encerra o processo.
 ///
-/// Exemplo: se nome == "" { sair(1) }
-sair = funcao() { 0 }
-sair = funcao(codigo) { 0 }
+/// Exemplo: se nome == "" { saia(1) }
+saia = funcao() { 0 }
+saia = funcao(codigo) { 0 }
 
 /// Espera o número de segundos (aceita fração: durma(0.5)).
 ///
@@ -113,8 +113,8 @@ formate = funcao(modelo, valor) { 0 }
 /// Erros: o argumento não é texto; o texto está vazio; erro de sintaxe ou de
 /// execução no código avaliado. Tudo isso pode ir em se_falhar.
 ///
-/// Exemplo: avaliar("2 + 3 * 4")
-avaliar = funcao(texto) { 0 }
+/// Exemplo: avalie("2 + 3 * 4")
+avalie = funcao(texto) { 0 }
 
 /// Escopo atual, ou o que tem num mapa, módulo ou função (nome, args, tipo, modulo).
 ///
@@ -216,9 +216,9 @@ substitua = funcao(texto, antigo, novo) { 0 }
 /// No texto, trecho é um pedaço. Na lista, compara o item com ==.
 /// Trecho vazio ("") é erro.
 ///
-/// Exemplo: procurar("onde", "n")
-procurar = funcao(texto, trecho) { 0 }
-procurar = funcao(lista, item) { 0 }
+/// Exemplo: procure("onde", "n")
+procure = funcao(texto, trecho) { 0 }
+procure = funcao(lista, item) { 0 }
 
 /// Parte o texto. Separador "" gera um item por caractere.
 ///

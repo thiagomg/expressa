@@ -110,7 +110,7 @@ impl std::error::Error for RuntimeError {}
 #[derive(Debug)]
 pub(crate) enum EvalError {
     Runtime(RuntimeError),
-    /// `sair(codigo)` or the debugger's `terminar`. Not caught by `se_falhar`.
+    /// `saia(codigo)` or the debugger's `terminar`. Not caught by `se_falhar`.
     Quit(i32),
     /// `retorne` inside a `funcao`. Not caught by `se_falhar`.
     Return {

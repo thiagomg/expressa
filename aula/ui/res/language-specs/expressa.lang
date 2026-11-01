@@ -91,7 +91,7 @@
       <suffix>(?![A-Za-zÀ-ÿ0-9_])</suffix>
       <keyword>escreva</keyword>
       <keyword>escreva_erro</keyword>
-      <keyword>sair</keyword>
+      <keyword>saia</keyword>
       <keyword>cls</keyword>
       <keyword>limpe_tela</keyword>
       <keyword>casa</keyword>
@@ -128,7 +128,7 @@
       <keyword>pixel</keyword>
       <keyword>como_imagem</keyword>
       <keyword>salve</keyword>
-      <keyword>avaliar</keyword>
+      <keyword>avalie</keyword>
       <keyword>catalogo</keyword>
       <keyword>ajuda</keyword>
       <keyword>catálogo</keyword>
@@ -177,7 +177,7 @@
       <keyword>sem_acento</keyword>
       <keyword>remova</keyword>
       <keyword>substitua</keyword>
-      <keyword>procurar</keyword>
+      <keyword>procure</keyword>
       <keyword>separe</keyword>
       <keyword>junte</keyword>
       <keyword>limpe</keyword>
@@ -213,13 +213,13 @@
       <keyword>imagem</keyword>
       <keyword>carregue</keyword>
       <keyword>rotacione</keyword>
-      <keyword>escala</keyword>
+      <keyword>redimensione</keyword>
       <keyword>largura</keyword>
       <keyword>altura</keyword>
       <keyword>documento</keyword>
       <keyword>grafico</keyword>
       <keyword>eixos</keyword>
-      <keyword>plotar</keyword>
+      <keyword>plote</keyword>
       <keyword>adicione</keyword>
       <keyword>mostre</keyword>
     </context>

@@ -5,6 +5,27 @@ use super::super::eval::Vm;
 use super::super::value::Value;
 
 impl Vm<'_, '_> {
+    pub(crate) fn bi_xy(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
+        match args {
+            [matriz, x, y] => {
+                self.expect_matriz(matriz, span)?;
+                self.index_get2(matriz, y, x, span)
+            }
+            [matriz, x, y, valor] => {
+                self.expect_matriz(matriz, span)?;
+                self.assign_index2(matriz, y, x, valor.clone(), span)?;
+                Ok(matriz.clone())
+            }
+            _ => Err(self.err(
+                format!(
+                    "xy espera 3 ou 4 argumentos (matriz, x, y, valor opcional), recebeu {}",
+                    args.len()
+                ),
+                span,
+            )),
+        }
+    }
+
     pub(crate) fn expect_matriz(
         &self,
         v: &Value,

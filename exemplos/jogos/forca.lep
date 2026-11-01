@@ -4,7 +4,7 @@ importe "mat"
 /// Procura um texto dentro de outro texto, mas sem levar em conta acentos
 /// Ex: Ação == Acao para esta função
 procura_sem_acento = função(palavra, letra) {
-    sem_acento(palavra).procurar(sem_acento(letra))
+    sem_acento(palavra).procure(sem_acento(letra))
 }
 
 /// Boneco: 0 erros (só a forca) até 6 (enforcado)
@@ -175,7 +175,7 @@ e_letra = função(t) {
     se t.tamanho() != 1 {
         retorne falso
     }
-    "ABCDEFGHIJKLMNOPQRSTUVWXYZ".procurar(sem_acento(t)) >= 0
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZ".procure(sem_acento(t)) >= 0
 }
 
 /// Lê uma letra do usuário
@@ -203,7 +203,7 @@ inicial = função(palavra_secreta) {
         chute = nova_letra()
         se chute.tamanho() == 0 {
             escreva("Obrigado por jogar. Tchau!")
-            sair(0)
+            saia(0)
         }
 
         // Guardamos sem acento para C e Ç (e á/ã) serem a mesma tentativa

@@ -16,15 +16,15 @@ salve = funcao(img, caminho) { 0 }
 /// Exemplo: r = rotacione(img, 90)
 rotacione = funcao(img, graus) { 0 }
 
-/// escala(img, fator)
-/// escala(img, fator_x, fator_y)
+/// redimensione(img, fator)
+/// redimensione(img, fator_x, fator_y)
 ///
 /// Redimensiona. Fator 2 dobra; 0,5 reduz à metade. Vizinho mais próximo
 /// (bom para sprites). Devolve uma imagem nova.
 ///
-/// Exemplo: d = escala(img, 2)
-escala = funcao(img, fator) { 0 }
-escala = funcao(img, fator_x, fator_y) { 0 }
+/// Exemplo: d = redimensione(img, 2)
+redimensione = funcao(img, fator) { 0 }
+redimensione = funcao(img, fator_x, fator_y) { 0 }
 
 /// Largura em pixels.
 ///

@@ -1391,7 +1391,7 @@ impl<'a, 'c> Vm<'a, 'c> {
         }
     }
 
-    fn index_get2(
+    pub(crate) fn index_get2(
         &self,
         obj: &Value,
         row: &Value,
@@ -1413,7 +1413,7 @@ impl<'a, 'c> Vm<'a, 'c> {
         Ok(Value::Numero(Numero::from(rows[i][j])))
     }
 
-    fn assign_index2(
+    pub(crate) fn assign_index2(
         &self,
         obj: &Value,
         row: &Value,
@@ -2416,7 +2416,7 @@ escreva(t:y)
     fn sair_stops_the_program() {
         let src = r#"
 escreva("antes")
-sair(1)
+saia(1)
 escreva("depois")
 "#;
         let mut input = io::Cursor::new("");
@@ -2437,14 +2437,14 @@ escreva("depois")
         .unwrap();
         assert_eq!(code, 1);
         assert_eq!(String::from_utf8(out).unwrap(), "antes\n");
-        assert_eq!(run(r#"sair()"#), "");
+        assert_eq!(run(r#"saia()"#), "");
         let skipped = run(r#"
-sair(0)
+saia(0)
 escreva("depois")
 "#);
         assert_eq!(skipped, "");
         let not_caught = run(r#"
-sair(1) se_falhar 0
+saia(1) se_falhar 0
 escreva("depois")
 "#);
         assert_eq!(not_caught, "");
@@ -3374,7 +3374,7 @@ escreva(x)
 
     #[test]
     fn avaliar_recursivo_tambem_tem_limite() {
-        let err = run_fundo("f = funcao() {\n    avaliar(\"f()\")\n}\nf()\n").unwrap_err();
+        let err = run_fundo("f = funcao() {\n    avalie(\"f()\")\n}\nf()\n").unwrap_err();
         assert!(
             err.message.contains("recursão profunda demais"),
             "{}",

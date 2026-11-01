@@ -34,7 +34,7 @@ salve_csv = funcao(caminho, dados) { 0 }
 
 /// Verdadeiro se o arquivo ou a pasta existe.
 ///
-/// Exemplo: se nao existe("dados.txt") { sair(1) }
+/// Exemplo: se nao existe("dados.txt") { saia(1) }
 existe = funcao(caminho) { 0 }
 
 /// Verdadeiro se o caminho é uma pasta. Também é_pasta.

@@ -60,7 +60,7 @@ impl Vm<'_, '_> {
         Ok(args[0].clone())
     }
 
-    pub(crate) fn bi_plotar(
+    pub(crate) fn bi_plote(
         &mut self,
         args: &[Value],
         span: Span,
@@ -69,11 +69,11 @@ impl Vm<'_, '_> {
         self.expect_arity(args, 3, span)?;
         let mapa = expect_mapa(&args[0], "grafico", span, self)?;
         if !tem_chave(&mapa, "curvas") || tem_chave(&mapa, "graficos") {
-            return Err(self.err("plotar espera um grafico (cart::grafico())", span));
+            return Err(self.err("plote espera um grafico (cart::grafico())", span));
         }
         let xmin = match get_f64(&mapa, "xmin") {
             Some(n) => n,
-            None => return Err(self.err("defina os eixos antes de plotar", span)),
+            None => return Err(self.err("defina os eixos antes de chamar plote", span)),
         };
         let xmax = get_f64(&mapa, "xmax").unwrap_or(xmin);
         let func = &args[1];
@@ -81,7 +81,7 @@ impl Vm<'_, '_> {
             Value::Funcao(_) | Value::Builtin(_) => {}
             other => {
                 return Err(self.err(
-                    format!("plotar espera uma função, encontrado {}", other.type_name()),
+                    format!("plote espera uma função, encontrado {}", other.type_name()),
                     span,
                 ));
             }
@@ -101,7 +101,7 @@ impl Vm<'_, '_> {
             let t = i as f64 / (n - 1) as f64;
             let x = xmin + t * (xmax - xmin);
             let xv = Value::Numero(x.into());
-            let yv = self.call_value(func, &[xv], span, "plotar", env)?;
+            let yv = self.call_value(func, &[xv], span, "plote", env)?;
             match yv {
                 Value::Numero(n) => {
                     let y = n.to_f64();
@@ -117,7 +117,7 @@ impl Vm<'_, '_> {
                 other => {
                     return Err(self.err(
                         format!(
-                            "a função de plotar deve devolver numero, encontrou {}",
+                            "a função passada a plote deve devolver numero, encontrou {}",
                             other.type_name()
                         ),
                         span,
@@ -402,12 +402,12 @@ escreva(tipo(c))
         let out = run(r#"
 g = grafico()
 g.eixos(-1, 1, -1, 1)
-g.plotar(função(x) { x }, :azul)
+g.plote(função(x) { x }, :azul)
 escreva(tamanho(g:curvas))
 escreva(tamanho(g:curvas[0]:pontos))
 c = documento()
 c.adicione(g)
-g.plotar(função(x) { 0 }, :vermelho)
+g.plote(função(x) { 0 }, :vermelho)
 escreva(tamanho(g:curvas))
 escreva(tamanho(c:graficos[0]:curvas))
 "#);
@@ -416,7 +416,7 @@ escreva(tamanho(c:graficos[0]:curvas))
 
     #[test]
     fn plotar_sem_eixos_e_mostre_vazio() {
-        assert!(run_err("g = grafico()\ng.plotar(função(x) { x }, :azul)").contains("eixos"));
+        assert!(run_err("g = grafico()\ng.plote(função(x) { x }, :azul)").contains("eixos"));
         assert!(run_err("c = documento()\nc.mostre()").contains("gráfico"));
         assert!(run_err("eixos(1, 0, 1, -1, 1)").contains("grafico"));
         assert!(
@@ -433,7 +433,7 @@ g.eixos(1, 0, -1, 1)
                 r#"
 g = grafico()
 g.eixos(-1, 1, -1, 1)
-g.plotar(função(x) { x }, :rosa)
+g.plote(função(x) { x }, :rosa)
 "#
             )
             .contains("cor desconhecida")
@@ -459,7 +459,7 @@ importe "cartesiano"
 c = documento()
 g = grafico()
 g.eixos(-1, 1, -2, 2)
-g.plotar(função(x) { x }, :verde)
+g.plote(função(x) { x }, :verde)
 c.adicione(g)
 c.mostre()
 c.mostre()
@@ -502,7 +502,7 @@ c1 = documento()
 c2 = documento()
 g = grafico()
 g.eixos(-1, 1, -1, 1)
-g.plotar(função(x) { 0 }, :azul)
+g.plote(função(x) { 0 }, :azul)
 c1.adicione(g)
 c2.adicione(g)
 c1.mostre()
@@ -538,7 +538,7 @@ c2.mostre()
 importe "cartesiano"
 g = grafico()
 g.eixos(-1, 1, -1, 1)
-g.plotar(função(x) {
+g.plote(função(x) {
     se x == 0 { 1 / 0 se_falhar 0 / 0 }
     senao { x }
 }, :azul)
@@ -555,12 +555,12 @@ c.mostre()
         // So holes only if we push Nada... we only push Nada when y is non-finite after to_f64.
         // rust_decimal to_f64 of normal numbers is finite.
         // For this language, holes happen if we later add sqrt negative as nan... raiz errors.
-        // Keep the test as "plotar succeeds" — hole path is still unit-tested via FolhaPronta.
+        // Keep the test as "plote succeeds" — hole path is still unit-tested via FolhaPronta.
         let _ = src;
         let out = run(r#"
 g = grafico()
 g.eixos(-1, 1, -1, 1)
-g.plotar(função(x) { x }, :azul)
+g.plote(função(x) { x }, :azul)
 escreva(g:curvas[0]:cor)
 "#);
         assert_eq!(out, "azul\n");

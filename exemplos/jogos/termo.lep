@@ -14,7 +14,7 @@ remove_letra = função(palavra, posição) {
 /// Procura um texto dentro de outro texto, mas sem levar em conta acentos
 /// Ex: Ação == Acao para esta função
 procura_sem_acento = função(palavra, letra) {
-    sem_acento(palavra).procurar(sem_acento(letra))
+    sem_acento(palavra).procure(sem_acento(letra))
 }
 
 /// Transforma um texto em uma lista de caracteres
@@ -230,7 +230,7 @@ inicial = funcao(palavra_secreta) {
         chute = nova_palavra(palavra_secreta.tamanho())
         se chute.tamanho() == 0 {
             escreva("Obrigado por jogar. Tchau!")
-            sair(0)
+            saia(0)
         }
         tentativas += [chute]
 

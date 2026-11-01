@@ -52,7 +52,11 @@ impl Vm<'_, '_> {
         Ok(Value::Imagem(out))
     }
 
-    pub(crate) fn bi_img_escala(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
+    pub(crate) fn bi_img_redimensione(
+        &mut self,
+        args: &[Value],
+        span: Span,
+    ) -> Result<Value, EvalError> {
         if args.len() != 2 && args.len() != 3 {
             return Err(self.err(
                 format!("esperado 2 ou 3 argumento(s), recebeu {}", args.len()),
@@ -196,7 +200,7 @@ escreva(b.largura())
             r#"
 img = carregue("sprite.png")
 r = rotacione(img, 90)
-d = escala(img, 2)
+d = redimensione(img, 2)
 escreva(r.largura())
 escreva(r.altura())
 escreva(d.largura())
@@ -215,7 +219,7 @@ escreva(d.altura())
             &dir,
             r#"
 img = carregue("sprite.png")
-escala(img, 0)
+redimensione(img, 0)
 "#,
         );
         assert!(err.contains("maior que 0"), "{err}");

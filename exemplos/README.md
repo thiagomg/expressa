@@ -59,7 +59,7 @@ Pasta = para que o arquivo existe. Depois do tutorial: `linguagem/` → `texto/`
 | `turma.lep` | boletim com `media`, `maximo`, `situacao` |
 | `diario.lep` | `salve_arquivo`, `adicione_arquivo`, `leia_arquivo` |
 | `contatos.lep` | agenda em CSV |
-| `calculadora.lep` | `avaliar` + `leia` |
+| `calculadora.lep` | `avalie` + `leia` |
 | `frutas.lep` | matriz + tabela |
 
 `diario.lep` e `contatos.lep` gravam em `programas/saida/` (ignorada pelo git).

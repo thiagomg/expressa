@@ -81,16 +81,16 @@
       "doc": "Como escreva, mas na saída de erro (stderr). Não vai para arquivos com >.\n\nDevolve nada.\n\nExemplo: escreva_erro(\"nome vazio\")"
     },
     {
-      "name": "sair",
+      "name": "saia",
       "aliases": [],
       "module": null,
       "kind": "funcao",
       "signatures": [
-        "sair()",
-        "sair(codigo)"
+        "saia()",
+        "saia(codigo)"
       ],
-      "summary": "Encerra o programa. Sem argumento, código 0; sair(1) indica falha.",
-      "doc": "Encerra o programa. Sem argumento, código 0; sair(1) indica falha.\n\nNada depois da chamada executa. Não é capturado por se_falhar.\nNo REPL, a linha sair (sem parênteses) sai do interpretador; sair() encerra o processo.\n\nExemplo: se nome == \"\" { sair(1) }"
+      "summary": "Encerra o programa. Sem argumento, código 0; saia(1) indica falha.",
+      "doc": "Encerra o programa. Sem argumento, código 0; saia(1) indica falha.\n\nNada depois da chamada executa. Não é capturado por se_falhar.\nNo REPL, a linha sair (sem parênteses) sai do interpretador; saia() encerra o processo.\n\nExemplo: se nome == \"\" { saia(1) }"
     },
     {
       "name": "durma",
@@ -164,15 +164,15 @@
       "doc": "Monta um texto: {} valor, {:<n} esquerda, {:>n} direita, {:^n} centro.\n\nCada {} (ou {0}, {1}, …) é substituído pelo valor correspondente.\nSem < > ^, texto encosta à esquerda e número à direita: {:8}.\nSe o valor já é mais largo que n, entra inteiro. {0} é o primeiro valor.\n{{ e }} escrevem { e }. Números seguem o formato atual.\nMapa com :_como_texto (função de um argumento que devolve texto) usa essa função.\n\nExemplo: formate(\"{:<8} {:>5}\", \"Ana\", 10)"
     },
     {
-      "name": "avaliar",
+      "name": "avalie",
       "aliases": [],
       "module": null,
       "kind": "funcao",
       "signatures": [
-        "avaliar(texto)"
+        "avalie(texto)"
       ],
       "summary": "Executa o texto como código Expressa no escopo atual e devolve o último valor.",
-      "doc": "Executa o texto como código Expressa no escopo atual e devolve o último valor.\n\nVê as variáveis e funções já definidas; uma atribuição no texto altera o\nescopo de quem chamou (função não escreve nomes de fora).\n\nErros: o argumento não é texto; o texto está vazio; erro de sintaxe ou de\nexecução no código avaliado. Tudo isso pode ir em se_falhar.\n\nExemplo: avaliar(\"2 + 3 * 4\")"
+      "doc": "Executa o texto como código Expressa no escopo atual e devolve o último valor.\n\nVê as variáveis e funções já definidas; uma atribuição no texto altera o\nescopo de quem chamou (função não escreve nomes de fora).\n\nErros: o argumento não é texto; o texto está vazio; erro de sintaxe ou de\nexecução no código avaliado. Tudo isso pode ir em se_falhar.\n\nExemplo: avalie(\"2 + 3 * 4\")"
     },
     {
       "name": "catalogo",
@@ -312,16 +312,16 @@
       "doc": "Troca todas as ocorrências de antigo por novo.\n\nExemplo: substitua(\"aa\", \"a\", \"b\")"
     },
     {
-      "name": "procurar",
+      "name": "procure",
       "aliases": [],
       "module": null,
       "kind": "funcao",
       "signatures": [
-        "procurar(texto, trecho)",
-        "procurar(lista, item)"
+        "procure(texto, trecho)",
+        "procure(lista, item)"
       ],
       "summary": "Índice (0…n−1) da primeira ocorrência; -1 se não achar.",
-      "doc": "Índice (0…n−1) da primeira ocorrência; -1 se não achar.\n\nNo texto, trecho é um pedaço. Na lista, compara o item com ==.\nTrecho vazio (\"\") é erro.\n\nExemplo: procurar(\"onde\", \"n\")"
+      "doc": "Índice (0…n−1) da primeira ocorrência; -1 se não achar.\n\nNo texto, trecho é um pedaço. Na lista, compara o item com ==.\nTrecho vazio (\"\") é erro.\n\nExemplo: procure(\"onde\", \"n\")"
     },
     {
       "name": "separe",
@@ -894,6 +894,18 @@
       "doc": "Quantidade de colunas da matriz.\n\nExemplo: ncolunas(A)"
     },
     {
+      "name": "xy",
+      "aliases": [],
+      "module": "matriz",
+      "kind": "funcao",
+      "signatures": [
+        "xy(matriz, x, y)",
+        "xy(matriz, x, y, valor)"
+      ],
+      "summary": "Lê ou altera a célula em (x, y): x é a coluna e y é a linha.",
+      "doc": "Lê ou altera a célula em (x, y): x é a coluna e y é a linha.\n\nxy(matriz, x, y) lê matriz[y, x]. Com valor, altera essa célula e\ndevolve a mesma matriz, permitindo encadear chamadas. A alteração é\nvisível por outras referências à matriz. Valor deve ser um número.\nCoordenadas inteiras em base zero, com os mesmos limites do acesso\npor índices. Fora da matriz é erro. Importe \"matriz\" antes de usar.\n\nExemplo: A.xy(2, 0)\nExemplo: A.xy(2, 0, 9)"
+    },
+    {
       "name": "leia_arquivo",
       "aliases": [],
       "module": "arquivo",
@@ -957,7 +969,7 @@
         "existe(caminho)"
       ],
       "summary": "Verdadeiro se o arquivo ou a pasta existe.",
-      "doc": "Verdadeiro se o arquivo ou a pasta existe.\n\nExemplo: se nao existe(\"dados.txt\") { sair(1) }"
+      "doc": "Verdadeiro se o arquivo ou a pasta existe.\n\nExemplo: se nao existe(\"dados.txt\") { saia(1) }"
     },
     {
       "name": "eh_pasta",
@@ -1141,8 +1153,8 @@
       "signatures": [
         "grafico()"
       ],
-      "summary": "Plano xy vazio. Defina eixos e depois plotar.",
-      "doc": "Plano xy vazio. Defina eixos e depois plotar.\n\ntipo(g) continua \"mapa\".\n\nExemplo: g = grafico()"
+      "summary": "Plano xy vazio. Defina eixos e depois plote.",
+      "doc": "Plano xy vazio. Defina eixos e depois plote.\n\ntipo(g) continua \"mapa\".\n\nExemplo: g = grafico()"
     },
     {
       "name": "eixos",
@@ -1153,18 +1165,18 @@
         "eixos(grafico, xmin, xmax, ymin, ymax)"
       ],
       "summary": "Limites do plano. xmin < xmax e ymin < ymax. y cresce para cima.",
-      "doc": "Limites do plano. xmin < xmax e ymin < ymax. y cresce para cima.\n\nSem eixos, plotar é erro.\n\nExemplo: g.eixos(-2 * pi, 2 * pi, -1.5, 1.5)"
+      "doc": "Limites do plano. xmin < xmax e ymin < ymax. y cresce para cima.\n\nSem eixos, plote é erro.\n\nExemplo: g.eixos(-2 * pi, 2 * pi, -1.5, 1.5)"
     },
     {
-      "name": "plotar",
+      "name": "plote",
       "aliases": [],
       "module": "cartesiano",
       "kind": "funcao",
       "signatures": [
-        "plotar(grafico, f, cor)"
+        "plote(grafico, f, cor)"
       ],
       "summary": "Amostra a função de xmin a xmax (~400 pontos) e acrescenta a curva.",
-      "doc": "Amostra a função de xmin a xmax (~400 pontos) e acrescenta a curva.\n\nA função recebe um número e devolve um número. y não finito vira um furo na linha.\nCores: as mesmas da tela (azul, vermelho, …).\n\nExemplo: g.plotar(função(x) { seno(x) }, :azul)"
+      "doc": "Amostra a função de xmin a xmax (~400 pontos) e acrescenta a curva.\n\nA função recebe um número e devolve um número. y não finito vira um furo na linha.\nCores: as mesmas da tela (azul, vermelho, …).\n\nExemplo: g.plote(função(x) { seno(x) }, :azul)"
     },
     {
       "name": "adicione",
@@ -1395,16 +1407,16 @@
       "doc": "Gira no sentido horário, em graus. 0 deixa o topo apontando para cima.\n90, 180 e 270 são exatos. Devolve uma imagem nova; a original não muda.\n\nExemplo: r = rotacione(img, 90)"
     },
     {
-      "name": "escala",
+      "name": "redimensione",
       "aliases": [],
       "module": "imagem",
       "kind": "funcao",
       "signatures": [
-        "escala(img, fator)",
-        "escala(img, fator_x, fator_y)"
+        "redimensione(img, fator)",
+        "redimensione(img, fator_x, fator_y)"
       ],
       "summary": "Redimensiona. Fator 2 dobra; 0,5 reduz à metade. Vizinho mais próximo (bom para sprites). Devolve uma imagem nova.",
-      "doc": "Redimensiona. Fator 2 dobra; 0,5 reduz à metade. Vizinho mais próximo\n(bom para sprites). Devolve uma imagem nova.\n\nExemplo: d = escala(img, 2)"
+      "doc": "Redimensiona. Fator 2 dobra; 0,5 reduz à metade. Vizinho mais próximo\n(bom para sprites). Devolve uma imagem nova.\n\nExemplo: d = redimensione(img, 2)"
     },
     {
       "name": "largura",

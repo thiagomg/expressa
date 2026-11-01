@@ -164,7 +164,7 @@ valor = 10 / 0 se_falhar 0
 linhas = leia_arquivo("x.txt") se_falhar []
 ```
 
-`sair(1)` encerra de propósito e **não** é capturado por `se_falhar`.
+`saia(1)` encerra de propósito e **não** é capturado por `se_falhar`.
 
 ---
 
@@ -189,12 +189,12 @@ Como `escreva`, na saída de erro (stderr). Não entra em `> arquivo`.
 escreva_erro("nome vazio")
 ```
 
-### `sair()` / `sair(codigo)`
+### `saia()` / `saia(codigo)`
 
-Encerra. Sem argumento, código 0. Nada depois da chamada executa. No REPL, a linha `sair` (sem `()`) sai do interpretador; `sair()` encerra o processo.
+Encerra. Sem argumento, código 0. Nada depois da chamada executa. No REPL, a linha `sair` (sem `()`) sai do interpretador; `saia()` encerra o processo.
 
 ```text
-se nome == "" { sair(1) }
+se nome == "" { saia(1) }
 ```
 
 ### `durma(segundos)`
@@ -280,12 +280,12 @@ formate("{:<8} {:>5}", "Ana", 10)
 
 Um mapa pode definir `:_como_texto` (função de um argumento que devolve texto). `formate`, `escreva` e o `+` com texto chamam essa função. Sem o campo, o mapa continua `mapa{…}`. A função é do aluno (`como_texto = função(fr) { … }`; `fr:_como_texto = como_texto`); não é nativa.
 
-### `avaliar(texto)`
+### `avalie(texto)`
 
 executa o texto como Expressa no escopo atual e devolve o último valor. Erro de sintaxe ou de execução vai em `se_falhar`.
 
 ```text
-avaliar("2 + 3 * 4")     // 14
+avalie("2 + 3 * 4")     // 14
 ```
 
 ### `catalogo()` / `catalogo(alvo)` / `catálogo`
@@ -374,12 +374,12 @@ Troca todas as ocorrências.
 substitua("aa", "a", "b")    // "bb"
 ```
 
-### `procurar(texto, trecho)` / `procurar(lista, item)`
+### `procure(texto, trecho)` / `procure(lista, item)`
 
 Índice 0…n−1 da primeira ocorrência; `-1` se não achar. Trecho `""` é erro.
 
 ```text
-procurar("onde", "n")    // 1
+procure("onde", "n")    // 1
 ```
 
 ### `separe(texto, separador)`
@@ -514,8 +514,8 @@ cart = importe "cartesiano"
 c = cart::documento()
 g = cart::grafico()
 g.cart::eixos(-2 * pi, 2 * pi, -1.5, 1.5)
-g.cart::plotar(função(x) { seno(x) }, :azul)
-g.cart::plotar(função(x) { cosseno(x) }, :vermelho)
+g.cart::plote(função(x) { seno(x) }, :azul)
+g.cart::plote(função(x) { cosseno(x) }, :vermelho)
 c.cart::adicione(g)
 c.cart::mostre()
 ```
@@ -540,7 +540,7 @@ g.tela_grafica::salve("casa.png")
 
 ## `importe "imagem"`
 
-PNG em memória: `carregue`, `salve`, `rotacione`, `escala`, `largura`, `altura`. `tipo(img)` é `"imagem"`. `tela_grafica::imagem` aceita o valor, um caminho (lido uma vez) ou outra tela gráfica.
+PNG em memória: `carregue`, `salve`, `rotacione`, `redimensione`, `largura`, `altura`. `tipo(img)` é `"imagem"`. `tela_grafica::imagem` aceita o valor, um caminho (lido uma vez) ou outra tela gráfica.
 
 ```
 img = importe "imagem"
@@ -555,13 +555,13 @@ Mapa-folha. Ainda não abre janela.
 
 ### `grafico()`
 
-Plano vazio. Depois `eixos` e `plotar`.
+Plano vazio. Depois `eixos` e `plote`.
 
 ### `eixos(grafico, xmin, xmax, ymin, ymax)`
 
-`xmin < xmax`, `ymin < ymax`. Sem isso, `plotar` é erro.
+`xmin < xmax`, `ymin < ymax`. Sem isso, `plote` é erro.
 
-### `plotar(grafico, f, cor)`
+### `plote(grafico, f, cor)`
 
 `f` recebe x e devolve y. ~400 amostras. y infinito vira um furo na linha.
 
@@ -627,9 +627,13 @@ Chão, teto, inteiro mais próximo. Empate (`n,5`) afasta de zero: `arredonde(1.
 
 Só números. `A[0, 1]` é linha 0, coluna 1. `A[0]` é a linha como lista.
 
+Para gráficos, `A.xy(x, y)` lê `A[y, x]` e `A.xy(x, y, valor)` altera essa célula, devolvendo a mesma matriz para encadear chamadas. Ambas usam coordenadas inteiras em base zero e os mesmos limites do acesso por índices. A escrita exige um número e é visível por outras referências à matriz.
+
 ```text
 A = matriz([[1, 2, 3], [4, 5, 6]])
 A[0, 1]          // 2
+A.xy(1, 0)       // 2: x é coluna, y é linha
+A.xy(1, 0, 9)  // altera A[0, 1]; devolve A
 transposta(A)
 det(A)           // 1×1, 2×2 ou 3×3
 identidade(3)

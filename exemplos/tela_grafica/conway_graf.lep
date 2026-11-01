@@ -123,7 +123,7 @@ vizinhos = função(m, l, c) {
 conta_vizinhos = função(m) {
     se m.nlinhas() != 3 ou m.ncolunas() != 3 {
         escreva_erro("a função conta_vizinhos só aceita matrizes de 3x3")
-        sair(1)
+        saia(1)
     }
 
     items = [

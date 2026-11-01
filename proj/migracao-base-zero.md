@@ -13,7 +13,7 @@ Não há detecção automática nem modo misto de indexação.
 | Primeiro argumento do programa | `argumentos[1]` | `argumentos[0]` |
 | Primeiro valor em formato manual | `"{1}"` | `"{0}"` |
 | Canto superior esquerdo do terminal | `bloco(1, 1)` | `bloco(0, 0)` |
-| Busca sem resultado | `procurar(xs, valor) == 0` | `procurar(xs, valor) == -1` |
+| Busca sem resultado | `procurar(xs, valor) == 0` | `procure(xs, valor) == -1` |
 
 Para testar se encontrou, use `indice >= 0`. O índice `0` é um resultado válido.
 Textos continuam indexados por caracteres Unicode, e não por bytes.

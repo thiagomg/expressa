@@ -60,7 +60,7 @@ impl Vm<'_, '_> {
         self.sleep_secs(secs, span)?;
         Ok(Value::Nada)
     }
-    pub(crate) fn bi_sair(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
+    pub(crate) fn bi_saia(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
         let code = match args {
             [] => 0,
             [v] => {
@@ -69,7 +69,7 @@ impl Vm<'_, '_> {
             }
             _ => {
                 return Err(self.err(
-                    format!("sair() espera 0 ou 1 argumento(s), recebeu {}", args.len()),
+                    format!("saia() espera 0 ou 1 argumento(s), recebeu {}", args.len()),
                     span,
                 ));
             }
@@ -386,13 +386,13 @@ impl Vm<'_, '_> {
         let to = self.expect_texto(&args[2], span)?;
         Ok(Value::Texto(s.replace(&from, &to)))
     }
-    pub(crate) fn bi_procurar(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
+    pub(crate) fn bi_procure(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
         self.expect_arity(args, 2, span)?;
         match &args[0] {
             Value::Texto(s) => {
                 let needle = self.expect_texto(&args[1], span)?;
                 if needle.is_empty() {
-                    return Err(self.err("procurar espera um trecho não vazio", span));
+                    return Err(self.err("procure espera um trecho não vazio", span));
                 }
                 let pos = match s.find(&needle) {
                     Some(byte_i) => s[..byte_i].chars().count() as i64,
@@ -411,7 +411,7 @@ impl Vm<'_, '_> {
             }
             other => Err(self.err(
                 format!(
-                    "procurar espera texto ou lista, encontrado {}",
+                    "procure espera texto ou lista, encontrado {}",
                     other.type_name()
                 ),
                 span,
@@ -506,7 +506,7 @@ impl Vm<'_, '_> {
         }
     }
 
-    pub(crate) fn bi_avaliar(
+    pub(crate) fn bi_avalie(
         &mut self,
         args: &[Value],
         span: Span,
@@ -514,17 +514,17 @@ impl Vm<'_, '_> {
     ) -> Result<Value, EvalError> {
         self.expect_arity(args, 1, span)?;
         let src = self.expect_texto(&args[0], span)?;
-        let program = parse(&src).map_err(|e| self.err(format!("avaliar: {}", e.message), span))?;
+        let program = parse(&src).map_err(|e| self.err(format!("avalie: {}", e.message), span))?;
         if program.items.is_empty() {
-            return Err(self.err("avaliar espera uma expressão", span));
+            return Err(self.err("avalie espera uma expressão", span));
         }
         self.check_profundidade(span)?;
         self.stack.push(CallFrame {
-            name: "avaliar".into(),
+            name: "avalie".into(),
             file: self.file.clone(),
             span,
         });
-        let prev_file = std::mem::replace(&mut self.file, "<avaliar>".into());
+        let prev_file = std::mem::replace(&mut self.file, "<avalie>".into());
         let prev_source = std::mem::replace(&mut self.source, std::rc::Rc::from(src));
         let result = self.eval_items_value(&program.items, env);
         self.source = prev_source;

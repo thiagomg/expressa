@@ -463,7 +463,7 @@ fn print_help_geral() {
          formato(\"pt\") / en     texto dos números (1.000,5 / 1,000.5)\n  \
          formato(\"decimal\") / float  aritmética (padrão decimal)\n  \
          sair                   encerra o REPL (também Ctrl+D)\n  \
-         sair() / sair(1)       nativa: encerra o processo\n  \
+         saia() / saia(1)       nativa: encerra o processo\n  \
          cls                    comando do REPL: limpa a tela\n  \
          importe \"tela\"         cls() / casa() / quadro() / nova_linha\n  \
          ↑ ↓                    comandos anteriores"
@@ -608,7 +608,7 @@ fn print_help_linguagem() {
          importe \"matriz\"              matriz([[1, 2], [3, 4]])\n  \
          importe \"arquivo\" / \"tela\" / \"mat\"\n  \
          seno(radianos(30))              módulo mat; pi é valor\n  \
-         avaliar(\"2 + 3 * 4\")          executa o texto no escopo atual\n  \
+         avalie(\"2 + 3 * 4\")          executa o texto no escopo atual\n  \
          \"HP\".pinte(:verde)            cor no terminal (módulo tela)\n  \
          lista[0]  t[1] = \"x\"  texto[0..2]  t[1..]   fatia corta no fim; t[1] fora ainda é erro\n  \
          pessoa:nome                     chave de mapa (pessoa[\"nome\"])\n  \
@@ -616,7 +616,7 @@ fn print_help_linguagem() {
          xs.tamanho()                    igual a tamanho(xs)\n  \
          i += 1  xs += [x]  nome += \" a\"\n  \
          xs.remova(2)  t.remova(1, 3)  m.remova(\"k\")\n  \
-         procurar(\"onde\", \"n\")       2; 0 se não achar\n  \
+         procure(\"onde\", \"n\")       1; -1 se não achar\n  \
          e  ou  nao  contem\n  \
          #!/usr/bin/env expressa primeira linha (arquivo executável)"
     );

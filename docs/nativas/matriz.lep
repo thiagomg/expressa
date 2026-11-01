@@ -51,3 +51,16 @@ nlinhas = funcao(matriz) { 0 }
 ///
 /// Exemplo: ncolunas(A)
 ncolunas = funcao(matriz) { 0 }
+
+/// Lê ou altera a célula em (x, y): x é a coluna e y é a linha.
+///
+/// xy(matriz, x, y) lê matriz[y, x]. Com valor, altera essa célula e
+/// devolve a mesma matriz, permitindo encadear chamadas. A alteração é
+/// visível por outras referências à matriz. Valor deve ser um número.
+/// Coordenadas inteiras em base zero, com os mesmos limites do acesso
+/// por índices. Fora da matriz é erro. Importe "matriz" antes de usar.
+///
+/// Exemplo: A.xy(2, 0)
+/// Exemplo: A.xy(2, 0, 9)
+xy = funcao(matriz, x, y) { 0 }
+xy = funcao(matriz, x, y, valor) { 0 }
