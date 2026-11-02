@@ -60,7 +60,7 @@ pub struct Prefs {
     pub servidor: String,
     /// Last project opened on the server; the project list selects it.
     pub projeto: String,
-    /// Projects opened before, most recent first (Arquivo → Recentes).
+    /// Local projects and server/student pairs, most recent first.
     pub recentes: Vec<Recente>,
     /// Last file opened in the project (relative path).
     pub arquivo: String,
@@ -108,6 +108,7 @@ impl Prefs {
                 _ => {}
             }
         }
+        p.organizar_recentes();
         p
     }
 
@@ -129,9 +130,20 @@ impl Prefs {
 
     /// `r` was just opened: first in the list, without repeating it.
     pub fn lembrar_recente(&mut self, r: Recente) {
-        self.recentes.retain(|x| *x != r);
         self.recentes.insert(0, r);
-        self.recentes.truncate(RECENTES_MAXIMO);
+        self.organizar_recentes();
+    }
+
+    fn organizar_recentes(&mut self) {
+        let mut locais = std::collections::HashSet::new();
+        let mut servidores = std::collections::HashSet::new();
+        self.recentes.retain(|r| match r {
+            Recente::Local(p) => locais.len() < RECENTES_MAXIMO && locais.insert(p.clone()),
+            Recente::Servidor { url, aluno, .. } => {
+                let key = (crate::normalize_url(url), aluno.clone());
+                servidores.len() < RECENTES_MAXIMO && servidores.insert(key)
+            }
+        });
     }
 
     pub fn load() -> Self {
@@ -539,6 +551,46 @@ mod tests {
         assert_eq!(Prefs::parse(&p.to_text()), p);
         assert_eq!(Prefs::parse("fonte=999\nlixo\n").font_size, MAX_FONT);
         assert_eq!(Prefs::parse(""), Prefs::default());
+    }
+
+    #[test]
+    fn legacy_history_groups_servers_and_preserves_latest_project() {
+        let p = Prefs::parse(
+            "recente=servidor\thttp://SERVER:80/\tana\tlatest\nrecente=local\t/a/project\nrecente=servidor\tserver\tana\told\nrecente=servidor\thttp://server\tbia\tother\nrecente=local\t/a/project\nrecente=local\t/b/project\n",
+        );
+        assert_eq!(p.recentes.len(), 4);
+        assert!(matches!(&p.recentes[0], Recente::Servidor { projeto, .. } if projeto == "latest"));
+        assert_eq!(p.recentes[1], Recente::Local("/a/project".into()));
+        assert_eq!(p.recentes[3], Recente::Local("/b/project".into()));
+        assert_eq!(Prefs::parse(&p.to_text()), p);
+    }
+
+    #[test]
+    fn retention_is_independent_and_latest_server_use_replaces_project() {
+        let mut p = Prefs::default();
+        for i in 0..12 {
+            p.lembrar_recente(Recente::Local(format!("/p{i}")));
+            p.lembrar_recente(Recente::Servidor {
+                url: format!("http://s{i}"),
+                aluno: "ana".into(),
+                projeto: "old".into(),
+            });
+        }
+        assert_eq!(p.recentes.len(), 20);
+        p.lembrar_recente(Recente::Servidor {
+            url: "http://S11:80/".into(),
+            aluno: "ana".into(),
+            projeto: "new".into(),
+        });
+        assert_eq!(p.recentes.len(), 20);
+        assert!(matches!(&p.recentes[0], Recente::Servidor { projeto, .. } if projeto == "new"));
+        assert_eq!(
+            p.recentes
+                .iter()
+                .filter(|r| matches!(r, Recente::Local(_)))
+                .count(),
+            10
+        );
     }
 
     #[test]

@@ -1,18 +1,14 @@
 //! Jumping by name: a project file (Ctrl+P), a function of the open file
-//! (Ctrl+Shift+O), a project opened before (Arquivo → Recentes).
+//! (Ctrl+Shift+O), local projects and previous servers.
 
 use std::path::PathBuf;
 use std::rc::Rc;
-use std::sync::Arc;
 
 use gtk::prelude::*;
 
 use crate::escolher::{self, Item};
 use crate::prefs::Recente;
-use crate::rpc::Rpc;
-use crate::{
-    UiRc, after_unsaved, apply_remote, current_doc, open_local_project, open_path, set_status,
-};
+use crate::{UiRc, current_doc, open_local_project, open_path, set_status};
 
 /// Splits `lib/mat.lep` into (`mat.lep`, `lib`).
 fn nome_e_pasta(caminho: &str) -> (String, String) {
@@ -85,11 +81,19 @@ pub fn funcoes_do_arquivo(ui: &UiRc) {
     );
 }
 
-/// Arquivo → Recentes: reopen a folder or a server project used before.
+/// Arquivo → Local → Projetos recentes.
 pub fn recentes(ui: &UiRc) {
     let (window, recentes) = {
         let u = ui.borrow();
-        (u.window.clone(), u.prefs.recentes.clone())
+        (
+            u.window.clone(),
+            u.prefs
+                .recentes
+                .iter()
+                .filter(|r| matches!(r, Recente::Local(_)))
+                .cloned()
+                .collect::<Vec<_>>(),
+        )
     };
     if recentes.is_empty() {
         set_status(ui, "nenhum projeto aberto antes");
@@ -99,10 +103,10 @@ pub fn recentes(ui: &UiRc) {
         .iter()
         .map(|r| match r {
             Recente::Local(p) => {
-                let (nome, pasta) = nome_e_pasta(&p.replace('\\', "/"));
+                let (nome, _) = nome_e_pasta(&p.replace('\\', "/"));
                 Item {
                     rotulo: nome,
-                    detalhe: pasta,
+                    detalhe: p.clone(),
                 }
             }
             Recente::Servidor {
@@ -132,15 +136,38 @@ fn abrir_recente(ui: &UiRc, r: Recente) {
             url,
             aluno,
             projeto,
-        } => match Rpc::connect(&url) {
-            Ok(rpc) => {
-                let ui_c = Rc::clone(ui);
-                let rpc = Arc::new(rpc);
-                after_unsaved(ui, move || apply_remote(&ui_c, rpc, url, aluno, projeto));
-            }
-            Err(e) => set_status(ui, &format!("servidor {url}: {e}")),
-        },
+        } => crate::conectar_servidor(ui, url, aluno, projeto),
     }
+}
+
+pub fn servidores_anteriores(ui: &UiRc) {
+    let recentes: Vec<_> = ui
+        .borrow()
+        .prefs
+        .recentes
+        .iter()
+        .filter(|r| matches!(r, Recente::Servidor { .. }))
+        .cloned()
+        .collect();
+    let itens = recentes
+        .iter()
+        .map(|r| match r {
+            Recente::Servidor { url, aluno, .. } => Item {
+                rotulo: aluno.clone(),
+                detalhe: crate::normalize_url(url),
+            },
+            _ => unreachable!(),
+        })
+        .collect();
+    let window = ui.borrow().window.clone();
+    let ui = Rc::clone(ui);
+    escolher::mostrar(
+        &window,
+        "Servidores anteriores",
+        "servidor ou aluno",
+        itens,
+        move |i| abrir_recente(&ui, recentes[i].clone()),
+    );
 }
 
 #[cfg(test)]

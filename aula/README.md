@@ -87,7 +87,9 @@ Fechar o editor fecha as janelas irmãs (gráficos destacados e Ajuda) e encerra
 
 No depurador: a linha atual fica amarela, no arquivo certo (abre o módulo importado se for preciso); um erro durante a depuração para na linha (em vermelho) com as variáveis visíveis, e Continuar encerra. **Observados** guarda nomes para ver o valor a cada passo; **Variáveis** lista o que está no escopo; **Pilha** as chamadas.
 
-**Arquivo → Pasta…** escolhe a pasta do projeto neste computador; **Arquivo → Servidor…** conecta a um servidor (`aula-data/aluno`). O caminho (ou `url — aula-data/aluno`) fica à direita da barra de status.
+**Arquivo → Local → Abrir projeto…** escolhe a pasta do projeto neste computador; **Arquivo → Remoto → Conectar ao servidor…** conecta a um servidor (`aula-data/aluno`). O caminho (ou `url — aula-data/aluno`) fica à direita da barra de status.
+
+**Local → Projetos recentes** mostra até dez pastas, com seus caminhos completos. **Remoto → Servidores anteriores** mostra até dez combinações de servidor e aluno; ao reconectar, escolha o projeto na lista (o último usado fica selecionado). No submenu **Remoto**, quando há um projeto remoto ativo, a lista de projetos identifica o servidor e o aluno e marca o projeto atual. Use **Novo projeto…** para criar outro projeto e **Sincronização…** para acompanhar os arquivos locais e remotos.
 
 `leia("Seu nome:")` espera a resposta na própria saída: digite e aperte Enter, como num terminal (o interpretador avisa com `<<<EXPRESSA-LEIA>>>`). Na linha de comando:
 

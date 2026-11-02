@@ -7,6 +7,7 @@ mod abas;
 mod ajuda;
 mod assist;
 mod atalhos;
+mod background;
 mod busca_projeto;
 mod cartesiano;
 mod conflitos;
@@ -27,6 +28,7 @@ mod pares;
 mod pendencias;
 mod pendencias_ui;
 mod prefs;
+mod projetos_menu;
 mod recuperacao;
 mod rpc;
 mod sessao;
@@ -72,6 +74,10 @@ struct Run {
 }
 
 struct Ui {
+    navigation_epoch: u64,
+    listing_epoch: u64,
+    remote_menu: gio::Menu,
+    projects_menu: gio::Menu,
     files: Files,
     /// Folder name locally, student name on a remote server.
     project: String,
@@ -267,6 +273,10 @@ fn build_ui(app: &Application) {
     win.add_css_class("aula-window");
 
     let ui: UiRc = Rc::new(RefCell::new(Ui {
+        navigation_epoch: 0,
+        listing_epoch: 0,
+        remote_menu: gio::Menu::new(),
+        projects_menu: gio::Menu::new(),
         files: Files::None,
         project: String::new(),
         project_path,
@@ -902,6 +912,13 @@ fn install_menubar(
     add_win_action(win, ui, "servidor", ask_server);
     add_win_action(win, ui, "trocar-projeto", trocar_projeto);
     add_win_action(win, ui, "recentes", navegar::recentes);
+    add_win_action(
+        win,
+        ui,
+        "servidores-anteriores",
+        navegar::servidores_anteriores,
+    );
+    add_win_action(win, ui, "novo-projeto-remoto", trocar_projeto);
     add_win_action(win, ui, "sincronizacao", sincronizacao::show)
         .set_enabled(ui.borrow().files.is_remote());
     add_win_action(win, ui, "buscar-projeto", buscar_no_projeto);
@@ -968,20 +985,12 @@ fn install_menubar(
     let arquivo = gio::Menu::new();
     arquivo.append_item(&menu_item("_Novo", "win.novo", Some("<Primary>n")));
     arquivo.append_item(&menu_item("_Salvar", "win.salvar", Some("<Primary>s")));
-    let sync_item = menu_item("_Sincronização…", "win.sincronizacao", None);
-    sync_item.set_attribute_value("hidden-when", Some(&"action-disabled".to_variant()));
-    arquivo.append_item(&sync_item);
     arquivo.append_item(&menu_item(
         "_Fechar aba",
         "win.fechar-aba",
         Some("<Primary>w"),
     ));
-    let projeto = gio::Menu::new();
-    projeto.append_item(&menu_item("_Pasta…", "win.pasta", None));
-    projeto.append_item(&menu_item("Se_rvidor…", "win.servidor", None));
-    projeto.append_item(&menu_item("_Trocar projeto…", "win.trocar-projeto", None));
-    projeto.append_item(&menu_item("Re_centes…", "win.recentes", None));
-    arquivo.append_section(None, &projeto);
+    projetos_menu::install(ui, &arquivo);
     let sair = gio::Menu::new();
     sair.append_item(&menu_item("Sa_ir", "win.encerrar", Some("<Primary>q")));
     arquivo.append_section(None, &sair);
@@ -2490,11 +2499,13 @@ fn open_local_project(ui: &UiRc, path: PathBuf) {
         refresh_tree(ui);
         return;
     }
+    ui.borrow_mut().navigation_epoch += 1;
     let ui_c = Rc::clone(ui);
     after_unsaved(ui, move || apply_local(&ui_c, path));
 }
 
 fn apply_local(ui: &UiRc, path: PathBuf) {
+    ui.borrow_mut().navigation_epoch += 1;
     sincronizacao::close(ui);
     if !matches!(ui.borrow().files, Files::None) {
         close_project_tabs(ui);
@@ -2527,6 +2538,7 @@ fn ask_server(ui: &UiRc) {
     if !can_change_project(ui) {
         return;
     }
+    ui.borrow_mut().navigation_epoch += 1;
     let (url, aluno) = {
         let u = ui.borrow();
         let url = if u.prefs.servidor.is_empty() {
@@ -2554,13 +2566,11 @@ fn ask_server(ui: &UiRc) {
         return;
     }
     let url = normalize_url(&url);
-    match Rpc::connect(&url) {
-        Ok(rpc) => abrir_projeto_remoto(ui, Arc::new(rpc), url, aluno),
-        Err(e) => set_status(ui, &format!("servidor: {e}")),
-    }
+    let atual = ui.borrow().prefs.projeto.clone();
+    conectar_servidor(ui, url, aluno, atual);
 }
 
-/// Arquivo → Trocar projeto: the project list of the student connected now,
+/// Arquivo → Remoto → Novo projeto: the project list of the connected student,
 /// or the server dialog when the window is not on a server.
 fn trocar_projeto(ui: &UiRc) {
     let conectado = {
@@ -2584,37 +2594,101 @@ fn abrir_projeto_remoto(ui: &UiRc, rpc: Arc<Rpc>, url: String, aluno: String) {
     if !can_change_project(ui) {
         return;
     }
-    let projetos = match rpc.list_projects(&aluno) {
-        Ok(p) => p,
-        Err(e) => {
-            set_status(ui, &format!("projetos de {aluno}: {e}"));
-            return;
-        }
-    };
-    let (window, atual) = {
+    let atual = {
         let u = ui.borrow();
-        let atual = match &u.files {
+        match &u.files {
             Files::Remote { projeto, .. } if u.project == aluno => projeto.clone(),
             _ => u.prefs.projeto.clone(),
-        };
-        (u.window.clone(), atual)
+        }
     };
+    listar_e_escolher(ui, rpc, url, aluno, atual, true);
+}
+
+fn navigation_task<T: Send + 'static>(
+    ui: &UiRc,
+    work: impl FnOnce() -> Result<T, String> + Send + 'static,
+    done: impl FnOnce(&UiRc, T) + 'static,
+) {
+    let epoch = ui.borrow().navigation_epoch;
+    let reply = background::Reply::spawn(epoch, work);
     let ui = Rc::clone(ui);
-    let titulo = aluno.clone();
-    escolher_projeto(
-        &window,
-        Arc::clone(&rpc),
-        &titulo,
-        projetos,
-        &atual,
-        move |projeto| {
-            let ui_c = Rc::clone(&ui);
-            after_unsaved(&ui, move || apply_remote(&ui_c, rpc, url, aluno, projeto));
+    let mut done = Some(done);
+    glib::timeout_add_local(std::time::Duration::from_millis(30), move || {
+        let epoch = ui.borrow().navigation_epoch;
+        match reply.poll(epoch) {
+            background::Poll::Ready(Ok(value)) => {
+                done.take().unwrap()(&ui, value);
+                glib::ControlFlow::Break
+            }
+            background::Poll::Ready(Err(e)) => {
+                set_status(&ui, &e);
+                glib::ControlFlow::Break
+            }
+            background::Poll::Pending => glib::ControlFlow::Continue,
+            background::Poll::Obsolete => glib::ControlFlow::Break,
+        }
+    });
+}
+
+fn conectar_servidor(ui: &UiRc, url: String, aluno: String, atual: String) {
+    if !can_change_project(ui) {
+        return;
+    }
+    ui.borrow_mut().navigation_epoch += 1;
+    let url = normalize_url(&url);
+    let address = url.clone();
+    set_status(ui, "conectando ao servidor…");
+    navigation_task(
+        ui,
+        move || Rpc::connect(&address).map(Arc::new),
+        move |ui, rpc| listar_e_escolher(ui, rpc, url, aluno, atual, false),
+    );
+}
+
+fn listar_e_escolher(
+    ui: &UiRc,
+    rpc: Arc<Rpc>,
+    url: String,
+    aluno: String,
+    atual: String,
+    novo: bool,
+) {
+    let client = Arc::clone(&rpc);
+    let student = aluno.clone();
+    navigation_task(
+        ui,
+        move || client.list_projects(&student),
+        move |ui, projetos| {
+            if !can_change_project(ui) {
+                return;
+            }
+            let window = ui.borrow().window.clone();
+            let ui = Rc::clone(ui);
+            let epoch = ui.borrow().navigation_epoch;
+            let titulo = aluno.clone();
+            let chooser_ui = Rc::clone(&ui);
+            escolher_projeto(
+                &chooser_ui,
+                &window,
+                Arc::clone(&rpc),
+                &titulo,
+                projetos,
+                &atual,
+                novo,
+                move |projeto| {
+                    if ui.borrow().navigation_epoch != epoch {
+                        return;
+                    }
+                    let ui_c = Rc::clone(&ui);
+                    after_unsaved(&ui, move || apply_remote(&ui_c, rpc, url, aluno, projeto));
+                },
+            );
         },
     );
 }
 
 fn apply_remote(ui: &UiRc, rpc: Arc<Rpc>, url: String, aluno: String, projeto: String) {
+    ui.borrow_mut().navigation_epoch += 1;
     sincronizacao::close(ui);
     if !matches!(ui.borrow().files, Files::None) {
         close_project_tabs(ui);
@@ -2647,11 +2721,13 @@ fn apply_remote(ui: &UiRc, rpc: Arc<Rpc>, url: String, aluno: String, projeto: S
 /// create a new one. Calls `done` with the chosen name; closing or
 /// Cancelar calls nothing. Does not block the GTK loop.
 fn escolher_projeto(
+    ui: &UiRc,
     parent: &impl IsA<gtk::Window>,
     rpc: Arc<Rpc>,
     aluno: &str,
     projetos: Vec<String>,
     atual: &str,
+    novo_projeto: bool,
     done: impl FnOnce(String) + 'static,
 ) {
     let dialog = gtk::Window::builder()
@@ -2767,23 +2843,50 @@ fn escolher_projeto(
         let novo = novo.clone();
         let aviso = aviso.clone();
         let aluno = aluno.to_string();
+        let ui = Rc::clone(ui);
+        let criar = criar.clone();
+        let dialog = dialog.clone();
         move || {
+            if !can_change_project(&ui) || !criar.is_sensitive() {
+                return;
+            }
             let nome = novo.text().trim().to_string();
             if !valid_aluno(&nome) {
                 aviso.set_text("nome do projeto: letras, números, _ e - (sem espaços)");
                 return;
             }
-            let lista_nova = rpc
-                .create_project(&aluno, &nome)
-                .and_then(|()| rpc.list_projects(&aluno));
-            match lista_nova {
-                Ok(lista_nova) => {
-                    preencher(lista_nova, &nome);
-                    novo.set_text("");
-                    aviso.set_text(&format!("criado `{nome}`: aperte Abrir"));
-                }
-                Err(e) => aviso.set_text(&e),
-            }
+            criar.set_sensitive(false);
+            let rpc = Arc::clone(&rpc);
+            let aluno = aluno.clone();
+            let criado = nome.clone();
+            let preencher = Rc::clone(&preencher);
+            let novo = novo.clone();
+            let aviso = aviso.clone();
+            let criar = criar.clone();
+            let dialog = dialog.clone();
+            navigation_task(
+                &ui,
+                move || {
+                    Ok(rpc
+                        .create_project(&aluno, &nome)
+                        .and_then(|()| rpc.list_projects(&aluno)))
+                },
+                move |ui, result| {
+                    criar.set_sensitive(true);
+                    if !dialog.is_visible() {
+                        return;
+                    }
+                    match result {
+                        Ok(lista) => {
+                            preencher(lista, &criado);
+                            novo.set_text("");
+                            aviso.set_text(&format!("criado `{criado}`: aperte Abrir"));
+                            projetos_menu::refresh(ui);
+                        }
+                        Err(e) => aviso.set_text(&e),
+                    }
+                },
+            );
         }
     });
     {
@@ -2796,7 +2899,7 @@ fn escolher_projeto(
         cancelar.connect_clicked(move |_| dialog.close());
     }
     dialog.present();
-    if vazio {
+    if vazio || novo_projeto {
         novo.grab_focus();
     } else {
         lista.grab_focus();
@@ -2804,6 +2907,13 @@ fn escolher_projeto(
 }
 
 fn after_unsaved(ui: &UiRc, then: impl FnOnce() + 'static) {
+    let epoch = ui.borrow().navigation_epoch;
+    let next = Rc::clone(ui);
+    let then = move || {
+        if next.borrow().navigation_epoch == epoch && can_change_project(&next) {
+            then();
+        }
+    };
     if !can_change_project(ui) {
         return;
     }
@@ -2840,6 +2950,8 @@ fn close_project_tabs(ui: &UiRc) {
 
 /// Show the project tree. Reopens the last file of this project, if it is still there.
 fn finish_open(ui: &UiRc) {
+    projetos_menu::rebuild(ui);
+    projetos_menu::refresh(ui);
     refresh_title(ui);
     refresh_diag_label(ui);
     // Reopen the tabs of last time once the listing says what is there.
@@ -2851,13 +2963,14 @@ fn finish_open(ui: &UiRc) {
 
 fn normalize_url(url: &str) -> String {
     let url = url.trim();
-    if url.is_empty() {
+    let url = if url.is_empty() {
         DEFAULT_URL.to_string()
-    } else if url.starts_with("http://") || url.starts_with("https://") {
+    } else if url.contains("://") {
         url.to_string()
     } else {
         format!("http://{url}")
-    }
+    };
+    identidade::normalize_endpoint(&url).unwrap_or(url)
 }
 
 /// Folder picker. `FileChooserNative` never maps a window on this desktop, and
