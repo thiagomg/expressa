@@ -12,6 +12,7 @@ mod busca_projeto;
 mod cartesiano;
 mod conflitos;
 mod console;
+mod debug_sources;
 mod docs;
 mod documentos;
 mod editing;
@@ -69,11 +70,14 @@ const DEFAULT_URL: &str = "http://127.0.0.1:50051";
 /// A program running or being debugged.
 struct Run {
     debug_cmd: std::sync::mpsc::Sender<String>,
-    /// The local copy: breakpoints set while running name files there.
-    ws_dir: PathBuf,
+    paused: Option<(String, u32, bool)>,
 }
 
 struct Ui {
+    execution_sources: Arc<debug_sources::Sources>,
+    execution_breakpoints: Vec<(String, u32)>,
+    execution_editors: HashMap<String, std::rc::Weak<Doc>>,
+    source_viewer: Option<Rc<debug_sources::Viewer>>,
     navigation_epoch: u64,
     listing_epoch: u64,
     remote_menu: gio::Menu,
@@ -163,6 +167,11 @@ fn editor_panes(editor: &impl IsA<gtk::Widget>, bottom: &impl IsA<gtk::Widget>) 
 }
 
 fn build_ui(app: &Application) {
+    build_ui_state(app, true);
+}
+
+/// Construct the UI separately from restoring projects and starting autosave.
+fn build_ui_state(app: &Application, startup: bool) -> UiRc {
     // ibus + GTK4 leaves the dead key (´ ~ `) stuck as preedit after composing
     // á/ã. GTK's built-in input method composes dead keys itself.
     // GTK_IM_MODULE in the environment still takes precedence over this.
@@ -273,6 +282,10 @@ fn build_ui(app: &Application) {
     win.add_css_class("aula-window");
 
     let ui: UiRc = Rc::new(RefCell::new(Ui {
+        execution_sources: Arc::new(debug_sources::Sources::new()),
+        execution_breakpoints: Vec::new(),
+        execution_editors: HashMap::new(),
+        source_viewer: None,
         navigation_epoch: 0,
         listing_epoch: 0,
         remote_menu: gio::Menu::new(),
@@ -553,9 +566,7 @@ fn build_ui(app: &Application) {
         });
         k(&shortcuts, "<Primary>n", new_untitled_tab);
         k(&shortcuts, "<Primary>w", |ui| {
-            if let Some(d) = current_doc(ui) {
-                close_doc(ui, &d);
-            }
+            close_current_tab(ui);
         });
         k(&shortcuts, "<Primary>f", show_search);
         k(&shortcuts, "<Primary>h", show_search);
@@ -672,8 +683,11 @@ fn build_ui(app: &Application) {
         });
     }
 
-    sessao::iniciar_copias(&ui);
     apply_theme(&ui);
+    if !startup {
+        return ui;
+    }
+    sessao::iniciar_copias(&ui);
     win.maximize();
     win.present();
     schedule_raise();
@@ -747,6 +761,7 @@ fn build_ui(app: &Application) {
             }
         });
     }
+    ui
 }
 
 fn encerrar(ui: &UiRc) {
@@ -902,9 +917,7 @@ fn install_menubar(
         }
     });
     add_win_action(win, ui, "fechar-aba", |ui| {
-        if let Some(d) = current_doc(ui) {
-            close_doc(ui, &d);
-        }
+        close_current_tab(ui);
     });
     add_win_action(win, ui, "pasta", |ui| {
         choose_local_folder(ui);
@@ -1394,6 +1407,44 @@ fn open_doc(ui: &UiRc, path: Option<String>, text: &str) -> Rc<Doc> {
                 }
             });
     }
+    {
+        let source = ui.borrow().run.as_ref().and_then(|_| {
+            ui.borrow()
+                .execution_sources
+                .get(&debug_sources::normalize_path(&doc.name()))
+                .cloned()
+        });
+        if source.is_some() {
+            ui.borrow_mut().execution_editors.insert(
+                debug_sources::normalize_path(&doc.name()),
+                Rc::downgrade(&doc),
+            );
+        }
+        doc.set_running_source(source);
+        let weak_ui = Rc::downgrade(ui);
+        let weak_doc = Rc::downgrade(&doc);
+        doc.inspect_source.connect_clicked(move |_| {
+            if let (Some(ui), Some(doc)) = (weak_ui.upgrade(), weak_doc.upgrade()) {
+                let source = doc.running_source.borrow().clone();
+                if let Some(source) = source {
+                    let paused = ui
+                        .borrow()
+                        .run
+                        .as_ref()
+                        .and_then(|run| run.paused.clone())
+                        .filter(|(path, _, _)| path == &source.path);
+                    let (_, line, error) =
+                        paused.clone().unwrap_or((source.path.clone(), 1, false));
+                    show_running_source(&ui, &source.path, line, error);
+                    if paused.is_none()
+                        && let Some(viewer) = ui.borrow().source_viewer.as_ref()
+                    {
+                        viewer.doc.clear_debug_line();
+                    }
+                }
+            }
+        });
+    }
     let help = ui.borrow().help.clone().expect("help");
     let vh = {
         let weak = Rc::downgrade(&doc);
@@ -1833,6 +1884,9 @@ fn apply_theme(ui: &UiRc) {
     for d in all_docs(ui) {
         d.set_theme(scheme.as_ref(), dark);
     }
+    if let Some(viewer) = ui.borrow().source_viewer.as_ref() {
+        viewer.doc.set_theme(scheme.as_ref(), dark);
+    }
     ui.borrow().console.set_dark(dark);
 }
 
@@ -1997,8 +2051,9 @@ fn make_debug_panel(ui: &UiRc) -> GtkBox {
                     .ok()
                     .filter(|l| *l > 0)
                     .map(|l| (f.to_string(), l))
-            }) {
-                goto_file_line(&ui_s, &file, line);
+            }) && !show_running_source(&ui_s, &file, line, false)
+            {
+                set_status(&ui_s, "fonte desta execução não está disponível");
             }
         });
     }
@@ -2064,6 +2119,9 @@ fn send_debug_cmd(ui: &UiRc, cmd: &str) {
     // Resuming: the program runs until the next pause, so the step buttons
     // are off and the stopped line is no longer current.
     if sent && matches!(cmd, "continuar" | "proximo" | "entrar" | "sair") {
+        if let Some(run) = ui.borrow_mut().run.as_mut() {
+            run.paused = None;
+        }
         set_debug_buttons(ui, false, true);
         clear_debug_views(ui);
         set_status(ui, "executando… (Parar encerra)");
@@ -2087,15 +2145,13 @@ fn toggle_breakpoint_here(ui: &UiRc) {
 }
 
 fn toggle_breakpoint(ui: &UiRc, doc: &Rc<Doc>, line: u32) {
-    let on = doc.toggle_breakpoint(line);
+    doc.toggle_breakpoint(line);
     sessao::salvar(ui);
-    // While running, tell the debugger (it names files by their copy).
-    let cmd = ui.borrow().run.as_ref().map(|run| {
-        let file = run.ws_dir.join(doc.name()).to_string_lossy().into_owned();
-        format!("{} {file}:{line}", if on { "ponto" } else { "remover" })
-    });
-    if let Some(cmd) = cmd {
-        send_debug_cmd(ui, &cmd);
+    if !matches!(ui.borrow().execution.availability(), Ok(())) {
+        set_status(
+            ui,
+            "ponto de parada alterado para a próxima execução; a execução atual usa os pontos iniciais",
+        );
     }
 }
 
@@ -2134,6 +2190,9 @@ fn fill_error_stack(ui: &UiRc, frames: &[exec::StackFrame]) {
 }
 
 fn clear_debug_views(ui: &UiRc) {
+    if let Some(viewer) = ui.borrow().source_viewer.as_ref() {
+        viewer.doc.clear_debug_line();
+    }
     {
         let u = ui.borrow();
         u.vars_store.clear();
@@ -2149,16 +2208,122 @@ fn show_pause(ui: &UiRc, p: &expressa::runtime::DebugPaused) {
     for d in all_docs(ui) {
         d.clear_debug_line();
     }
-    match doc_by_name(ui, &p.file).or_else(|| open_path(ui, &p.file)) {
-        Some(doc) => {
-            switch_to(ui, &doc);
-            doc.show_debug_line(p.line, p.error.is_some());
-        }
-        None => set_status(
+    if !show_running_source(ui, &p.file, p.line, p.error.is_some()) {
+        set_status(
             ui,
-            &format!("pausado em {}:{} (arquivo fora do projeto)", p.file, p.line),
-        ),
+            &format!(
+                "pausado em {}:{} (fonte da execução indisponível)",
+                p.file, p.line
+            ),
+        );
     }
+}
+
+fn close_current_tab(ui: &UiRc) {
+    if let Some(doc) = current_doc(ui) {
+        close_doc(ui, &doc);
+    } else {
+        close_source_viewer(ui);
+    }
+}
+
+fn execution_editor(ui: &UiRc, path: &str) -> Option<Rc<Doc>> {
+    let original = ui
+        .borrow()
+        .execution_editors
+        .get(path)
+        .and_then(std::rc::Weak::upgrade);
+    original
+        .filter(|d| all_docs(ui).iter().any(|open| Rc::ptr_eq(d, open)))
+        .or_else(|| doc_by_name(ui, path))
+        .or_else(|| open_path(ui, path))
+}
+
+fn execution_entry_doc(ui: &UiRc) -> Option<Rc<Doc>> {
+    current_doc(ui).or_else(|| {
+        let path = {
+            let u = ui.borrow();
+            let viewer = u.source_viewer.as_ref()?;
+            (u.notebook.current_page() == u.notebook.page_num(&viewer.page))
+                .then(|| viewer.source.path.clone())?
+        };
+        execution_editor(ui, &path)
+    })
+}
+
+/// Keep execution sources outside the editable document/recovery lifecycle.
+fn close_source_viewer(ui: &UiRc) {
+    let viewer = ui.borrow_mut().source_viewer.take();
+    if let Some(viewer) = viewer {
+        let notebook = ui.borrow().notebook.clone();
+        if let Some(n) = notebook.page_num(&viewer.page) {
+            notebook.remove_page(Some(n));
+        }
+    }
+}
+
+fn show_running_source(ui: &UiRc, path: &str, line: u32, error: bool) -> bool {
+    let source = ui
+        .borrow()
+        .execution_sources
+        .get(&debug_sources::normalize_path(path))
+        .cloned();
+    let Some(source) = source else { return false };
+    let existing = ui.borrow().source_viewer.clone();
+    let viewer = if let Some(viewer) =
+        existing.filter(|v| v.source.revision == source.revision && v.source.path == source.path)
+    {
+        viewer
+    } else {
+        close_source_viewer(ui);
+        let viewer = {
+            let u = ui.borrow();
+            Rc::new(debug_sources::Viewer::new(
+                Arc::clone(&source),
+                &u.languages,
+                &u.search_settings,
+            ))
+        };
+        let (dark, scheme) = theme_scheme(ui);
+        viewer.doc.set_theme(scheme.as_ref(), dark);
+        for (file, line) in &ui.borrow().execution_breakpoints {
+            if file == &source.path {
+                viewer.doc.toggle_breakpoint(*line);
+            }
+        }
+        let weak = Rc::downgrade(ui);
+        let path = source.path.clone();
+        viewer.edit.connect_clicked(move |_| {
+            let Some(ui) = weak.upgrade() else { return };
+            // Prefer the original tab even after Save As/rename.
+            if let Some(doc) = execution_editor(&ui, &path) {
+                switch_to(&ui, &doc);
+            }
+        });
+        let weak = Rc::downgrade(ui);
+        viewer.close.connect_clicked(move |_| {
+            if let Some(ui) = weak.upgrade() {
+                close_source_viewer(&ui);
+            }
+        });
+        let notebook = ui.borrow().notebook.clone();
+        notebook.append_page(
+            &viewer.page,
+            Some(&Label::new(Some(&format!("Execução: {}", source.path)))),
+        );
+        ui.borrow_mut().source_viewer = Some(Rc::clone(&viewer));
+        viewer
+    };
+    if ui.borrow().run.is_none() {
+        viewer.finish();
+    }
+    let notebook = ui.borrow().notebook.clone();
+    if let Some(n) = notebook.page_num(&viewer.page) {
+        notebook.set_current_page(Some(n));
+    }
+    viewer.doc.show_debug_line(line, error);
+    viewer.doc.view.grab_focus();
+    true
 }
 
 // ── Running ────────────────────────────────────────────────────────────────
@@ -2189,7 +2354,7 @@ fn executar(ui: &UiRc, debug: bool) {
     if !execution_available(ui, "já tem um programa executando — aperte Parar primeiro") {
         return;
     }
-    let Some(doc) = current_doc(ui) else {
+    let Some(doc) = execution_entry_doc(ui) else {
         set_status(ui, "abra um arquivo para executar");
         return;
     };
@@ -2213,6 +2378,23 @@ fn executar(ui: &UiRc, debug: bool) {
             },
         })
         .collect();
+    let launch_docs: Vec<_> = all_docs(ui)
+        .into_iter()
+        .map(|d| {
+            let path = debug_sources::normalize_path(&d.name());
+            (Rc::downgrade(&d), path)
+        })
+        .collect();
+    let bps: Vec<_> = all_docs(ui)
+        .iter()
+        .flat_map(|d| {
+            let name = debug_sources::normalize_path(&d.name());
+            d.breakpoint_lines()
+                .into_iter()
+                .map(move |line| (name.clone(), line))
+        })
+        .collect();
+    let entry_name = name.clone();
     let (files, project, args) = {
         let mut u = ui.borrow_mut();
         u.execution
@@ -2231,7 +2413,8 @@ fn executar(ui: &UiRc, debug: bool) {
                 ws.write_editor_source(source)?;
             }
             ws.arm()?;
-            Ok::<_, String>(ws)
+            let sources = ws.capture_sources()?;
+            Ok::<_, String>((ws, sources))
         },
         move |ui, ws| {
             let outro_projeto = {
@@ -2246,7 +2429,28 @@ fn executar(ui: &UiRc, debug: bool) {
                 return;
             }
             match ws {
-                Ok(ws) => iniciar_execucao(ui, ws, &doc, fonte, debug, args),
+                Ok((ws, mut sources)) => {
+                    // The entry source has its own immutable identity, even if
+                    // its editor tab was renamed while preparation ran.
+                    let source = Arc::new(debug_sources::Source::new(&entry_name, fonte.clone()));
+                    sources.insert(source.path.clone(), source);
+                    close_source_viewer(ui);
+                    for d in all_docs(ui) {
+                        d.set_running_source(None);
+                    }
+                    ui.borrow_mut().execution_editors.clear();
+                    for (weak, path) in launch_docs {
+                        ui.borrow_mut()
+                            .execution_editors
+                            .insert(path.clone(), weak.clone());
+                        if let Some(d) = weak.upgrade() {
+                            d.set_running_source(sources.get(&path).cloned());
+                        }
+                    }
+                    ui.borrow_mut().execution_sources = Arc::new(sources);
+                    ui.borrow_mut().execution_breakpoints = bps;
+                    iniciar_execucao(ui, ws, entry_name, fonte, debug, args)
+                }
                 Err(e) => {
                     ui.borrow_mut()
                         .execution
@@ -2266,33 +2470,37 @@ fn executar(ui: &UiRc, debug: bool) {
 fn iniciar_execucao(
     ui: &UiRc,
     ws: Workspace,
-    doc: &Rc<Doc>,
+    name: String,
     fonte: String,
     debug: bool,
     args: Vec<String>,
 ) {
-    let name = doc.name();
-    let docs = all_docs(ui);
     mostrar_pagina_inferior(ui, PaginaInferior::Saida);
-    let bps: Vec<(String, u32)> = docs
-        .iter()
-        .flat_map(|d| {
-            let n = d.name();
-            d.breakpoints
-                .borrow()
-                .iter()
-                .map(move |&l| (n.clone(), l))
-                .collect::<Vec<_>>()
-        })
-        .collect();
+    let (bps, unbound) = {
+        let u = ui.borrow();
+        u.execution_breakpoints
+            .iter()
+            .cloned()
+            .partition::<Vec<_>, _>(|(path, line)| {
+                u.execution_sources
+                    .get(path)
+                    .and_then(|s| s.lines.as_ref())
+                    .is_some_and(|lines| lines.contains(line))
+            })
+    };
     let console = Rc::clone(&ui.borrow().console);
     let graficos = Rc::clone(&ui.borrow().graficos);
     let telas_graf = Rc::clone(&ui.borrow().telas_graf);
     console.clear();
+    if debug {
+        for (path, line) in unbound {
+            console.stderr(&format!("ponto de parada inativo em {path}:{line}: sem instrução executável, ou fonte com erro de sintaxe\n"));
+        }
+    }
     graficos.limpar();
     ui.borrow().telas_graf.limpar();
     clear_debug_views(ui);
-    if let Some(d) = doc.diag.borrow().as_ref() {
+    if let Some(d) = docs::diagnose(&fonte) {
         set_status(
             ui,
             &format!(
@@ -2316,7 +2524,7 @@ fn iniciar_execucao(
             .expect("prepared before starting a run");
         u.run = Some(Run {
             debug_cmd: run.debug_cmd.clone(),
-            ws_dir: ws.dir.clone(),
+            paused: None,
         });
     }
     set_debug_buttons(ui, false, true);
@@ -2329,7 +2537,30 @@ fn iniciar_execucao(
             match run.events.try_recv() {
                 Ok(ExecEvent::Stdout(s)) => console.stdout(&s),
                 Ok(ExecEvent::Stderr(s)) => console.stderr(&s),
+                Ok(ExecEvent::Source(source)) => {
+                    {
+                        let mut u = ui_ev.borrow_mut();
+                        Arc::make_mut(&mut u.execution_sources)
+                            .insert(source.path.clone(), Arc::clone(&source));
+                    }
+                    for doc in all_docs(&ui_ev) {
+                        let matches = doc
+                            .running_source
+                            .borrow()
+                            .as_ref()
+                            .map(|s| s.path == source.path)
+                            .unwrap_or_else(|| {
+                                debug_sources::normalize_path(&doc.name()) == source.path
+                            });
+                        if matches {
+                            doc.set_running_source(Some(Arc::clone(&source)));
+                        }
+                    }
+                }
                 Ok(ExecEvent::Paused(p)) => {
+                    if let Some(run) = ui_ev.borrow_mut().run.as_mut() {
+                        run.paused = Some((p.file.clone(), p.line, p.error.is_some()));
+                    }
                     fill_debug_views(&ui_ev, &p);
                     set_debug_buttons(&ui_ev, true, true);
                     show_pause(&ui_ev, &p);
@@ -2404,7 +2635,7 @@ fn iniciar_execucao(
                             } else {
                                 f.error_file.clone()
                             };
-                            goto_file_line(&ui_ev, &file, f.error_line);
+                            show_running_source(&ui_ev, &file, f.error_line, true);
                         }
                     }
                     return glib::ControlFlow::Break;
@@ -2932,6 +3163,10 @@ fn after_unsaved(ui: &UiRc, then: impl FnOnce() + 'static) {
 }
 
 fn close_project_tabs(ui: &UiRc) {
+    close_source_viewer(ui);
+    ui.borrow_mut().execution_sources = Arc::new(debug_sources::Sources::new());
+    ui.borrow_mut().execution_breakpoints.clear();
+    ui.borrow_mut().execution_editors.clear();
     // Keep this project's tabs for next time. Its unsaved tabs were saved
     // or discarded already, so their copies go.
     sessao::salvar(ui);
@@ -3406,6 +3641,13 @@ fn mostrar_menu(
 /// After a run: send what the program wrote back to the project off the
 /// GTK thread; failures remain in the durable journal for explicit retry.
 fn enviar_depois_da_execucao(ui: &UiRc, console: &Rc<Console>, ws: Workspace) {
+    for doc in all_docs(ui) {
+        doc.set_running_source(None);
+    }
+    if let Some(viewer) = ui.borrow().source_viewer.as_ref() {
+        viewer.finish();
+    }
+
     let (files, project) = {
         let mut u = ui.borrow_mut();
         u.execution
@@ -3815,6 +4057,76 @@ fn resume_raise() {
 
 /// GTK may only be used from the thread that initialized it, but tests run
 /// on many threads: every GTK test runs its body on one shared thread.
+#[cfg(test)]
+mod debug_ui_tests {
+    use super::*;
+
+    #[test]
+    fn snapshot_navigation_keeps_editor_identity_and_frozen_breakpoints() {
+        gtk_test::run(|| {
+            let app = Application::builder()
+                .application_id("dev.expressa.aula.tests.sources")
+                .flags(gio::ApplicationFlags::NON_UNIQUE)
+                .build();
+            app.register(None::<&gio::Cancellable>).unwrap();
+            let ui = build_ui_state(&app, false);
+            let doc = open_doc(&ui, Some("lib/a.lep".into()), "escreva(1)\n");
+            let source = Arc::new(debug_sources::Source::new(&doc.name(), doc.text()));
+            ui.borrow_mut().execution_sources =
+                Arc::new(HashMap::from([(source.path.clone(), source.clone())]));
+            ui.borrow_mut()
+                .execution_editors
+                .insert(source.path.clone(), Rc::downgrade(&doc));
+            ui.borrow_mut()
+                .execution_breakpoints
+                .push((source.path.clone(), 1));
+            let (sender, receiver) = std::sync::mpsc::channel();
+            ui.borrow_mut().run = Some(Run {
+                debug_cmd: sender,
+                paused: Some((source.path.clone(), 1, false)),
+            });
+            doc.set_running_source(Some(source.clone()));
+            doc.buffer
+                .insert(&mut doc.buffer.start_iter(), "// edited\n");
+            doc.set_path("lib/renamed.lep".into());
+            toggle_breakpoint(&ui, &doc, 2);
+            assert!(
+                receiver.try_recv().is_err(),
+                "editor breakpoints must not change this run"
+            );
+            assert!(show_running_source(&ui, "lib\\a.lep", 1, false));
+            assert!(
+                current_doc(&ui).is_none(),
+                "snapshot must not become a save/recovery document"
+            );
+            assert_eq!(all_docs(&ui).len(), 1);
+            let viewer = ui.borrow().source_viewer.clone().unwrap();
+            assert_eq!(viewer.doc.text(), "escreva(1)\n");
+            assert_eq!(
+                viewer.doc.breakpoint_lines(),
+                std::collections::BTreeSet::from([1])
+            );
+            assert!(
+                Rc::ptr_eq(&execution_entry_doc(&ui).unwrap(), &doc),
+                "restarting from the snapshot uses the renamed editor"
+            );
+            viewer.edit.emit_clicked();
+            assert!(Rc::ptr_eq(&current_doc(&ui).unwrap(), &doc));
+            doc.inspect_source.emit_clicked();
+            assert!(current_doc(&ui).is_none());
+            send_debug_cmd(&ui, "proximo");
+            assert_eq!(receiver.try_recv().unwrap(), "proximo");
+            assert!(ui.borrow().run.as_ref().unwrap().paused.is_none());
+            close_current_tab(&ui);
+            assert!(ui.borrow().source_viewer.is_none());
+            assert!(Rc::ptr_eq(&current_doc(&ui).unwrap(), &doc));
+            ui.borrow_mut().run = None;
+            doc.mark_saved();
+            ui.borrow().window.destroy();
+        });
+    }
+}
+
 #[cfg(test)]
 mod gtk_test {
     use std::panic::{AssertUnwindSafe, catch_unwind, resume_unwind};

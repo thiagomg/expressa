@@ -144,7 +144,7 @@ pub fn salvar(ui: &UiRc) {
             .map(|d| AbaSalva {
                 caminho: d.name(),
                 linha: d.cursor().line() as u32 + 1,
-                pontos: d.breakpoints.borrow().iter().copied().collect(),
+                pontos: d.breakpoint_lines().into_iter().collect(),
             })
             .collect(),
         ativa: current_doc(ui)
@@ -182,7 +182,7 @@ pub fn restaurar(ui: &UiRc) {
             continue;
         };
         for &p in &aba.pontos {
-            if !doc.breakpoints.borrow().contains(&p) {
+            if !doc.breakpoint_lines().contains(&p) {
                 doc.toggle_breakpoint(p);
             }
         }
@@ -725,6 +725,44 @@ fn mudou_fora(ui: &UiRc, doc: &Rc<Doc>, caminho: &Path) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn session_round_trip_uses_current_anchored_breakpoint_positions() {
+        crate::gtk_test::run(|| {
+            let language = sourceview5::LanguageManager::new();
+            let search = sourceview5::SearchSettings::new();
+            let doc = crate::docs::Doc::new(
+                Some("lib/a.lep".into()),
+                String::new(),
+                "a = 1\nescreva(a)\n",
+                &language,
+                &search,
+            );
+            doc.toggle_breakpoint(2);
+            doc.buffer.insert(&mut doc.buffer.start_iter(), "// new\n");
+            let session = Sessao {
+                abas: vec![AbaSalva {
+                    caminho: doc.name(),
+                    linha: 1,
+                    pontos: doc.breakpoint_lines().into_iter().collect(),
+                }],
+                ativa: Some(doc.name()),
+            };
+            let restored = sessao_de_texto(&sessao_em_texto(&session));
+            assert_eq!(restored.abas[0].pontos, [3]);
+            let reopened = crate::docs::Doc::new(
+                Some(doc.name()),
+                String::new(),
+                &doc.text(),
+                &language,
+                &search,
+            );
+            for line in &restored.abas[0].pontos {
+                reopened.toggle_breakpoint(*line);
+            }
+            assert_eq!(reopened.breakpoint_lines(), doc.breakpoint_lines());
+        });
+    }
 
     #[test]
     fn sessao_vai_e_volta() {

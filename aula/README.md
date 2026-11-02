@@ -85,7 +85,12 @@ primeiro projeto, as abas que já estavam abertas continuam abertas para serem s
 
 Fechar o editor fecha as janelas irmãs (gráficos destacados e Ajuda) e encerra o `expressa-aula-server` que ele mesmo tiver iniciado. A janela abre maximizada; o código ocupa a maior parte da tela. Em janela estreita os painéis encolhem.
 
-No depurador: a linha atual fica amarela, no arquivo certo (abre o módulo importado se for preciso); um erro durante a depuração para na linha (em vermelho) com as variáveis visíveis, e Continuar encerra. **Observados** guarda nomes para ver o valor a cada passo; **Variáveis** lista o que está no escopo; **Pilha** as chamadas.
+No depurador: a linha atual fica amarela na aba **Execução: arquivo**, uma cópia somente para leitura da fonte executada (inclusive módulos importados). Um erro durante a depuração para na linha em vermelho, com as variáveis visíveis, e Continuar encerra. **Observados** guarda nomes para ver o valor a cada passo; **Variáveis** lista o que está no escopo; **Pilha** as chamadas.
+
+Cada execução usa uma fonte fixa e os pontos de parada definidos ao iniciá-la. Editar ou salvar um arquivo durante a execução não altera o programa em andamento: as mudanças, inclusive nos pontos de parada, valem na próxima execução. O editor mostra um aviso quando a fonte foi editada; **Ver fonte em execução** abre a cópia executada, e **Voltar ao editor** retorna à aba editável. F5/F6 na aba de execução inicia a próxima execução usando a versão atual do editor depois que a anterior terminar.
+
+Os pontos de parada acompanham inserções e exclusões de linhas. Ao apagar o texto de um ponto, ele segue a próxima posição sobrevivente (ou o fim do arquivo); desfazer/refazer acompanha essa posição. Pontos que coincidem aparecem uma só vez. Um círculo cinza vazado indica uma linha sem instrução executável, ou uma fonte com erro de sintaxe; esse ponto fica inativo e é informado na saída ao depurar.
+
 
 **Arquivo → Local → Abrir projeto…** escolhe a pasta do projeto neste computador; **Arquivo → Remoto → Conectar ao servidor…** conecta a um servidor (`aula-data/aluno`). O caminho (ou `url — aula-data/aluno`) fica à direita da barra de status.
 

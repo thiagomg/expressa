@@ -69,11 +69,15 @@ pub struct Doc {
     pub untitled: String,
     pub buffer: SourceBuffer,
     pub view: SourceView,
-    pub page: ScrolledWindow,
+    pub page: GtkBox,
     pub tab: GtkBox,
     label: Label,
     pub close_button: Button,
-    pub breakpoints: RefCell<BTreeSet<u32>>,
+    breakpoint_anchors: RefCell<Vec<gtk::TextMark>>,
+    executable_lines: RefCell<Option<BTreeSet<u32>>>,
+    pub running_source: RefCell<Option<std::sync::Arc<crate::debug_sources::Source>>>,
+    run_notice: Label,
+    pub inspect_source: Button,
     pub search: SearchContext,
     debug_tag: TextTag,
     error_tag: TextTag,
@@ -198,15 +202,34 @@ impl Doc {
         view.set_input_purpose(gtk::InputPurpose::FreeForm);
         let bp = MarkAttributes::new();
         bp.set_pixbuf(&dot_pixbuf((0xe5, 0x39, 0x35)));
+        bp.connect_query_tooltip_text(|_, _| "Ponto de parada para a próxima execução".into());
         view.set_mark_attributes("breakpoint", &bp, 10);
+        let pending = MarkAttributes::new();
+        pending.set_pixbuf(&ring_pixbuf());
+        pending.connect_query_tooltip_text(|_, _| {
+            "Sem instrução executável nesta linha, ou fonte com erro de sintaxe".into()
+        });
+        view.set_mark_attributes("breakpoint-pending", &pending, 10);
         let err = MarkAttributes::new();
         err.set_icon_name("dialog-error-symbolic");
         view.set_mark_attributes("erro", &err, 20);
-        let page = ScrolledWindow::builder()
+        let scroll = ScrolledWindow::builder()
             .vexpand(true)
             .hexpand(true)
             .child(&view)
             .build();
+
+        let page = GtkBox::new(Orientation::Vertical, 4);
+        let run_notice = Label::new(None);
+        run_notice.set_xalign(0.0);
+        run_notice.set_wrap(true);
+        run_notice.set_visible(false);
+        let inspect_source = Button::with_label("Ver fonte em execução");
+        inspect_source.set_halign(gtk::Align::Start);
+        inspect_source.set_visible(false);
+        page.append(&run_notice);
+        page.append(&inspect_source);
+        page.append(&scroll);
 
         let label = Label::new(None);
         let close_button = Button::from_icon_name("window-close-symbolic");
@@ -242,7 +265,11 @@ impl Doc {
             tab,
             label,
             close_button,
-            breakpoints: RefCell::new(BTreeSet::new()),
+            breakpoint_anchors: RefCell::new(Vec::new()),
+            executable_lines: RefCell::new(None),
+            running_source: RefCell::new(None),
+            run_notice,
+            inspect_source,
             search,
             debug_tag,
             error_tag,
@@ -277,6 +304,9 @@ impl Doc {
             let weak = weak.clone();
             move |_| {
                 if let Some(d) = weak.upgrade() {
+                    d.paint_breakpoints();
+                    d.refresh_running_notice();
+                    d.clear_debug_line();
                     d.schedule_check();
                 }
             }
@@ -334,6 +364,7 @@ impl Doc {
     pub fn set_path(&self, path: String) {
         *self.path.borrow_mut() = Some(path);
         self.refresh_label();
+        self.refresh_running_notice();
     }
 
     /// Replace the text with `text`, the file's new saved content (the
@@ -389,28 +420,86 @@ impl Doc {
 
     // ── Breakpoints ────────────────────────────────────────────────────────
 
+    /// Anchors use right gravity: inserting lines at a breakpoint moves it
+    /// with the original text. Deleting its text collapses it onto the next
+    /// surviving position (EOF when necessary). Undo/redo follows that position;
+    /// it does not recreate deleted text identities. Coincident anchors dedupe.
+    pub fn breakpoint_lines(&self) -> BTreeSet<u32> {
+        self.breakpoint_anchors
+            .borrow()
+            .iter()
+            .filter(|m| !m.is_deleted())
+            .map(|m| self.buffer.iter_at_mark(m).line() as u32 + 1)
+            .collect()
+    }
+
     pub fn toggle_breakpoint(&self, line: u32) -> bool {
-        let on = {
-            let mut bps = self.breakpoints.borrow_mut();
-            if bps.remove(&line) {
-                false
-            } else {
-                bps.insert(line);
-                true
-            }
+        let Some(iter) = line
+            .checked_sub(1)
+            .and_then(|l| self.buffer.iter_at_line(l as i32))
+        else {
+            return false;
         };
+        let on = !self.breakpoint_lines().contains(&line);
+        if on {
+            let mark = self.buffer.create_mark(None, &iter, false);
+            self.breakpoint_anchors.borrow_mut().push(mark);
+        } else {
+            self.breakpoint_anchors.borrow_mut().retain(|mark| {
+                if self.buffer.iter_at_mark(mark).line() as u32 + 1 == line {
+                    self.buffer.delete_mark(mark);
+                    false
+                } else {
+                    true
+                }
+            });
+        }
         self.paint_breakpoints();
         on
     }
 
     pub fn paint_breakpoints(&self) {
         let (s, e) = self.buffer.bounds();
-        self.buffer.remove_source_marks(&s, &e, Some("breakpoint"));
-        for &line in self.breakpoints.borrow().iter() {
+        for category in ["breakpoint", "breakpoint-pending"] {
+            self.buffer.remove_source_marks(&s, &e, Some(category));
+        }
+        for line in self.breakpoint_lines() {
             if let Some(it) = self.buffer.iter_at_line(line as i32 - 1) {
-                self.buffer.create_source_mark(None, "breakpoint", &it);
+                let bound = self
+                    .executable_lines
+                    .borrow()
+                    .as_ref()
+                    .is_some_and(|lines| lines.contains(&line));
+                self.buffer.create_source_mark(
+                    None,
+                    if bound {
+                        "breakpoint"
+                    } else {
+                        "breakpoint-pending"
+                    },
+                    &it,
+                );
             }
         }
+    }
+
+    pub fn set_running_source(&self, source: Option<std::sync::Arc<crate::debug_sources::Source>>) {
+        *self.running_source.borrow_mut() = source;
+        self.refresh_running_notice();
+    }
+
+    fn refresh_running_notice(&self) {
+        let running = self.running_source.borrow();
+        let changed = running.as_ref().is_some_and(|s| {
+            s.differs(&self.text()) || s.path != crate::debug_sources::normalize_path(&self.name())
+        });
+        self.run_notice.set_text(if changed {
+            "Editado após iniciar a execução. As alterações e os pontos de parada valem na próxima execução."
+        } else {
+            "Esta execução usa uma cópia fixa. Alterações e pontos de parada valem na próxima execução."
+        });
+        self.run_notice.set_visible(running.is_some());
+        self.inspect_source.set_visible(running.is_some());
     }
 
     // ── Debugger line ──────────────────────────────────────────────────────
@@ -521,7 +610,15 @@ impl Doc {
         let (s, e) = self.buffer.bounds();
         self.buffer.remove_tag(&self.diag_tag, &s, &e);
         self.buffer.remove_source_marks(&s, &e, Some("erro"));
-        let diag = diagnose(&self.buffer.text(&s, &e, true));
+        let text = self.buffer.text(&s, &e, true);
+        let lines = crate::debug_sources::executable_lines(&text);
+        let diag = if lines.is_none() {
+            diagnose(&text)
+        } else {
+            None
+        };
+        *self.executable_lines.borrow_mut() = lines;
+        self.paint_breakpoints();
         if let Some(d) = &diag {
             let a = self.buffer.iter_at_offset(d.start);
             let b = self.buffer.iter_at_offset(d.end);
@@ -577,6 +674,19 @@ pub fn dot_pixbuf((r, g, b): (u8, u8, u8)) -> gtk::gdk_pixbuf::Pixbuf {
     pb
 }
 
+fn ring_pixbuf() -> gtk::gdk_pixbuf::Pixbuf {
+    let pb = dot_pixbuf((0x88, 0x88, 0x88));
+    for y in 0..12u32 {
+        for x in 0..12u32 {
+            let (dx, dy) = (x as i32 - 5, y as i32 - 5);
+            if dx * dx + dy * dy < 9 {
+                pb.put_pixel(x, y, 0, 0, 0, 0);
+            }
+        }
+    }
+    pb
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -619,9 +729,113 @@ mod tests {
             );
             assert!(doc.toggle_breakpoint(2));
             doc.show_debug_line(1, false);
-            assert!(doc.breakpoints.borrow().contains(&2));
+            assert!(doc.breakpoint_lines().contains(&2));
             let marks = doc.buffer.source_marks_at_line(1, Some("breakpoint"));
             assert_eq!(marks.len(), 1);
+        });
+    }
+
+    fn test_doc(text: &str) -> Rc<Doc> {
+        Doc::new(
+            Some("a.lep".into()),
+            String::new(),
+            text,
+            &sourceview5::LanguageManager::new(),
+            &SearchSettings::new(),
+        )
+    }
+
+    #[test]
+    fn anchored_breakpoints_follow_insert_delete_and_undo_redo() {
+        crate::gtk_test::run(|| {
+            let doc = test_doc("a = 1\nescreva(a)\n");
+            doc.toggle_breakpoint(2);
+            let mut before = doc.buffer.iter_at_line(1).unwrap();
+            doc.buffer.begin_user_action();
+            doc.buffer.insert(&mut before, "// inserted\n\n");
+            doc.buffer.end_user_action();
+            assert_eq!(doc.breakpoint_lines(), BTreeSet::from([4]));
+            doc.check_now();
+            assert_eq!(
+                doc.buffer.source_marks_at_line(3, Some("breakpoint")).len(),
+                1
+            );
+            doc.buffer.undo();
+            assert_eq!(doc.breakpoint_lines(), BTreeSet::from([2]));
+            doc.buffer.redo();
+            assert_eq!(doc.breakpoint_lines(), BTreeSet::from([4]));
+            let mut start = doc.buffer.start_iter();
+            let mut end = doc.buffer.iter_at_line(3).unwrap();
+            doc.buffer.delete(&mut start, &mut end);
+            assert_eq!(doc.breakpoint_lines(), BTreeSet::from([1]));
+        });
+    }
+
+    #[test]
+    fn deleted_and_replaced_breakpoint_lines_follow_next_surviving_text() {
+        crate::gtk_test::run(|| {
+            let doc = test_doc("a = 1\nb = 2\nc = 3\nescreva(c)\n");
+            doc.toggle_breakpoint(2);
+            doc.toggle_breakpoint(3);
+            doc.toggle_breakpoint(4);
+            doc.buffer.begin_user_action();
+            let mut start = doc.buffer.iter_at_line(1).unwrap();
+            let mut end = doc.buffer.iter_at_line(3).unwrap();
+            doc.buffer.delete(&mut start, &mut end);
+            doc.buffer.insert(&mut start, "// replacement\n");
+            doc.buffer.end_user_action();
+            assert_eq!(doc.breakpoint_lines(), BTreeSet::from([3]));
+            doc.buffer.undo();
+            // All deleted anchors stay attached to the surviving statement.
+            assert_eq!(doc.breakpoint_lines(), BTreeSet::from([4]));
+            doc.buffer.redo();
+            assert_eq!(doc.breakpoint_lines(), BTreeSet::from([3]));
+            assert!(!doc.toggle_breakpoint(3));
+            assert!(doc.breakpoint_lines().is_empty());
+            assert!(!doc.toggle_breakpoint(0));
+            assert!(!doc.toggle_breakpoint(999));
+        });
+    }
+
+    #[test]
+    fn non_executable_breakpoints_are_visibly_pending() {
+        crate::gtk_test::run(|| {
+            let doc = test_doc("// comment\na = 1\n\n");
+            doc.toggle_breakpoint(1);
+            doc.toggle_breakpoint(2);
+            assert_eq!(
+                doc.buffer
+                    .source_marks_at_line(0, Some("breakpoint-pending"))
+                    .len(),
+                1
+            );
+            assert_eq!(
+                doc.buffer.source_marks_at_line(1, Some("breakpoint")).len(),
+                1
+            );
+        });
+    }
+
+    #[test]
+    fn edits_and_rename_show_divergence_without_changing_running_source() {
+        crate::gtk_test::run(|| {
+            let doc = test_doc("escreva(1)\n");
+            let source =
+                std::sync::Arc::new(crate::debug_sources::Source::new("a.lep", doc.text()));
+            doc.set_running_source(Some(source.clone()));
+            assert!(doc.run_notice.is_visible());
+            assert!(!doc.run_notice.text().starts_with("Editado"));
+            doc.buffer.insert(&mut doc.buffer.start_iter(), "// edit\n");
+            assert!(doc.run_notice.text().starts_with("Editado"));
+            assert_eq!(source.text, "escreva(1)\n");
+            doc.buffer.undo();
+            assert!(!doc.run_notice.text().starts_with("Editado"));
+            doc.set_path("renamed.lep".into());
+            assert!(doc.run_notice.text().starts_with("Editado"));
+            assert_eq!(doc.running_source.borrow().as_ref().unwrap().path, "a.lep");
+            doc.set_running_source(None);
+            assert!(!doc.run_notice.is_visible());
+            assert!(!doc.inspect_source.is_visible());
         });
     }
 
