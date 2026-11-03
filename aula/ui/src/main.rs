@@ -23,6 +23,7 @@ mod identidade;
 mod indent;
 mod janela_graf;
 mod lang;
+mod menu_teclado;
 mod navegar;
 mod painel_repl;
 mod pares;
@@ -1087,6 +1088,7 @@ fn install_menubar(
         app.set_menubar(Some(&model));
     }
     win.set_show_menubar(true);
+    menu_teclado::install(win);
 }
 
 /// Like `add_shortcut`, but `f` returning false lets the key through.

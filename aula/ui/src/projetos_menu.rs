@@ -104,13 +104,36 @@ pub fn refresh(ui: &UiRc) {
 }
 
 fn fill_projects(menu: &gio::Menu, projetos: Vec<String>, atual: &str) {
+    let entries: Vec<_> = projetos
+        .into_iter()
+        .map(|projeto| {
+            let label = if projeto == atual {
+                format!("✓ {projeto}")
+            } else {
+                projeto.clone()
+            };
+            (label, projeto)
+        })
+        .collect();
+    // Replacing identical rows destroys GTK's focused menu item while its
+    // submenu is open. Leave its widgets and focus intact on routine refresh.
+    if menu.n_items() as usize == entries.len()
+        && entries.iter().enumerate().all(|(i, (label, target))| {
+            menu.item_attribute_value(i as i32, "label", None)
+                .and_then(|v| v.str().map(str::to_owned))
+                .as_ref()
+                == Some(label)
+                && menu
+                    .item_attribute_value(i as i32, "target", None)
+                    .and_then(|v| v.str().map(str::to_owned))
+                    .as_ref()
+                    == Some(target)
+        })
+    {
+        return;
+    }
     menu.remove_all();
-    for projeto in projetos {
-        let label = if projeto == atual {
-            format!("✓ {projeto}")
-        } else {
-            projeto.clone()
-        };
+    for (label, projeto) in entries {
         let item = gio::MenuItem::new(Some(&label), None);
         item.set_action_and_target_value(
             Some("win.abrir-projeto-remoto"),
@@ -165,6 +188,11 @@ mod tests {
                 .str(),
             Some("b")
         );
+        let changes = Rc::new(std::cell::Cell::new(0));
+        let observed = changes.clone();
+        projects.connect_items_changed(move |_, _, _, _| observed.set(observed.get() + 1));
+        fill_projects(&projects, vec!["a".into(), "b".into()], "b");
+        assert_eq!(changes.get(), 0, "unchanged refresh recreated focused rows");
         fill_projects(&projects, vec!["new".into()], "new");
         assert_eq!(labels(&projects), ["✓ new"]);
     }
