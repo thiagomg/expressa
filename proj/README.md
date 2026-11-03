@@ -28,7 +28,8 @@ verification. Each document includes its own acceptance criteria.
 - 02 implemented: commit `9289114`.
 - 03 implemented; its navigation follow-up was committed as `021f0a6` and manually tested.
 - 05 implemented in the working tree, ready for review; no commit created.
-- 04 and 06–10 remain separate planned work; 11 supplies cross-cutting verification practices.
+- 09 implemented in the working tree, ready for review; no commit created.
+- 04, 06–08 and the remainder of 10 remain separate planned work; 11 supplies cross-cutting verification practices.
 
 The earlier items still have manual desktop walkthroughs and native Windows
 verification outstanding. Those checks are not blockers for implementing 03;

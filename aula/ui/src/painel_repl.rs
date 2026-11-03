@@ -1,40 +1,38 @@
 //! REPL tab of the bottom panel: try an expression without making a file.
-//! The interpreter runs on its own thread (`repl_por_canal`), so a slow line
+//! The interpreter runs on its own thread (`CanalRepl`), so a slow line
 //! never freezes the window, and Parar interrupts it.
 
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
-use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::mpsc::{Receiver, Sender, TryRecvError};
+use std::sync::mpsc::TryRecvError;
+use std::time::{Duration, Instant};
 
-use expressa::runtime::{RespostaRepl, repl_por_canal};
+use expressa::runtime::{
+    CanalRepl, ConteudoRepl, EventoRepl, FimRepl, FluxoRepl, IdSessao, REPL_MAX_CODIGO, TextoRepl,
+};
 use gtk::glib;
 use gtk::prelude::*;
 use gtk::{Box as GtkBox, Button, Entry, Label, Orientation, ScrolledWindow, TextView};
 
-/// One interpreter session on its thread.
-struct Sessao {
-    linhas: Sender<String>,
-    respostas: Receiver<RespostaRepl>,
-    parar: Arc<AtomicBool>,
-}
+const INTERVALO_CONSULTA: Duration = Duration::from_millis(30);
+const TEMPO_POR_QUADRO: Duration = Duration::from_millis(4);
+const EVENTOS_POR_QUADRO: usize = 128;
+const BYTES_POR_QUADRO: usize = 64 * 1024;
+const MAX_CARACTERES_SAIDA: i32 = 256 * 1024;
+const MAX_HISTORICO: usize = 100;
 
-impl Sessao {
-    fn nova() -> Self {
-        let (linhas, rx) = std::sync::mpsc::channel();
-        let (tx, respostas) = std::sync::mpsc::channel();
-        let parar = Arc::new(AtomicBool::new(false));
-        let p = Arc::clone(&parar);
-        std::thread::Builder::new()
-            .name("repl".into())
-            .spawn(move || repl_por_canal(rx, tx, p))
-            .expect("thread do REPL");
-        Self {
-            linhas,
-            respostas,
-            parar,
-        }
+type Trechos = Vec<(Option<&'static str>, String)>;
+
+fn acrescentar(trechos: &mut Trechos, texto: String, tag: Option<&'static str>) {
+    if texto.is_empty() {
+        return;
+    }
+    if let Some((anterior, conteudo)) = trechos.last_mut()
+        && *anterior == tag
+    {
+        conteudo.push_str(&texto);
+    } else {
+        trechos.push((tag, texto));
     }
 }
 
@@ -43,11 +41,13 @@ pub struct PainelRepl {
     saida: TextView,
     entrada: Entry,
     prompt: Label,
-    sessao: RefCell<Sessao>,
+    sessao: RefCell<Option<CanalRepl>>,
+    consulta: RefCell<Option<glib::SourceId>>,
+    stdout: RefCell<TextoRepl>,
+    stderr: RefCell<TextoRepl>,
+    btn_parar: Button,
     /// Lines typed so far of code that is not complete yet (`se x {`).
     pendente: RefCell<String>,
-    /// Pieces sent and not answered yet.
-    esperando: Cell<u32>,
     historico: RefCell<Vec<String>>,
     /// Position while walking the history with ↑/↓ (`len` = new line).
     no_historico: Cell<usize>,
@@ -80,7 +80,9 @@ impl PainelRepl {
             .hexpand(true)
             .placeholder_text("digite uma expressão e Enter (ex.: 2 + 3, escreva(\"oi\"))")
             .build();
+        entrada.set_max_length((REPL_MAX_CODIGO - 1) as i32);
         let parar = Button::with_label("Parar");
+        parar.set_sensitive(false);
         parar.set_tooltip_text(Some("Interrompe a linha que está rodando"));
         let limpar = Button::with_label("Limpar");
         let reiniciar = Button::with_label("Reiniciar");
@@ -103,9 +105,12 @@ impl PainelRepl {
             saida,
             entrada,
             prompt,
-            sessao: RefCell::new(Sessao::nova()),
+            sessao: RefCell::new(None),
+            consulta: RefCell::new(None),
+            stdout: RefCell::new(TextoRepl::default()),
+            stderr: RefCell::new(TextoRepl::default()),
+            btn_parar: parar.clone(),
             pendente: RefCell::new(String::new()),
-            esperando: Cell::new(0),
             historico: RefCell::new(Vec::new()),
             no_historico: Cell::new(0),
         });
@@ -146,6 +151,15 @@ impl PainelRepl {
             });
         }
         painel.historico_com_setas();
+        {
+            let p = Rc::downgrade(&painel);
+            painel.widget.connect_destroy(move |_| {
+                if let Some(p) = p.upgrade() {
+                    p.encerrar();
+                }
+            });
+        }
+        painel.iniciar();
         painel
     }
 
@@ -160,12 +174,29 @@ impl PainelRepl {
             Some(t) => buffer.insert_with_tags_by_name(&mut fim, texto, &[t]),
             None => buffer.insert(&mut fim, texto),
         }
+        crate::console::trim_output(&buffer);
+        let excesso = buffer.char_count() - MAX_CARACTERES_SAIDA;
+        if excesso > 0 {
+            let mut inicio = buffer.start_iter();
+            let mut fim = buffer.iter_at_offset(excesso);
+            buffer.delete(&mut inicio, &mut fim);
+        }
         let mut fim = buffer.end_iter();
         self.saida.scroll_to_iter(&mut fim, 0.0, false, 0.0, 0.0);
     }
 
     fn enviar(self: &Rc<Self>) {
         let linha = self.entrada.text().to_string();
+        if self.sessao.borrow().is_none() {
+            return;
+        }
+        if self.pendente.borrow().len() + linha.len() + 1 > REPL_MAX_CODIGO {
+            self.escrever(
+                "código grande demais para o REPL (limite: 64 KiB)\n",
+                Some("erro"),
+            );
+            return;
+        }
         self.entrada.set_text("");
         let primeira = self.pendente.borrow().is_empty();
         if primeira && matches!(linha.trim(), "limpe" | "cls" | "limpe_tela") {
@@ -179,6 +210,9 @@ impl PainelRepl {
             let mut h = self.historico.borrow_mut();
             if !linha.trim().is_empty() && h.last() != Some(&linha) {
                 h.push(linha.clone());
+                if h.len() > MAX_HISTORICO {
+                    h.remove(0);
+                }
             }
             self.no_historico.set(h.len());
         }
@@ -195,76 +229,190 @@ impl PainelRepl {
             std::mem::take(&mut *p)
         };
         self.prompt.set_text(">");
-        if self.sessao.borrow().linhas.send(codigo).is_err() {
-            self.escrever("a sessão parou; aperte Reiniciar\n", Some("erro"));
-            return;
+        let resultado = self
+            .sessao
+            .borrow_mut()
+            .as_mut()
+            .unwrap()
+            .enviar(codigo.clone());
+        if let Err(erro) = resultado {
+            // Preserve the complete command for retry when the bounded queue fills.
+            self.entrada.set_text(codigo.trim_end_matches('\n'));
+            self.escrever(&format!("{erro}\n"), Some("erro"));
         }
-        self.esperando.set(self.esperando.get() + 1);
-        if self.esperando.get() == 1 {
-            self.aguardar();
+        self.atualizar_parada();
+    }
+
+    fn iniciar(self: &Rc<Self>) {
+        match CanalRepl::nova() {
+            Ok(sessao) => {
+                let id = sessao.id();
+                *self.sessao.borrow_mut() = Some(sessao);
+                self.entrada.set_sensitive(true);
+                let p = Rc::downgrade(self);
+                let fonte = glib::timeout_add_local(INTERVALO_CONSULTA, move || {
+                    let Some(p) = p.upgrade() else {
+                        return glib::ControlFlow::Break;
+                    };
+                    let continuar = p.drenar(id);
+                    if continuar == glib::ControlFlow::Break
+                        && p.sessao.borrow().as_ref().is_some_and(|s| s.id() == id)
+                    {
+                        p.consulta.borrow_mut().take();
+                    }
+                    continuar
+                });
+                *self.consulta.borrow_mut() = Some(fonte);
+            }
+            Err(e) => {
+                self.entrada.set_sensitive(false);
+                self.escrever(
+                    &format!("não foi possível iniciar o REPL: {e}\n"),
+                    Some("erro"),
+                );
+            }
         }
     }
 
-    /// Polls for answers while some are pending (the session is on another
-    /// thread with a plain channel).
-    fn aguardar(self: &Rc<Self>) {
-        let p = Rc::downgrade(self);
-        glib::timeout_add_local(std::time::Duration::from_millis(30), move || {
-            let Some(p) = p.upgrade() else {
-                return glib::ControlFlow::Break;
-            };
-            loop {
-                let resposta = p.sessao.borrow().respostas.try_recv();
-                match resposta {
-                    Ok(r) => {
-                        p.mostrar(r);
-                        p.esperando.set(p.esperando.get().saturating_sub(1));
-                    }
-                    Err(TryRecvError::Empty) => break,
-                    Err(TryRecvError::Disconnected) => {
-                        p.esperando.set(0);
+    fn atualizar_parada(&self) {
+        self.btn_parar.set_sensitive(
+            self.sessao
+                .borrow()
+                .as_ref()
+                .is_some_and(|s| s.pendentes() > 0),
+        );
+    }
+
+    /// One source per session. Work, transfer size and display memory are bounded
+    /// independently; even an infinite printer must yield to the GTK main loop.
+    fn drenar(&self, id: IdSessao) -> glib::ControlFlow {
+        if !self.sessao.borrow().as_ref().is_some_and(|s| s.id() == id) {
+            return glib::ControlFlow::Break;
+        }
+        let inicio = Instant::now();
+        let mut bytes = 0;
+        let mut trechos = Trechos::new();
+        let mut continuar = glib::ControlFlow::Continue;
+        for _ in 0..EVENTOS_POR_QUADRO {
+            if inicio.elapsed() >= TEMPO_POR_QUADRO || bytes >= BYTES_POR_QUADRO {
+                break;
+            }
+            let evento = self.sessao.borrow_mut().as_mut().unwrap().receber();
+            match evento {
+                Ok(evento) => {
+                    bytes += match &evento.conteudo {
+                        ConteudoRepl::Saida { bytes, .. } => bytes.len(),
+                        ConteudoRepl::Resultado(Ok(Some(s)) | Err(s)) => s.len(),
+                        _ => 0,
+                    };
+                    if self.mostrar(evento, &mut trechos) {
+                        continuar = glib::ControlFlow::Break;
                         break;
                     }
                 }
+                Err(TryRecvError::Empty) => break,
+                Err(TryRecvError::Disconnected) => {
+                    self.terminar_texto(&mut trechos);
+                    acrescentar(
+                        &mut trechos,
+                        "a sessão do REPL foi desconectada; aperte Reiniciar\n".into(),
+                        Some("erro"),
+                    );
+                    self.sessao.borrow_mut().as_mut().unwrap().encerrar();
+                    self.entrada.set_sensitive(false);
+                    continuar = glib::ControlFlow::Break;
+                    break;
+                }
             }
-            if p.esperando.get() == 0 {
-                glib::ControlFlow::Break
-            } else {
-                glib::ControlFlow::Continue
-            }
-        });
+        }
+        for (tag, texto) in trechos {
+            self.escrever(&texto, tag);
+        }
+        self.atualizar_parada();
+        continuar
     }
 
-    fn mostrar(&self, r: RespostaRepl) {
-        if !r.saida.is_empty() {
-            self.escrever(&r.saida, None);
-        }
-        match r.resultado {
-            Ok(Some(valor)) => self.escrever(&format!("{valor}\n"), None),
-            Ok(None) => {}
-            Err(e) => self.escrever(&format!("{e}\n"), Some("erro")),
-        }
+    fn terminar_texto(&self, trechos: &mut Trechos) {
+        acrescentar(trechos, self.stdout.borrow_mut().terminar(), None);
+        acrescentar(trechos, self.stderr.borrow_mut().terminar(), Some("erro"));
     }
 
-    /// Interrupts the line running now. Nothing running: nothing to stop
-    /// (and the next line must not be stopped by it).
+    /// Returns true on termination. Reject events from an earlier session.
+    fn mostrar(&self, evento: EventoRepl, trechos: &mut Trechos) -> bool {
+        if !self
+            .sessao
+            .borrow()
+            .as_ref()
+            .is_some_and(|s| s.id() == evento.sessao)
+        {
+            return false;
+        }
+        match evento.conteudo {
+            ConteudoRepl::Saida { fluxo, bytes } => {
+                let (decoder, tag) = match fluxo {
+                    FluxoRepl::Stdout => (&self.stdout, None),
+                    FluxoRepl::Stderr => (&self.stderr, Some("erro")),
+                };
+                acrescentar(trechos, decoder.borrow_mut().decodificar(&bytes), tag);
+            }
+            ConteudoRepl::Resultado(resultado) => {
+                self.terminar_texto(trechos);
+                match resultado {
+                    Ok(Some(valor)) => acrescentar(trechos, format!("{valor}\n"), None),
+                    Ok(None) => {}
+                    Err(e) => acrescentar(trechos, format!("{e}\n"), Some("erro")),
+                }
+            }
+            ConteudoRepl::Terminou(fim) => {
+                self.terminar_texto(trechos);
+                let (texto, tag) = match fim {
+                    FimRepl::Saida(code) => (
+                        format!("sessão encerrada (código {code}); aperte Reiniciar\n"),
+                        Some("eco"),
+                    ),
+                    FimRepl::Encerrada => {
+                        ("sessão encerrada; aperte Reiniciar\n".into(), Some("eco"))
+                    }
+                    FimRepl::Falha(e) => (
+                        format!("falha na sessão: {e}; aperte Reiniciar\n"),
+                        Some("erro"),
+                    ),
+                };
+                acrescentar(trechos, texto, tag);
+                self.entrada.set_sensitive(false);
+                return true;
+            }
+        }
+        false
+    }
+
     fn parar(&self) {
-        if self.esperando.get() > 0 {
-            self.sessao.borrow().parar.store(true, Ordering::SeqCst);
+        if let Some(sessao) = self.sessao.borrow().as_ref() {
+            sessao.parar();
         }
     }
 
-    fn reiniciar(&self) {
-        // The old thread ends once its line stops and its channel closes.
-        self.sessao.borrow().parar.store(true, Ordering::SeqCst);
-        *self.sessao.borrow_mut() = Sessao::nova();
+    /// Called only on confirmed window close or panel disposal, not on tab hide.
+    pub fn encerrar(&self) {
+        if let Some(fonte) = self.consulta.borrow_mut().take() {
+            fonte.remove();
+        }
+        self.sessao.borrow_mut().take();
+        self.btn_parar.set_sensitive(false);
+        self.entrada.set_sensitive(false);
+    }
+
+    fn reiniciar(self: &Rc<Self>) {
+        self.encerrar();
         self.pendente.borrow_mut().clear();
-        self.esperando.set(0);
+        *self.stdout.borrow_mut() = TextoRepl::default();
+        *self.stderr.borrow_mut() = TextoRepl::default();
         self.prompt.set_text(">");
         self.escrever(
             "— sessão nova: as variáveis foram esquecidas —\n",
             Some("eco"),
         );
+        self.iniciar();
     }
 
     fn historico_com_setas(self: &Rc<Self>) {
@@ -297,6 +445,15 @@ impl PainelRepl {
     }
 }
 
+impl Drop for PainelRepl {
+    fn drop(&mut self) {
+        if let Some(fonte) = self.consulta.get_mut().take() {
+            fonte.remove();
+        }
+        // Dropping CanalRepl cancels both evaluation and backpressured writes.
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -309,6 +466,7 @@ mod tests {
             ctx.iteration(false);
             std::thread::sleep(std::time::Duration::from_millis(5));
         }
+        assert!(pronto(), "GTK REPL interaction did not complete");
     }
 
     fn texto(p: &PainelRepl) -> String {
@@ -318,7 +476,199 @@ mod tests {
 
     fn digitar(p: &Rc<PainelRepl>, linha: &str) {
         p.entrada.set_text(linha);
-        p.enviar();
+        p.entrada.emit_activate();
+    }
+
+    fn esperando(p: &PainelRepl) -> usize {
+        p.sessao.borrow().as_ref().map_or(0, CanalRepl::pendentes)
+    }
+
+    #[test]
+    fn printing_streams_live_and_stop_then_next_command_work_under_saturation() {
+        crate::gtk_test::run(|| {
+            let p = PainelRepl::new();
+            // Large, newline-free chunks also exercise the character cap.
+            let codigo = format!(
+                "enquanto verdadeiro {{ escreva(\"{}\") }}",
+                "ação".repeat(1024)
+            );
+            digitar(&p, &codigo);
+            let ticks = Rc::new(Cell::new(0));
+            let t = ticks.clone();
+            let heartbeat = glib::timeout_add_local(Duration::from_millis(1), move || {
+                t.set(t.get() + 1);
+                glib::ControlFlow::Continue
+            });
+            girar_ate(|| p.saida.buffer().char_count() == MAX_CARACTERES_SAIDA);
+            assert!(ticks.get() > 2, "output starved the GTK main loop");
+            assert_eq!(esperando(&p), 1, "printing loop unexpectedly finished");
+            assert!(texto(&p).contains("açãoação"));
+            assert!(!texto(&p).contains('�'));
+            assert!(p.btn_parar.is_sensitive());
+            p.btn_parar.emit_clicked();
+            girar_ate(|| esperando(&p) == 0);
+            assert!(texto(&p).contains("interrompido"));
+            assert!(!p.btn_parar.is_sensitive());
+            digitar(&p, "2 + 2");
+            girar_ate(|| esperando(&p) == 0);
+            assert!(texto(&p).ends_with("4\n"));
+            assert!(p.saida.buffer().char_count() <= MAX_CARACTERES_SAIDA);
+            heartbeat.remove();
+        });
+    }
+
+    #[test]
+    fn repeated_restart_rejects_old_callbacks_and_does_not_mix_new_input_or_counts() {
+        crate::gtk_test::run(|| {
+            let p = PainelRepl::new();
+            for _ in 0..4 {
+                let antiga = p.sessao.borrow().as_ref().unwrap().id();
+                digitar(&p, "enquanto verdadeiro { escreva(\"ANTIGA\") }");
+                girar_ate(|| texto(&p).ends_with("ANTIGA\n"));
+                p.reiniciar();
+                assert_ne!(p.sessao.borrow().as_ref().unwrap().id(), antiga);
+                assert_eq!(esperando(&p), 0);
+                digitar(&p, "x = 40");
+                digitar(&p, "x + 2");
+                assert_eq!(p.drenar(antiga), glib::ControlFlow::Break);
+                assert_eq!(
+                    esperando(&p),
+                    2,
+                    "stale callback changed new session counts"
+                );
+                girar_ate(|| esperando(&p) == 0);
+                let texto = texto(&p);
+                let nova = texto.rsplit("— sessão nova:").next().unwrap();
+                assert!(nova.ends_with("42\n"), "{nova}");
+                assert!(
+                    !nova.contains("ANTIGA"),
+                    "old output entered the new session"
+                );
+                assert!(p.consulta.borrow().is_some());
+            }
+            // An incomplete command and UTF-8 prefix also belong to their session.
+            digitar(&p, "se verdadeiro {");
+            p.stdout.borrow_mut().decodificar(&[0xc3]);
+            p.reiniciar();
+            assert!(p.pendente.borrow().is_empty());
+            assert_eq!(p.prompt.text(), ">");
+            digitar(&p, "x");
+            girar_ate(|| esperando(&p) == 0);
+            assert!(texto(&p).contains("não definida"));
+            assert!(!texto(&p).contains('�'));
+        });
+    }
+
+    #[test]
+    fn scrollback_limits_keep_the_tail_and_stderr_stays_distinct() {
+        crate::gtk_test::run(|| {
+            let p = PainelRepl::new();
+            p.escrever(&format!("{}fim\n", "antigo\n".repeat(6000)), None);
+            assert!(p.saida.buffer().line_count() <= 5000);
+            assert!(texto(&p).ends_with("fim\n"));
+            p.escrever(
+                &format!("{}fim", "á".repeat(MAX_CARACTERES_SAIDA as usize)),
+                None,
+            );
+            assert_eq!(p.saida.buffer().char_count(), MAX_CARACTERES_SAIDA);
+            assert!(texto(&p).ends_with("fim"));
+            digitar(&p, "escreva(\"normal\")");
+            digitar(&p, "escreva_erro(\"atenção\")");
+            girar_ate(|| esperando(&p) == 0);
+            let b = p.saida.buffer();
+            let erro = b.tag_table().lookup("erro").unwrap();
+            let (normal, _) = b
+                .start_iter()
+                .forward_search("normal\n", gtk::TextSearchFlags::TEXT_ONLY, None)
+                .unwrap();
+            let (aviso, _) = b
+                .start_iter()
+                .forward_search("atenção\n", gtk::TextSearchFlags::TEXT_ONLY, None)
+                .unwrap();
+            assert!(!normal.has_tag(&erro));
+            assert!(aviso.has_tag(&erro));
+        });
+    }
+
+    #[test]
+    fn quit_clears_pending_work_stops_polling_and_restart_accepts_input_again() {
+        crate::gtk_test::run(|| {
+            let p = PainelRepl::new();
+            digitar(&p, "saia(7)");
+            digitar(&p, "enquanto verdadeiro { x = 1 }");
+            girar_ate(|| p.consulta.borrow().is_none());
+            assert_eq!(esperando(&p), 0);
+            assert!(!p.entrada.is_sensitive());
+            assert!(!p.btn_parar.is_sensitive());
+            assert!(texto(&p).contains("código 7"));
+            p.reiniciar();
+            digitar(&p, "6 * 7");
+            girar_ate(|| esperando(&p) == 0);
+            assert!(texto(&p).ends_with("42\n"));
+            assert!(p.entrada.is_sensitive());
+            p.encerrar();
+            assert!(p.consulta.borrow().is_none());
+            assert!(p.sessao.borrow().is_none());
+            let fraco = Rc::downgrade(&p);
+            drop(p);
+            assert!(fraco.upgrade().is_none(), "polling retained the panel");
+        });
+    }
+
+    #[test]
+    fn destroying_the_ide_window_cancels_the_repl_even_when_ui_state_is_retained() {
+        crate::gtk_test::run(|| {
+            let app = gtk::Application::builder()
+                .application_id("dev.expressa.aula.tests.repl")
+                .flags(gtk::gio::ApplicationFlags::NON_UNIQUE)
+                .build();
+            app.register(None::<&gtk::gio::Cancellable>).unwrap();
+            let ui = crate::build_ui_state(&app, false);
+            let p = ui.borrow().repl.clone();
+            ui.borrow().window.present();
+            girar_ate(|| ui.borrow().window.is_mapped());
+            digitar(&p, "enquanto verdadeiro { escreva(\"ativo\") }");
+            girar_ate(|| texto(&p).ends_with("ativo\n"));
+            ui.borrow().window.destroy();
+            assert!(p.sessao.borrow().is_none());
+            assert!(p.consulta.borrow().is_none());
+            assert!(!p.entrada.is_sensitive());
+        });
+    }
+
+    #[test]
+    fn dropping_an_active_panel_removes_its_polling_source() {
+        crate::gtk_test::run(|| {
+            let p = PainelRepl::new();
+            digitar(&p, "enquanto verdadeiro { escreva(\"ativo\") }");
+            girar_ate(|| texto(&p).ends_with("ativo\n"));
+            let fonte = glib::MainContext::default()
+                .find_source_by_id(p.consulta.borrow().as_ref().unwrap())
+                .unwrap();
+            let fraco = Rc::downgrade(&p);
+            drop(p);
+            assert!(fraco.upgrade().is_none());
+            assert!(fonte.is_destroyed());
+        });
+    }
+
+    #[test]
+    fn worker_disconnection_is_visible_and_restart_recovers() {
+        crate::gtk_test::run(|| {
+            let p = PainelRepl::new();
+            digitar(&p, "enquanto verdadeiro { escreva(\"ativo\") }");
+            girar_ate(|| texto(&p).ends_with("ativo\n"));
+            // Simulate a worker disappearing without delivering a terminal event.
+            p.sessao.borrow_mut().as_mut().unwrap().encerrar();
+            girar_ate(|| p.consulta.borrow().is_none());
+            assert!(texto(&p).contains("desconectada; aperte Reiniciar"));
+            assert_eq!(esperando(&p), 0);
+            assert!(!p.entrada.is_sensitive());
+            p.reiniciar();
+            digitar(&p, "42");
+            girar_ate(|| esperando(&p) == 0);
+            assert!(texto(&p).ends_with("42\n"));
+        });
     }
 
     #[test]

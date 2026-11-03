@@ -191,7 +191,7 @@ escreva_erro("nome vazio")
 
 ### `saia()` / `saia(codigo)`
 
-Encerra. Sem argumento, código 0. Nada depois da chamada executa. No REPL, a linha `sair` (sem `()`) sai do interpretador; `saia()` encerra o processo.
+Encerra. Sem argumento, código 0. Nada depois da chamada executa. No REPL do terminal, a linha `sair` (sem `()`) sai do interpretador; `saia()` encerra o processo. No painel REPL da Aula, `saia()` encerra apenas a sessão; **Reiniciar** começa outra.
 
 ```text
 se nome == "" { saia(1) }
@@ -739,6 +739,14 @@ para linha em linhas_de("tail -f app.log") {
 ---
 
 ## REPL e depurador
+
+Na Aula, **Ver → REPL** abre um painel em que as variáveis permanecem entre comandos
+e a saída aparece durante a execução. **Parar** interrompe a avaliação atual;
+**Reiniciar** cancela a sessão e esquece as variáveis. **Limpar** apaga apenas a saída.
+O painel mantém até 5000 linhas e 262144 caracteres, descartando o texto mais antigo.
+Resultados longos são abreviados com um aviso. Fechar a IDE encerra a sessão.
+
+No terminal:
 
 ```text
 expressa

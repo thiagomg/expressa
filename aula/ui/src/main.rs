@@ -657,12 +657,19 @@ fn build_ui_state(app: &Application, startup: bool) -> UiRc {
         ui.borrow().tree.add_controller(del);
     }
     {
+        let repl = Rc::downgrade(&ui.borrow().repl);
+        win.connect_unrealize(move |_| {
+            if let Some(repl) = repl.upgrade() {
+                repl.encerrar();
+            }
+        });
         let ui_close = Rc::clone(&ui);
         win.connect_close_request(move |w| {
             if ui_close.borrow().closing {
                 sessao::salvar(&ui_close);
                 sessao::limpar_copias(&ui_close);
                 fechar_janelas_filhas(&ui_close);
+                ui_close.borrow().repl.encerrar();
                 ui_close.borrow_mut().files.shutdown();
                 return glib::Propagation::Proceed;
             }
@@ -671,6 +678,7 @@ fn build_ui_state(app: &Application, startup: bool) -> UiRc {
                 sessao::salvar(&ui_close);
                 sessao::limpar_copias(&ui_close);
                 fechar_janelas_filhas(&ui_close);
+                ui_close.borrow().repl.encerrar();
                 ui_close.borrow_mut().files.shutdown();
                 return glib::Propagation::Proceed;
             }

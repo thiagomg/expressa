@@ -32,6 +32,12 @@ Execuções sem pendências são removidas. Novas execuções são recusadas qua
 
 A execução não lê nem grava fora da pasta do projeto (`..`, caminhos absolutos). Não há limite de tempo: jogos e outros laços infinitos (`exemplos/jogos/conway_jogo_da_vida.lep`) continuam até **Parar**. O painel de saída guarda as últimas 5000 linhas; depois de `cls()`/`casa()` funciona como um terminal (cada linha substitui o quadro anterior).
 
+## REPL
+
+**Ver → REPL** abre o painel para experimentar expressões. As variáveis ficam disponíveis para os próximos comandos. A saída aparece enquanto o código executa; mensagens de erro aparecem em vermelho. **Parar** interrompe a avaliação atual, inclusive durante impressão contínua, e permite continuar usando a sessão. **Reiniciar** cancela a sessão anterior, abandona seus comandos na fila e esquece as variáveis. Fechar a IDE encerra também o REPL.
+
+O painel conserva até 5000 linhas e 262144 caracteres, removendo o texto mais antigo. **Limpar** apaga apenas o texto exibido. A fila aceita até 16 avaliações, cada uma com até 64 KiB de código; se estiver cheia, o comando fica na entrada para tentar novamente. Resultados muito longos são abreviados com um aviso. `saia()` encerra a sessão do painel; **Reiniciar** permite começar outra. Se a sessão falhar ou perder a conexão com seu interpretador, o painel informa o problema e oferece o mesmo reinício.
+
 ## Subir o servidor
 
 ```bash
