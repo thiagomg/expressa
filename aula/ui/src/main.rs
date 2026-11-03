@@ -5,6 +5,7 @@
 
 mod abas;
 mod ajuda;
+mod analysis;
 mod assist;
 mod atalhos;
 mod background;
@@ -25,6 +26,7 @@ mod janela_graf;
 mod lang;
 mod menu_teclado;
 mod navegar;
+mod operations;
 mod painel_repl;
 mod pares;
 mod pendencias;
@@ -32,6 +34,8 @@ mod pendencias_ui;
 mod prefs;
 mod projetos_menu;
 mod recuperacao;
+#[cfg(test)]
+mod responsiveness_tests;
 mod rpc;
 mod sessao;
 mod sincronizacao;
@@ -58,7 +62,7 @@ use sourceview5::{LanguageManager, SearchSettings, StyleSchemeManager};
 use assist::{Help, Target, ViewHelp};
 use console::Console;
 use docs::Doc;
-use documentos::{CloseDecision, Documents, OpenDocument, SaveOutcome, UnsavedChoice};
+use documentos::{CloseDecision, Documents, SaveOutcome, UnsavedChoice};
 use exec::{ExecEvent, Workspace};
 use execution_state::{Event as ExecutionEvent, ExecutionState, Unavailable};
 use prefs::{FontCss, Prefs, ThemeCss, expand_tilde, path_for_display};
@@ -79,6 +83,10 @@ struct Ui {
     execution_breakpoints: Vec<(String, u32)>,
     execution_editors: HashMap<String, std::rc::Weak<Doc>>,
     source_viewer: Option<Rc<debug_sources::Viewer>>,
+    project_epoch: u64,
+    file_operations: HashMap<String, u64>,
+    next_file_operation: u64,
+    operations: Rc<operations::Operations>,
     navigation_epoch: u64,
     listing_epoch: u64,
     remote_menu: gio::Menu,
@@ -122,7 +130,7 @@ struct Ui {
     theme_css: ThemeCss,
     help: Option<Rc<Help>>,
     /// Unsaved changes were handled: the window may close now.
-    closing: bool,
+    closing: std::cell::Cell<bool>,
     /// Availability shared by run and project-switch actions. Run resources
     /// stay in `run`, not in the lifecycle model.
     execution: ExecutionState,
@@ -135,6 +143,9 @@ struct Ui {
     /// dealt with): from now on it can be saved over (`sessao.rs`).
     sessao_pronta: bool,
     recuperacao_aberta: bool,
+    recovery_timer: RefCell<Option<glib::SourceId>>,
+    backup_busy: std::cell::Cell<bool>,
+    backup_review: RefCell<Option<Box<dyn FnOnce(&UiRc, bool)>>>,
     sync_window: Option<gtk::Window>,
     /// Below the editor: Saída (program output), Busca, REPL.
     painel_inferior: gtk::Notebook,
@@ -149,7 +160,10 @@ fn main() {
     prepare_runtime_prefix();
     rpc::install_signal_handlers();
     let app = Application::builder().application_id(APP_ID).build();
-    app.connect_activate(build_ui);
+    let prefs = Prefs::load();
+    app.connect_activate(move |app| {
+        build_ui_with_prefs(app, true, prefs.clone());
+    });
     app.run();
 }
 
@@ -167,12 +181,13 @@ fn editor_panes(editor: &impl IsA<gtk::Widget>, bottom: &impl IsA<gtk::Widget>) 
     pane
 }
 
-fn build_ui(app: &Application) {
-    build_ui_state(app, true);
+#[cfg(test)]
+fn build_ui_state(app: &Application, startup: bool) -> UiRc {
+    build_ui_with_prefs(app, startup, Prefs::default())
 }
 
-/// Construct the UI separately from restoring projects and starting autosave.
-fn build_ui_state(app: &Application, startup: bool) -> UiRc {
+/// Preferences are read before entering GTK's event loop; tests inject defaults.
+fn build_ui_with_prefs(app: &Application, startup: bool, prefs: Prefs) -> UiRc {
     // ibus + GTK4 leaves the dead key (´ ~ `) stuck as preedit after composing
     // á/ã. GTK's built-in input method composes dead keys itself.
     // GTK_IM_MODULE in the environment still takes precedence over this.
@@ -180,7 +195,6 @@ fn build_ui_state(app: &Application, startup: bool) -> UiRc {
         settings.set_gtk_im_module(Some("gtk-im-context-simple"));
     }
 
-    let prefs = Prefs::load();
     let theme_css = ThemeCss::install();
     theme_css.apply(prefs.dark);
     let font_css = FontCss::install();
@@ -287,6 +301,10 @@ fn build_ui_state(app: &Application, startup: bool) -> UiRc {
         execution_breakpoints: Vec::new(),
         execution_editors: HashMap::new(),
         source_viewer: None,
+        project_epoch: 0,
+        file_operations: HashMap::new(),
+        next_file_operation: 0,
+        operations: operations::Operations::new(),
         navigation_epoch: 0,
         listing_epoch: 0,
         remote_menu: gio::Menu::new(),
@@ -325,12 +343,15 @@ fn build_ui_state(app: &Application, startup: bool) -> UiRc {
         font_css,
         theme_css,
         help: None,
-        closing: false,
+        closing: std::cell::Cell::new(false),
         execution: ExecutionState::default(),
         geracao_arvore: 0,
         abas_fechadas: Vec::new(),
         sessao_pronta: false,
         recuperacao_aberta: false,
+        recovery_timer: RefCell::new(None),
+        backup_busy: std::cell::Cell::new(false),
+        backup_review: RefCell::new(None),
         sync_window: None,
         painel_inferior: gtk::Notebook::new(),
         busca: None,
@@ -463,6 +484,7 @@ fn build_ui_state(app: &Application, startup: bool) -> UiRc {
     status_row.set_margin_end(8);
     status_row.set_margin_bottom(6);
     status_row.append(&ui.borrow().status);
+    status_row.append(&ui.borrow().operations.button);
     status_row.append(&ui.borrow().cursor_pos);
     status_row.append(&ui.borrow().diag_label);
     status_row.append(&ui.borrow().project_path);
@@ -658,17 +680,32 @@ fn build_ui_state(app: &Application, startup: bool) -> UiRc {
     }
     {
         let repl = Rc::downgrade(&ui.borrow().repl);
+        let weak = Rc::downgrade(&ui);
         win.connect_unrealize(move |_| {
+            if let Some(ui) = weak.upgrade() {
+                ui.borrow().closing.set(true);
+                ui.borrow().operations.cancel_all();
+                sessao::stop_copies(&ui);
+                for doc in all_docs(&ui) {
+                    doc.cancel_pending();
+                }
+            }
             if let Some(repl) = repl.upgrade() {
                 repl.encerrar();
             }
         });
         let ui_close = Rc::clone(&ui);
         win.connect_close_request(move |w| {
-            if ui_close.borrow().closing {
+            if ui_close.borrow().closing.get() {
                 sessao::salvar(&ui_close);
                 sessao::limpar_copias(&ui_close);
                 fechar_janelas_filhas(&ui_close);
+                ui_close.borrow().closing.set(true);
+                ui_close.borrow().operations.cancel_all();
+                sessao::stop_copies(&ui_close);
+                for doc in all_docs(&ui_close) {
+                    doc.cancel_pending();
+                }
                 ui_close.borrow().repl.encerrar();
                 ui_close.borrow_mut().files.shutdown();
                 return glib::Propagation::Proceed;
@@ -678,6 +715,12 @@ fn build_ui_state(app: &Application, startup: bool) -> UiRc {
                 sessao::salvar(&ui_close);
                 sessao::limpar_copias(&ui_close);
                 fechar_janelas_filhas(&ui_close);
+                ui_close.borrow().closing.set(true);
+                ui_close.borrow().operations.cancel_all();
+                sessao::stop_copies(&ui_close);
+                for doc in all_docs(&ui_close) {
+                    doc.cancel_pending();
+                }
                 ui_close.borrow().repl.encerrar();
                 ui_close.borrow_mut().files.shutdown();
                 return glib::Propagation::Proceed;
@@ -685,7 +728,7 @@ fn build_ui_state(app: &Application, startup: bool) -> UiRc {
             let ui_c = Rc::clone(&ui_close);
             let w = w.clone();
             confirm_unsaved(&ui_close, dirty, move || {
-                ui_c.borrow_mut().closing = true;
+                ui_c.borrow().closing.set(true);
                 w.close();
             });
             glib::Propagation::Stop
@@ -703,42 +746,61 @@ fn build_ui_state(app: &Application, startup: bool) -> UiRc {
     {
         let ui_p = Rc::clone(&ui);
         glib::timeout_add_local_once(std::time::Duration::from_millis(250), move || {
-            if sessao::restaurar_sem_projeto(&ui_p) {
-                set_project_path(&ui_p, "", None);
-                return;
-            }
-            let pasta = ui_p.borrow().prefs.pasta.clone();
-            let pasta_path = expand_tilde(&pasta);
-            let opened =
-                if !pasta.is_empty() && pasta_path.is_dir() && !store::pasta_larga(&pasta_path) {
-                    open_local_project(&ui_p, pasta_path);
-                    true
-                } else {
-                    if store::pasta_larga(&pasta_path) {
-                        {
-                            let mut u = ui_p.borrow_mut();
-                            u.prefs.pasta.clear();
-                            u.prefs.save();
+            sessao::restaurar_sem_projeto(&ui_p, move |ui_p, offered| {
+                if offered {
+                    set_project_path(ui_p, "", None);
+                    return;
+                }
+                let pasta = ui_p.borrow().prefs.pasta.clone();
+                async_result(
+                    ui_p,
+                    "Abrindo projeto inicial",
+                    true,
+                    move || {
+                        let path = expand_tilde(&pasta);
+                        let wide = store::pasta_larga(&path);
+                        let valid = !pasta.is_empty() && !wide && path.is_dir();
+                        Ok((path, valid, wide))
+                    },
+                    move |ui_p, result| {
+                        let (pasta_path, valid, wide) = match result {
+                            Ok(value) => value,
+                            Err(e) => {
+                                set_status(ui_p, &e);
+                                return;
+                            }
+                        };
+                        let opened = if valid {
+                            open_local_project(ui_p, pasta_path);
+                            true
+                        } else {
+                            if wide {
+                                let mut u = ui_p.borrow_mut();
+                                u.prefs.pasta.clear();
+                                u.prefs.save();
+                                drop(u);
+                                set_project_path(ui_p, "", None);
+                            }
+                            if open_shipped_exemplos(ui_p) {
+                                true
+                            } else {
+                                choose_local_folder(ui_p);
+                                false
+                            }
+                        };
+                        schedule_raise();
+                        if !opened {
+                            set_status(ui_p, "escolha a pasta do projeto");
                         }
-                        set_project_path(&ui_p, "", None);
-                    }
-                    if open_shipped_exemplos(&ui_p) {
-                        true
-                    } else {
-                        choose_local_folder(&ui_p);
-                        false
-                    }
-                };
-            schedule_raise();
-            if !opened {
-                set_status(&ui_p, "escolha a pasta do projeto");
-            }
-            if !lang_ok {
-                set_status(
-                    &ui_p,
-                    "aviso: gramática Expressa não carregou; o texto fica sem cores",
+                        if !lang_ok {
+                            set_status(
+                                ui_p,
+                                "aviso: gramática Expressa não carregou; o texto fica sem cores",
+                            );
+                        }
+                    },
                 );
-            }
+            });
         });
     }
     {
@@ -1283,18 +1345,11 @@ fn make_help(ui: &UiRc) -> Rc<Help> {
             if let Some(hit) = u.file_cache.borrow().get(path) {
                 return hit.clone();
             }
-            if !u.files.is_remote() {
-                let text = u.files.read_file(&u.project, path).ok();
-                u.file_cache
-                    .borrow_mut()
-                    .insert(path.to_string(), text.clone());
-                return text;
-            }
             // On a server, fetch it in the background: this hover goes
             // without, the next one finds it in the cache.
             u.file_cache.borrow_mut().insert(path.to_string(), None);
             let (files, projeto, rel) = (u.files.clone(), u.project.clone(), path.to_string());
-            let chave = files.cache_key(&projeto);
+            let epoch = u.project_epoch;
             drop(u);
             let p = projeto.clone();
             let r = rel.clone();
@@ -1303,7 +1358,7 @@ fn make_help(ui: &UiRc) -> Rc<Help> {
                 move || files.read_file(&p, &r).ok(),
                 move |ui, text| {
                     let u = ui.borrow();
-                    if u.files.cache_key(&u.project) == chave {
+                    if u.project_epoch == epoch {
                         u.file_cache.borrow_mut().insert(rel, text);
                     }
                 },
@@ -1609,38 +1664,128 @@ fn new_untitled_tab(ui: &UiRc) {
 }
 
 /// Open `path` from the project (or switch to its tab).
-fn open_path(ui: &UiRc, path: &str) -> Option<Rc<Doc>> {
-    match with_documents(ui, |documents| documents.open(path)) {
-        Ok(OpenDocument::Existing(doc)) => {
-            switch_to(ui, &doc);
-            Some(doc)
-        }
-        Ok(OpenDocument::Loaded {
-            path,
-            text,
-            revision,
-        }) => {
-            let doc = open_doc(ui, Some(path.clone()), &text);
-            *doc.revision.borrow_mut() = revision;
-            set_status(ui, &format!("aberto {path}"));
-            Some(doc)
-        }
-        Err(e) => {
-            set_status(ui, &format!("abrir {path}: {e}"));
-            None
-        }
+fn open_path(ui: &UiRc, path: &str) {
+    open_path_then(ui, path, |_, _| {});
+}
+
+#[derive(Debug, PartialEq, Eq)]
+enum OpenFailure {
+    Cancelled,
+    Failed,
+}
+
+fn open_path_then(ui: &UiRc, path: &str, done: impl FnOnce(&UiRc, Option<Rc<Doc>>) + 'static) {
+    open_path_status(ui, path, move |ui, result| done(ui, result.ok()));
+}
+
+fn next_file_operation(ui: &UiRc, path: &str) -> u64 {
+    let mut u = ui.borrow_mut();
+    u.next_file_operation += 1;
+    let id = u.next_file_operation;
+    u.file_operations.insert(path.replace('\\', "/"), id);
+    id
+}
+
+fn invalidate_file_operations(ui: &UiRc, path: &str) {
+    let path = path.replace('\\', "/");
+    let paths: Vec<_> = ui
+        .borrow()
+        .file_operations
+        .keys()
+        .filter(|p| **p == path || p.starts_with(&format!("{path}/")))
+        .cloned()
+        .collect();
+    for path in paths {
+        next_file_operation(ui, &path);
     }
+}
+
+fn open_path_status(
+    ui: &UiRc,
+    path: &str,
+    done: impl FnOnce(&UiRc, Result<Rc<Doc>, OpenFailure>) + 'static,
+) {
+    if let Some(doc) = doc_by_name(ui, path) {
+        next_file_operation(ui, path);
+        switch_to(ui, &doc);
+        done(ui, Ok(doc));
+        return;
+    }
+    let (files, project) = {
+        let u = ui.borrow();
+        (u.files.clone(), u.project.clone())
+    };
+    let path_owned = path.to_string();
+    open_path_read(
+        ui,
+        path,
+        move || {
+            files
+                .current_text(&project, &path_owned)?
+                .ok_or_else(|| format!("arquivo `{path_owned}` não existe"))
+        },
+        done,
+    );
+}
+
+fn open_path_read(
+    ui: &UiRc,
+    path: &str,
+    read: impl FnOnce() -> Result<store::TextSnapshot, String> + Send + 'static,
+    done: impl FnOnce(&UiRc, Result<Rc<Doc>, OpenFailure>) + 'static,
+) {
+    let path = path.replace('\\', "/");
+    let operation = next_file_operation(ui, &path);
+    async_result(
+        ui,
+        &format!("Abrindo {path}"),
+        true,
+        read,
+        move |ui, result| {
+            if ui.borrow().file_operations.get(&path) != Some(&operation) {
+                done(ui, Err(OpenFailure::Cancelled));
+                return;
+            }
+            match result {
+                Ok(snapshot) => {
+                    // A second request or the user may have opened/edited the same
+                    // file meanwhile. Never replace that buffer with this snapshot.
+                    let doc = doc_by_name(ui, &path).unwrap_or_else(|| {
+                        let doc = open_doc(ui, Some(path.clone()), &snapshot.text);
+                        *doc.revision.borrow_mut() = snapshot.revision;
+                        doc
+                    });
+                    switch_to(ui, &doc);
+                    set_status(ui, &format!("aberto {path}"));
+                    done(ui, Ok(doc));
+                }
+                Err(e) => {
+                    set_status(ui, &format!("abrir {path}: {e}"));
+                    done(
+                        ui,
+                        Err(if e == "operação cancelada" {
+                            OpenFailure::Cancelled
+                        } else {
+                            OpenFailure::Failed
+                        }),
+                    );
+                }
+            }
+        },
+    );
 }
 
 fn goto_file_line(ui: &UiRc, file: &str, line: u32) {
-    let doc = doc_by_name(ui, file).or_else(|| open_path(ui, file));
-    if let Some(d) = doc {
-        switch_to(ui, &d);
-        d.goto_line(line);
-    }
+    open_path_then(ui, file, move |_, doc| {
+        if let Some(doc) = doc {
+            doc.goto_line(line);
+        }
+    });
 }
 
 fn remove_tab(ui: &UiRc, doc: &Rc<Doc>) {
+    doc.cancel_pending();
+    invalidate_file_operations(ui, &doc.name());
     let (nb, vh) = {
         let mut u = ui.borrow_mut();
         let pos = u.docs.iter().position(|(d, _)| Rc::ptr_eq(d, doc));
@@ -1654,11 +1799,8 @@ fn remove_tab(ui: &UiRc, doc: &Rc<Doc>) {
         nb.remove_page(Some(n));
     }
     doc.vigia.replace(None);
-    if let Err(e) = documentos::forget_recovery(doc) {
-        ui.borrow()
-            .console
-            .stderr(&format!("aviso: cópia de recuperação preservada: {e}\n"));
-    }
+    doc.recovery.close();
+    forget_recovery_async(ui, doc);
     refresh_title(ui);
     refresh_diag_label(ui);
     sessao::salvar(ui);
@@ -1681,7 +1823,11 @@ fn close_doc(ui: &UiRc, doc: &Rc<Doc>) {
 }
 
 /// Save one tab; an untitled one asks for a name. False if not saved.
-fn save_doc(ui: &UiRc, doc: &Rc<Doc>) -> bool {
+fn save_doc(ui: &UiRc, doc: &Rc<Doc>) {
+    save_doc_then(ui, doc, |_| {});
+}
+
+fn save_doc_then(ui: &UiRc, doc: &Rc<Doc>, done: impl FnOnce(bool) + 'static) {
     let original_name = doc.name();
     let new_name = if doc.is_untitled() {
         let window = ui.borrow().window.clone();
@@ -1690,10 +1836,246 @@ fn save_doc(ui: &UiRc, doc: &Rc<Doc>) -> bool {
         None
     };
     if doc.name() != original_name || !all_docs(ui).iter().any(|d| Rc::ptr_eq(d, doc)) {
-        return false;
+        done(false);
+        return;
     }
-    let outcome = with_documents(ui, |documents| documents.save(doc, new_name.as_deref()));
-    finish_save(ui, doc, outcome)
+    save_request(ui, doc, new_name.as_deref(), doc.is_untitled(), None, done);
+}
+
+fn save_request(
+    ui: &UiRc,
+    doc: &Rc<Doc>,
+    new_name: Option<&str>,
+    creating: bool,
+    explicit: Option<&store::Expected>,
+    done: impl FnOnce(bool) + 'static,
+) {
+    if doc.saving.get() {
+        set_status(ui, "esta aba já está sendo salva");
+        done(false);
+        return;
+    }
+    let request = match with_documents(ui, |documents| {
+        documents.prepare_save(doc, new_name, creating, explicit)
+    }) {
+        Ok(Some(request)) => request,
+        Ok(None) => {
+            done(finish_save(ui, doc, Ok(SaveOutcome::Cancelled)));
+            return;
+        }
+        Err(e) => {
+            set_status(ui, &e);
+            done(false);
+            return;
+        }
+    };
+    let (files, project) = {
+        let u = ui.borrow();
+        (u.files.clone(), u.project.clone())
+    };
+    let work = request.clone();
+    save_prepared(ui, doc, request, move || work.write(&files, &project), done);
+}
+
+fn save_prepared(
+    ui: &UiRc,
+    doc: &Rc<Doc>,
+    request: documentos::SaveRequest,
+    write: impl FnOnce() -> Result<store::Saved, store::SaveError> + Send + 'static,
+    done: impl FnOnce(bool) + 'static,
+) {
+    doc.saving.set(true);
+    doc.refresh_label();
+    let weak = Rc::downgrade(doc);
+    async_result(
+        ui,
+        &format!("Salvando {}", request.name),
+        false,
+        move || Ok(write()),
+        move |ui, result| {
+            let Some(doc) = weak.upgrade() else {
+                done(false);
+                return;
+            };
+            doc.saving.set(false);
+            doc.refresh_label();
+            if !all_docs(ui).iter().any(|open| Rc::ptr_eq(open, &doc)) {
+                done(false);
+                return;
+            }
+            if request.creating
+                && matches!(&result, Ok(Ok(_)))
+                && all_docs(ui).iter().any(|other| {
+                    !Rc::ptr_eq(other, &doc)
+                        && exec::same_project_path(&other.name(), &request.name)
+                })
+            {
+                doc.buffer.set_modified(true);
+                set_status(
+                    ui,
+                    "o arquivo foi salvo, mas o destino foi aberto em outra aba; sua aba foi preservada",
+                );
+                done(false);
+                return;
+            }
+            let result = result.and_then(|receipt| request.complete(&doc, receipt));
+            let succeeded = finish_save(ui, &doc, result);
+            if succeeded && !doc.is_dirty() {
+                forget_recovery_async(ui, &doc);
+            }
+            if succeeded && doc.is_dirty() {
+                set_status(ui, "arquivo salvo; há novas alterações na aba");
+            }
+            sessao::check_deferred(ui, &doc);
+            done(succeeded && !doc.is_dirty());
+        },
+    );
+}
+
+fn reload_doc(ui: &UiRc, doc: &Rc<Doc>) {
+    if doc.saving.get() {
+        set_status(ui, "aguarde a gravação desta aba antes de recarregar");
+        return;
+    }
+    let (files, project) = {
+        let u = ui.borrow();
+        (u.files.clone(), u.project.clone())
+    };
+    let name = doc.name();
+    let path = name.clone();
+    let edit = doc.edit_epoch.get();
+    let io = doc.io_epoch.get();
+    let weak = Rc::downgrade(doc);
+    async_result(
+        ui,
+        &format!("Recarregando {name}"),
+        true,
+        move || {
+            files
+                .current_text(&project, &path)?
+                .ok_or("o arquivo foi removido; a aba foi preservada".into())
+        },
+        move |ui, result| {
+            let Some(doc) = weak.upgrade() else {
+                return;
+            };
+            if doc.name() != name
+                || doc.io_epoch.get() != io
+                || doc.edit_epoch.get() != edit
+                || !all_docs(ui).iter().any(|open| Rc::ptr_eq(open, &doc))
+            {
+                set_status(
+                    ui,
+                    "a aba mudou durante a leitura; seu texto foi preservado",
+                );
+                return;
+            }
+            match result {
+                Ok(snapshot) => {
+                    doc.recarregar_snapshot(&snapshot.text, snapshot.revision);
+                    forget_recovery_async(ui, &doc);
+                    set_status(ui, &format!("recarregado {name}"));
+                }
+                Err(e) => set_status(ui, &e),
+            }
+        },
+    );
+}
+
+fn forget_recovery_async(ui: &UiRc, doc: &Rc<Doc>) {
+    forget_recovery_docs_async(ui, vec![doc.clone()]);
+}
+
+fn forget_recovery_docs_async(ui: &UiRc, docs: Vec<Rc<Doc>>) {
+    let known: Vec<_> = docs
+        .iter()
+        .map(|d| d.copia_recuperacao.borrow().clone())
+        .collect();
+    let work: Vec<_> = docs
+        .iter()
+        .zip(known.iter())
+        .map(|(d, b)| (d.recovery.clone(), b.clone()))
+        .collect();
+    let weak: Vec<_> = docs.iter().map(Rc::downgrade).collect();
+    async_on(
+        background::persistence(),
+        true,
+        ui,
+        "",
+        false,
+        move || {
+            Ok(work
+                .into_iter()
+                .map(|(owner, backup)| owner.retire(backup.as_ref()))
+                .collect::<Vec<_>>())
+        },
+        move |ui, results| match results {
+            Ok(results) => {
+                for ((doc, known), result) in weak.into_iter().zip(known).zip(results) {
+                    match result {
+                        Ok(()) => {
+                            if let Some(doc) = doc.upgrade() {
+                                let same =
+                                    match (doc.copia_recuperacao.borrow().as_ref(), known.as_ref())
+                                    {
+                                        (Some(a), Some(b)) => {
+                                            a.id == b.id && a.revision == b.revision
+                                        }
+                                        _ => false,
+                                    };
+                                if same {
+                                    doc.copia_recuperacao.borrow_mut().take();
+                                    doc.resumo_da_copia.set(None);
+                                    doc.refresh_label();
+                                }
+                            }
+                        }
+                        Err(e) => ui
+                            .borrow()
+                            .console
+                            .stderr(&format!("aviso: cópia de recuperação preservada: {e}\n")),
+                    }
+                }
+            }
+            Err(e) => ui.borrow().console.stderr(&format!("aviso: {e}\n")),
+        },
+    );
+}
+
+fn save_documents(ui: &UiRc, docs: Vec<Rc<Doc>>, then: impl FnOnce() + 'static) {
+    let unrelated = Rc::new(
+        dirty_docs(ui)
+            .into_iter()
+            .filter(|d| !docs.iter().any(|target| Rc::ptr_eq(d, target)))
+            .collect::<Vec<_>>(),
+    );
+    fn next(
+        ui: &UiRc,
+        docs: Rc<Vec<Rc<Doc>>>,
+        unrelated: Rc<Vec<Rc<Doc>>>,
+        index: usize,
+        then: Box<dyn FnOnce()>,
+    ) {
+        if index == docs.len() {
+            if dirty_docs(ui)
+                .iter()
+                .all(|d| unrelated.iter().any(|other| Rc::ptr_eq(d, other)))
+            {
+                then();
+            } else {
+                set_status(ui, "há novas alterações; confira as abas antes de fechar");
+            }
+            return;
+        }
+        let next_ui = Rc::clone(ui);
+        let rest = docs.clone();
+        save_doc_then(ui, &docs[index], move |saved| {
+            if saved {
+                next(&next_ui, rest, unrelated, index + 1, then);
+            }
+        });
+    }
+    next(ui, Rc::new(docs), unrelated, 0, Box::new(then));
 }
 
 fn finish_save(ui: &UiRc, doc: &Rc<Doc>, outcome: Result<SaveOutcome, String>) -> bool {
@@ -1783,9 +2165,18 @@ fn confirm_unsaved(ui: &UiRc, docs: Vec<Rc<Doc>>, then: impl FnOnce() + 'static)
             gtk::ResponseType::Accept => UnsavedChoice::Save,
             _ => UnsavedChoice::Cancel,
         };
-        let go = documentos::resolve_unsaved(choice, &docs, |doc| save_doc(&ui_c, doc));
-        if go && let Some(f) = then.borrow_mut().take() {
-            f();
+        match choice {
+            UnsavedChoice::Save => {
+                if let Some(f) = then.borrow_mut().take() {
+                    save_documents(&ui_c, docs.clone(), f);
+                }
+            }
+            UnsavedChoice::Discard => {
+                if let Some(f) = then.borrow_mut().take() {
+                    f();
+                }
+            }
+            UnsavedChoice::Cancel => {}
         }
     });
     dlg.present();
@@ -2246,7 +2637,6 @@ fn execution_editor(ui: &UiRc, path: &str) -> Option<Rc<Doc>> {
     original
         .filter(|d| all_docs(ui).iter().any(|open| Rc::ptr_eq(d, open)))
         .or_else(|| doc_by_name(ui, path))
-        .or_else(|| open_path(ui, path))
 }
 
 fn execution_entry_doc(ui: &UiRc) -> Option<Rc<Doc>> {
@@ -2308,6 +2698,8 @@ fn show_running_source(ui: &UiRc, path: &str, line: u32, error: bool) -> bool {
             // Prefer the original tab even after Save As/rename.
             if let Some(doc) = execution_editor(&ui, &path) {
                 switch_to(&ui, &doc);
+            } else {
+                open_path(&ui, &path);
             }
         });
         let weak = Rc::downgrade(ui);
@@ -2365,7 +2757,20 @@ fn executar(ui: &UiRc, debug: bool) {
         return;
     }
     let Some(doc) = execution_entry_doc(ui) else {
-        set_status(ui, "abra um arquivo para executar");
+        let path = ui
+            .borrow()
+            .source_viewer
+            .as_ref()
+            .map(|v| v.source.path.clone());
+        if let Some(path) = path {
+            open_path_then(ui, &path, move |ui, doc| {
+                if doc.is_some() {
+                    executar(ui, debug);
+                }
+            });
+        } else {
+            set_status(ui, "abra um arquivo para executar");
+        }
         return;
     };
     let name = doc.name();
@@ -2413,10 +2818,12 @@ fn executar(ui: &UiRc, debug: bool) {
         let args = parse_run_args(&u.args_entry.text());
         (u.files.clone(), u.project.clone(), args)
     };
-    let chave = files.cache_key(&project);
+    let chave = ui.borrow().project_epoch;
     set_status(ui, &format!("preparando {name}…"));
-    em_segundo_plano(
+    async_result(
         ui,
+        "Preparando execução",
+        true,
         move || {
             let mut ws = Workspace::sync(&files, &project)?;
             for source in &textos {
@@ -2429,7 +2836,7 @@ fn executar(ui: &UiRc, debug: bool) {
         move |ui, ws| {
             let outro_projeto = {
                 let u = ui.borrow();
-                u.files.cache_key(&u.project) != chave
+                u.project_epoch != chave
             };
             if outro_projeto {
                 ui.borrow_mut()
@@ -2718,31 +3125,44 @@ fn choose_local_folder(ui: &UiRc) {
 }
 
 fn open_local_project(ui: &UiRc, path: PathBuf) {
-    let path = expand_tilde(&path.to_string_lossy());
-    let path = match path.canonicalize() {
-        Ok(p) if p.is_dir() => p,
-        Ok(_) => {
-            set_status(ui, "escolha uma pasta");
-            return;
-        }
-        Err(e) => {
-            set_status(ui, &format!("pasta: {e}"));
-            return;
-        }
-    };
-    if store::pasta_larga(&path) {
-        set_status(ui, "escolha a pasta do projeto, não a pasta pessoal");
-        choose_local_folder(ui);
-        return;
-    }
-    let same = { matches!(&ui.borrow().files, Files::Local(cur) if cur == &path) };
-    if same {
-        refresh_tree(ui);
+    if !can_change_project(ui) {
         return;
     }
     ui.borrow_mut().navigation_epoch += 1;
-    let ui_c = Rc::clone(ui);
-    after_unsaved(ui, move || apply_local(&ui_c, path));
+    let navigation = ui.borrow().navigation_epoch;
+    async_result(
+        ui,
+        "Abrindo projeto local",
+        true,
+        move || {
+            let path = expand_tilde(&path.to_string_lossy())
+                .canonicalize()
+                .map_err(|e| format!("pasta: {e}"))?;
+            if !path.is_dir() {
+                return Err("escolha uma pasta".into());
+            }
+            if store::pasta_larga(&path) {
+                return Err("escolha a pasta do projeto, não a pasta pessoal".into());
+            }
+            Ok(path)
+        },
+        move |ui, result| {
+            if ui.borrow().navigation_epoch != navigation {
+                return;
+            }
+            match result {
+                Ok(path) => {
+                    if matches!(&ui.borrow().files, Files::Local(current) if current == &path) {
+                        refresh_tree(ui);
+                        return;
+                    }
+                    let next = ui.clone();
+                    after_unsaved(ui, move || apply_local(&next, path));
+                }
+                Err(e) => set_status(ui, &e),
+            }
+        },
+    );
 }
 
 fn apply_local(ui: &UiRc, path: PathBuf) {
@@ -2761,6 +3181,12 @@ fn apply_local(ui: &UiRc, path: PathBuf) {
     {
         let mut u = ui.borrow_mut();
         u.files.shutdown();
+        u.operations.cancel_all();
+        u.project_epoch += 1;
+        u.file_operations.clear();
+        u.backup_busy.set(false);
+        u.backup_review.borrow_mut().take();
+        u.recuperacao_aberta = false;
         u.files = Files::Local(path.clone());
         u.project = name;
         u.prefs.pasta = shown.clone();
@@ -2852,9 +3278,20 @@ fn navigation_task<T: Send + 'static>(
 ) {
     let epoch = ui.borrow().navigation_epoch;
     let reply = background::Reply::spawn(epoch, work);
-    let ui = Rc::clone(ui);
+    let operation =
+        ui.borrow()
+            .operations
+            .begin("Consultando servidor", reply.cancellation(), true);
+    let ui = Rc::downgrade(ui);
     let mut done = Some(done);
     glib::timeout_add_local(std::time::Duration::from_millis(30), move || {
+        let _keep_progress = &operation;
+        let Some(ui) = ui.upgrade() else {
+            return glib::ControlFlow::Break;
+        };
+        if ui.borrow().closing.get() {
+            return glib::ControlFlow::Break;
+        }
         let epoch = ui.borrow().navigation_epoch;
         match reply.poll(epoch) {
             background::Poll::Ready(Ok(value)) => {
@@ -2939,6 +3376,12 @@ fn apply_remote(ui: &UiRc, rpc: Arc<Rpc>, url: String, aluno: String, projeto: S
     {
         let mut u = ui.borrow_mut();
         u.files.shutdown();
+        u.operations.cancel_all();
+        u.project_epoch += 1;
+        u.file_operations.clear();
+        u.backup_busy.set(false);
+        u.backup_review.borrow_mut().take();
+        u.recuperacao_aberta = false;
         u.files = Files::Remote {
             rpc,
             projeto: projeto.clone(),
@@ -3105,12 +3548,13 @@ fn escolher_projeto(
             let aviso = aviso.clone();
             let criar = criar.clone();
             let dialog = dialog.clone();
-            navigation_task(
+            async_result(
                 &ui,
+                "Criando projeto",
+                false,
                 move || {
-                    Ok(rpc
-                        .create_project(&aluno, &nome)
-                        .and_then(|()| rpc.list_projects(&aluno)))
+                    rpc.create_project(&aluno, &nome)
+                        .and_then(|()| rpc.list_projects(&aluno))
                 },
                 move |ui, result| {
                     criar.set_sensitive(true);
@@ -3232,7 +3676,7 @@ fn pick_folder(
     // Modal would freeze the editor again if the portal window failed to map.
     dialog.set_modal(false);
     let start_path = expand_tilde(start);
-    if start_path.is_dir() && !store::pasta_larga(&start_path) {
+    if start_path.is_absolute() {
         dialog.set_initial_folder(Some(&gtk::gio::File::for_path(&start_path)));
     }
     let dialog_keep = dialog.clone();
@@ -3336,15 +3780,69 @@ fn em_segundo_plano<T: Send + 'static>(
     trabalho: impl FnOnce() -> T + Send + 'static,
     depois: impl FnOnce(&UiRc, T) + 'static,
 ) {
-    let ui = Rc::downgrade(ui);
-    let tarefa = gio::spawn_blocking(trabalho);
-    glib::spawn_future_local(async move {
-        let resultado = tarefa.await;
-        let Some(ui) = ui.upgrade() else { return };
-        match resultado {
-            Ok(r) => depois(&ui, r),
-            Err(_) => set_status(&ui, "erro interno ao falar com o servidor"),
+    async_result(
+        ui,
+        "",
+        false,
+        move || Ok(trabalho()),
+        move |ui, result| match result {
+            Ok(value) => depois(ui, value),
+            Err(e) => set_status(ui, &e),
+        },
+    );
+}
+
+fn async_result<T: Send + 'static>(
+    ui: &UiRc,
+    label: &str,
+    cancellable: bool,
+    work: impl FnOnce() -> Result<T, String> + Send + 'static,
+    done: impl FnOnce(&UiRc, Result<T, String>) + 'static,
+) {
+    async_on(background::io(), false, ui, label, cancellable, work, done);
+}
+
+fn async_on<T: Send + 'static>(
+    pool: &background::Pool,
+    durable: bool,
+    ui: &UiRc,
+    label: &str,
+    cancellable: bool,
+    work: impl FnOnce() -> Result<T, String> + Send + 'static,
+    done: impl FnOnce(&UiRc, Result<T, String>) + 'static,
+) {
+    let epoch = ui.borrow().project_epoch;
+    let mut reply = pool.submit(epoch, work);
+    if durable {
+        reply.keep_running();
+    }
+    let operation = if label.is_empty() {
+        None
+    } else {
+        Some(
+            ui.borrow()
+                .operations
+                .begin(label, reply.cancellation(), cancellable),
+        )
+    };
+    let weak = Rc::downgrade(ui);
+    let mut done = Some(done);
+    let mut operation = operation;
+    glib::timeout_add_local(std::time::Duration::from_millis(16), move || {
+        let Some(ui) = weak.upgrade() else {
+            return glib::ControlFlow::Break;
+        };
+        if ui.borrow().closing.get() || ui.borrow().project_epoch != epoch {
+            return glib::ControlFlow::Break;
         }
+        let result = match reply.poll(epoch) {
+            background::Poll::Pending => return glib::ControlFlow::Continue,
+            background::Poll::Ready(result) => result,
+            background::Poll::Obsolete => Err("operação cancelada".into()),
+        };
+        operation.take();
+        done.take().unwrap()(&ui, result);
+        glib::ControlFlow::Break
     });
 }
 
@@ -3369,8 +3867,10 @@ fn refresh_tree_e(ui: &UiRc, depois: impl FnOnce(&UiRc) + 'static) {
         (u.files.clone(), u.project.clone(), onde, u.geracao_arvore)
     };
     let p = projeto.clone();
-    em_segundo_plano(
+    async_result(
         ui,
+        "Atualizando arquivos",
+        true,
         move || files.list_tree(&p),
         move |ui, listagem| {
             if ui.borrow().geracao_arvore != geracao {
@@ -3667,10 +4167,16 @@ fn enviar_depois_da_execucao(ui: &UiRc, console: &Rc<Console>, ws: Workspace) {
         (u.files.clone(), u.project.clone())
     };
     let console = Rc::clone(console);
-    em_segundo_plano(
+    async_result(
         ui,
-        move || ws.upload_changes(&files, &project),
-        move |ui, envio| {
+        "Salvando arquivos da execução",
+        false,
+        move || Ok(ws.upload_changes(&files, &project)),
+        move |ui, result| {
+            let envio = result.unwrap_or_else(|e| exec::Envio {
+                erros: vec![e],
+                ..Default::default()
+            });
             {
                 let mut u = ui.borrow_mut();
                 u.execution
@@ -3767,18 +4273,25 @@ fn criar_arquivo(ui: &UiRc, dir: &str) {
         format!("{name}.lep")
     };
     let path = join_path(dir, &name);
-    let result = {
+    let (files, project) = {
         let u = ui.borrow();
-        u.files.create_file(&u.project, &path, "escreva(\"Olá\")\n")
+        (u.files.clone(), u.project.clone())
     };
-    match result {
-        Ok(()) => {
-            refresh_tree(ui);
-            open_path(ui, &path);
-            set_status(ui, &format!("criado {path}"));
-        }
-        Err(e) => set_status(ui, &format!("criar: {e}")),
-    }
+    let target = path.clone();
+    async_result(
+        ui,
+        &format!("Criando {path}"),
+        false,
+        move || files.create_file(&project, &target, "escreva(\"Olá\")\n"),
+        move |ui, result| match result {
+            Ok(()) => {
+                refresh_tree(ui);
+                open_path(ui, &path);
+                set_status(ui, &format!("criado {path}"));
+            }
+            Err(e) => set_status(ui, &format!("criar: {e}")),
+        },
+    );
 }
 
 fn criar_pasta(ui: &UiRc, dir: &str) {
@@ -3790,17 +4303,24 @@ fn criar_pasta(ui: &UiRc, dir: &str) {
         return;
     }
     let path = join_path(dir, name.trim());
-    let result = {
+    let (files, project) = {
         let u = ui.borrow();
-        u.files.mkdir(&u.project, &path)
+        (u.files.clone(), u.project.clone())
     };
-    match result {
-        Ok(()) => {
-            refresh_tree(ui);
-            set_status(ui, &format!("pasta {path}"));
-        }
-        Err(e) => set_status(ui, &format!("pasta: {e}")),
-    }
+    let target = path.clone();
+    async_result(
+        ui,
+        &format!("Criando pasta {path}"),
+        false,
+        move || files.mkdir(&project, &target),
+        move |ui, result| match result {
+            Ok(()) => {
+                refresh_tree(ui);
+                set_status(ui, &format!("pasta {path}"));
+            }
+            Err(e) => set_status(ui, &format!("pasta: {e}")),
+        },
+    );
 }
 
 fn renomear_entrada(ui: &UiRc, rel: &str) {
@@ -3813,28 +4333,41 @@ fn renomear_entrada(ui: &UiRc, rel: &str) {
         return;
     }
     let to = join_path(&parent_dir(rel, false), name.trim());
-    let result = {
+    let (files, project) = {
         let u = ui.borrow();
-        u.files.rename(&u.project, rel, &to)
+        (u.files.clone(), u.project.clone())
     };
-    match result {
-        Ok(()) => {
-            for d in all_docs(ui) {
-                let n = d.name();
-                if n == rel {
-                    d.set_path(to.clone());
-                    sessao::vigiar(ui, &d);
-                } else if let Some(rest) = n.strip_prefix(&format!("{rel}/")) {
-                    d.set_path(format!("{to}/{rest}"));
-                    sessao::vigiar(ui, &d);
+    invalidate_file_operations(ui, rel);
+    let from = rel.to_string();
+    let target = to.clone();
+    let rel = rel.to_string();
+    async_result(
+        ui,
+        &format!("Renomeando {rel}"),
+        false,
+        move || files.rename(&project, &from, &target),
+        move |ui, result| match result {
+            Ok(()) => {
+                invalidate_file_operations(ui, &rel);
+                invalidate_file_operations(ui, &to);
+                for d in all_docs(ui) {
+                    let n = d.name();
+                    if n == rel {
+                        d.set_path(to.clone());
+                        sessao::vigiar(ui, &d);
+                    } else if let Some(rest) = n.strip_prefix(&format!("{rel}/")) {
+                        d.set_path(format!("{to}/{rest}"));
+                        sessao::vigiar(ui, &d);
+                    }
                 }
+                ui.borrow().file_cache.borrow_mut().clear();
+                refresh_tree(ui);
+                refresh_title(ui);
+                set_status(ui, &format!("{rel} → {to}"));
             }
-            refresh_tree(ui);
-            refresh_title(ui);
-            set_status(ui, &format!("{rel} → {to}"));
-        }
-        Err(e) => set_status(ui, &format!("renomear: {e}")),
-    }
+            Err(e) => set_status(ui, &format!("renomear: {e}")),
+        },
+    );
 }
 
 fn confirmar_apagar(ui: &UiRc, rel: &str) {
@@ -3846,24 +4379,54 @@ fn confirmar_apagar(ui: &UiRc, rel: &str) {
         let ui = Rc::clone(ui);
         let rel = rel.to_string();
         move || {
-            let result = {
+            let (files, project) = {
                 let u = ui.borrow();
-                u.files.delete_file(&u.project, &rel)
+                (u.files.clone(), u.project.clone())
             };
-            match result {
-                Ok(()) => {
-                    for d in all_docs(&ui) {
-                        let n = d.name();
-                        if n == rel || n.starts_with(&format!("{rel}/")) {
-                            d.mark_saved();
-                            remove_tab(&ui, &d);
+            let snapshots: Vec<_> = all_docs(&ui)
+                .into_iter()
+                .map(|d| (Rc::downgrade(&d), d.name(), d.edit_epoch.get()))
+                .collect();
+            invalidate_file_operations(&ui, &rel);
+            let path = rel.clone();
+            async_result(
+                &ui,
+                &format!("Apagando {rel}"),
+                false,
+                move || files.delete_file(&project, &path),
+                move |ui, result| match result {
+                    Ok(()) => {
+                        invalidate_file_operations(ui, &rel);
+                        let mut preserved = false;
+                        for (weak, name, epoch) in snapshots {
+                            let Some(doc) = weak.upgrade() else {
+                                continue;
+                            };
+                            if doc.name() != name
+                                || !(name == rel || name.starts_with(&format!("{rel}/")))
+                            {
+                                continue;
+                            }
+                            if doc.edit_epoch.get() != epoch {
+                                preserved = true;
+                                continue;
+                            }
+                            doc.mark_saved();
+                            remove_tab(ui, &doc);
                         }
+                        refresh_tree(ui);
+                        set_status(
+                            ui,
+                            &if preserved {
+                                format!("apagado {rel}; novas edições foram preservadas nas abas")
+                            } else {
+                                format!("apagado {rel}")
+                            },
+                        );
                     }
-                    refresh_tree(&ui);
-                    set_status(&ui, &format!("apagado {rel}"));
-                }
-                Err(e) => set_status(&ui, &format!("apagar: {e}")),
-            }
+                    Err(e) => set_status(ui, &format!("apagar: {e}")),
+                },
+            );
         }
     };
     let then = RefCell::new(Some(then));

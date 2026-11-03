@@ -7,8 +7,8 @@ use gtk::prelude::*;
 
 use crate::docs::Doc;
 use crate::{
-    UiRc, all_docs, close_doc, confirm_unsaved, mostrar_menu, open_path, remove_tab,
-    revelar_na_arvore, set_status, switch_to,
+    UiRc, all_docs, close_doc, confirm_unsaved, mostrar_menu, remove_tab, revelar_na_arvore,
+    set_status, switch_to,
 };
 
 /// How many closed tabs Ctrl+Shift+T can bring back.
@@ -161,17 +161,15 @@ pub fn lembrar_fechada(ui: &UiRc, doc: &Rc<Doc>) {
 
 /// Ctrl+Shift+T: reopen the last closed tab, on the line it was at.
 pub fn reabrir(ui: &UiRc) {
-    loop {
-        let Some((nome, linha)) = ui.borrow_mut().abas_fechadas.pop() else {
-            set_status(ui, "nenhuma aba fechada para reabrir");
-            return;
-        };
-        // Deleted or renamed since: try the one before.
-        if let Some(doc) = open_path(ui, &nome) {
-            doc.goto_line(linha);
-            return;
-        }
-    }
+    let Some((nome, linha)) = ui.borrow_mut().abas_fechadas.pop() else {
+        set_status(ui, "nenhuma aba fechada para reabrir");
+        return;
+    };
+    crate::open_path_status(ui, &nome, move |ui, result| match result {
+        Ok(doc) => doc.goto_line(linha),
+        Err(crate::OpenFailure::Failed) => reabrir(ui),
+        Err(crate::OpenFailure::Cancelled) => {}
+    });
 }
 
 fn copiar_caminho(ui: &UiRc, doc: &Rc<Doc>) {

@@ -3,7 +3,7 @@
 
 use crate::docs::Doc;
 use crate::store::{Expected, TextSnapshot};
-use crate::{UiRc, all_docs, finish_save, perguntar_linha, set_status, with_documents};
+use crate::{UiRc, all_docs, async_result, perguntar_linha, set_status};
 use gtk::{gio, prelude::*};
 use std::rc::Rc;
 
@@ -20,21 +20,30 @@ pub fn mostrar(ui: &UiRc, doc: &Rc<Doc>) {
     if !documento_atual(ui, doc, &name) {
         return;
     }
-    let snapshot = {
-        let (files, project) = {
-            let u = ui.borrow();
-            (u.files.clone(), u.project.clone())
-        };
-        files.current_text(&project, &name)
+    let (files, project) = {
+        let u = ui.borrow();
+        (u.files.clone(), u.project.clone())
     };
-    let snapshot = match snapshot {
-        Ok(snapshot) => snapshot,
-        Err(e) => {
-            set_status(ui, &format!("não foi possível comparar {name}: {e}"));
-            return;
-        }
-    };
-    mostrar_com_snapshot(ui, doc, snapshot);
+    let path = name.clone();
+    let weak = Rc::downgrade(doc);
+    async_result(
+        ui,
+        &format!("Comparando {name}"),
+        true,
+        move || files.current_text(&project, &path),
+        move |ui, result| {
+            let Some(doc) = weak.upgrade() else {
+                return;
+            };
+            if !documento_atual(ui, &doc, &name) {
+                return;
+            }
+            match result {
+                Ok(snapshot) => mostrar_com_snapshot(ui, &doc, snapshot),
+                Err(e) => set_status(ui, &format!("não foi possível comparar {name}: {e}")),
+            }
+        },
+    );
 }
 
 fn mostrar_com_snapshot(ui: &UiRc, doc: &Rc<Doc>, snapshot: Option<TextSnapshot>) {
@@ -71,17 +80,7 @@ fn mostrar_com_snapshot(ui: &UiRc, doc: &Rc<Doc>, snapshot: Option<TextSnapshot>
         }
         match result {
             Ok(resposta::COMPARAR) => comparar(&ui, &doc, snapshot),
-            Ok(resposta::RECARREGAR) => {
-                match with_documents(&ui, |documents| documents.reload(&doc)) {
-                    Ok(warning) => {
-                        set_status(&ui, &format!("recarregado {name}"));
-                        if let Some(warning) = warning {
-                            ui.borrow().console.stderr(&format!("aviso: {warning}\n"));
-                        }
-                    }
-                    Err(e) => set_status(&ui, &e),
-                }
-            }
+            Ok(resposta::RECARREGAR) => crate::reload_doc(&ui, &doc),
             Ok(resposta::SALVAR_COMO) => {
                 let window = ui.borrow().window.clone();
                 let Some(new_name) =
@@ -92,8 +91,7 @@ fn mostrar_com_snapshot(ui: &UiRc, doc: &Rc<Doc>, snapshot: Option<TextSnapshot>
                 if !documento_atual(&ui, &doc, &name) {
                     return;
                 }
-                let result = with_documents(&ui, |documents| documents.save_as(&doc, &new_name));
-                finish_save(&ui, &doc, result);
+                crate::save_request(&ui, &doc, Some(&new_name), true, None, |_| {});
             }
             Ok(resposta::SUBSTITUIR) => {
                 let expected = snapshot.map_or(Expected::Missing, |s| {
@@ -101,8 +99,7 @@ fn mostrar_com_snapshot(ui: &UiRc, doc: &Rc<Doc>, snapshot: Option<TextSnapshot>
                         .map(Expected::Revision)
                         .unwrap_or(Expected::Unversioned)
                 });
-                let result = with_documents(&ui, |documents| documents.overwrite(&doc, &expected));
-                finish_save(&ui, &doc, result);
+                crate::save_request(&ui, &doc, None, false, Some(&expected), |_| {});
             }
             _ => {}
         }

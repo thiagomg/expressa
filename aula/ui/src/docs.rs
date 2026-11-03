@@ -66,6 +66,15 @@ pub struct Doc {
     pub path: RefCell<Option<String>>,
     /// Revision of the saved bytes this buffer was based on (never refreshed on save failure).
     pub revision: RefCell<Option<String>>,
+    /// Monotonic buffer revision, independent of the saved storage revision.
+    pub edit_epoch: Cell<u64>,
+    pub io_epoch: Cell<u64>,
+    pub saving: Cell<bool>,
+    pub pending_external_change: Cell<bool>,
+    pub recovery: std::sync::Arc<crate::recuperacao::Owner>,
+    analysis_epoch: Cell<u64>,
+    analysis: RefCell<Option<crate::analysis::Analysis>>,
+    analysis_job: RefCell<Option<crate::background::Reply<crate::analysis::Analysis>>>,
     pub untitled: String,
     pub buffer: SourceBuffer,
     pub view: SourceView,
@@ -101,6 +110,7 @@ pub struct Doc {
 const DIAG_DELAY_MS: u64 = 400;
 const OCORRENCIAS_DELAY_MS: u64 = 250;
 
+#[cfg(test)]
 fn faz_parte_de_nome(c: char) -> bool {
     c.is_alphanumeric() || c == '_'
 }
@@ -108,6 +118,7 @@ fn faz_parte_de_nome(c: char) -> bool {
 /// Where the word around character `cursor` appears in `texto`, as
 /// character ranges, when it is a name worth marking: not a keyword, at
 /// least two letters, and in more than one place (one is just itself).
+#[cfg(test)]
 pub fn ocorrencias_da_palavra(texto: &str, cursor: usize) -> Vec<(usize, usize)> {
     // Big files: not worth scanning on every cursor move.
     if texto.len() > 200_000 {
@@ -252,12 +263,19 @@ impl Doc {
         let search = SearchContext::new(&buffer, Some(search_settings));
         search.set_highlight(true);
 
-        let revision = path
-            .as_ref()
-            .map(|_| expressa_aula_storage::revision(text.as_bytes()));
+        // A storage revision comes from the read receipt, never a guess based on editor text.
+        let revision = None;
         let doc = Rc::new(Self {
             path: RefCell::new(path),
             revision: RefCell::new(revision),
+            edit_epoch: Cell::new(1),
+            io_epoch: Cell::new(0),
+            saving: Cell::new(false),
+            pending_external_change: Cell::new(false),
+            recovery: std::sync::Arc::new(crate::recuperacao::Owner::default()),
+            analysis_epoch: Cell::new(0),
+            analysis: RefCell::new(None),
+            analysis_job: RefCell::new(None),
             untitled,
             buffer,
             view,
@@ -304,6 +322,13 @@ impl Doc {
             let weak = weak.clone();
             move |_| {
                 if let Some(d) = weak.upgrade() {
+                    d.edit_epoch.set(d.edit_epoch.get() + 1);
+                    d.analysis_job.borrow_mut().take();
+                    let (start, end) = d.buffer.bounds();
+                    d.buffer.remove_tag(&d.diag_tag, &start, &end);
+                    d.buffer.remove_source_marks(&start, &end, Some("erro"));
+                    d.diag.borrow_mut().take();
+                    d.executable_lines.borrow_mut().take();
                     d.paint_breakpoints();
                     d.refresh_running_notice();
                     d.clear_debug_line();
@@ -343,7 +368,9 @@ impl Doc {
     pub fn refresh_label(&self) {
         let name = self.name();
         let base = name.rsplit(['/', '\\']).next().unwrap_or(&name).to_string();
-        self.label.set_text(&if self.is_dirty() {
+        self.label.set_text(&if self.saving.get() {
+            format!("{base} — salvando…")
+        } else if self.is_dirty() {
             format!("● {base}")
         } else {
             base
@@ -362,6 +389,7 @@ impl Doc {
     }
 
     pub fn set_path(&self, path: String) {
+        self.io_epoch.set(self.io_epoch.get() + 1);
         *self.path.borrow_mut() = Some(path);
         self.refresh_label();
         self.refresh_running_notice();
@@ -370,6 +398,11 @@ impl Doc {
     /// Replace the text with `text`, the file's new saved content (the
     /// program changed it). Keeps the cursor on the same line.
     pub fn recarregar(&self, text: &str) {
+        self.recarregar_snapshot(text, Some(expressa_aula_storage::revision(text.as_bytes())));
+    }
+
+    pub fn recarregar_snapshot(&self, text: &str, revision: Option<String>) {
+        self.io_epoch.set(self.io_epoch.get() + 1);
         let linha = self.cursor().line();
         self.buffer.begin_irreversible_action();
         self.buffer.set_text(text);
@@ -379,11 +412,12 @@ impl Doc {
             .iter_at_line(linha)
             .unwrap_or_else(|| self.buffer.end_iter());
         self.buffer.place_cursor(&iter);
-        *self.revision.borrow_mut() = Some(expressa_aula_storage::revision(text.as_bytes()));
+        *self.revision.borrow_mut() = revision;
         self.mark_saved();
     }
 
     pub fn mark_saved(&self) {
+        self.recovery.saved(self.edit_epoch.get());
         self.buffer.set_modified(false);
         self.refresh_label();
     }
@@ -536,18 +570,23 @@ impl Doc {
     fn highlight_block(&self) {
         let (s, e) = self.buffer.bounds();
         self.buffer.remove_tag(&self.match_tag, &s, &e);
-        let text = self.buffer.text(&s, &e, true).to_string();
-        let cursor = self.cursor().offset() as usize;
-        let byte = text
-            .char_indices()
-            .nth(cursor)
-            .map_or(text.len(), |(i, _)| i);
-        let Some((open, close)) = crate::indent::block_pair(&text, byte) else {
+        if self.analysis_epoch.get() != self.edit_epoch.get() {
+            return;
+        }
+        let analysis = self.analysis.borrow();
+        let cursor = self.cursor();
+        let Some((open, close)) = analysis
+            .as_ref()
+            .and_then(|a| a.block(cursor.line(), cursor.offset()))
+        else {
             return;
         };
-        let at = |b: usize| self.buffer.iter_at_offset(text[..b].chars().count() as i32);
-        for (a, z) in [open, close] {
-            self.buffer.apply_tag(&self.match_tag, &at(a), &at(z));
+        for (a, b) in [open, close] {
+            self.buffer.apply_tag(
+                &self.match_tag,
+                &self.buffer.iter_at_offset(a),
+                &self.buffer.iter_at_offset(b),
+            );
         }
     }
 
@@ -578,12 +617,18 @@ impl Doc {
         if self.buffer.has_selection() {
             return;
         }
-        let texto = self.buffer.text(&s, &e, false);
-        let cursor = self.cursor().offset() as usize;
-        for (ini, fim) in ocorrencias_da_palavra(&texto, cursor) {
-            let a = self.buffer.iter_at_offset(ini as i32);
-            let b = self.buffer.iter_at_offset(fim as i32);
-            self.buffer.apply_tag(&self.ocorrencia_tag, &a, &b);
+        if self.analysis_epoch.get() != self.edit_epoch.get() {
+            return;
+        }
+        let analysis = self.analysis.borrow();
+        if let Some(analysis) = analysis.as_ref() {
+            for &(start, end) in analysis.occurrences(self.cursor().offset()) {
+                self.buffer.apply_tag(
+                    &self.ocorrencia_tag,
+                    &self.buffer.iter_at_offset(start),
+                    &self.buffer.iter_at_offset(end),
+                );
+            }
         }
     }
 
@@ -606,18 +651,73 @@ impl Doc {
         self.highlight_block();
     }
 
-    pub fn check_now(&self) {
+    pub fn check_now(self: &Rc<Self>) {
+        if let Some(source) = self.diag_timer.borrow_mut().take() {
+            source.remove();
+        }
+        self.analysis_job.borrow_mut().take();
+        let epoch = self.edit_epoch.get();
+        let text = self.text();
+        *self.analysis_job.borrow_mut() = Some(
+            crate::background::analysis()
+                .submit(epoch, move || Ok(crate::analysis::Analysis::new(&text))),
+        );
+        let weak = Rc::downgrade(self);
+        let source = glib::timeout_add_local(std::time::Duration::from_millis(16), move || {
+            let Some(doc) = weak.upgrade() else {
+                return glib::ControlFlow::Break;
+            };
+            let result = doc
+                .analysis_job
+                .borrow()
+                .as_ref()
+                .map(|job| job.poll(doc.edit_epoch.get()));
+            match result {
+                Some(crate::background::Poll::Pending) => return glib::ControlFlow::Continue,
+                Some(crate::background::Poll::Ready(Ok(analysis))) => {
+                    doc.analysis_job.borrow_mut().take();
+                    doc.diag_timer.borrow_mut().take();
+                    doc.apply_analysis(epoch, analysis);
+                }
+                Some(crate::background::Poll::Ready(Err(_))) => {
+                    doc.analysis_job.borrow_mut().take();
+                    doc.diag_timer.borrow_mut().take();
+                    doc.schedule_check();
+                }
+                _ => {
+                    doc.analysis_job.borrow_mut().take();
+                    doc.diag_timer.borrow_mut().take();
+                }
+            }
+            glib::ControlFlow::Break
+        });
+        *self.diag_timer.borrow_mut() = Some(source);
+    }
+
+    pub fn cancel_pending(&self) {
+        self.analysis_job.borrow_mut().take();
+        if let Some(monitor) = self.vigia.borrow_mut().take() {
+            monitor.cancel();
+        }
+        if let Some(id) = self.diag_timer.borrow_mut().take() {
+            id.remove();
+        }
+        if let Some(id) = self.ocorrencia_timer.borrow_mut().take() {
+            id.remove();
+        }
+    }
+
+    fn apply_analysis(&self, epoch: u64, analysis: crate::analysis::Analysis) {
+        if epoch != self.edit_epoch.get() {
+            return;
+        }
+        self.analysis_epoch.set(epoch);
         let (s, e) = self.buffer.bounds();
         self.buffer.remove_tag(&self.diag_tag, &s, &e);
         self.buffer.remove_source_marks(&s, &e, Some("erro"));
-        let text = self.buffer.text(&s, &e, true);
-        let lines = crate::debug_sources::executable_lines(&text);
-        let diag = if lines.is_none() {
-            diagnose(&text)
-        } else {
-            None
-        };
-        *self.executable_lines.borrow_mut() = lines;
+        let diag = analysis.diag.clone();
+        *self.executable_lines.borrow_mut() = analysis.lines.clone();
+        *self.analysis.borrow_mut() = Some(analysis);
         self.paint_breakpoints();
         if let Some(d) = &diag {
             let a = self.buffer.iter_at_offset(d.start);
@@ -628,6 +728,8 @@ impl Doc {
             }
         }
         *self.diag.borrow_mut() = diag;
+        self.highlight_block();
+        self.marcar_ocorrencias();
         if let Some(f) = self.on_diag.borrow().as_ref() {
             f(self);
         }
@@ -687,6 +789,32 @@ fn ring_pixbuf() -> gtk::gdk_pixbuf::Pixbuf {
     pb
 }
 
+impl Drop for Doc {
+    fn drop(&mut self) {
+        if let Some(id) = self.diag_timer.get_mut().take() {
+            id.remove();
+        }
+        if let Some(id) = self.ocorrencia_timer.get_mut().take() {
+            id.remove();
+        }
+    }
+}
+
+#[cfg(test)]
+impl Doc {
+    pub(crate) fn wait_for_analysis(&self) {
+        let end = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        while self.analysis_epoch.get() != self.edit_epoch.get() {
+            assert!(
+                std::time::Instant::now() < end,
+                "document analysis did not finish"
+            );
+            gtk::glib::MainContext::default().iteration(false);
+            std::thread::sleep(std::time::Duration::from_millis(1));
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -727,6 +855,7 @@ mod tests {
                 &languages,
                 &search,
             );
+            doc.wait_for_analysis();
             assert!(doc.toggle_breakpoint(2));
             doc.show_debug_line(1, false);
             assert!(doc.breakpoint_lines().contains(&2));
@@ -736,13 +865,15 @@ mod tests {
     }
 
     fn test_doc(text: &str) -> Rc<Doc> {
-        Doc::new(
+        let doc = Doc::new(
             Some("a.lep".into()),
             String::new(),
             text,
             &sourceview5::LanguageManager::new(),
             &SearchSettings::new(),
-        )
+        );
+        doc.wait_for_analysis();
+        doc
     }
 
     #[test]
@@ -756,6 +887,7 @@ mod tests {
             doc.buffer.end_user_action();
             assert_eq!(doc.breakpoint_lines(), BTreeSet::from([4]));
             doc.check_now();
+            doc.wait_for_analysis();
             assert_eq!(
                 doc.buffer.source_marks_at_line(3, Some("breakpoint")).len(),
                 1
@@ -836,6 +968,23 @@ mod tests {
             doc.set_running_source(None);
             assert!(!doc.run_notice.is_visible());
             assert!(!doc.inspect_source.is_visible());
+        });
+    }
+
+    #[test]
+    fn stale_analysis_never_paints_diagnostics_on_a_newer_revision() {
+        crate::gtk_test::run(|| {
+            let doc = test_doc("a = 1\n");
+            doc.buffer.set_text("a = (\n");
+            let old = doc.edit_epoch.get();
+            let stale = crate::analysis::Analysis::new(&doc.text());
+            assert!(stale.diag.is_some());
+            doc.buffer.set_text("a = 2\n");
+            doc.apply_analysis(old, stale);
+            assert!(doc.diag.borrow().is_none());
+            doc.wait_for_analysis();
+            assert!(doc.diag.borrow().is_none());
+            assert_eq!(doc.analysis_epoch.get(), doc.edit_epoch.get());
         });
     }
 

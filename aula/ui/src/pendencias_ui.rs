@@ -22,7 +22,7 @@ pub fn notify_local_failure(ui: &UiRc) {
         if u.files.is_remote() {
             return;
         }
-        let Ok(id) = u.files.identity(&u.project) else {
+        let Ok(id) = u.files.known_identity(&u.project) else {
             return;
         };
         id
@@ -35,7 +35,7 @@ pub fn notify_local_failure(ui: &UiRc) {
             if ui
                 .borrow()
                 .files
-                .identity(&ui.borrow().project)
+                .known_identity(&ui.borrow().project)
                 .ok()
                 .as_ref()
                 != Some(&expected)
@@ -56,7 +56,7 @@ pub fn show(ui: &UiRc) {
 fn show_at(ui: &UiRc, index: usize) {
     let (identity, remote) = {
         let u = ui.borrow();
-        let Ok(id) = u.files.identity(&u.project) else {
+        let Ok(id) = u.files.known_identity(&u.project) else {
             return;
         };
         (id, u.files.is_remote())
@@ -69,7 +69,7 @@ fn show_at(ui: &UiRc, index: usize) {
             if ui
                 .borrow()
                 .files
-                .identity(&ui.borrow().project)
+                .known_identity(&ui.borrow().project)
                 .ok()
                 .as_ref()
                 != Some(&expected)
@@ -177,7 +177,7 @@ fn retry(ui: &UiRc, run: PendingRun) {
         let u = ui.borrow();
         (u.files.clone(), u.project.clone())
     };
-    if files.identity(&student).ok().as_ref() != Some(&run.identity) {
+    if files.known_identity(&student).ok().as_ref() != Some(&run.identity) {
         set_status(
             ui,
             "abra o projeto de origem antes de reenviar; também é possível exportar a saída",
@@ -188,8 +188,10 @@ fn retry(ui: &UiRc, run: PendingRun) {
         .execution
         .transition(crate::ExecutionEvent::Prepare)
         .expect("idle before retry");
-    em_segundo_plano(
+    crate::async_result(
         ui,
+        "Reenviando arquivos",
+        true,
         move || {
             let journal =
                 Journal::open(&run.path)?.ok_or("a execução está sendo usada por outra janela")?;

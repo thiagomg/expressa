@@ -17,6 +17,7 @@ pub const MARCA: &str = ".projetos";
 /// Where files go while being moved. A move cut short is finished by the
 /// next call: everything still loose goes into the same folder.
 const MUDANDO: &str = ".mudando";
+const MAX_FOLDER_ENTRIES: usize = 20_000;
 
 /// Lays out `dir` (one student) as project folders, moving old loose
 /// files into [`PROJETO_PADRAO`]. Does nothing once [`MARCA`] exists.
@@ -27,8 +28,16 @@ pub fn preparar(dir: &Path) -> io::Result<()> {
         return Ok(());
     }
     fs::create_dir_all(dir)?;
-    let soltos: Vec<_> = fs::read_dir(dir)?
-        .collect::<Result<Vec<_>, _>>()?
+    let entries: Vec<_> = fs::read_dir(dir)?
+        .take(MAX_FOLDER_ENTRIES + 1)
+        .collect::<Result<Vec<_>, _>>()?;
+    if entries.len() > MAX_FOLDER_ENTRIES {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "pasta do aluno com arquivos demais",
+        ));
+    }
+    let soltos: Vec<_> = entries
         .into_iter()
         .filter(|e| e.file_name() != MUDANDO)
         .collect();
@@ -48,7 +57,13 @@ pub fn preparar(dir: &Path) -> io::Result<()> {
 /// Project names of a prepared student folder, sorted.
 pub fn listar(dir: &Path) -> io::Result<Vec<String>> {
     let mut out = Vec::new();
-    for entry in fs::read_dir(dir)? {
+    for (index, entry) in fs::read_dir(dir)?.enumerate() {
+        if index >= MAX_FOLDER_ENTRIES {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "projetos demais para listar",
+            ));
+        }
         let entry = entry?;
         let name = entry.file_name().to_string_lossy().into_owned();
         if !name.starts_with('.') && entry.file_type()?.is_dir() {

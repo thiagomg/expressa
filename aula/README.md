@@ -38,6 +38,14 @@ A execução não lê nem grava fora da pasta do projeto (`..`, caminhos absolut
 
 O painel conserva até 5000 linhas e 262144 caracteres, removendo o texto mais antigo. **Limpar** apaga apenas o texto exibido. A fila aceita até 16 avaliações, cada uma com até 64 KiB de código; se estiver cheia, o comando fica na entrada para tentar novamente. Resultados muito longos são abreviados com um aviso. `saia()` encerra a sessão do painel; **Reiniciar** permite começar outra. Se a sessão falhar ou perder a conexão com seu interpretador, o painel informa o problema e oferece o mesmo reinício.
 
+## Operações e responsividade
+
+Abrir, salvar, listar arquivos e analisar a sintaxe usam trabalho em segundo plano. **Operações**, na barra inferior, mostra o que está em andamento e permite cancelar leituras, conexões e a preparação de uma execução. A edição continua disponível enquanto você aguarda.
+
+Salvar grava a versão enviada ao iniciar a operação. Se você continuar digitando, as novas alterações permanecem marcadas na aba e serão gravadas na próxima vez que salvar. Fechar a janela ou trocar de projeto aguarda a confirmação dos salvamentos; uma gravação antiga não autoriza descartar edições mais novas.
+
+Leituras de texto aceitam até 8 MiB em projetos locais; o servidor aceita até 3 MiB por arquivo de texto. O servidor recusa gravações acima desse limite antes de substituir o arquivo existente. Listagens têm limite de 20000 entradas e 64 níveis de pastas.
+
 ## Subir o servidor
 
 ```bash

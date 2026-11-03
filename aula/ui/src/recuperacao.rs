@@ -21,6 +21,82 @@ pub struct Backup {
     pub paths: Vec<PathBuf>,
 }
 
+/// Ownership survives a GTK callback being cancelled. Recovery writes and
+/// acknowledgements run on the ordered persistence worker; UI updates only
+/// signal saved/closed revisions through atomics.
+#[derive(Default)]
+pub struct Owner {
+    closed: std::sync::atomic::AtomicBool,
+    saved: std::sync::atomic::AtomicU64,
+    latest: std::sync::Mutex<Option<(u64, Backup)>>,
+}
+impl Owner {
+    pub fn saved(&self, epoch: u64) {
+        self.saved
+            .fetch_max(epoch, std::sync::atomic::Ordering::Release);
+    }
+    pub fn close(&self) {
+        self.closed
+            .store(true, std::sync::atomic::Ordering::Release);
+    }
+    fn acknowledged(&self, epoch: u64) -> bool {
+        self.closed.load(std::sync::atomic::Ordering::Acquire)
+            || self.saved.load(std::sync::atomic::Ordering::Acquire) >= epoch
+    }
+    pub fn save(
+        &self,
+        store: &RecoveryStore,
+        name: &str,
+        text: &str,
+        epoch: u64,
+        previous: Option<Backup>,
+        unchanged: bool,
+    ) -> Result<Option<Backup>, String> {
+        if self.acknowledged(epoch) {
+            return Ok(None);
+        }
+        let mut latest = self.latest.lock().unwrap_or_else(|e| e.into_inner());
+        let previous = latest
+            .as_ref()
+            .filter(|(_, b)| previous.as_ref().is_none_or(|p| p.id == b.id))
+            .map(|(_, b)| b.clone())
+            .or(previous);
+        let current = unchanged
+            && previous.as_ref().is_some_and(|b| {
+                b.name == name
+                    && b.paths
+                        .first()
+                        .is_some_and(|p| p.parent() == Some(store.0.as_path()) && p.is_file())
+            });
+        let backup = if current {
+            previous.unwrap()
+        } else {
+            store.save(name, text, previous.as_ref())?
+        };
+        *latest = Some((epoch, backup.clone()));
+        if self.acknowledged(epoch) {
+            backup.remove()?;
+            latest.take();
+            Ok(None)
+        } else {
+            Ok(Some(backup))
+        }
+    }
+    pub fn retire(&self, known: Option<&Backup>) -> Result<(), String> {
+        let mut latest = self.latest.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(known) = known {
+            known.remove()?;
+        }
+        if let Some((epoch, backup)) = latest.as_ref()
+            && self.acknowledged(*epoch)
+        {
+            backup.remove()?;
+            latest.take();
+        }
+        Ok(())
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Copy {
     pub backup: Backup,
@@ -361,6 +437,46 @@ mod tests {
         fn drop(&mut self) {
             let _ = fs::remove_dir_all(&self.0);
         }
+    }
+
+    #[test]
+    fn acknowledgement_retires_a_worker_snapshot_before_gtk_has_received_it() {
+        let fixture = Fixture::new();
+        let store = fixture.store();
+        let owner = Owner::default();
+        let copy = owner
+            .save(&store, "a.lep", "saved text", 1, None, false)
+            .unwrap()
+            .unwrap();
+        // No GTK copy metadata exists yet. The worker lease still owns it.
+        owner.saved(1);
+        owner.retire(None).unwrap();
+        assert!(store.scan().copies.is_empty());
+        assert!(
+            owner
+                .save(&store, "a.lep", "saved text", 1, Some(copy), true)
+                .unwrap()
+                .is_none()
+        );
+        let newer = owner
+            .save(&store, "a.lep", "new edit", 2, None, false)
+            .unwrap()
+            .unwrap();
+        owner.retire(None).unwrap();
+        assert_eq!(
+            store.scan().copies[0].text,
+            "new edit",
+            "acknowledgement erased newer edits"
+        );
+        owner.close();
+        owner.retire(None).unwrap();
+        assert!(store.scan().copies.is_empty());
+        assert!(
+            owner
+                .save(&store, "a.lep", "closed", 3, Some(newer), false)
+                .unwrap()
+                .is_none()
+        );
     }
 
     #[test]

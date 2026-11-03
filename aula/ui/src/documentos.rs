@@ -53,20 +53,26 @@ pub enum UnsavedChoice {
 }
 
 pub struct Documents<'a> {
+    #[cfg(test)]
     files: &'a Files,
+    #[cfg(test)]
     project: &'a str,
     docs: &'a [Rc<Doc>],
 }
 
 impl<'a> Documents<'a> {
     pub fn new(files: &'a Files, project: &'a str, docs: &'a [Rc<Doc>]) -> Self {
+        let _ = (files, project);
         Self {
+            #[cfg(test)]
             files,
+            #[cfg(test)]
             project,
             docs,
         }
     }
 
+    #[cfg(test)]
     pub fn open(&self, path: &str) -> Result<OpenDocument, String> {
         if let Some(doc) = find_by_name(self.docs, path) {
             return Ok(OpenDocument::Existing(doc));
@@ -82,15 +88,46 @@ impl<'a> Documents<'a> {
         })
     }
 
+    #[cfg(test)]
     pub fn recover(
         &self,
         copy: &Copy,
         create: impl FnOnce(Option<String>, &str) -> Result<Rc<Doc>, String>,
     ) -> Result<RecoveredDocument, String> {
+        let original = self.open(&copy.backup.name);
+        self.apply_recovery(copy, original, create)
+    }
+
+    pub fn recover_loaded(
+        &self,
+        copy: &Copy,
+        snapshot: Result<Option<crate::store::TextSnapshot>, String>,
+        create: impl FnOnce(Option<String>, &str) -> Result<Rc<Doc>, String>,
+    ) -> Result<RecoveredDocument, String> {
+        let original = if let Some(doc) = find_by_name(self.docs, &copy.backup.name) {
+            Ok(OpenDocument::Existing(doc))
+        } else {
+            snapshot
+                .and_then(|s| s.ok_or_else(|| "o arquivo original não existe".into()))
+                .map(|s| OpenDocument::Loaded {
+                    path: copy.backup.name.clone(),
+                    text: s.text,
+                    revision: s.revision,
+                })
+        };
+        self.apply_recovery(copy, original, create)
+    }
+
+    fn apply_recovery(
+        &self,
+        copy: &Copy,
+        original: Result<OpenDocument, String>,
+        create: impl FnOnce(Option<String>, &str) -> Result<Rc<Doc>, String>,
+    ) -> Result<RecoveredDocument, String> {
         let (doc, warning) = if copy.backup.name.starts_with(UNTITLED_PREFIX) {
             (create(None, &copy.text)?, None)
         } else {
-            match self.open(&copy.backup.name) {
+            match original {
                 Ok(OpenDocument::Existing(doc)) if !doc.is_dirty() => (doc, None),
                 Ok(OpenDocument::Loaded {
                     path,
@@ -126,19 +163,23 @@ impl<'a> Documents<'a> {
     }
 
     /// A cancelled/conflicting/failed save keeps buffer contents and recovery copies.
+    #[cfg(test)]
     pub fn save(&self, doc: &Doc, new_name: Option<&str>) -> Result<SaveOutcome, String> {
         self.save_to(doc, new_name, doc.is_untitled(), None)
     }
 
+    #[cfg(test)]
     pub fn save_as(&self, doc: &Doc, name: &str) -> Result<SaveOutcome, String> {
         self.save_to(doc, Some(name), true, None)
     }
 
     /// Explicit overwrite is still conditional on the revision shown to the user.
+    #[cfg(test)]
     pub fn overwrite(&self, doc: &Doc, expected: &Expected) -> Result<SaveOutcome, String> {
         self.save_to(doc, None, false, Some(expected))
     }
 
+    #[cfg(test)]
     pub fn reload(&self, doc: &Doc) -> Result<Option<String>, String> {
         let snapshot = self
             .files
@@ -149,20 +190,20 @@ impl<'a> Documents<'a> {
         Ok(forget_recovery(doc).err())
     }
 
-    fn save_to(
+    pub fn prepare_save(
         &self,
         doc: &Doc,
         new_name: Option<&str>,
         creating: bool,
         explicit: Option<&Expected>,
-    ) -> Result<SaveOutcome, String> {
+    ) -> Result<Option<SaveRequest>, String> {
         let name = if creating {
             let Some(name) = new_name else {
-                return Ok(SaveOutcome::Cancelled);
+                return Ok(None);
             };
             let name = name.trim().trim_start_matches('/');
             if name.is_empty() {
-                return Ok(SaveOutcome::Cancelled);
+                return Ok(None);
             }
             let name = if name.contains('.') {
                 name.to_string()
@@ -189,41 +230,105 @@ impl<'a> Documents<'a> {
                     .unwrap_or(Expected::Unversioned)
             })
         };
-        let receipt = match self
-            .files
-            .write_file(self.project, &name, &doc.text(), &expected)
+        Ok(Some(SaveRequest {
+            name,
+            text: doc.text(),
+            expected,
+            creating,
+            original_name: doc.name(),
+            edit_epoch: doc.edit_epoch.get(),
+            io_epoch: doc.io_epoch.get(),
+        }))
+    }
+
+    #[cfg(test)]
+    fn save_to(
+        &self,
+        doc: &Doc,
+        new_name: Option<&str>,
+        creating: bool,
+        explicit: Option<&Expected>,
+    ) -> Result<SaveOutcome, String> {
+        let Some(request) = self.prepare_save(doc, new_name, creating, explicit)? else {
+            return Ok(SaveOutcome::Cancelled);
+        };
+        let result = request.write(self.files, self.project);
+        let mut outcome = request.complete(doc, result)?;
+        if let SaveOutcome::Saved { warning, .. } = &mut outcome
+            && !doc.is_dirty()
+            && let Err(e) = forget_recovery(doc)
         {
+            *warning = Some(
+                warning
+                    .take()
+                    .map_or_else(|| e.clone(), |w| format!("{w}\n{e}")),
+            );
+        }
+        Ok(outcome)
+    }
+}
+
+/// Immutable GTK snapshot: only these bytes and this expected storage revision
+/// may be written by the worker. Completion never acknowledges newer edits.
+#[derive(Clone)]
+pub struct SaveRequest {
+    pub name: String,
+    pub text: String,
+    pub expected: Expected,
+    pub creating: bool,
+    pub original_name: String,
+    pub edit_epoch: u64,
+    pub io_epoch: u64,
+}
+impl SaveRequest {
+    pub fn write(&self, files: &Files, project: &str) -> Result<crate::store::Saved, SaveError> {
+        files.write_file(project, &self.name, &self.text, &self.expected)
+    }
+    pub fn complete(
+        &self,
+        doc: &Doc,
+        result: Result<crate::store::Saved, SaveError>,
+    ) -> Result<SaveOutcome, String> {
+        if doc.name() != self.original_name || doc.io_epoch.get() != self.io_epoch {
+            return Err("a aba mudou de nome durante a gravação; confira o arquivo salvo".into());
+        }
+        let receipt = match result {
             Ok(receipt) => receipt,
             Err(SaveError::Conflict) => {
                 doc.buffer.set_modified(true);
-                return Ok(SaveOutcome::Conflict { name });
+                return Ok(SaveOutcome::Conflict {
+                    name: self.name.clone(),
+                });
             }
-            Err(SaveError::AlreadyExists) if !creating => {
+            Err(SaveError::AlreadyExists) if !self.creating => {
                 doc.buffer.set_modified(true);
-                return Ok(SaveOutcome::Conflict { name });
+                return Ok(SaveOutcome::Conflict {
+                    name: self.name.clone(),
+                });
             }
-            Err(e) => return Err(format!("erro ao salvar {name}: {e}")),
+            Err(e) => return Err(format!("erro ao salvar {}: {e}", self.name)),
         };
-        if creating {
+        if self.creating {
             doc.vigia.replace(None);
-            doc.set_path(name.clone());
+            doc.set_path(self.name.clone());
         }
         *doc.revision.borrow_mut() = Some(receipt.revision);
-        doc.mark_saved();
-        let warnings: Vec<_> = receipt
-            .warning
-            .into_iter()
-            .chain(forget_recovery(doc).err())
-            .collect();
+        doc.recovery.saved(self.edit_epoch);
+        if doc.edit_epoch.get() == self.edit_epoch {
+            doc.mark_saved();
+        } else {
+            doc.buffer.set_modified(true);
+        }
         Ok(SaveOutcome::Saved {
-            name,
-            warning: (!warnings.is_empty()).then(|| warnings.join("\n")),
+            name: self.name.clone(),
+            warning: receipt.warning,
         })
     }
 }
 
 /// A successful save or an explicitly accepted close owns only this tab's copies.
 /// A cleanup failure keeps its metadata available for retry.
+#[cfg(test)]
 pub fn forget_recovery(doc: &Doc) -> Result<(), String> {
     if let Some(backup) = doc.copia_recuperacao.borrow().as_ref() {
         backup.remove()?;
@@ -250,6 +355,7 @@ pub fn close_decision(doc: &Doc) -> CloseDecision {
 
 /// Resolve a UI choice before closing tabs or switching projects. Saving stops
 /// at the first failure/cancellation; only the caller performs the actual close.
+#[cfg(test)]
 pub fn resolve_unsaved(
     choice: UnsavedChoice,
     docs: &[Rc<Doc>],
@@ -286,13 +392,17 @@ mod tests {
     }
 
     fn doc(path: Option<&str>, text: &str) -> Rc<Doc> {
-        Doc::new(
+        let doc = Doc::new(
             path.map(str::to_string),
             "sem-titulo.lep".into(),
             text,
             &sourceview5::LanguageManager::new(),
             &sourceview5::SearchSettings::new(),
-        )
+        );
+        if path.is_some() {
+            *doc.revision.borrow_mut() = Some(expressa_aula_storage::revision(text.as_bytes()));
+        }
+        doc
     }
 
     #[test]

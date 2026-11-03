@@ -27,7 +27,7 @@ pub fn notify(ui: &UiRc) {
     }
     let (identity, context) = {
         let u = ui.borrow();
-        let Ok(identity) = u.files.identity(&u.project) else {
+        let Ok(identity) = u.files.known_identity(&u.project) else {
             return;
         };
         (identity, crate::sessao::synchronization_context(ui))
@@ -50,7 +50,7 @@ pub fn notify(ui: &UiRc) {
         },
         move |ui, pending| {
             let u = ui.borrow();
-            if u.files.identity(&u.project).ok().as_ref() != Some(&expected) {
+            if u.files.known_identity(&u.project).ok().as_ref() != Some(&expected) {
                 return;
             }
             if pending {
@@ -86,7 +86,7 @@ pub fn show(ui: &UiRc) {
     let origin = {
         let u = ui.borrow();
         u.files
-            .identity(&u.project)
+            .known_identity(&u.project)
             .map(|i| i.label())
             .unwrap_or_default()
     };
@@ -179,7 +179,7 @@ fn refresh_summary(ui: &UiRc, labels: (gtk::Label, gtk::Label, gtk::Label)) {
         if !u.files.is_remote() {
             return;
         }
-        let Ok(identity) = u.files.identity(&u.project) else {
+        let Ok(identity) = u.files.known_identity(&u.project) else {
             return;
         };
         (identity, crate::sessao::synchronization_context(ui))
@@ -210,7 +210,8 @@ fn refresh_summary(ui: &UiRc, labels: (gtk::Label, gtk::Label, gtk::Label)) {
         },
         move |ui, (files, edits, errors)| {
             let u = ui.borrow();
-            if !u.files.is_remote() || u.files.identity(&u.project).ok().as_ref() != Some(&expected)
+            if !u.files.is_remote()
+                || u.files.known_identity(&u.project).ok().as_ref() != Some(&expected)
             {
                 return;
             }

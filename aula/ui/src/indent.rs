@@ -272,7 +272,7 @@ pub fn backtab(buffer: &SourceBuffer) {
 
 /// Block delimiters in `text` (comments and strings skipped), as
 /// (opens, byte start, byte end).
-fn block_tokens(text: &str) -> Vec<(bool, usize, usize)> {
+pub(crate) fn block_tokens(text: &str) -> Vec<(bool, usize, usize)> {
     let code = crate::lang::blank_comments_and_strings(text);
     let mut out = Vec::new();
     let mut i = 0;
@@ -307,6 +307,7 @@ fn block_tokens(text: &str) -> Vec<(bool, usize, usize)> {
 /// of the opener (`inicio` / `{`) and its closer (`fim` / `}`). Prefers the
 /// token under the cursor, then a closer starting the line, then the last
 /// opener of the line whose block continues below.
+#[cfg(test)]
 pub fn block_pair(text: &str, cursor: usize) -> Option<((usize, usize), (usize, usize))> {
     let tokens = block_tokens(text);
     let mut pair = vec![None; tokens.len()];
