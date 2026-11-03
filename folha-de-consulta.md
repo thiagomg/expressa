@@ -1,6 +1,6 @@
 # Expressa — folha de consulta
 
-Arquivos `.lep`. Palavras em português. Índices começam em **1**.
+Arquivos `.lep`. Palavras em português. Índices começam em **0**.
 
 Tutorial: `tutorial/basico.md`. Avançado: `tutorial/avancado.md`.  
 Manual: `docs/manual.md`. Spec: `especificacao-linguagem.md`. Fichas: `docs/nativas/*.lep`.
@@ -125,8 +125,8 @@ Sem `se_falhar`, um erro encerra o programa.
 soma = funcao(x, y) { x + y }
 escreva(soma(10, 5))           // 15
 
-avaliar("2 + 3 * 4")           // 14  (usa x, funções… do escopo atual)
-escreva(avaliar(leia("> ")) se_falhar "conta inválida")
+avalie("2 + 3 * 4")           // 14  (usa x, funções… do escopo atual)
+escreva(avalie(leia("> ")) se_falhar "conta inválida")
 catalogo()                     // nativas, funcao do programa, módulos
 catalogo(c)  catalogo("matriz")  // mapa, módulo ou função
 ajuda("escreva")  ajuda("matriz::zeros")
@@ -146,10 +146,10 @@ busca = funcao(xs, alvo) {
 
 ```text
 xs = [10, 20, 30, 40]
-xs[1]                          // 10
-xs[2..3]                       // [20, 30]
-xs[2..]                        // até o fim
-"b"[1..3]                      // "b" (não falha)
+xs[0]                          // 10
+xs[1..2]                       // [20, 30]
+xs[1..]                        // até o fim
+"b"[0..2]                      // "b" (não falha)
 xs + [50]
 xs += [50]                     // xs = xs + [50]
 xs = xs.remova(2)               // sem o índice 2
@@ -157,12 +157,12 @@ xs = xs.remova(2, 4)            // faixa inclusiva
 tamanho(xs)  primeiro(xs)  ultimo(xs)
 
 t = "  Maria Silva  "
-t[1]  t[1..5]
-t[2] = "x"                     // um caractere; reatribui t
+t[0]  t[0..4]
+t[1] = "x"                     // um caractere; reatribui t
 tamanho(t)  maiuscula(t)  minuscula(t)  limpe(t)  sem_acento(t)
 substitua(t, "Maria", "Ana")
-procurar("onde", "n")          // 2;  0 se não achar
-procurar([10, 20, 30], 20)     // 2
+procure("onde", "n")          // 1;  -1 se não achar
+procure([10, 20, 30], 20)     // 1
 separe("a,b,c", ",")           // ["a", "b", "c"]
 junte(["a", "b"], " - ")
 formate("{:<8} {:>5}", "Ana", 10)  // colunas: < esquerda  > direita  ^ centro
@@ -184,8 +184,10 @@ s = s.remova(:bia)
 
 importe "matriz"
 A = matriz([[1, 2, 3], [4, 5, 6]])
-A[1, 2]                        // 2
-A[1]                           // linha → lista
+A[0, 1]                        // 2
+A[0]                           // linha → lista
+A.xy(x, y)                     // A[y, x]; base zero
+A.xy(x, y, valor)        // altera A[y, x]; devolve A
 A + B    3 * A    A * B
 transposta(A)  det(A)  identidade(3)
 zeros(2, 5)  uns(3)  cheia(2, 3, 7)
@@ -201,14 +203,14 @@ tamanho(A)                     // também linhas
 escreva("Média:", 7.5)         // stdout
 escreva_erro("falhou")         // stderr (não entra em > arquivo)
 durma(1)                       // espera 1 segundo  (aceita 0.5)
-sair()                         // encerra, código 0
-sair(1)                        // encerra com falha (não pega se_falhar)
+saia()                         // encerra, código 0
+saia(1)                        // encerra com falha (não pega se_falhar)
 
 nome = leia("Seu nome: ")      // uma linha, sem o Enter
 idade = numero(leia("Idade: ")) se_falhar 0    // também número()
 linhas = leia_linhas()         // resto da entrada → lista; vazio = []
 
-busca = argumentos[1]          // depois do .lep; REPL → []
+busca = argumentos[0]          // depois do .lep; REPL → []
 tipo(10)                       // "numero"  (texto, bool, lista, mapa, …)
 tipos()                        // lista desses nomes
 
@@ -218,7 +220,7 @@ casa()                         // cursor no canto, sem apagar (animações)
 quadro(tela)                   // casa + texto; apaga resto da linha e embaixo
 nova_linha                     // "\n" no Unix, "\r\n" no Windows
 colunas()  linhas()            // tamanho em caracteres (80×24 sem TTY)
-b = bloco(1, 28)               // mapa {:linha, :coluna}
+b = bloco(0, 27)               // mapa {:linha, :coluna}
 b.escreva_em("Q W E R T")      // uma linha na coluna; devolve b
 eh_terminal()                  // teclado?  também é_terminal()
 "HP".pinte(:verde)             // letra; :branco, :vermelho = letra e fundo
@@ -264,7 +266,7 @@ cart = importe "cartesiano"
 c = cart::documento()
 g = cart::grafico()
 g.cart::eixos(-2 * pi, 2 * pi, -1.5, 1.5)
-g.cart::plotar(função(x) { seno(x) }, :azul)
+g.cart::plote(função(x) { seno(x) }, :azul)
 c.cart::adicione(g)
 c.cart::mostre()                 // mesma janela a cada mostre; não espera
 ```
@@ -324,13 +326,13 @@ Núcleo (sempre no escopo):
 
 | | |
 |---|---|
-| `escreva` `escreva_erro` `sair` `durma` | imprimir / encerrar / esperar |
+| `escreva` `escreva_erro` `saia` `durma` | imprimir / encerrar / esperar |
 | `leia` `leia_linhas` | teclado / pipe |
 | `argumentos` | lista (não é função) |
-| `numero` `número` `formato` `avaliar` `catalogo` `ajuda` | número / executar texto / listar / ficha |
+| `numero` `número` `formato` `avalie` `catalogo` `ajuda` | número / executar texto / listar / ficha |
 | `mapa` `conjunto` | construtores |
 | `tamanho` `primeiro` `ultimo` | coleção |
-| `maiuscula` `minuscula` `sem_acento` `remova` `substitua` `procurar` `separe` `junte` `limpe` `formate` | texto / lista / mapa / conjunto |
+| `maiuscula` `minuscula` `sem_acento` `remova` `substitua` `procure` `separe` `junte` `limpe` `formate` | texto / lista / mapa / conjunto |
 | `ordene` `comeca_com` `termina_com` | ordem; começo e fim de texto |
 | `ambiente` `agora` `formate_data` | variável de ambiente; data e hora |
 
@@ -340,11 +342,11 @@ Módulos (`importe "…"`):
 |---|---|
 | `tela` | `cls` `casa` `eh_terminal` `pinte` `fundo` `negrito` `colunas` `linhas` `quadro` `bloco` `escreva_em` `nova_linha` |
 | `mat` | `pi` `raiz` `aleatorio` `semente` `seno` `cosseno` `tangente` `arcoseno` `arcocosseno` `arcotangente` `arcotangente2` `radianos` `graus` `exp` `log` `log10` `potencia` `piso` `teto` `arredonde` |
-| `matriz` | `matriz` `transposta` `det` `identidade` `zeros` `uns` `cheia` `nlinhas` `ncolunas` |
+| `matriz` | `matriz` `transposta` `det` `identidade` `zeros` `uns` `cheia` `nlinhas` `ncolunas` `xy` |
 | `arquivo` | `leia_arquivo` `salve_arquivo` `adicione_arquivo` `leia_csv` `salve_csv` `existe` `eh_pasta` `liste` `crie_pasta` `apague_arquivo` `apague_pasta` `mova` `copie` `junte_caminho` `nome_do_arquivo` `pasta_de` `extensao` `pasta_atual` |
-| `cartesiano` | `documento` `grafico` `eixos` `plotar` `adicione` `mostre` |
+| `cartesiano` | `documento` `grafico` `eixos` `plote` `adicione` `mostre` |
 | `tela_grafica` | `nova` `cor` `fundo` `linha` `circulo` `ponto` `retangulo` `texto` `imagem` `apague` `pixel` `como_imagem` `salve` `mostre` `evento` |
-| `imagem` | `carregue` `salve` `rotacione` `escala` `largura` `altura` |
+| `imagem` | `carregue` `salve` `rotacione` `redimensione` `largura` `altura` |
 | `processo` | `execute` `linhas_de` (só na linha de comando) |
 
 Nativas não podem ser reatribuídas (`escreva = 1` é erro).
@@ -383,7 +385,7 @@ vars (v)   pilha (k)   ponto N   terminar (q)
 
 ```text
 #!/usr/bin/env expressa
-busca = argumentos[1] se_falhar ""
+busca = argumentos[0] se_falhar ""
 para linha em leia_linhas() {
     se linha contem busca { escreva(linha) }
 }

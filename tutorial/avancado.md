@@ -52,10 +52,10 @@ Arquivo: `exemplos/10_texto.lep`
 
 ```text
 s = "Expressa"
-escreva(s[1])          // E
-escreva(s[1..4])       // Expr
+escreva(s[0])          // E
+escreva(s[0..3])       // Expr
 escreva(s contem "press")
-escreva(procurar(s, "s"))   // 6;  0 se não achar
+escreva(procure(s, "s"))   // 5;  -1 se não achar
 ```
 
 `separe` gera uma lista baseado num texto; `junte` gera um texto baseado numa lista.
@@ -358,7 +358,7 @@ cart = importe "cartesiano"
 c = cart::documento()
 g = cart::grafico()
 g.cart::eixos(-2 * pi, 2 * pi, -1.5, 1.5)
-g.cart::plotar(função(x) { seno(x) }, :azul)
+g.cart::plote(função(x) { seno(x) }, :azul)
 c.cart::adicione(g)
 c.cart::mostre()
 ```
@@ -373,7 +373,7 @@ Na Aula o gráfico aparece no painel; **Destacar** abre janela à parte. No term
 
 Arquivo: `exemplos/18_argumentos.lep`
 
-O que vem depois do `.lep` entra na lista `argumentos`. O primeiro é `argumentos[1]`.
+O que vem depois do `.lep` entra na lista `argumentos`. O primeiro é `argumentos[0]`.
 
 ```text
 expressa tutorial/exemplos/18_argumentos.lep Ana 16
@@ -393,13 +393,15 @@ Exemplo avançado - filtrar linhas: `../exemplos/unix/grep.lep`.
 
 Estrutura bidimensional que só aceita números
 
-`importe "matriz"`. `A[1, 2]` é linha 1, coluna 2.
+`importe "matriz"`. `A[0, 1]` é linha 0, coluna 1.
 
 ```text
 importe "matriz"
 
 A = matriz([[1, 2, 3], [4, 5, 6]])
-escreva(A[1, 2])        // 2
+escreva(A[0, 1])        // 2
+escreva(A.xy(1, 0))     // 2: x é coluna, y é linha
+A.xy(1, 0, 9)    // altera A[0, 1]
 escreva(nlinhas(A))     // 2
 escreva(ncolunas(A))    // 3
 escreva(identidade(3))

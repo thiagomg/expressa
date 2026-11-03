@@ -4,12 +4,12 @@ importe "mat"
 /// Procura um texto dentro de outro texto, mas sem levar em conta acentos
 /// Ex: Ação == Acao para esta função
 procura_sem_acento = função(palavra, letra) {
-    sem_acento(palavra).procurar(sem_acento(letra))
+    sem_acento(palavra).procure(sem_acento(letra))
 }
 
 /// Boneco: 0 erros (só a forca) até 6 (enforcado)
 figura = função(erros) {
-    // Cada item da lista é um desenho. erros 0 usa o índice 1
+    // Cada item da lista é um desenho. erros 0 usa o índice 0
     passos = [
         [
             "  +---+",
@@ -75,14 +75,14 @@ figura = função(erros) {
             "=======",
         ],
     ]
-    junte(passos[erros + 1], nova_linha)
+    junte(passos[erros], nova_linha)
 }
 
 /// Letras certas viram visíveis; o resto fica _
 mostra_palavra = função(palavra, acertos) {
     s = ""
-    para i de 1 até palavra.tamanho() {
-        se i > 1 {
+    para i de 0 até palavra.tamanho() - 1 {
+        se i > 0 {
             s += " "
         }
         letra = palavra[i]
@@ -98,7 +98,7 @@ mostra_palavra = função(palavra, acertos) {
 
 /// Verdadeiro se cada letra da palavra já foi acertada (C vale Ç)
 ganhou = função(palavra, acertos) {
-    para i de 1 até palavra.tamanho() {
+    para i de 0 até palavra.tamanho() - 1 {
         se nao (acertos contem sem_acento(palavra[i])) {
             retorne falso
         }
@@ -126,8 +126,8 @@ desenha_teclado = função(linha, coluna, cores_teclado) {
     // Desenha uma linha do teclado
     linha_teclado = função(letras, recuo, cores_teclado) {
         s = recuo
-        para i de 1 até letras.tamanho() {
-            se i > 1 {
+        para i de 0 até letras.tamanho() - 1 {
+            se i > 0 {
                 s += " "
             }
             s += pinta_letra(letras[i], cores_teclado)
@@ -141,7 +141,7 @@ desenha_teclado = função(linha, coluna, cores_teclado) {
     // Ao inves de começar na coluna da esquerda, começa na
     // linha e coluna definidas no bloco
     b = bloco(linha, coluna)
-    para i de 1 até teclas.tamanho() {
+    para i de 0 até teclas.tamanho() - 1 {
         b.escreva_em(linha_teclado(teclas[i], recuos[i], cores_teclado))
     }
 }
@@ -155,19 +155,19 @@ desenha = função(palavra, acertos, erros, max_erros, cores_teclado) {
     quadro(tela)
 
     // Calcula posição do teclado
-    coluna_tec = 12
-    linha_tec = 2
+    coluna_tec = 11
+    linha_tec = 1
     se colunas() < coluna_tec + 20 {
-        linha_tec = 11
-        coluna_tec = 2
+        linha_tec = 10
+        coluna_tec = 1
     }
     desenha_teclado(linha_tec, coluna_tec, cores_teclado)
 
-    linha_prompt = 11
+    linha_prompt = 10
     se linha_tec + 3 > linha_prompt {
         linha_prompt = linha_tec + 3
     }
-    bloco(linha_prompt, 1).escreva_em("")
+    bloco(linha_prompt, 0).escreva_em("")
 }
 
 /// Uma letra A–Z (Ç conta como C)
@@ -175,7 +175,7 @@ e_letra = função(t) {
     se t.tamanho() != 1 {
         retorne falso
     }
-    "ABCDEFGHIJKLMNOPQRSTUVWXYZ".procurar(sem_acento(t)) >= 1
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZ".procure(sem_acento(t)) >= 0
 }
 
 /// Lê uma letra do usuário
@@ -203,7 +203,7 @@ inicial = função(palavra_secreta) {
         chute = nova_letra()
         se chute.tamanho() == 0 {
             escreva("Obrigado por jogar. Tchau!")
-            sair(0)
+            saia(0)
         }
 
         // Guardamos sem acento para C e Ç (e á/ã) serem a mesma tentativa
@@ -213,7 +213,7 @@ inicial = função(palavra_secreta) {
             continue
         }
 
-        se procura_sem_acento(palavra_secreta, letra) >= 1 {
+        se procura_sem_acento(palavra_secreta, letra) >= 0 {
             acertos += letra
             cores_teclado[letra] = :verde
         } senão {
@@ -246,10 +246,10 @@ palavras = [
     "CORAÇÃO", "ALUNO", "TERMINAL",
 ]
 
-palavra = se argumentos.tamanho() >= 1 {
-    argumentos[1]
+palavra = se argumentos.tamanho() > 0 {
+    argumentos[0]
 } senão {
-    palavras[aleatorio(1, palavras.tamanho())]
+    palavras[aleatorio(0, palavras.tamanho() - 1)]
 }
 
 inicial(palavra)

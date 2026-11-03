@@ -41,7 +41,10 @@ pub use nativas::{
 };
 pub use numero::{Numero, NumeroAritmetica, default_numero_aritmetica};
 pub use pilha::PROFUNDIDADE_MAXIMA;
-pub use repl::run_repl;
+pub use repl::{
+    CanalRepl, ConteudoRepl, EventoRepl, FimRepl, FluxoRepl, IdAvaliacao, IdSessao,
+    REPL_MAX_CODIGO, TextoRepl, run_repl,
+};
 pub use value::{NumeroLocale, Value, default_numero_locale};
 pub use viewer::{run_live_viewer, run_viewer};
 

@@ -17,13 +17,13 @@ cabeca = primeiro(dados)
 escreva("colunas: " + junte(cabeca, " | "))
 escreva("pessoas: " + (tamanho(dados) - 1))
 
-i = 2
+i = 1
 repita tamanho(dados) - 1 vezes
 inicio
     linha = dados[i]
-    nome = linha[1]
-    cidade = linha[2]
-    idade = linha[3]
+    nome = linha[0]
+    cidade = linha[1]
+    idade = linha[2]
     escreva(nome + " mora em " + cidade + " (" + idade + " anos)")
     i = i + 1
 fim
@@ -31,13 +31,13 @@ fim
 escreva("---")
 procura = "Carla"
 achou = falso
-i = 2
+i = 1
 repita tamanho(dados) - 1 vezes
 inicio
-    se dados[i][1] == procura
+    se dados[i][0] == procura
     inicio
         achou = verdadeiro
-        escreva("encontrei " + procura + " em " + dados[i][2])
+        escreva("encontrei " + procura + " em " + dados[i][1])
     fim
     i = i + 1
 fim

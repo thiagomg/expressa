@@ -8,7 +8,7 @@ use rustyline::error::ReadlineError;
 
 use crate::parser::{needs_more_input, parse};
 
-use super::debug::NoopHook;
+use super::debug::{DebugHook, NoopHook};
 use super::env::{Env, FrameKind};
 use super::error::{EvalError, RuntimeError};
 use super::eval::{LineInput, Vm};
@@ -36,10 +36,19 @@ impl<'a> ReplSession<'a> {
         out: &'a mut dyn Write,
         err: &'a mut dyn Write,
     ) -> Self {
+        Self::with_hook(input, out, err, Box::new(NoopHook))
+    }
+
+    fn with_hook(
+        input: &'a mut dyn LineInput,
+        out: &'a mut dyn Write,
+        err: &'a mut dyn Write,
+        hook: Box<dyn DebugHook>,
+    ) -> Self {
         let mut vm = Vm::new(
             "<repl>",
             "",
-            Box::new(NoopHook),
+            hook,
             input,
             out,
             err,
@@ -96,6 +105,12 @@ impl<'a> ReplSession<'a> {
         }
     }
 }
+
+mod canal;
+pub use canal::{
+    CanalRepl, ConteudoRepl, EventoRepl, FimRepl, FluxoRepl, IdAvaliacao, IdSessao,
+    REPL_MAX_CODIGO, TextoRepl,
+};
 
 struct ConsoleInput;
 
@@ -372,7 +387,7 @@ fn print_help_geral() {
          formato(\"pt\") / en     texto dos números (1.000,5 / 1,000.5)\n  \
          formato(\"decimal\") / float  aritmética (padrão decimal)\n  \
          sair                   encerra o REPL (também Ctrl+D)\n  \
-         sair() / sair(1)       nativa: encerra o processo\n  \
+         saia() / saia(1)       nativa: encerra o processo\n  \
          cls                    comando do REPL: limpa a tela\n  \
          importe \"tela\"         cls() / casa() / quadro() / nova_linha\n  \
          ↑ ↓                    comandos anteriores"
@@ -508,7 +523,7 @@ fn print_help_linguagem() {
          enquanto cond {{ … }}\n  \
          repita n vezes {{ … }}\n  \
          pare / continue         sai do laço / próxima volta\n  \
-         argumentos[1]           primeiro argumento após o .lep\n  \
+         argumentos[0]           primeiro argumento após o .lep\n  \
          funcao(a, b) {{ … }}            último valor é o resultado\n  \
          expr se_falhar outro            captura erro (divisão, arquivo, índice)\n  \
          :nome                           o texto \"nome\" (chave de mapa)\n  \
@@ -517,15 +532,15 @@ fn print_help_linguagem() {
          importe \"matriz\"              matriz([[1, 2], [3, 4]])\n  \
          importe \"arquivo\" / \"tela\" / \"mat\"\n  \
          seno(radianos(30))              módulo mat; pi é valor\n  \
-         avaliar(\"2 + 3 * 4\")          executa o texto no escopo atual\n  \
+         avalie(\"2 + 3 * 4\")          executa o texto no escopo atual\n  \
          \"HP\".pinte(:verde)            cor no terminal (módulo tela)\n  \
-         lista[1]  t[2] = \"x\"  texto[1..3]  t[2..]   fatia corta no fim; t[2] fora ainda é erro\n  \
+         lista[0]  t[1] = \"x\"  texto[0..2]  t[1..]   fatia corta no fim; t[1] fora ainda é erro\n  \
          pessoa:nome                     chave de mapa (pessoa[\"nome\"])\n  \
          mat::soma(1, 2)                 nome em um módulo\n  \
          xs.tamanho()                    igual a tamanho(xs)\n  \
          i += 1  xs += [x]  nome += \" a\"\n  \
          xs.remova(2)  t.remova(1, 3)  m.remova(\"k\")\n  \
-         procurar(\"onde\", \"n\")       2; 0 se não achar\n  \
+         procure(\"onde\", \"n\")       1; -1 se não achar\n  \
          e  ou  nao  contem\n  \
          #!/usr/bin/env expressa primeira linha (arquivo executável)"
     );

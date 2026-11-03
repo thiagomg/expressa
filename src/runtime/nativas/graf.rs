@@ -1,4 +1,3 @@
-use std::cell::RefCell;
 use std::rc::Rc;
 use std::time::{Duration, Instant};
 
@@ -9,7 +8,7 @@ use crate::runtime::eval::Vm;
 use crate::runtime::graf::{ALTURA_MAX, LARGURA_MAX, OpGraf, TelaGrafica, cor_graf_conhecida};
 use crate::runtime::graf_host::{EventoGraf, GrafHost};
 use crate::runtime::imagem::{self, Imagem};
-use crate::runtime::value::{MapKey, Value};
+use crate::runtime::value::{ListaRc, MapKey, MapaRc, Value};
 
 impl Vm<'_, '_> {
     pub(crate) fn bi_graf_nova(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
@@ -422,11 +421,7 @@ pub(crate) fn is_graf(v: &Value) -> bool {
     tem_chave(xs, "largura") && tem_chave(xs, "altura") && tem_chave(xs, "ops")
 }
 
-fn expect_graf(
-    v: &Value,
-    span: Span,
-    vm: &Vm<'_, '_>,
-) -> Result<Rc<RefCell<Vec<(MapKey, Value)>>>, EvalError> {
+fn expect_graf(v: &Value, span: Span, vm: &Vm<'_, '_>) -> Result<MapaRc, EvalError> {
     match v {
         Value::Mapa(xs) if is_graf(v) => Ok(Rc::clone(xs)),
         Value::Mapa(_) => Err(vm.err("não é uma tela gráfica (tela_grafica::nova())", span)),
@@ -553,25 +548,22 @@ fn check_cor(cor: &str, span: Span, vm: &Vm<'_, '_>) -> Result<(), EvalError> {
     }
 }
 
-fn pen(mapa: &Rc<RefCell<Vec<(MapKey, Value)>>>) -> String {
+fn pen(mapa: &MapaRc) -> String {
     get_texto(mapa, "cor").unwrap_or_else(|| "preto".into())
 }
 
-fn push_op(mapa: &Rc<RefCell<Vec<(MapKey, Value)>>>, op: Value) {
+fn push_op(mapa: &MapaRc, op: Value) {
     if let Some(ops) = get_lista(mapa, "ops") {
         ops.borrow_mut().push(op);
     }
 }
 
-fn tem_chave(mapa: &Rc<RefCell<Vec<(MapKey, Value)>>>, chave: &str) -> bool {
+fn tem_chave(mapa: &MapaRc, chave: &str) -> bool {
     let k = MapKey::Texto(chave.into());
     mapa.borrow().iter().any(|(kk, _)| *kk == k)
 }
 
-fn get_lista(
-    mapa: &Rc<RefCell<Vec<(MapKey, Value)>>>,
-    chave: &str,
-) -> Option<Rc<RefCell<Vec<Value>>>> {
+fn get_lista(mapa: &MapaRc, chave: &str) -> Option<ListaRc> {
     let k = MapKey::Texto(chave.into());
     match mapa
         .borrow()
@@ -607,7 +599,7 @@ fn figura_de(v: &Value, span: Span, vm: &Vm<'_, '_>) -> Result<Imagem, EvalError
     }
 }
 
-fn get_imagem(mapa: &Rc<RefCell<Vec<(MapKey, Value)>>>, chave: &str) -> Option<Imagem> {
+fn get_imagem(mapa: &MapaRc, chave: &str) -> Option<Imagem> {
     let k = MapKey::Texto(chave.into());
     match mapa
         .borrow()
@@ -620,7 +612,7 @@ fn get_imagem(mapa: &Rc<RefCell<Vec<(MapKey, Value)>>>, chave: &str) -> Option<I
     }
 }
 
-fn get_texto(mapa: &Rc<RefCell<Vec<(MapKey, Value)>>>, chave: &str) -> Option<String> {
+fn get_texto(mapa: &MapaRc, chave: &str) -> Option<String> {
     let k = MapKey::Texto(chave.into());
     match mapa
         .borrow()
@@ -633,7 +625,7 @@ fn get_texto(mapa: &Rc<RefCell<Vec<(MapKey, Value)>>>, chave: &str) -> Option<St
     }
 }
 
-fn get_u32(mapa: &Rc<RefCell<Vec<(MapKey, Value)>>>, chave: &str) -> Option<u32> {
+fn get_u32(mapa: &MapaRc, chave: &str) -> Option<u32> {
     let k = MapKey::Texto(chave.into());
     match mapa
         .borrow()
@@ -653,7 +645,7 @@ fn get_u32(mapa: &Rc<RefCell<Vec<(MapKey, Value)>>>, chave: &str) -> Option<u32>
     }
 }
 
-fn get_f64(mapa: &Rc<RefCell<Vec<(MapKey, Value)>>>, chave: &str) -> Option<f64> {
+fn get_f64(mapa: &MapaRc, chave: &str) -> Option<f64> {
     let k = MapKey::Texto(chave.into());
     match mapa
         .borrow()
@@ -669,7 +661,7 @@ fn get_f64(mapa: &Rc<RefCell<Vec<(MapKey, Value)>>>, chave: &str) -> Option<f64>
     }
 }
 
-fn get_i32(mapa: &Rc<RefCell<Vec<(MapKey, Value)>>>, chave: &str) -> Option<i32> {
+fn get_i32(mapa: &MapaRc, chave: &str) -> Option<i32> {
     let k = MapKey::Texto(chave.into());
     match mapa
         .borrow()

@@ -12,7 +12,7 @@ Documentação para quem **usa** a linguagem. Exemplos curtos, uma função de c
 
 Na Aula, **F1** (ou `ajuda("escreva")`) mostra a mesma ficha que está em `docs/nativas/`. O REPL: `ajuda escreva`.
 
-Arquivos de programa: `.lep`. Índices começam em **1**.
+Arquivos de programa: `.lep`. Índices começam em **0**. O último índice é `tamanho - 1`; índices negativos são erros. Fatias mantêm o fim inclusivo: `[0..2]` contém três itens. Veja a [migração para base zero](migracao-base-zero.md).
 
 ---
 
@@ -21,11 +21,11 @@ Arquivos de programa: `.lep`. Índices começam em **1**.
 ```text
 expressa                 REPL
 expressa prog.lep        executa o arquivo
-expressa prog.lep Ana    argumentos[1] é "Ana"
+expressa prog.lep Ana    argumentos[0] é "Ana"
 expressa debug prog.lep  depurador
 ```
 
-Na Aula: **Executar** (F5). `leia` responde na saída. Caixa **argumentos** = `argumentos[1]`….
+Na Aula: **Executar** (F5). `leia` responde na saída. Caixa **argumentos** = `argumentos[0]`….
 
 Shebang: `#!/usr/bin/env expressa` na primeira linha, `chmod +x prog.lep`.
 
@@ -38,7 +38,7 @@ Shebang: `#!/usr/bin/env expressa` na primeira linha, `chmod +x prog.lep`.
 | número | `10` `3.14` `-8` | no código, ponto; valor decimal exato (`0.1+0.2` é `0.3`) |
 | texto | `"olá"` | |
 | bool | `verdadeiro` `falso` | |
-| lista | `[1, 2, 3]` | `xs[1]` é o primeiro |
+| lista | `[1, 2, 3]` | `xs[0]` é o primeiro |
 | par | `:nome -> "Ana"` | `p:chave` `p:valor` |
 | mapa | `mapa([:nome -> "Ana"])` | `pessoa:nome` |
 | conjunto | `conjunto([:ana, 1])` | valores únicos |
@@ -164,7 +164,7 @@ valor = 10 / 0 se_falhar 0
 linhas = leia_arquivo("x.txt") se_falhar []
 ```
 
-`sair(1)` encerra de propósito e **não** é capturado por `se_falhar`.
+`saia(1)` encerra de propósito e **não** é capturado por `se_falhar`.
 
 ---
 
@@ -189,12 +189,12 @@ Como `escreva`, na saída de erro (stderr). Não entra em `> arquivo`.
 escreva_erro("nome vazio")
 ```
 
-### `sair()` / `sair(codigo)`
+### `saia()` / `saia(codigo)`
 
-Encerra. Sem argumento, código 0. Nada depois da chamada executa. No REPL, a linha `sair` (sem `()`) sai do interpretador; `sair()` encerra o processo.
+Encerra. Sem argumento, código 0. Nada depois da chamada executa. No REPL do terminal, a linha `sair` (sem `()`) sai do interpretador; `saia()` encerra o processo. No painel REPL da Aula, `saia()` encerra apenas a sessão; **Reiniciar** começa outra.
 
 ```text
-se nome == "" { sair(1) }
+se nome == "" { saia(1) }
 ```
 
 ### `durma(segundos)`
@@ -223,10 +223,10 @@ para linha em leia_linhas() { escreva(linha) }
 
 ### `argumentos`
 
-Lista, não função. O que veio depois do `.lep`. `argumentos[1]` é o primeiro. No REPL: `[]`. Não dá para fazer `argumentos = …`.
+Lista, não função. O que veio depois do `.lep`. `argumentos[0]` é o primeiro. No REPL: `[]`. Não dá para fazer `argumentos = …`.
 
 ```text
-escreva(argumentos[1])
+escreva(argumentos[0])
 ```
 
 ### `tipo(valor)`
@@ -272,7 +272,7 @@ formato("float")
 
 ### `formate(modelo, valor, …)`
 
-`{}` vira o valor. `{:<n}` esquerda, `{:>n}` direita, `{:^n}` centro. `{1}` é o primeiro valor. `{{` `}}` escrevem `{` `}`.
+`{}` vira o valor. `{:<n}` esquerda, `{:>n}` direita, `{:^n}` centro. `{0}` é o primeiro valor. `{{` `}}` escrevem `{` `}`.
 
 ```text
 formate("{:<8} {:>5}", "Ana", 10)
@@ -280,12 +280,12 @@ formate("{:<8} {:>5}", "Ana", 10)
 
 Um mapa pode definir `:_como_texto` (função de um argumento que devolve texto). `formate`, `escreva` e o `+` com texto chamam essa função. Sem o campo, o mapa continua `mapa{…}`. A função é do aluno (`como_texto = função(fr) { … }`; `fr:_como_texto = como_texto`); não é nativa.
 
-### `avaliar(texto)`
+### `avalie(texto)`
 
 executa o texto como Expressa no escopo atual e devolve o último valor. Erro de sintaxe ou de execução vai em `se_falhar`.
 
 ```text
-avaliar("2 + 3 * 4")     // 14
+avalie("2 + 3 * 4")     // 14
 ```
 
 ### `catalogo()` / `catalogo(alvo)` / `catálogo`
@@ -336,7 +336,7 @@ tamanho("olá")    // 3
 
 ### `primeiro(lista)` / `ultimo(lista)`
 
-Índice 1 e último. Erro se a lista está vazia.
+Índice 0 e último. Erro se a lista está vazia.
 
 ```text
 primeiro([10, 20])
@@ -374,12 +374,12 @@ Troca todas as ocorrências.
 substitua("aa", "a", "b")    // "bb"
 ```
 
-### `procurar(texto, trecho)` / `procurar(lista, item)`
+### `procure(texto, trecho)` / `procure(lista, item)`
 
-Índice 1…n da primeira ocorrência; `0` se não achar. Trecho `""` é erro.
+Índice 0…n−1 da primeira ocorrência; `-1` se não achar. Trecho `""` é erro.
 
 ```text
-procurar("onde", "n")    // 2
+procure("onde", "n")    // 1
 ```
 
 ### `separe(texto, separador)`
@@ -426,13 +426,13 @@ Variável de ambiente. Não existe → erro: `ambiente("EDITOR") se_falhar "vim"
 
 ```text
 xs = [10, 20, 30, 40]
-xs[1]           // 10
-xs[2..3]        // [20, 30]
-xs[2..]         // até o fim
+xs[0]           // 10
+xs[1..2]        // [20, 30]
+xs[1..]         // até o fim
 xs + [50]
 xs += [50]
-"abc"[1..2]     // "ab"
-t[2] = "x"      // um caractere; reatribui t
+"abc"[0..1]     // "ab"
+t[1] = "x"      // um caractere; reatribui t
 ```
 
 Nativas do núcleo não podem ser reatribuídas (`escreva = 1` é erro).
@@ -490,14 +490,14 @@ tela += linha + nova_linha
 
 ### `bloco(linha, coluna)`
 
-Mapa `{:linha, :coluna}` (1-based). Não desenha.
+Mapa `{:linha, :coluna}` (base zero). Não desenha.
 
 ### `escreva_em(bloco, texto)`
 
 Uma linha na coluna do bloco; devolve o mesmo mapa (a linha anda). UFCS: `b.escreva_em("Q W E")`. Sem `\n` no texto. O que estava à esquerda na mesma linha permanece.
 
 ```text
-b = bloco(1, 28)
+b = bloco(0, 27)
 b.escreva_em("Q W E R T")
 ```
 
@@ -514,8 +514,8 @@ cart = importe "cartesiano"
 c = cart::documento()
 g = cart::grafico()
 g.cart::eixos(-2 * pi, 2 * pi, -1.5, 1.5)
-g.cart::plotar(função(x) { seno(x) }, :azul)
-g.cart::plotar(função(x) { cosseno(x) }, :vermelho)
+g.cart::plote(função(x) { seno(x) }, :azul)
+g.cart::plote(função(x) { cosseno(x) }, :vermelho)
 c.cart::adicione(g)
 c.cart::mostre()
 ```
@@ -540,7 +540,7 @@ g.tela_grafica::salve("casa.png")
 
 ## `importe "imagem"`
 
-PNG em memória: `carregue`, `salve`, `rotacione`, `escala`, `largura`, `altura`. `tipo(img)` é `"imagem"`. `tela_grafica::imagem` aceita o valor, um caminho (lido uma vez) ou outra tela gráfica.
+PNG em memória: `carregue`, `salve`, `rotacione`, `redimensione`, `largura`, `altura`. `tipo(img)` é `"imagem"`. `tela_grafica::imagem` aceita o valor, um caminho (lido uma vez) ou outra tela gráfica.
 
 ```
 img = importe "imagem"
@@ -555,13 +555,13 @@ Mapa-folha. Ainda não abre janela.
 
 ### `grafico()`
 
-Plano vazio. Depois `eixos` e `plotar`.
+Plano vazio. Depois `eixos` e `plote`.
 
 ### `eixos(grafico, xmin, xmax, ymin, ymax)`
 
-`xmin < xmax`, `ymin < ymax`. Sem isso, `plotar` é erro.
+`xmin < xmax`, `ymin < ymax`. Sem isso, `plote` é erro.
 
-### `plotar(grafico, f, cor)`
+### `plote(grafico, f, cor)`
 
 `f` recebe x e devolve y. ~400 amostras. y infinito vira um furo na linha.
 
@@ -625,11 +625,15 @@ Chão, teto, inteiro mais próximo. Empate (`n,5`) afasta de zero: `arredonde(1.
 
 ## `importe "matriz"`
 
-Só números. `A[1, 2]` é linha 1, coluna 2. `A[1]` é a linha como lista.
+Só números. `A[0, 1]` é linha 0, coluna 1. `A[0]` é a linha como lista.
+
+Para gráficos, `A.xy(x, y)` lê `A[y, x]` e `A.xy(x, y, valor)` altera essa célula, devolvendo a mesma matriz para encadear chamadas. Ambas usam coordenadas inteiras em base zero e os mesmos limites do acesso por índices. A escrita exige um número e é visível por outras referências à matriz.
 
 ```text
 A = matriz([[1, 2, 3], [4, 5, 6]])
-A[1, 2]          // 2
+A[0, 1]          // 2
+A.xy(1, 0)       // 2: x é coluna, y é linha
+A.xy(1, 0, 9)  // altera A[0, 1]; devolve A
 transposta(A)
 det(A)           // 1×1, 2×2 ou 3×3
 identidade(3)
@@ -687,7 +691,7 @@ Se o destino é uma pasta, vai para dentro dela. `copie` só copia arquivos.
 Só montam ou leem o texto do caminho. `pasta_atual()` é a pasta do terminal; os caminhos relativos das outras funções partem da pasta do `.lep`:
 
 ```text
-entrada = junte_caminho(pasta_atual(), argumentos[1])
+entrada = junte_caminho(pasta_atual(), argumentos[0])
 ```
 
 ### `leia_csv(caminho)` / `salve_csv(caminho, dados)`
@@ -711,7 +715,7 @@ Espera terminar. Mapa `:codigo`, `:ok`, `:saida` (linhas), `:erro` (linhas). Có
 
 ```text
 filtro = funcao(linha, oque) { se linha contem oque { linha } }
-n = execute("ls", [filtro, ".txt"], ["wc", "-l"]):saida[1]
+n = execute("ls", [filtro, ".txt"], ["wc", "-l"]):saida[0]
 r = execute("git status --short")
 se nao r:ok { escreva_erro(r:erro) }
 ```
@@ -735,6 +739,14 @@ para linha em linhas_de("tail -f app.log") {
 ---
 
 ## REPL e depurador
+
+Na Aula, **Ver → REPL** abre um painel em que as variáveis permanecem entre comandos
+e a saída aparece durante a execução. **Parar** interrompe a avaliação atual;
+**Reiniciar** cancela a sessão e esquece as variáveis. **Limpar** apaga apenas a saída.
+O painel mantém até 5000 linhas e 262144 caracteres, descartando o texto mais antigo.
+Resultados longos são abreviados com um aviso. Fechar a IDE encerra a sessão.
+
+No terminal:
 
 ```text
 expressa

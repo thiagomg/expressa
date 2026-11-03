@@ -1,7 +1,7 @@
 use expressa_aula_proto::turma_client::TurmaClient;
 use expressa_aula_proto::{
-    DeleteFileRequest, ListFilesRequest, MkdirRequest, ReadFileRequest, RenameRequest, TreeEntry,
-    WriteFileRequest,
+    CreateProjectRequest, DeleteFileRequest, ListFilesRequest, ListProjectsRequest, MkdirRequest,
+    ReadFileRequest, RenameRequest, TreeEntry, WriteFileRequest,
 };
 use std::process::Child;
 use std::sync::Mutex;
@@ -150,11 +150,17 @@ unsafe extern "system" fn on_console_ctrl(ctrl: u32) -> i32 {
 }
 
 pub struct Rpc {
+    pub endpoint: String,
     rt: tokio::runtime::Runtime,
     channel: Channel,
     /// Set only when this client started `expressa-aula-server`.
     spawned_server: Option<Child>,
 }
+
+/// Longest a single request may take. Most calls now run off the GTK thread,
+/// but the few that still block it (open, save, rename…) must not hang the
+/// window forever when the server stops answering.
+const TEMPO_POR_PEDIDO: std::time::Duration = std::time::Duration::from_secs(10);
 
 impl Rpc {
     pub fn connect(url: &str) -> Result<Self, String> {
@@ -165,19 +171,22 @@ impl Rpc {
     }
 
     fn connect_within(url: &str, limit: std::time::Duration) -> Result<Self, String> {
+        let normalized = crate::identidade::normalize_endpoint(url)?;
         let rt = tokio::runtime::Builder::new_multi_thread()
             .enable_all()
             .build()
             .map_err(|e| e.to_string())?;
         let channel = rt.block_on(async {
-            Endpoint::from_shared(url.to_string())
+            Endpoint::from_shared(normalized.clone())
                 .map_err(|e| e.to_string())?
                 .connect_timeout(limit)
+                .timeout(TEMPO_POR_PEDIDO)
                 .connect()
                 .await
                 .map_err(|e| e.to_string())
         })?;
         Ok(Self {
+            endpoint: normalized,
             rt,
             channel,
             spawned_server: None,
@@ -218,73 +227,155 @@ impl Drop for Rpc {
     }
 }
 
+/// The server writes refusals (`já existe …`, bad paths) for the user; show
+/// those as they are, and the full status for anything unexpected.
+fn mensagem(status: tonic::Status) -> String {
+    match status.code() {
+        tonic::Code::AlreadyExists | tonic::Code::InvalidArgument | tonic::Code::NotFound => {
+            status.message().to_string()
+        }
+        _ => status.to_string(),
+    }
+}
+
 impl Rpc {
-    pub fn list_tree(&self, student: &str) -> Result<Vec<TreeEntry>, String> {
+    /// The student's projects, sorted.
+    pub fn list_projects(&self, student: &str) -> Result<Vec<String>, String> {
+        let mut c = TurmaClient::new(self.channel.clone());
+        let resp = self
+            .rt
+            .block_on(c.list_projects(ListProjectsRequest {
+                student: student.to_string(),
+            }))
+            .map_err(mensagem)?;
+        Ok(resp.into_inner().projects)
+    }
+
+    /// Fails with `já existe o projeto …` when it exists.
+    pub fn create_project(&self, student: &str, project: &str) -> Result<(), String> {
+        let mut c = TurmaClient::new(self.channel.clone());
+        self.rt
+            .block_on(c.create_project(CreateProjectRequest {
+                student: student.to_string(),
+                project: project.to_string(),
+            }))
+            .map_err(mensagem)?;
+        Ok(())
+    }
+
+    pub fn list_tree(&self, student: &str, project: &str) -> Result<Vec<TreeEntry>, String> {
         let mut c = TurmaClient::new(self.channel.clone());
         let resp = self
             .rt
             .block_on(c.list_files(ListFilesRequest {
                 student: student.to_string(),
+                project: project.to_string(),
             }))
-            .map_err(|e| e.to_string())?;
+            .map_err(mensagem)?;
         Ok(resp.into_inner().entries)
     }
 
-    pub fn read_file(&self, student: &str, path: &str) -> Result<String, String> {
+    pub fn current_text(
+        &self,
+        student: &str,
+        project: &str,
+        path: &str,
+    ) -> Result<Option<crate::store::TextSnapshot>, String> {
         let mut c = TurmaClient::new(self.channel.clone());
-        let resp = self
-            .rt
-            .block_on(c.read_file(ReadFileRequest {
-                student: student.to_string(),
-                path: path.to_string(),
-            }))
-            .map_err(|e| e.to_string())?;
-        Ok(resp.into_inner().source)
+        match self.rt.block_on(c.read_file(ReadFileRequest {
+            student: student.to_string(),
+            project: project.to_string(),
+            path: path.to_string(),
+        })) {
+            Ok(response) => {
+                let response = response.into_inner();
+                Ok(Some(crate::store::TextSnapshot {
+                    text: response.source,
+                    revision: (!response.revision.is_empty()).then_some(response.revision),
+                }))
+            }
+            Err(e) if e.code() == tonic::Code::NotFound => Ok(None),
+            Err(e) => Err(mensagem(e)),
+        }
     }
 
-    pub fn write_file(&self, student: &str, path: &str, source: &str) -> Result<(), String> {
+    pub fn write_file(
+        &self,
+        student: &str,
+        project: &str,
+        path: &str,
+        source: &str,
+        expected: &expressa_aula_storage::Expected,
+    ) -> Result<expressa_aula_storage::Saved, expressa_aula_storage::SaveError> {
+        use expressa_aula_storage::{Expected, SaveError, Saved};
+        let (create_new, expected_revision) = match expected {
+            Expected::Missing => (true, String::new()),
+            Expected::Revision(revision) => (false, revision.clone()),
+            Expected::Unversioned => return Err(SaveError::Unsupported),
+        };
         let mut c = TurmaClient::new(self.channel.clone());
-        self.rt
-            .block_on(c.write_file(WriteFileRequest {
+        let response = self
+            .rt
+            .block_on(c.write_file_checked(WriteFileRequest {
                 student: student.to_string(),
+                project: project.to_string(),
                 path: path.to_string(),
                 source: source.to_string(),
+                create_new,
+                expected_revision,
             }))
-            .map_err(|e| e.to_string())?;
-        Ok(())
+            .map_err(|e| match e.code() {
+                tonic::Code::Aborted => SaveError::Conflict,
+                tonic::Code::AlreadyExists => SaveError::AlreadyExists,
+                tonic::Code::Unimplemented | tonic::Code::FailedPrecondition => {
+                    SaveError::Unsupported
+                }
+                _ => SaveError::Other(mensagem(e)),
+            })?
+            .into_inner();
+        if response.revision.is_empty() {
+            return Err(SaveError::Unsupported);
+        }
+        Ok(Saved {
+            revision: response.revision,
+            warning: (!response.warning.is_empty()).then_some(response.warning),
+        })
     }
 
-    pub fn delete_file(&self, student: &str, path: &str) -> Result<(), String> {
+    pub fn delete_file(&self, student: &str, project: &str, path: &str) -> Result<(), String> {
         let mut c = TurmaClient::new(self.channel.clone());
         self.rt
             .block_on(c.delete_file(DeleteFileRequest {
                 student: student.to_string(),
+                project: project.to_string(),
                 path: path.to_string(),
             }))
-            .map_err(|e| e.to_string())?;
+            .map_err(mensagem)?;
         Ok(())
     }
 
-    pub fn mkdir(&self, student: &str, path: &str) -> Result<(), String> {
+    pub fn mkdir(&self, student: &str, project: &str, path: &str) -> Result<(), String> {
         let mut c = TurmaClient::new(self.channel.clone());
         self.rt
             .block_on(c.mkdir(MkdirRequest {
                 student: student.to_string(),
+                project: project.to_string(),
                 path: path.to_string(),
             }))
-            .map_err(|e| e.to_string())?;
+            .map_err(mensagem)?;
         Ok(())
     }
 
-    pub fn rename(&self, student: &str, from: &str, to: &str) -> Result<(), String> {
+    pub fn rename(&self, student: &str, project: &str, from: &str, to: &str) -> Result<(), String> {
         let mut c = TurmaClient::new(self.channel.clone());
         self.rt
             .block_on(c.rename(RenameRequest {
                 student: student.to_string(),
+                project: project.to_string(),
                 from: from.to_string(),
                 to: to.to_string(),
             }))
-            .map_err(|e| e.to_string())?;
+            .map_err(mensagem)?;
         Ok(())
     }
 }

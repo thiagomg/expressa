@@ -115,7 +115,9 @@ resultado = { 10 + 5 }    // igual
 
 ## 5.1. Matrizes
 
-Retangulares, só números. Vêm do módulo `matriz`. Índices começam em 1: `A[linha, coluna]`. `A[i]` devolve a linha como lista.
+Retangulares, só números. Vêm do módulo `matriz`. Índices começam em 0: `A[linha, coluna]`. `A[i]` devolve a linha como lista.
+
+`xy(A, x, y)` (UFCS `A.xy(x, y)`) equivale a `A[y, x]`. `xy(A, x, y, valor)` altera essa mesma célula e devolve a própria matriz, permitindo encadear chamadas. São funções do módulo `matriz`: x é coluna, y é linha, ambos inteiros em base zero, com os mesmos limites e erros da indexação. O valor escrito deve ser numérico; outras referências à matriz observam a alteração.
 
 ```text
 importe "matriz"
@@ -125,7 +127,9 @@ A = matriz([
     [4, 5, 6],
 ])
 
-A[1, 2]          // 2
+A[0, 1]          // 2
+A.xy(1, 0)       // também 2: equivale a A[0, 1]
+A.xy(1, 0, 9)  // equivale a A[0, 1] = 9; devolve A
 A + B            // mesma ordem
 3 * A
 A * B            // produto de matrizes
@@ -247,36 +251,36 @@ x = se n >= 7 { "ok" } senao { "não" }     // ok
 
 ## 9. Listas
 
-- Indexação começa em **1**
+- Indexação começa em **0**
 - Criação: `[1, 2, 3]`
 
 ```text
 numeros = [10, 20, 30, 40]
 
 tamanho(numeros)               // 4
-numeros[1]                     // 10
+numeros[0]                     // 10
 numeros + [50]                 // [10, 20, 30, 40, 50]
 numeros += [50]                // igual a numeros = numeros + [50]
-numeros.remova(2)              // sem o 2º item (cópia)
+numeros.remova(1)              // sem o 2º item (cópia)
 numeros.remova(2, 3)           // sem os índices 2 e 3
 numeros contem 20              // verdadeiro
 primeiro(numeros)              // 10
 ultimo(numeros)                // 40
-numeros[2..3]                  // [20, 30]
-numeros[2..]                   // do 2 até o fim
-"b"[1..3]                      // "b" (corta no tamanho)
+numeros[1..2]                  // [20, 30]
+numeros[1..]                   // do índice 1 até o fim
+"b"[0..2]                      // "b" (corta no tamanho)
 ordene([3, 1, 2])              // [1, 2, 3] (cópia)
 ordene(pessoas, funcao(p) { p:idade })   // por chave
 ```
 
 `ordene` compara como `<`: itens (ou chaves) todos números ou todos textos; misturar é erro. Itens com a mesma chave mantêm a ordem original.
 
-Índices de **texto** também começam em **1** e falam de caracteres Unicode (não bytes). `t[2]` lê um caractere. `t[2] = "b"` troca esse caractere e reatribui o texto; o valor precisa ser um texto de tamanho 1. O tamanho do texto permanece o mesmo. `a = t` depois `t[1] = "x"` deixa `a` com o texto antigo.
+Índices de **texto** também começam em **0** e falam de caracteres Unicode (não bytes). `t[1]` lê um caractere. `t[1] = "b"` troca esse caractere e reatribui o texto; o valor precisa ser um texto de tamanho 1. O tamanho do texto permanece o mesmo. `a = t` depois `t[0] = "x"` deixa `a` com o texto antigo.
 
 ```text
 s = "ABCDE"
-s[2] = "b"                     // "AbCDE"
-linhas[1][2] = "x"             // se linhas[1] é texto, reescreve o caractere
+s[1] = "b"                     // "AbCDE"
+linhas[0][1] = "x"             // se linhas[0] é texto, reescreve o caractere
 ```
 
 ---
@@ -336,16 +340,16 @@ Lista e mapa **não** viram conjunto sozinhos. `remova` no conjunto é o element
 
 ```text
 nome = "  Maria Silva  "
-nome[1]                    // um caractere
-nome[2..4]                 // inclusive; se o fim passar do tamanho, corta
-nome[2..]                  // até o último
+nome[0]                    // um caractere
+nome[1..3]                 // inclusive; se o fim passar do tamanho, corta
+nome[1..]                  // até o último
 
 tamanho(nome)
 maiuscula(nome)
 sem_acento("olá")          // "ola"
 minuscula(nome)
 nome contem "Silva"
-procurar(nome, "Silva")    // índice 1…n; 0 se não achar
+procure(nome, "Silva")    // índice 0…n−1; -1 se não achar
 substitua(nome, "Maria", "Ana")
 separe("a,b,c", ",")
 junte(["a", "b"], " - ")
@@ -354,8 +358,8 @@ comeca_com(nome, "  Ma")   // também começa_com
 termina_com(nome, "  ")
 formate("{:<8} {:>5}", "Ana", 10)   // < esquerda  > direita  ^ centro
                                // mapa com :_como_texto (função de 1 arg → texto) usa essa função
-nome[1]
-nome[1..5]
+nome[0]
+nome[0..4]
 ```
 
 ---
@@ -375,7 +379,7 @@ Fim da entrada (Ctrl+D / Ctrl+Z) é um erro, tratável com `se_falhar`.
 `leia_linhas()` lê **todas** as linhas restantes da entrada padrão e devolve uma lista (arquivo vazio → `[]`). Não é erro chegar ao fim.
 
 ```text
-busca = argumentos[1]
+busca = argumentos[0]
 para linha em leia_linhas()
 inicio
     se linha contem busca
@@ -391,15 +395,15 @@ cat nomes.txt | expressa grep.lep Thiago
 
 `eh_terminal()` (também `é_terminal()`), no módulo `tela`, é `verdadeiro` se a entrada é o teclado, `falso` se é um pipe ou um arquivo.
 
-`argumentos` é a lista dos valores depois do `.lep` na linha de comando (`argumentos[1]` é o primeiro; índices começam em 1). Sem argumentos extras, a lista é `[]`. Não dá para reatribuir `argumentos`.
+`argumentos` é a lista dos valores depois do `.lep` na linha de comando (`argumentos[0]` é o primeiro; índices começam em 0). Sem argumentos extras, a lista é `[]`. Não dá para reatribuir `argumentos`.
 
-`avaliar(texto)` executa o texto como código Expressa no escopo atual e devolve o último valor. `avaliar("2 + 3 * 4")` vale `14`. Erros de sintaxe ou de execução (por exemplo divisão por zero) são capturáveis com `se_falhar`.
+`avalie(texto)` executa o texto como código Expressa no escopo atual e devolve o último valor. `avalie("2 + 3 * 4")` vale `14`. Erros de sintaxe ou de execução (por exemplo divisão por zero) são capturáveis com `se_falhar`.
 
 `catalogo()` (também `catálogo()`) devolve uma lista de mapas com as funções e módulos visíveis: `:nome`, `:tipo` (`nativa`, `funcao`, `modulo`), `:args`, `:modulo`. `catalogo(alvo)` inspeciona um mapa, um módulo, uma função ou o nome de um módulo nativo (`catalogo("matriz")`). No REPL, `ls` formata o catálogo; `ls matriz` e `ls c` inspecionam o alvo. Uma `funcao` impressa mostra os parâmetros: `<funcao(x)>`.
 
 `escreva` vai para a saída padrão (stdout). `escreva_erro` vai para a saída de erro (stderr).  
 Com `importe "tela"`: `cls()` (também `limpe_tela()`) limpa a tela; `casa()` manda o cursor ao canto sem apagar — use no lugar de `cls()` em animações para não piscar.  
-`colunas()` e `linhas()` são o tamanho da tela em caracteres (80×24 se não houver TTY). `nova_linha` é o texto `"\n"` no Unix e `"\r\n"` no Windows (valor, não função). `quadro(texto)` volta ao canto, escreve o texto, apaga o resto de cada linha e o que sobrar embaixo; as quebras viram `nova_linha` na saída. `bloco(linha, coluna)` devolve o mapa `{:linha, :coluna}` (1-based); `escreva_em(bloco, texto)` (UFCS `b.escreva_em("…")`) escreve uma linha nessa coluna, anda `:linha` e devolve o mesmo mapa. Sem `"\n"` no texto.  
+`colunas()` e `linhas()` são o tamanho da tela em caracteres (80×24 se não houver TTY). `nova_linha` é o texto `"\n"` no Unix e `"\r\n"` no Windows (valor, não função). `quadro(texto)` volta ao canto, escreve o texto, apaga o resto de cada linha e o que sobrar embaixo; as quebras viram `nova_linha` na saída. `bloco(linha, coluna)` devolve o mapa `{:linha, :coluna}` (base zero); `escreva_em(bloco, texto)` (UFCS `b.escreva_em("…")`) escreve uma linha nessa coluna, anda `:linha` e devolve o mesmo mapa. Sem `"\n"` no texto.
 `pinte(texto, frente)` e `pinte(texto, frente, fundo)` devolvem o texto com cor ANSI e reset no fim. `fundo(texto, cor)` pinta só o papel; `negrito(texto)` deixa em negrito. Cores: `normal`, `preto`, `vermelho`, `verde`, `amarelo`, `azul`, `magenta`, `ciano`, `branco`.  
 `durma(segundos)` espera; `durma(0.5)` é meio segundo.
 
@@ -407,19 +411,19 @@ Com `importe "tela"`: `cls()` (também `limpe_tela()`) limpa a tela; `casa()` ma
 
 `agora()` é a data e a hora locais: mapa `:ano`, `:mes`, `:dia`, `:hora`, `:minuto`, `:segundo`, `:dia_da_semana` (1 = domingo … 7 = sábado) e `:epoch` (segundos desde 1970). Fora do Linux/macOS o horário é UTC. `formate_data(data, modelo)` monta um texto com `%Y`, `%m`, `%d`, `%H`, `%M`, `%S` (dois dígitos, ano com quatro) e `%%`; outra letra depois de `%` é erro. A data é o mapa de `agora()` (bastam `:ano` … `:segundo`) ou um número de segundos (`:epoch`).
 
-`sair()` encerra o programa com código 0. `sair(1)` encerra com falha (o shell vê o código). Não é capturado por `se_falhar`.
+`saia()` encerra o programa com código 0. `saia(1)` encerra com falha (o shell vê o código). Não é capturado por `se_falhar`.
 
-Com `importe "cartesiano"`: `documento()` é a identidade da janela (um mapa `:graficos`). `grafico()` é um plano xy (`:xmin`… e `:curvas`). `eixos(g, xmin, xmax, ymin, ymax)` grava os limites (y para cima). `plotar(g, função, cor)` amostra ~400 pontos de xmin a xmax; y não finito vira um furo na linha. Cores: as da `tela`. `adicione(c, g)` copia o gráfico para a folha (congela). `mostre(c)` abre ou atualiza a janela daquele documento e traz o foco; não espera fechar. Folha vazia é erro. Dois `documento()` são duas janelas. `tipo(g)` continua `"mapa"`. Sem display, `mostre` falha (`se_falhar`). O CLI abre `expressa-grafico` (ou `expressa --grafico`). Na Aula o painel Gráficos (Destacar vira janela irmã).
+Com `importe "cartesiano"`: `documento()` é a identidade da janela (um mapa `:graficos`). `grafico()` é um plano xy (`:xmin`… e `:curvas`). `eixos(g, xmin, xmax, ymin, ymax)` grava os limites (y para cima). `plote(g, função, cor)` amostra ~400 pontos de xmin a xmax; y não finito vira um furo na linha. Cores: as da `tela`. `adicione(c, g)` copia o gráfico para a folha (congela). `mostre(c)` abre ou atualiza a janela daquele documento e traz o foco; não espera fechar. Folha vazia é erro. Dois `documento()` são duas janelas. `tipo(g)` continua `"mapa"`. Sem display, `mostre` falha (`se_falhar`). O CLI abre `expressa-grafico` (ou `expressa --grafico`). Na Aula o painel Gráficos (Destacar vira janela irmã).
 
 Com `importe "tela_grafica"`: `nova(largura, altura)` é uma tela de pixels (mapa `:largura`, `:altura`, `:cor`, `:fundo`, `:ops`). Origem no canto superior esquerdo, y para baixo, (0,0) no primeiro pixel. Inteiros 1…2048. `cor`, `fundo`, `linha`, `circulo`, `ponto`, `retangulo`, `texto`, `apague` acumulam ou limpam comandos. Cores: as da `tela` e `transparente` (furo no sprite). `fundo(g, cor)` é o papel (padrão branco). `retangulo(g, x1, y1, x2, y2)` preenche o retângulo (cantos inclusivos, recorta). `como_imagem(g)` devolve uma `imagem` (cópia; transparente vira alpha 0). `texto(g, x, y, t)` / `texto(g, x, y, t, tamanho)` desenha t na caneta; (x, y) é o canto superior esquerdo, tamanho é a altura da célula (padrão 8), `\\n` desce uma linha. `imagem(g, caminho|img|tela, x, y, angulo)` carimba pixels (PNG lido uma vez, ou outra tela via `como_imagem`). `pixel(g, x, y)` devolve o nome da cor (fora da tela é erro). `salve(g, "a.png")` grava PNG com transparência, sem janela. `mostre(g)` abre ou atualiza a janela daquela instância (não acopla na Aula). `evento(g)` / `evento(g, segundos)` espera clique, tecla ou fechar naquela janela (mapa `:tipo`, `:x`, `:y`, `:botao`, `:tecla`). Cada `nova()` é uma janela. `tipo(g)` continua `"mapa"`. Cores: as da `tela`. Protocolo da janela: `docs/tela_grafica.md`.
 
-Com `importe "imagem"`: `carregue("a.png")` lê um PNG e devolve um valor `tipo` `"imagem"` (pixels em memória, até 2048×2048). `salve(img, "b.png")` grava PNG com transparência. `rotacione(img, graus)` gira no sentido horário e devolve uma imagem nova (90/180/270 são exatos). `escala(img, fator)` ou `escala(img, fx, fy)` redimensiona (vizinho mais próximo). `largura(img)` e `altura(img)` são o tamanho em pixels.
+Com `importe "imagem"`: `carregue("a.png")` lê um PNG e devolve um valor `tipo` `"imagem"` (pixels em memória, até 2048×2048). `salve(img, "b.png")` grava PNG com transparência. `rotacione(img, graus)` gira no sentido horário e devolve uma imagem nova (90/180/270 são exatos). `redimensione(img, fator)` ou `redimensione(img, fx, fy)` redimensiona (vizinho mais próximo). `largura(img)` e `altura(img)` são o tamanho em pixels.
 
 ```text
 se nome == ""
 inicio
     escreva_erro("nome vazio")
-    sair(1)
+    saia(1)
 fim
 ```
 
@@ -469,7 +473,7 @@ extensao("a.tar.gz")                      // "gz" (sem ponto; sem extensão, "")
 pasta_atual()                             // pasta de onde o programa foi chamado
 ```
 
-Caminhos relativos partem da **pasta do `.lep`**, não de `pasta_atual()`. Um arquivo passado na linha de comando, relativo ao terminal, vira `junte_caminho(pasta_atual(), argumentos[1])`. Falhas (arquivo que não existe, sem permissão) são erros (`se_falhar`). Na Aula, todo caminho tem que ficar na pasta do aluno.
+Caminhos relativos partem da **pasta do `.lep`**, não de `pasta_atual()`. Um arquivo passado na linha de comando, relativo ao terminal, vira `junte_caminho(pasta_atual(), argumentos[0])`. Falhas (arquivo que não existe, sem permissão) são erros (`se_falhar`). Na Aula, todo caminho tem que ficar na pasta do aluno.
 
 ---
 
@@ -524,7 +528,7 @@ chmod +x ola.lep
 ./ola.lep
 ```
 
-Valores depois do script chegam em `argumentos` (`./ola.lep Thiago` → `argumentos[1]` é `"Thiago"`).
+Valores depois do script chegam em `argumentos` (`./ola.lep Thiago` → `argumentos[0]` é `"Thiago"`).
 
 ---
 
@@ -594,7 +598,7 @@ execute("cargo build --release", mapa([:terminal -> verdadeiro, :exija -> verdad
 
 Código diferente de 0 **não** é erro de execução; confira `:ok`. Um comando encerrado porque a etapa seguinte parou de ler (como `head -1`) não conta como falha.
 
-**`linhas_de`** devolve um valor do tipo `"processo"`: o comando já rodando. `para linha em …` recebe cada linha assim que ela passa por todas as etapas. Sair do laço por qualquer caminho (`pare`, `retorne`, erro, `sair()`) encerra os comandos; o laço termina sozinho quando eles terminam. A saída de erro vai direto para `escreva_erro`. Código de saída diferente de 0 não é erro (use `execute` para ler o código). Percorrer de novo um processo que já acabou não dá nenhuma volta. `tamanho`, `[i]` e outras funções de lista não aceitam processo.
+**`linhas_de`** devolve um valor do tipo `"processo"`: o comando já rodando. `para linha em …` recebe cada linha assim que ela passa por todas as etapas. Sair do laço por qualquer caminho (`pare`, `retorne`, erro, `saia()`) encerra os comandos; o laço termina sozinho quando eles terminam. A saída de erro vai direto para `escreva_erro`. Código de saída diferente de 0 não é erro (use `execute` para ler o código). Percorrer de novo um processo que já acabou não dá nenhuma volta. `tamanho`, `[i]` e outras funções de lista não aceitam processo.
 
 **Erros** (`se_falhar`): comando que não existe, sem permissão, `:pasta` que não existe, `:tempo` esgotado, etapa inválida, e erro dentro de uma função de etapa (que também encerra os comandos). `para` não aceita `se_falhar`; a chamada sim: `para l em linhas_de("x") se_falhar [] { … }`.
 

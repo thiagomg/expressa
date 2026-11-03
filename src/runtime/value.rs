@@ -1,4 +1,5 @@
 use std::cell::RefCell;
+use std::collections::HashSet;
 use std::fmt;
 use std::rc::Rc;
 
@@ -16,9 +17,9 @@ pub enum Value {
     Numero(Numero),
     Texto(String),
     Bool(bool),
-    Lista(Rc<RefCell<Vec<Value>>>),
+    Lista(ListaRc),
     Par(MapKey, Box<Value>),
-    Mapa(Rc<RefCell<Vec<(MapKey, Value)>>>),
+    Mapa(MapaRc),
     Conjunto(Rc<RefCell<Vec<MapKey>>>),
     Matriz(Rc<RefCell<Vec<Vec<f64>>>>),
     Imagem(Imagem),
@@ -27,6 +28,72 @@ pub enum Value {
     Modulo(Rc<RefCell<Env>>),
     /// `linhas_de`: a command still running, read with `para … em`.
     Processo(Rc<RefCell<Processo>>),
+}
+
+/// A list's items, shared by every copy of the list value.
+pub type ListaRc = Rc<ItensLista>;
+/// A map's entries, in insertion order, shared by every copy.
+pub type MapaRc = Rc<ItensMapa>;
+
+/// Storage of a list. Derefs to the `RefCell`, so `xs.borrow()` works; it
+/// exists for its `Drop` (see [`desmontar`]).
+pub struct ItensLista(RefCell<Vec<Value>>);
+
+/// Storage of a map; like [`ItensLista`].
+pub struct ItensMapa(RefCell<Vec<(MapKey, Value)>>);
+
+impl std::ops::Deref for ItensLista {
+    type Target = RefCell<Vec<Value>>;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl std::ops::Deref for ItensMapa {
+    type Target = RefCell<Vec<(MapKey, Value)>>;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl Drop for ItensLista {
+    fn drop(&mut self) {
+        desmontar(std::mem::take(self.0.get_mut()));
+    }
+}
+
+impl Drop for ItensMapa {
+    fn drop(&mut self) {
+        let valores = std::mem::take(self.0.get_mut()).into_iter().map(|(_, v)| v);
+        desmontar(valores.collect());
+    }
+}
+
+/// Drops `valores` without recursing: a list or map they alone hold is
+/// emptied onto the same work list before it goes. Rust's own drop would
+/// recurse once per level, and `repita 1000000 vezes { x = [x] }` would
+/// overflow the stack when `x` is dropped.
+fn desmontar(mut pilha: Vec<Value>) {
+    while let Some(v) = pilha.pop() {
+        match v {
+            Value::Lista(xs) => {
+                if let Ok(mut itens) = Rc::try_unwrap(xs) {
+                    pilha.append(itens.0.get_mut());
+                }
+            }
+            Value::Mapa(m) => {
+                if let Ok(mut itens) = Rc::try_unwrap(m) {
+                    pilha.extend(
+                        std::mem::take(itens.0.get_mut())
+                            .into_iter()
+                            .map(|(_, v)| v),
+                    );
+                }
+            }
+            Value::Par(_, v) => pilha.push(*v),
+            _ => {}
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -38,7 +105,7 @@ pub enum MapKey {
 
 pub struct Closure {
     pub params: Vec<Param>,
-    pub body: Block,
+    pub body: Rc<Block>,
     pub env: Rc<RefCell<Env>>,
     pub span: Span,
     /// File that defined the function and its text (errors, debugger).
@@ -60,11 +127,11 @@ impl Closure {
 
 impl Value {
     pub fn lista(items: Vec<Value>) -> Self {
-        Value::Lista(Rc::new(RefCell::new(items)))
+        Value::Lista(Rc::new(ItensLista(RefCell::new(items))))
     }
 
     pub fn mapa(entries: Vec<(MapKey, Value)>) -> Self {
-        Value::Mapa(Rc::new(RefCell::new(entries)))
+        Value::Mapa(Rc::new(ItensMapa(RefCell::new(entries))))
     }
 
     pub fn conjunto(items: Vec<MapKey>) -> Self {
@@ -86,49 +153,9 @@ impl Value {
 
     /// User-facing print (`escreva`, `"a" + n`): numbers follow locale.
     pub fn format_with(&self, loc: NumeroLocale) -> String {
-        match self {
-            Value::Numero(n) => loc.format(*n),
-            Value::Texto(s) => s.clone(),
-            Value::Lista(xs) => {
-                let inner: Vec<_> = xs
-                    .borrow()
-                    .iter()
-                    .map(|v| match v {
-                        Value::Texto(s) => format!("\"{}\"", escape_texto(s)),
-                        other => other.format_with(loc),
-                    })
-                    .collect();
-                format!("[{}]", inner.join(", "))
-            }
-            Value::Par(k, v) => {
-                let vs = match v.as_ref() {
-                    Value::Texto(s) => format!("\"{}\"", escape_texto(s)),
-                    other => other.format_with(loc),
-                };
-                format!("{k} -> {vs}")
-            }
-            Value::Mapa(xs) => {
-                let inner: Vec<_> = xs
-                    .borrow()
-                    .iter()
-                    .map(|(k, v)| {
-                        let vs = match v {
-                            Value::Texto(s) => format!("\"{}\"", escape_texto(s)),
-                            other => other.format_with(loc),
-                        };
-                        format!("{k}: {vs}")
-                    })
-                    .collect();
-                format!("mapa{{{}}}", inner.join(", "))
-            }
-            Value::Conjunto(xs) => {
-                let inner: Vec<_> = xs.borrow().iter().map(|k| format!("{k}")).collect();
-                format!("conjunto{{{}}}", inner.join(", "))
-            }
-            Value::Matriz(m) => format_matriz(&m.borrow(), loc),
-            Value::Imagem(img) => format!("<imagem {}x{}>", img.largura, img.altura),
-            other => other.to_string(),
-        }
+        let mut out = String::new();
+        escrever(&mut out, self, Some(loc), false, &mut HashSet::new());
+        out
     }
 
     /// Nomes que `tipo()` devolve e `tipos()` lista (iguais às mensagens de erro).
@@ -159,28 +186,170 @@ impl Value {
 
 impl PartialEq for Value {
     fn eq(&self, other: &Self) -> bool {
-        match (self, other) {
-            (Value::Nada, Value::Nada) => true,
-            (Value::Numero(a), Value::Numero(b)) => a == b,
-            (Value::Texto(a), Value::Texto(b)) => a == b,
-            (Value::Bool(a), Value::Bool(b)) => a == b,
-            (Value::Lista(a), Value::Lista(b)) => a.borrow()[..] == b.borrow()[..],
-            (Value::Par(ak, av), Value::Par(bk, bv)) => ak == bk && av == bv,
-            (Value::Mapa(a), Value::Mapa(b)) => a.borrow()[..] == b.borrow()[..],
-            (Value::Conjunto(a), Value::Conjunto(b)) => {
-                let a = a.borrow();
-                let b = b.borrow();
-                a.len() == b.len() && a.iter().all(|k| b.contains(k))
-            }
-            (Value::Matriz(a), Value::Matriz(b)) => a.borrow()[..] == b.borrow()[..],
-            (Value::Imagem(a), Value::Imagem(b)) => a == b,
-            (Value::Funcao(a), Value::Funcao(b)) => Rc::ptr_eq(a, b),
-            (Value::Builtin(a), Value::Builtin(b)) => a == b,
-            (Value::Modulo(a), Value::Modulo(b)) => Rc::ptr_eq(a, b),
-            (Value::Processo(a), Value::Processo(b)) => Rc::ptr_eq(a, b),
-            _ => false,
-        }
+        iguais(self, other, &mut HashSet::new())
     }
+}
+
+/// Address of a list's or map's storage, its identity.
+fn id<T>(rc: &Rc<T>) -> usize {
+    Rc::as_ptr(rc) as *const () as usize
+}
+
+/// Equality by content. `comparando` holds the pairs of lists or maps
+/// being compared right now: meeting a pair again means both sides loop
+/// the same way (`xs[1] = xs`), which counts as equal so far.
+fn iguais(a: &Value, b: &Value, comparando: &mut HashSet<(usize, usize)>) -> bool {
+    stacker::maybe_grow(PILHA_RESERVA, PILHA_SEGMENTO, || match (a, b) {
+        (Value::Nada, Value::Nada) => true,
+        (Value::Numero(a), Value::Numero(b)) => a == b,
+        (Value::Texto(a), Value::Texto(b)) => a == b,
+        (Value::Bool(a), Value::Bool(b)) => a == b,
+        (Value::Lista(a), Value::Lista(b)) => {
+            if Rc::ptr_eq(a, b) {
+                return true;
+            }
+            let par = (id(a), id(b));
+            if !comparando.insert(par) {
+                return true;
+            }
+            let (xs, ys) = (a.borrow(), b.borrow());
+            let r = xs.len() == ys.len()
+                && xs
+                    .iter()
+                    .zip(ys.iter())
+                    .all(|(x, y)| iguais(x, y, comparando));
+            comparando.remove(&par);
+            r
+        }
+        (Value::Par(ak, av), Value::Par(bk, bv)) => ak == bk && iguais(av, bv, comparando),
+        (Value::Mapa(a), Value::Mapa(b)) => {
+            if Rc::ptr_eq(a, b) {
+                return true;
+            }
+            let par = (id(a), id(b));
+            if !comparando.insert(par) {
+                return true;
+            }
+            let (xs, ys) = (a.borrow(), b.borrow());
+            let r = xs.len() == ys.len()
+                && xs
+                    .iter()
+                    .zip(ys.iter())
+                    .all(|((ka, va), (kb, vb))| ka == kb && iguais(va, vb, comparando));
+            comparando.remove(&par);
+            r
+        }
+        (Value::Conjunto(a), Value::Conjunto(b)) => {
+            let a = a.borrow();
+            let b = b.borrow();
+            a.len() == b.len() && a.iter().all(|k| b.contains(k))
+        }
+        (Value::Matriz(a), Value::Matriz(b)) => a.borrow()[..] == b.borrow()[..],
+        (Value::Imagem(a), Value::Imagem(b)) => a == b,
+        (Value::Funcao(a), Value::Funcao(b)) => Rc::ptr_eq(a, b),
+        (Value::Builtin(a), Value::Builtin(b)) => a == b,
+        (Value::Modulo(a), Value::Modulo(b)) => Rc::ptr_eq(a, b),
+        (Value::Processo(a), Value::Processo(b)) => Rc::ptr_eq(a, b),
+        _ => false,
+    })
+}
+
+/// Stack left before printing or comparing moves to a new segment, and its
+/// size: values nest as deep as a program builds them.
+const PILHA_RESERVA: usize = 64 * 1024;
+const PILHA_SEGMENTO: usize = 1024 * 1024;
+
+/// Writes `v` into `out`. `loc: None` is the plain form of `Display`
+/// (numbers as in source); `Some` follows the locale (`escreva`). Text is
+/// quoted when `aninhado` (inside a list, map or pair). `abertos` holds the
+/// lists and maps being written right now: meeting one again is a cycle
+/// (`xs[1] = xs`), written `[…]` / `mapa{…}` instead of forever.
+fn escrever(
+    out: &mut String,
+    v: &Value,
+    loc: Option<NumeroLocale>,
+    aninhado: bool,
+    abertos: &mut HashSet<usize>,
+) {
+    use std::fmt::Write as _;
+    stacker::maybe_grow(PILHA_RESERVA, PILHA_SEGMENTO, || match v {
+        Value::Nada => out.push_str("nada"),
+        Value::Numero(n) => match loc {
+            Some(loc) => out.push_str(&loc.format(*n)),
+            None => out.push_str(&format_numero(*n)),
+        },
+        Value::Texto(s) if aninhado => {
+            let _ = write!(out, "\"{}\"", escape_texto(s));
+        }
+        Value::Texto(s) => out.push_str(s),
+        Value::Bool(true) => out.push_str("verdadeiro"),
+        Value::Bool(false) => out.push_str("falso"),
+        Value::Lista(xs) => {
+            if !abertos.insert(id(xs)) {
+                out.push_str("[…]");
+                return;
+            }
+            out.push('[');
+            for (i, item) in xs.borrow().iter().enumerate() {
+                if i > 0 {
+                    out.push_str(", ");
+                }
+                escrever(out, item, loc, true, abertos);
+            }
+            out.push(']');
+            abertos.remove(&id(xs));
+        }
+        Value::Par(k, valor) => {
+            let _ = write!(out, "{k} -> ");
+            escrever(out, valor, loc, true, abertos);
+        }
+        Value::Mapa(m) => {
+            if !abertos.insert(id(m)) {
+                out.push_str("mapa{…}");
+                return;
+            }
+            out.push_str("mapa{");
+            for (i, (k, valor)) in m.borrow().iter().enumerate() {
+                if i > 0 {
+                    out.push_str(", ");
+                }
+                let _ = write!(out, "{k}: ");
+                escrever(out, valor, loc, true, abertos);
+            }
+            out.push('}');
+            abertos.remove(&id(m));
+        }
+        Value::Conjunto(xs) => {
+            out.push_str("conjunto{");
+            for (i, k) in xs.borrow().iter().enumerate() {
+                if i > 0 {
+                    out.push_str(", ");
+                }
+                let _ = write!(out, "{k}");
+            }
+            out.push('}');
+        }
+        Value::Matriz(m) => out.push_str(&format_matriz(
+            &m.borrow(),
+            loc.unwrap_or(NumeroLocale::PtBr),
+        )),
+        Value::Imagem(img) => {
+            let _ = write!(out, "<imagem {}x{}>", img.largura, img.altura);
+        }
+        Value::Funcao(c) => {
+            let _ = write!(out, "<funcao({})>", c.args_text());
+        }
+        Value::Builtin(name) => {
+            let _ = write!(out, "<funcao {name}>");
+        }
+        Value::Modulo(_) => out.push_str("<modulo>"),
+        Value::Processo(p) => match p.try_borrow() {
+            Ok(p) => {
+                let _ = write!(out, "<processo {}>", p.descricao);
+            }
+            Err(_) => out.push_str("<processo>"),
+        },
+    })
 }
 
 impl fmt::Display for MapKey {
@@ -196,71 +365,15 @@ impl fmt::Display for MapKey {
 
 impl fmt::Display for Value {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Value::Nada => write!(f, "nada"),
-            Value::Numero(n) => write!(f, "{}", format_numero(*n)),
-            Value::Texto(s) => write!(f, "{s}"),
-            Value::Bool(true) => write!(f, "verdadeiro"),
-            Value::Bool(false) => write!(f, "falso"),
-            Value::Lista(xs) => {
-                write!(f, "[")?;
-                for (i, v) in xs.borrow().iter().enumerate() {
-                    if i > 0 {
-                        write!(f, ", ")?;
-                    }
-                    write_debug_value(f, v)?;
-                }
-                write!(f, "]")
-            }
-            Value::Par(k, v) => {
-                write!(f, "{k} -> ")?;
-                write_debug_value(f, v)
-            }
-            Value::Mapa(xs) => {
-                write!(f, "mapa{{")?;
-                for (i, (k, v)) in xs.borrow().iter().enumerate() {
-                    if i > 0 {
-                        write!(f, ", ")?;
-                    }
-                    write!(f, "{k}: ")?;
-                    write_debug_value(f, v)?;
-                }
-                write!(f, "}}")
-            }
-            Value::Conjunto(xs) => {
-                write!(f, "conjunto{{")?;
-                for (i, k) in xs.borrow().iter().enumerate() {
-                    if i > 0 {
-                        write!(f, ", ")?;
-                    }
-                    write!(f, "{k}")?;
-                }
-                write!(f, "}}")
-            }
-            Value::Matriz(m) => write!(f, "{}", format_matriz(&m.borrow(), NumeroLocale::PtBr)),
-            Value::Imagem(img) => write!(f, "<imagem {}x{}>", img.largura, img.altura),
-            Value::Funcao(c) => write!(f, "<funcao({})>", c.args_text()),
-            Value::Builtin(name) => write!(f, "<funcao {name}>"),
-            Value::Modulo(_) => write!(f, "<modulo>"),
-            Value::Processo(p) => match p.try_borrow() {
-                Ok(p) => write!(f, "<processo {}>", p.descricao),
-                Err(_) => write!(f, "<processo>"),
-            },
-        }
+        let mut out = String::new();
+        escrever(&mut out, self, None, false, &mut HashSet::new());
+        f.write_str(&out)
     }
 }
 
 impl fmt::Debug for Value {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{self}")
-    }
-}
-
-/// Quoted form used inside lists/maps so nested text is visible.
-fn write_debug_value(f: &mut fmt::Formatter<'_>, v: &Value) -> fmt::Result {
-    match v {
-        Value::Texto(s) => write!(f, "\"{}\"", escape_texto(s)),
-        other => write!(f, "{other}"),
     }
 }
 

@@ -14,10 +14,10 @@ importe "lib/linha_cmd"
 
 conta_palavras = função(frase) {
     palavras = 0
-    i = 1
-    enquanto i <= frase.tamanho() {
+    i = 0
+    enquanto i < frase.tamanho() {
         // Vamos procurar algo que não seja espaço ou caractere especial
-        enquanto i <= frase.tamanho() {
+        enquanto i < frase.tamanho() {
             c = frase[i]
             se é_alfanumerico(c) { pare }
             i = i + 1
@@ -26,7 +26,7 @@ conta_palavras = função(frase) {
         // O não espaço foi encontrado.
         // Agora vamos procurar algo que seja espaço ou final de string
         encontrou = falso
-        enquanto i <= frase.tamanho() {
+        enquanto i < frase.tamanho() {
             c = frase[i]
             se é_alfanumerico(c) == falso { pare }
             // Se chegou aqui, existe algo que não é zero
@@ -90,7 +90,7 @@ exec_wc = função(args)
     {
         // Pulando o arg 1, já que ele é o padrão a ser procurado
         total_geral = 0
-        para i de 1 até args:pos.tamanho()
+        para i de 0 até args:pos.tamanho() - 1
         {
             arg = args:pos[i]
             total = função_contagem(leia_arquivo(arg))

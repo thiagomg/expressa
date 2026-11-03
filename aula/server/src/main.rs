@@ -1,4 +1,5 @@
 mod paths;
+mod projetos;
 mod service;
 
 use std::net::SocketAddr;
@@ -14,7 +15,10 @@ fn usage() {
         "Uso: expressa-aula-server [--root DIR] [--bind HOST:PORT]\n\n  \
          --root   pasta das turmas (padrão: ./aula-data)\n  \
          --bind   endereço (padrão: 127.0.0.1:50051)\n\n\
-         Só guarda os arquivos; o editor executa e depura os programas."
+         Cada projeto fica em DIR/aluno/projeto. Arquivos de antes dos projetos\n\
+         vão para DIR/aluno/principal no primeiro uso.\n\n\
+         Só guarda os arquivos; o editor executa e depura os programas.\n\
+         Não há senha: quem conecta escolhe o nome do aluno."
     );
 }
 
@@ -46,7 +50,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     std::fs::create_dir_all(&root)?;
     let root = root.canonicalize()?;
     let addr: SocketAddr = bind.parse()?;
-    let aula = Aula { root: root.clone() };
+    let aula = Aula::new(root.clone());
 
     eprintln!("expressa-aula-server em {addr}");
     eprintln!("arquivos em {}", root.display());

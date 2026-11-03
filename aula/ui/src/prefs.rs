@@ -7,6 +7,49 @@ pub const DEFAULT_FONT: u32 = 11;
 const MIN_FONT: u32 = 7;
 const MAX_FONT: u32 = 40;
 
+/// How many recent projects are kept.
+const RECENTES_MAXIMO: usize = 10;
+
+/// A project opened before.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Recente {
+    /// A folder on this computer.
+    Local(String),
+    /// A student's project on a server.
+    Servidor {
+        url: String,
+        aluno: String,
+        projeto: String,
+    },
+}
+
+impl Recente {
+    /// One prefs line: fields separated by tabs (no field has one).
+    fn texto(&self) -> String {
+        match self {
+            Recente::Local(p) => format!("local\t{p}"),
+            Recente::Servidor {
+                url,
+                aluno,
+                projeto,
+            } => format!("servidor\t{url}\t{aluno}\t{projeto}"),
+        }
+    }
+
+    fn de_texto(s: &str) -> Option<Self> {
+        let partes: Vec<&str> = s.split('\t').collect();
+        match partes.as_slice() {
+            ["local", p] if !p.is_empty() => Some(Recente::Local(p.to_string())),
+            ["servidor", url, aluno, projeto] => Some(Recente::Servidor {
+                url: url.to_string(),
+                aluno: aluno.to_string(),
+                projeto: projeto.to_string(),
+            }),
+            _ => None,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Prefs {
     pub font_size: u32,
@@ -15,6 +58,10 @@ pub struct Prefs {
     pub pasta: String,
     /// Last remote server URL.
     pub servidor: String,
+    /// Last project opened on the server; the project list selects it.
+    pub projeto: String,
+    /// Local projects and server/student pairs, most recent first.
+    pub recentes: Vec<Recente>,
     /// Last file opened in the project (relative path).
     pub arquivo: String,
 }
@@ -26,6 +73,8 @@ impl Default for Prefs {
             dark: false,
             pasta: String::new(),
             servidor: "http://127.0.0.1:50051".to_string(),
+            projeto: String::new(),
+            recentes: Vec::new(),
             arquivo: String::new(),
         }
     }
@@ -53,22 +102,48 @@ impl Prefs {
                 "tema" => p.dark = v.trim() == "escuro",
                 "pasta" => p.pasta = v.trim().to_string(),
                 "servidor" => p.servidor = v.trim().to_string(),
+                "projeto" => p.projeto = v.trim().to_string(),
+                "recente" => p.recentes.extend(Recente::de_texto(v.trim())),
                 "arquivo" => p.arquivo = v.trim().to_string(),
                 _ => {}
             }
         }
+        p.organizar_recentes();
         p
     }
 
     pub fn to_text(&self) -> String {
-        format!(
-            "fonte={}\ntema={}\npasta={}\nservidor={}\narquivo={}\n",
+        let mut t = format!(
+            "fonte={}\ntema={}\npasta={}\nservidor={}\nprojeto={}\narquivo={}\n",
             self.font_size,
             if self.dark { "escuro" } else { "claro" },
             self.pasta,
             self.servidor,
+            self.projeto,
             self.arquivo,
-        )
+        );
+        for r in &self.recentes {
+            t.push_str(&format!("recente={}\n", r.texto()));
+        }
+        t
+    }
+
+    /// `r` was just opened: first in the list, without repeating it.
+    pub fn lembrar_recente(&mut self, r: Recente) {
+        self.recentes.insert(0, r);
+        self.organizar_recentes();
+    }
+
+    fn organizar_recentes(&mut self) {
+        let mut locais = std::collections::HashSet::new();
+        let mut servidores = std::collections::HashSet::new();
+        self.recentes.retain(|r| match r {
+            Recente::Local(p) => locais.len() < RECENTES_MAXIMO && locais.insert(p.clone()),
+            Recente::Servidor { url, aluno, .. } => {
+                let key = (crate::normalize_url(url), aluno.clone());
+                servidores.len() < RECENTES_MAXIMO && servidores.insert(key)
+            }
+        });
     }
 
     pub fn load() -> Self {
@@ -103,12 +178,16 @@ fn home_dir() -> Option<PathBuf> {
 
 /// `~` and `~/…` become the user home directory. `~nome` is left as-is.
 pub fn expand_tilde(path: &str) -> PathBuf {
+    expand_tilde_with_home(path, home_dir())
+}
+
+fn expand_tilde_with_home(path: &str, home: Option<PathBuf>) -> PathBuf {
     if path == "~" {
-        return home_dir().unwrap_or_else(|| PathBuf::from("~"));
+        return home.unwrap_or_else(|| PathBuf::from("~"));
     }
     let rest = path.strip_prefix("~/").or_else(|| path.strip_prefix("~\\"));
     if let Some(rest) = rest
-        && let Some(home) = home_dir()
+        && let Some(home) = home
     {
         return home.join(rest);
     }
@@ -117,8 +196,12 @@ pub fn expand_tilde(path: &str) -> PathBuf {
 
 /// `/home/ana/proj` → `~/proj` when the prefix is this user’s home.
 pub fn path_for_display(path: &Path) -> String {
+    path_for_display_with_home(path, home_dir())
+}
+
+fn path_for_display_with_home(path: &Path, home: Option<PathBuf>) -> String {
     let shown = path.display().to_string();
-    let Some(home) = home_dir() else {
+    let Some(home) = home else {
         return shown;
     };
     let home = home.canonicalize().unwrap_or(home);
@@ -445,16 +528,69 @@ mod tests {
 
     #[test]
     fn parse_and_print() {
-        let p = Prefs::parse("fonte=18\ntema=escuro\n");
+        let p = Prefs::parse(
+            "fonte=18\ntema=escuro\nprojeto=aula-2\n\
+             recente=servidor\thttp://s:1\tana\taula-2\nrecente=local\t/home/ana/x\n\
+             recente=lixo\n",
+        );
         let expect = Prefs {
             font_size: 18,
             dark: true,
+            projeto: "aula-2".into(),
+            recentes: vec![
+                Recente::Servidor {
+                    url: "http://s:1".into(),
+                    aluno: "ana".into(),
+                    projeto: "aula-2".into(),
+                },
+                Recente::Local("/home/ana/x".into()),
+            ],
             ..Prefs::default()
         };
         assert_eq!(p, expect);
         assert_eq!(Prefs::parse(&p.to_text()), p);
         assert_eq!(Prefs::parse("fonte=999\nlixo\n").font_size, MAX_FONT);
         assert_eq!(Prefs::parse(""), Prefs::default());
+    }
+
+    #[test]
+    fn legacy_history_groups_servers_and_preserves_latest_project() {
+        let p = Prefs::parse(
+            "recente=servidor\thttp://SERVER:80/\tana\tlatest\nrecente=local\t/a/project\nrecente=servidor\tserver\tana\told\nrecente=servidor\thttp://server\tbia\tother\nrecente=local\t/a/project\nrecente=local\t/b/project\n",
+        );
+        assert_eq!(p.recentes.len(), 4);
+        assert!(matches!(&p.recentes[0], Recente::Servidor { projeto, .. } if projeto == "latest"));
+        assert_eq!(p.recentes[1], Recente::Local("/a/project".into()));
+        assert_eq!(p.recentes[3], Recente::Local("/b/project".into()));
+        assert_eq!(Prefs::parse(&p.to_text()), p);
+    }
+
+    #[test]
+    fn retention_is_independent_and_latest_server_use_replaces_project() {
+        let mut p = Prefs::default();
+        for i in 0..12 {
+            p.lembrar_recente(Recente::Local(format!("/p{i}")));
+            p.lembrar_recente(Recente::Servidor {
+                url: format!("http://s{i}"),
+                aluno: "ana".into(),
+                projeto: "old".into(),
+            });
+        }
+        assert_eq!(p.recentes.len(), 20);
+        p.lembrar_recente(Recente::Servidor {
+            url: "http://S11:80/".into(),
+            aluno: "ana".into(),
+            projeto: "new".into(),
+        });
+        assert_eq!(p.recentes.len(), 20);
+        assert!(matches!(&p.recentes[0], Recente::Servidor { projeto, .. } if projeto == "new"));
+        assert_eq!(
+            p.recentes
+                .iter()
+                .filter(|r| matches!(r, Recente::Local(_)))
+                .count(),
+            10
+        );
     }
 
     #[test]
@@ -481,12 +617,34 @@ mod tests {
     #[test]
     fn tilde_becomes_home() {
         let home = std::env::temp_dir().join("expressa-aula-tilde-home");
-        unsafe { std::env::set_var("HOME", &home) };
-        assert_eq!(expand_tilde("~"), home);
-        assert_eq!(expand_tilde("~/proj/a"), home.join("proj/a"));
-        assert_eq!(expand_tilde("/abs"), PathBuf::from("/abs"));
-        assert_eq!(expand_tilde("~nao"), PathBuf::from("~nao"));
+        let expand = |path| expand_tilde_with_home(path, Some(home.clone()));
+        assert_eq!(expand("~"), home);
+        assert_eq!(expand("~/proj/a"), home.join("proj/a"));
+        assert_eq!(expand("/abs"), PathBuf::from("/abs"));
+        assert_eq!(expand("~nao"), PathBuf::from("~nao"));
         let proj = home.join("proj");
-        assert_eq!(path_for_display(&proj), "~/proj".to_string());
+        assert_eq!(
+            path_for_display_with_home(&proj, Some(home)),
+            format!("~{}proj", std::path::MAIN_SEPARATOR)
+        );
+        assert_eq!(expand_tilde_with_home("~", None), PathBuf::from("~"));
+    }
+
+    #[test]
+    fn recentes_sem_repetir_e_no_maximo_dez() {
+        let mut p = Prefs::default();
+        for i in 0..12 {
+            p.lembrar_recente(Recente::Local(format!("/p{i}")));
+        }
+        p.lembrar_recente(Recente::Local("/p5".into()));
+        assert_eq!(p.recentes.len(), RECENTES_MAXIMO);
+        assert_eq!(p.recentes[0], Recente::Local("/p5".into()));
+        assert_eq!(
+            p.recentes
+                .iter()
+                .filter(|r| **r == Recente::Local("/p5".into()))
+                .count(),
+            1
+        );
     }
 }

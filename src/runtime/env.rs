@@ -109,7 +109,7 @@ use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
-use super::value::{Closure, MapKey, Value};
+use super::value::{Closure, ListaRc, MapaRc, Value};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FrameKind {
@@ -299,8 +299,8 @@ const LIMITE_DA_BUSCA: usize = 100_000;
 /// An object that holds `Rc`s of other values.
 enum Objeto {
     Env(Rc<RefCell<Env>>),
-    Lista(Rc<RefCell<Vec<Value>>>),
-    Mapa(Rc<RefCell<Vec<(MapKey, Value)>>>),
+    Lista(ListaRc),
+    Mapa(MapaRc),
     Funcao(Rc<Closure>),
 }
 
@@ -484,7 +484,7 @@ mod tests {
     fn closao(env: Rc<RefCell<Env>>, ident: &str) -> Value {
         Value::Funcao(Rc::new(Closure {
             params: vec![],
-            body: Block {
+            body: Rc::new(Block {
                 stmts: vec![Stmt::Expr {
                     expr: Expr::Ident {
                         name: ident.into(),
@@ -493,7 +493,7 @@ mod tests {
                     span: Span::default(),
                 }],
                 span: Span::default(),
-            },
+            }),
             env,
             span: Span::default(),
             file: String::new(),

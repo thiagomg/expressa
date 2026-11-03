@@ -5,8 +5,8 @@
 se argumentos.tamanho() == 0 {
     escreva("passe um nome: expressa tutorial/exemplos/18_argumentos.lep Ana")
 } senão {
-    escreva("olá, " + argumentos[1])
+    escreva("olá, " + argumentos[0])
     se argumentos.tamanho() >= 2 {
-        escreva("idade: " + argumentos[2])
+        escreva("idade: " + argumentos[1])
     }
 }

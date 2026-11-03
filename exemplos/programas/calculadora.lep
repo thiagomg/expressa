@@ -3,5 +3,5 @@ escreva("Calculadora. Digite uma conta (Enter vazio sai).")
 repita 100 vezes {
     conta = leia("> ") se_falhar ""
     se conta == "" { pare }
-    escreva("=", avaliar(conta) se_falhar "conta inválida")
+    escreva("=", avalie(conta) se_falhar "conta inválida")
 }

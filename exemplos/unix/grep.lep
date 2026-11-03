@@ -21,15 +21,15 @@ início
         // 1 argumento significa que arquivos não foram passados como
         // argumento da aplicação
         linhas = leia_linhas()
-        padrão = args:pos[1]
+        padrão = args:pos[0]
         grep_linhas(linhas, padrão, "")
     fim
     senao
     inicio
-        padrão = args:pos[1]
+        padrão = args:pos[0]
         
         // Pulando o arg 1, já que ele é o padrão a ser procurado
-        para i de 2 até args:pos.tamanho()
+        para i de 1 até args:pos.tamanho() - 1
         inicio
             arg = args:pos[i]
             prefixo = se args:op contém "h" ou args:op contém "humanos"

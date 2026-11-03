@@ -2,17 +2,48 @@
 
 tela_grafica = importe "tela_grafica"
 imagem = importe "imagem"
+mat = importe "mat"
 
-g = tela_grafica::nova(320, 200)
+largura = 320
+altura = 200
+
+crie_espaço = função()
+início
+    estrelas = []
+    repita 30 vezes
+    início
+        cx = mat::aleatório(0, largura)
+        cy = mat::aleatório(0, altura)
+        estrelas += [[cx, cy]]
+    fim
+    estrelas
+fim
+
+espaco = função(g, estrelas)
+início
+    g.tela_grafica::cor(:branco)
+    para estrela em estrelas
+    início
+        cx = estrela[0]
+        cy = estrela[1]
+        g.tela_grafica::ponto(cx, cy)
+    fim
+fim
+
+g = tela_grafica::nova(largura, altura)
 nave = imagem::carregue("../lib/tartaruga.png")
 
 angulo = 0
 x = 40
 y = 100
 
+g.tela_grafica::fundo(:preto)
+estrelas = crie_espaço()
+
 enquanto verdadeiro
 inicio
     g.tela_grafica::apague()
+    g.espaco(estrelas)
     g.tela_grafica::imagem(nave, x, y, angulo)
     g.tela_grafica::mostre()
     ev = g.tela_grafica::evento(0.05)

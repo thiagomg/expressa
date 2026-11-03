@@ -74,12 +74,12 @@ quadro = funcao(texto) { 0 }
 /// Exemplo: tela += linha + nova_linha
 nova_linha = "\n"
 
-/// Cursor de um bloco: mapa {:linha, :coluna}, 1-based.
+/// Cursor de um bloco: mapa {:linha, :coluna}, base zero.
 ///
 /// Não desenha. Passe o mapa a escreva_em. A coluna fica fixa; cada
 /// escreva_em anda uma linha.
 ///
-/// Exemplo: b = bloco(1, 28)
+/// Exemplo: b = bloco(0, 27)
 bloco = funcao(linha, coluna) { 0 }
 
 /// Escreve uma linha no bloco, na coluna dele, e devolve o mesmo mapa.

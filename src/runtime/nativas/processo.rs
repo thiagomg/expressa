@@ -526,7 +526,7 @@ mod tests {
         let inicio = Instant::now();
         assert_eq!(
             run("para l em linhas_de(\"yes\") {\n\
-                     se l != \"y\" { sair(1) }\n\
+                     se l != \"y\" { saia(1) }\n\
                      escreva(l)\n\
                      pare\n\
                  }\n\

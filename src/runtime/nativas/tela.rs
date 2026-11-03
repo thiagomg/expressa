@@ -3,7 +3,7 @@ use crate::lexer::Span;
 use super::super::error::EvalError;
 use super::super::eval::Vm;
 use super::super::leia::{CLEAR_SCREEN, CURSOR_HOME};
-use super::super::value::{MapKey, Value};
+use super::super::value::{MapKey, MapaRc, Value};
 
 const ERASE_DOWN: &str = "\x1b[J";
 const ERASE_LINE: &str = "\x1b[K";
@@ -181,8 +181,8 @@ impl Vm<'_, '_> {
         self.expect_arity(args, 2, span)?;
         let linha = self.expect_int(&args[0], span)?;
         let coluna = self.expect_int(&args[1], span)?;
-        if linha < 1 || coluna < 1 {
-            return Err(self.err("bloco espera linha e coluna >= 1", span));
+        if linha < 0 || coluna < 0 {
+            return Err(self.err("bloco espera linha e coluna >= 0", span));
         }
         Ok(Value::mapa(vec![
             (MapKey::Texto("linha".into()), Value::Numero(linha.into())),
@@ -210,11 +210,21 @@ impl Vm<'_, '_> {
         };
         let linha = map_int(xs, "linha", span, self)?;
         let coluna = map_int(xs, "coluna", span, self)?;
-        if linha < 1 || coluna < 1 {
-            return Err(self.err("bloco espera linha e coluna >= 1", span));
+        if linha < 0 || coluna < 0 {
+            return Err(self.err("bloco espera linha e coluna >= 0", span));
         }
-        write!(self.out, "\x1b[{linha};{coluna}H{texto}{ERASE_LINE}")
-            .map_err(|e| self.io_err(e, span))?;
+        // ANSI terminal coordinates are one-based; the language is zero-based.
+        let ansi_linha = linha
+            .checked_add(1)
+            .ok_or_else(|| self.err("linha fora do intervalo", span))?;
+        let ansi_coluna = coluna
+            .checked_add(1)
+            .ok_or_else(|| self.err("coluna fora do intervalo", span))?;
+        write!(
+            self.out,
+            "\x1b[{ansi_linha};{ansi_coluna}H{texto}{ERASE_LINE}"
+        )
+        .map_err(|e| self.io_err(e, span))?;
         self.out.flush().map_err(|e| self.io_err(e, span))?;
         {
             let mut entries = xs.borrow_mut();
@@ -224,12 +234,7 @@ impl Vm<'_, '_> {
     }
 }
 
-fn map_int(
-    xs: &std::rc::Rc<std::cell::RefCell<Vec<(MapKey, Value)>>>,
-    chave: &str,
-    span: Span,
-    vm: &Vm<'_, '_>,
-) -> Result<i64, EvalError> {
+fn map_int(xs: &MapaRc, chave: &str, span: Span, vm: &Vm<'_, '_>) -> Result<i64, EvalError> {
     let key = MapKey::Texto(chave.into());
     let v = xs
         .borrow()

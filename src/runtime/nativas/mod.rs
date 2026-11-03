@@ -38,7 +38,7 @@ pub const NATIVAS: &[Nativa] = &[
         module: None,
     },
     Nativa {
-        names: &["sair"],
+        names: &["saia"],
         module: None,
     },
     Nativa {
@@ -66,7 +66,7 @@ pub const NATIVAS: &[Nativa] = &[
         module: None,
     },
     Nativa {
-        names: &["avaliar"],
+        names: &["avalie"],
         module: None,
     },
     Nativa {
@@ -118,7 +118,7 @@ pub const NATIVAS: &[Nativa] = &[
         module: None,
     },
     Nativa {
-        names: &["procurar"],
+        names: &["procure"],
         module: None,
     },
     Nativa {
@@ -322,6 +322,10 @@ pub const NATIVAS: &[Nativa] = &[
         module: Some("matriz"),
     },
     Nativa {
+        names: &["xy"],
+        module: Some("matriz"),
+    },
+    Nativa {
         names: &["leia_arquivo"],
         module: Some("arquivo"),
     },
@@ -414,7 +418,7 @@ pub const NATIVAS: &[Nativa] = &[
         module: Some("cartesiano"),
     },
     Nativa {
-        names: &["plotar"],
+        names: &["plote"],
         module: Some("cartesiano"),
     },
     Nativa {
@@ -498,7 +502,7 @@ pub const NATIVAS: &[Nativa] = &[
         module: Some("imagem"),
     },
     Nativa {
-        names: &["escala"],
+        names: &["redimensione"],
         module: Some("imagem"),
     },
     Nativa {
@@ -556,7 +560,7 @@ impl Vm<'_, '_> {
         match name {
             "escreva" => self.bi_escreva(args, span, env),
             "escreva_erro" => self.bi_escreva_erro(args, span, env),
-            "sair" => self.bi_sair(args, span),
+            "saia" => self.bi_saia(args, span),
             "cls" | "limpe_tela" => self.bi_cls(args, span),
             "casa" => self.bi_casa(args, span),
             "durma" => self.bi_durma(args, span),
@@ -605,10 +609,11 @@ impl Vm<'_, '_> {
             "cheia" => self.bi_cheia(args, span),
             "nlinhas" => self.bi_nlinhas(args, span),
             "ncolunas" => self.bi_ncolunas(args, span),
+            "xy" => self.bi_xy(args, span),
             "numero" | "número" => self.bi_numero(args, span),
             "formato" => self.bi_formato(args, span),
             "formate" => self.bi_formate(args, span, env),
-            "avaliar" => self.bi_avaliar(args, span, env),
+            "avalie" => self.bi_avalie(args, span, env),
             "catalogo" | "catálogo" => self.bi_catalogo(args, span, env),
             "ajuda" => self.bi_ajuda(args, span),
             "tipo" => self.bi_tipo(args, span),
@@ -621,7 +626,7 @@ impl Vm<'_, '_> {
             "sem_acento" => self.bi_sem_acento(args, span),
             "remova" => self.bi_remova(args, span),
             "substitua" => self.bi_substitua(args, span),
-            "procurar" => self.bi_procurar(args, span),
+            "procure" => self.bi_procure(args, span),
             "separe" => self.bi_separe(args, span),
             "junte" => self.bi_junte(args, span, env),
             "limpe" => self.bi_limpe(args, span),
@@ -656,7 +661,7 @@ impl Vm<'_, '_> {
             "documento" => self.bi_documento(args, span),
             "grafico" => self.bi_grafico(args, span),
             "eixos" => self.bi_eixos(args, span),
-            "plotar" => self.bi_plotar(args, span, env),
+            "plote" => self.bi_plote(args, span, env),
             "adicione" => self.bi_adicione(args, span),
             "nova" => self.bi_graf_nova(args, span),
             "cor" => self.bi_graf_cor(args, span),
@@ -670,7 +675,7 @@ impl Vm<'_, '_> {
             "como_imagem" => self.bi_graf_como_imagem(args, span),
             "carregue" => self.bi_img_carregue(args, span),
             "rotacione" => self.bi_img_rotacione(args, span),
-            "escala" => self.bi_img_escala(args, span),
+            "redimensione" => self.bi_img_redimensione(args, span),
             "largura" => self.bi_img_largura(args, span),
             "altura" => self.bi_img_altura(args, span),
             "salve" => {
@@ -845,7 +850,7 @@ mod tests {
         assert!(names.contains(&"é_terminal"));
         assert!(names.contains(&"sem_acento"));
         assert!(names.contains(&"remova"));
-        assert!(names.contains(&"procurar"));
+        assert!(names.contains(&"procure"));
         assert!(names.contains(&"tipo"));
         assert!(names.contains(&"tipos"));
         assert!(names.contains(&"catalogo"));
@@ -853,6 +858,17 @@ mod tests {
         assert!(names.contains(&"mapa"));
         assert!(names.contains(&"conjunto"));
         assert!(names.contains(&"matriz"));
+        for (old, new) in [
+            ("procurar", "procure"),
+            ("avaliar", "avalie"),
+            ("plotar", "plote"),
+            ("sair", "saia"),
+            ("escala", "redimensione"),
+        ] {
+            assert!(names.contains(&new), "falta registro de {new}");
+            assert!(!names.contains(&old), "registro antigo de {old}");
+        }
+
         assert_eq!(
             lookup_builtin_doc("é_terminal").map(|d| d.name.as_str()),
             Some("eh_terminal")
@@ -924,32 +940,32 @@ escreva(tipo(f))"#),
 
     #[test]
     fn avaliar_runs_source_in_current_scope() {
-        assert_eq!(run(r#"escreva(avaliar("2 + 3 * 4"))"#), "14\n");
-        assert_eq!(run(r#"escreva("10 - 3".avaliar())"#), "7\n");
+        assert_eq!(run(r#"escreva(avalie("2 + 3 * 4"))"#), "14\n");
+        assert_eq!(run(r#"escreva("10 - 3".avalie())"#), "7\n");
         assert_eq!(
             run(r#"
 x = 10
-escreva(avaliar("x + 1"))
-avaliar("x = 20")
+escreva(avalie("x + 1"))
+avalie("x = 20")
 escreva(x)
 "#),
             "11\n20\n"
         );
         assert_eq!(
             run(r#"
-f = funcao(n) { avaliar("n * 2") }
+f = funcao(n) { avalie("n * 2") }
 escreva(f(3))
 "#),
             "6\n"
         );
-        assert_eq!(run(r#"escreva(avaliar("1 / 0") se_falhar 0)"#), "0\n");
-        assert_eq!(run(r#"escreva(avaliar("2 +") se_falhar "ops")"#), "ops\n");
-        assert!(run_err("avaliar(1)").contains("texto"));
-        assert!(run_err(r#"avaliar("")"#).contains("expressão"));
-        let err = run_to_string(r#"avaliar("1 / 0")"#, "teste.lep").expect_err("divisão");
+        assert_eq!(run(r#"escreva(avalie("1 / 0") se_falhar 0)"#), "0\n");
+        assert_eq!(run(r#"escreva(avalie("2 +") se_falhar "ops")"#), "ops\n");
+        assert!(run_err("avalie(1)").contains("texto"));
+        assert!(run_err(r#"avalie("")"#).contains("expressão"));
+        let err = run_to_string(r#"avalie("1 / 0")"#, "teste.lep").expect_err("divisão");
         assert!(err.message.contains("divisão por zero"), "{err}");
         assert!(
-            err.stack.iter().any(|f| f.name == "avaliar"),
+            err.stack.iter().any(|f| f.name == "avalie"),
             "pilha: {:?}",
             err.stack
         );
@@ -1105,9 +1121,9 @@ escreva(m::cosseno(0))"#),
 
     #[test]
     fn sair_rejects_bad_args() {
-        assert!(run_err(r#"sair("x")"#).contains("esperado numero"));
-        assert!(run_err("sair(1, 2)").contains("espera 0 ou 1"));
-        assert!(run_err("sair(1.5)").contains("inteiro"));
+        assert!(run_err(r#"saia("x")"#).contains("esperado numero"));
+        assert!(run_err("saia(1, 2)").contains("espera 0 ou 1"));
+        assert!(run_err("saia(1.5)").contains("inteiro"));
     }
 
     #[test]
@@ -1115,14 +1131,14 @@ escreva(m::cosseno(0))"#),
         assert_eq!(
             run(r#"
 xs = [10, 20, 30, 40]
-escreva(xs.remova(2))
+escreva(xs.remova(1))
 escreva(xs)
-escreva(xs.remova(2, 3))
+escreva(xs.remova(1, 2))
 "#),
             "[10, 30, 40]\n[10, 20, 30, 40]\n[10, 40]\n"
         );
-        assert_eq!(run(r#"escreva("abcd".remova(2, 3))"#), "ad\n");
-        assert_eq!(run(r#"escreva("olá".remova(2))"#), "oá\n");
+        assert_eq!(run(r#"escreva("abcd".remova(1, 2))"#), "ad\n");
+        assert_eq!(run(r#"escreva("olá".remova(1))"#), "oá\n");
         assert_eq!(
             run(r#"
 p = mapa([
@@ -1177,7 +1193,7 @@ escreva(p:nome)
             run(r#"escreva(formate("{:<8} {:>6}", "Ana", 7.5))"#),
             "Ana         7,5\n"
         );
-        assert_eq!(run(r#"escreva("{1} {1}".formate("oi"))"#), "oi oi\n");
+        assert_eq!(run(r#"escreva("{0} {0}".formate("oi"))"#), "oi oi\n");
         assert!(run_err(r#"formate("{}")"#).contains("espera pelo menos"));
         assert!(run_err(r#"formate(10, "x")"#).contains("texto"));
     }
@@ -1265,23 +1281,23 @@ escreva("b")
         assert!(run_err("nova_linha()").contains("chamar"));
         assert_eq!(
             run(r#"
-b = bloco(1, 8)
+b = bloco(0, 7)
 escreva(b:linha)
 escreva(b:coluna)
 b.escreva_em("X")
 escreva(b:linha)
 "#),
-            "1\n8\n\x1b[1;8HX\x1b[K2\n"
+            "0\n7\n\x1b[1;8HX\x1b[K1\n"
         );
         assert_eq!(
             run(r#"
-b = bloco(2, 3)
+b = bloco(1, 2)
 b.escreva_em("A").escreva_em("B")
 escreva(b:linha)
 "#),
-            "\x1b[2;3HA\x1b[K\x1b[3;3HB\x1b[K4\n"
+            "\x1b[2;3HA\x1b[K\x1b[3;3HB\x1b[K3\n"
         );
-        assert!(run_err("bloco(0, 1)").contains(">= 1"));
+        assert!(run_err("bloco(-1, 0)").contains(">= 0"));
         assert!(run_err(r#"escreva_em(1, "a")"#).contains("mapa"));
         assert!(run_err(r#"bloco(1, 1).escreva_em("a\nb")"#).contains("uma linha"));
     }
@@ -1343,16 +1359,16 @@ escreva_erro("falhou")"#,
 Z = zeros(2, 3)
 escreva(nlinhas(Z))
 escreva(ncolunas(Z))
-escreva(Z[1, 1])
-escreva(Z[2, 3])
+escreva(Z[0, 0])
+escreva(Z[1, 2])
 Q = zeros(2)
 escreva(ncolunas(Q))
 U = uns(1, 4)
-escreva(U[1, 4])
+escreva(U[0, 3])
 C = cheia(2, 3, 7)
-escreva(C[2, 1])
-C[1, 2] = 9
-escreva(C[1, 2])
+escreva(C[1, 0])
+C[0, 1] = 9
+escreva(C[0, 1])
 "#),
             "2\n3\n0\n0\n2\n1\n7\n9\n"
         );
@@ -1390,6 +1406,63 @@ escreva(A.ncolunas())
     }
 
     #[test]
+    fn matriz_xy_reads_and_writes_in_graphics_order() {
+        assert_eq!(
+            run(r#"
+A = matriz([[1, 2, 3], [4, 5, 6]])
+B = A
+escreva(A.xy(2, 0), xy(A, 0, 1))
+A.xy(2, 0, 9).xy(0, 1, 8)
+escreva(A[0, 2], B[1, 0], A.xy(1, 1))
+"#),
+            "3 4\n9 8 5\n"
+        );
+        let source = r#"
+mat = importe "matriz"
+A = mat::zeros(2, 3)
+mat::xy(A, 2, 1, 7)
+escreva(A.mat::xy(2, 1), mat::xy(A, 2, 1))
+"#;
+        assert_eq!(run_to_string(source, "teste.lep").unwrap(), "7 7\n");
+    }
+
+    #[test]
+    fn matriz_xy_rejects_invalid_coordinates_without_mutating() {
+        for (x, y) in [
+            ("-1", "0"),
+            ("0", "-1"),
+            ("3", "0"),
+            ("0", "2"),
+            ("0.5", "0"),
+            ("0", "0.5"),
+            ("\"x\"", "0"),
+            ("0", "\"y\""),
+        ] {
+            let source = format!(
+                r#"
+A = cheia(2, 3, 7)
+escreva(A.xy({x}, {y}) se_falhar :erro)
+escreva(A.xy({x}, {y}, 9) se_falhar :erro)
+escreva(A == cheia(2, 3, 7))
+"#
+            );
+            assert_eq!(run(&source), "erro\nerro\nverdadeiro\n", "{x}, {y}");
+        }
+        assert!(run_err("xy([], 0, 0)").contains("esperado matriz"));
+        assert!(run_err("xy([], 0, 0, 1)").contains("esperado matriz"));
+        assert!(run_err("xy(zeros(2), 0)").contains("3 ou 4 argumentos"));
+        assert!(run_err("xy(zeros(2), 0, 0, 1, 2)").contains("3 ou 4 argumentos"));
+        assert_eq!(
+            run(r#"
+A = cheia(2, 3, 7)
+escreva(A.xy(0, 0, "a") se_falhar :erro)
+escreva(A == cheia(2, 3, 7))
+"#),
+            "erro\nverdadeiro\n"
+        );
+    }
+
+    #[test]
     fn tamanho_on_text_list_and_map() {
         assert_eq!(run(r#"escreva(tamanho("olá"))"#), "3\n");
         assert_eq!(run(r#"escreva(tamanho([1, 2, 3]))"#), "3\n");
@@ -1421,18 +1494,26 @@ escreva(A.ncolunas())
     }
 
     #[test]
-    fn procurar_first_index_or_zero() {
-        assert_eq!(run(r#"escreva(procurar("onde", "n"))"#), "2\n");
-        assert_eq!(run(r#"escreva("onde".procurar("n"))"#), "2\n");
-        assert_eq!(run(r#"escreva(procurar("onde", "a"))"#), "0\n");
-        assert_eq!(run(r#"escreva(procurar("banana", "na"))"#), "3\n");
-        assert_eq!(run(r#"escreva(procurar("ação", "ç"))"#), "2\n");
-        assert_eq!(run(r#"escreva(procurar("abc", "abc"))"#), "1\n");
-        assert_eq!(run(r#"escreva(procurar([10, 20, 30], 20))"#), "2\n");
-        assert_eq!(run(r#"escreva(procurar([10, 20], 99))"#), "0\n");
-        assert!(run_err(r#"procurar("onde", "")"#).contains("não vazio"));
-        assert!(run_err("procurar(10, 1)").contains("texto ou lista"));
-        assert!(run_err(r#"procurar("onde", 1)"#).contains("esperado texto"));
+    fn procurar_first_index_or_minus_one() {
+        assert_eq!(
+            run(r#"escreva(procure([10, 20], 10), procure([], 10))"#),
+            "0 -1\n"
+        );
+        assert_eq!(
+            run(r#"escreva(procure("á😀z", "😀"), procure("", "z"))"#),
+            "1 -1\n"
+        );
+        assert_eq!(run(r#"escreva(procure("onde", "n"))"#), "1\n");
+        assert_eq!(run(r#"escreva("onde".procure("n"))"#), "1\n");
+        assert_eq!(run(r#"escreva(procure("onde", "a"))"#), "-1\n");
+        assert_eq!(run(r#"escreva(procure("banana", "na"))"#), "2\n");
+        assert_eq!(run(r#"escreva(procure("ação", "ç"))"#), "1\n");
+        assert_eq!(run(r#"escreva(procure("abc", "abc"))"#), "0\n");
+        assert_eq!(run(r#"escreva(procure([10, 20, 30], 20))"#), "1\n");
+        assert_eq!(run(r#"escreva(procure([10, 20], 99))"#), "-1\n");
+        assert!(run_err(r#"procure("onde", "")"#).contains("não vazio"));
+        assert!(run_err("procure(10, 1)").contains("texto ou lista"));
+        assert!(run_err(r#"procure("onde", 1)"#).contains("esperado texto"));
     }
 
     #[test]
@@ -1619,8 +1700,8 @@ escreva(junte(linhas, "|"))
             r#"
 salve_csv("pessoas.csv", [["Ana", 25], ["Bruno", 30]])
 dados = leia_csv("pessoas.csv")
+escreva(dados[0][0])
 escreva(dados[1][1])
-escreva(dados[2][2])
 "#,
         );
         assert_eq!(out, "Ana\n30\n");

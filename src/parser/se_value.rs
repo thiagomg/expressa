@@ -93,7 +93,13 @@ fn check_target(target: &AssignTarget) -> Result<(), ParseError> {
     }
 }
 
+/// Recursive like the tree it walks, which can be
+/// `parser::PROFUNDIDADE_MAXIMA` deep: grow the stack instead of overflowing.
 fn check_expr(expr: &Expr, use_: Use) -> Result<(), ParseError> {
+    stacker::maybe_grow(128 * 1024, 2 * 1024 * 1024, || check_expr_inner(expr, use_))
+}
+
+fn check_expr_inner(expr: &Expr, use_: Use) -> Result<(), ParseError> {
     match expr {
         Expr::If {
             branches,

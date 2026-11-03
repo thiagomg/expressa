@@ -1,7 +1,7 @@
-// Lista: vários valores num nome só. O primeiro item é o 1, não o 0.
+// Lista: vários valores num nome só. O primeiro item tem índice 0.
 
 notas = [7, 8, 6.5, 9]
-escreva("primeira: " + notas[1])
+escreva("primeira: " + notas[0])
 escreva("quantidade: " + tamanho(notas))
 
 soma = 0

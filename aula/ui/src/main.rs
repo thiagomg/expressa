@@ -3,18 +3,38 @@
 // move to ListView/AlertDialog is in ajustes/05-aula-e-servidor.md.
 #![allow(deprecated)]
 
+mod abas;
 mod ajuda;
 mod assist;
+mod atalhos;
+mod background;
+mod busca_projeto;
 mod cartesiano;
+mod conflitos;
 mod console;
+mod debug_sources;
 mod docs;
+mod documentos;
 mod editing;
+mod escolher;
 mod exec;
+mod execution_state;
+mod identidade;
 mod indent;
 mod janela_graf;
 mod lang;
+mod menu_teclado;
+mod navegar;
+mod painel_repl;
+mod pares;
+mod pendencias;
+mod pendencias_ui;
 mod prefs;
+mod projetos_menu;
+mod recuperacao;
 mod rpc;
+mod sessao;
+mod sincronizacao;
 mod store;
 mod tutoriais;
 
@@ -22,6 +42,7 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::rc::{Rc, Weak};
+use std::sync::Arc;
 
 use gtk::gdk::Key;
 use gtk::gio::{self, prelude::*};
@@ -37,7 +58,9 @@ use sourceview5::{LanguageManager, SearchSettings, StyleSchemeManager};
 use assist::{Help, Target, ViewHelp};
 use console::Console;
 use docs::Doc;
+use documentos::{CloseDecision, Documents, OpenDocument, SaveOutcome, UnsavedChoice};
 use exec::{ExecEvent, Workspace};
+use execution_state::{Event as ExecutionEvent, ExecutionState, Unavailable};
 use prefs::{FontCss, Prefs, ThemeCss, expand_tilde, path_for_display};
 use rpc::Rpc;
 use store::{Files, valid_aluno};
@@ -48,11 +71,18 @@ const DEFAULT_URL: &str = "http://127.0.0.1:50051";
 /// A program running or being debugged.
 struct Run {
     debug_cmd: std::sync::mpsc::Sender<String>,
-    /// The local copy: breakpoints set while running name files there.
-    ws_dir: PathBuf,
+    paused: Option<(String, u32, bool)>,
 }
 
 struct Ui {
+    execution_sources: Arc<debug_sources::Sources>,
+    execution_breakpoints: Vec<(String, u32)>,
+    execution_editors: HashMap<String, std::rc::Weak<Doc>>,
+    source_viewer: Option<Rc<debug_sources::Viewer>>,
+    navigation_epoch: u64,
+    listing_epoch: u64,
+    remote_menu: gio::Menu,
+    projects_menu: gio::Menu,
     files: Files,
     /// Folder name locally, student name on a remote server.
     project: String,
@@ -93,6 +123,23 @@ struct Ui {
     help: Option<Rc<Help>>,
     /// Unsaved changes were handled: the window may close now.
     closing: bool,
+    /// Availability shared by run and project-switch actions. Run resources
+    /// stay in `run`, not in the lifecycle model.
+    execution: ExecutionState,
+    /// Bumped by each tree listing; an older listing that comes back late
+    /// is dropped.
+    geracao_arvore: u64,
+    /// Tabs the user closed (file, line), last one at the end: Ctrl+Shift+T.
+    abas_fechadas: Vec<(String, u32)>,
+    /// The open project's session was restored (and its unsaved copies
+    /// dealt with): from now on it can be saved over (`sessao.rs`).
+    sessao_pronta: bool,
+    recuperacao_aberta: bool,
+    sync_window: Option<gtk::Window>,
+    /// Below the editor: Saída (program output), Busca, REPL.
+    painel_inferior: gtk::Notebook,
+    busca: Option<Rc<busca_projeto::PainelBusca>>,
+    repl: Rc<painel_repl::PainelRepl>,
     ajuda_win: RefCell<Option<gtk::Window>>,
 }
 
@@ -106,7 +153,26 @@ fn main() {
     app.run();
 }
 
+/// Keep the bottom notebook's input controls above the status bar when resized.
+fn editor_panes(editor: &impl IsA<gtk::Widget>, bottom: &impl IsA<gtk::Widget>) -> Paned {
+    let pane = Paned::new(Orientation::Vertical);
+    pane.add_css_class("aula-paned");
+    pane.set_wide_handle(false);
+    pane.set_start_child(Some(editor));
+    pane.set_end_child(Some(bottom));
+    pane.set_resize_start_child(true);
+    pane.set_resize_end_child(false);
+    pane.set_shrink_start_child(true);
+    pane.set_shrink_end_child(false);
+    pane
+}
+
 fn build_ui(app: &Application) {
+    build_ui_state(app, true);
+}
+
+/// Construct the UI separately from restoring projects and starting autosave.
+fn build_ui_state(app: &Application, startup: bool) -> UiRc {
     // ibus + GTK4 leaves the dead key (´ ~ `) stuck as preedit after composing
     // á/ã. GTK's built-in input method composes dead keys itself.
     // GTK_IM_MODULE in the environment still takes precedence over this.
@@ -217,6 +283,14 @@ fn build_ui(app: &Application) {
     win.add_css_class("aula-window");
 
     let ui: UiRc = Rc::new(RefCell::new(Ui {
+        execution_sources: Arc::new(debug_sources::Sources::new()),
+        execution_breakpoints: Vec::new(),
+        execution_editors: HashMap::new(),
+        source_viewer: None,
+        navigation_epoch: 0,
+        listing_epoch: 0,
+        remote_menu: gio::Menu::new(),
+        projects_menu: gio::Menu::new(),
         files: Files::None,
         project: String::new(),
         project_path,
@@ -252,10 +326,21 @@ fn build_ui(app: &Application) {
         theme_css,
         help: None,
         closing: false,
+        execution: ExecutionState::default(),
+        geracao_arvore: 0,
+        abas_fechadas: Vec::new(),
+        sessao_pronta: false,
+        recuperacao_aberta: false,
+        sync_window: None,
+        painel_inferior: gtk::Notebook::new(),
+        busca: None,
+        repl: painel_repl::PainelRepl::new(),
         ajuda_win: RefCell::new(None),
     }));
     let help = make_help(&ui);
     ui.borrow_mut().help = Some(help);
+    let busca = busca_projeto::PainelBusca::new(&ui);
+    ui.borrow_mut().busca = Some(busca);
 
     let btn_smaller = Button::with_label("A−");
     btn_smaller.set_tooltip_text(Some("Letra menor (Ctrl+-)"));
@@ -297,17 +382,16 @@ fn build_ui(app: &Application) {
     {
         let u = ui.borrow();
         bottom.append(&u.graficos.dock);
-        bottom.append(&output_scroll);
+        let painel = &u.painel_inferior;
+        painel.append_page(&output_scroll, Some(&Label::new(Some("Saída"))));
+        if let Some(b) = &u.busca {
+            painel.append_page(&b.widget, Some(&Label::new(Some("Busca"))));
+        }
+        painel.append_page(&u.repl.widget, Some(&Label::new(Some("REPL"))));
+        painel.set_vexpand(true);
+        bottom.append(painel);
     }
-    let editor_col = Paned::new(Orientation::Vertical);
-    editor_col.add_css_class("aula-paned");
-    editor_col.set_wide_handle(false);
-    editor_col.set_start_child(Some(&ui.borrow().notebook));
-    editor_col.set_end_child(Some(&bottom));
-    editor_col.set_resize_start_child(true);
-    editor_col.set_resize_end_child(false);
-    editor_col.set_shrink_start_child(true);
-    editor_col.set_shrink_end_child(true);
+    let editor_col = editor_panes(&ui.borrow().notebook, &bottom);
 
     let main_split = Paned::new(Orientation::Horizontal);
     main_split.add_css_class("aula-paned");
@@ -338,6 +422,32 @@ fn build_ui(app: &Application) {
     let btn_find_prev = Button::with_label("↑");
     search_bar.append(&btn_find_next);
     search_bar.append(&btn_find_prev);
+    {
+        // Search options, on the settings every tab's search shares.
+        let settings = ui.borrow().search_settings.clone();
+        let opcao = |rotulo: &str, dica: &str, f: fn(&SearchSettings, bool)| {
+            let b = gtk::ToggleButton::with_label(rotulo);
+            b.set_tooltip_text(Some(dica));
+            let settings = settings.clone();
+            b.connect_toggled(move |b| f(&settings, b.is_active()));
+            search_bar.append(&b);
+        };
+        opcao(
+            "Aa",
+            "Diferenciar maiúsculas de minúsculas",
+            SearchSettings::set_case_sensitive,
+        );
+        opcao(
+            "Palavra",
+            "Só a palavra inteira (`soma` não acha `somatorio`)",
+            SearchSettings::set_at_word_boundaries,
+        );
+        opcao(
+            ".*",
+            "Expressão regular (ex.: `nota[0-9]`)",
+            SearchSettings::set_regex_enabled,
+        );
+    }
     search_bar.append(&Label::new(Some("trocar:")));
     search_bar.append(&ui.borrow().replace_entry);
     let btn_repl = Button::with_label("Trocar");
@@ -457,9 +567,7 @@ fn build_ui(app: &Application) {
         });
         k(&shortcuts, "<Primary>n", new_untitled_tab);
         k(&shortcuts, "<Primary>w", |ui| {
-            if let Some(d) = current_doc(ui) {
-                close_doc(ui, &d);
-            }
+            close_current_tab(ui);
         });
         k(&shortcuts, "<Primary>f", show_search);
         k(&shortcuts, "<Primary>h", show_search);
@@ -471,6 +579,25 @@ fn build_ui(app: &Application) {
             k(&fkeys, accel, |ui| zoom(ui, -1));
         }
         k(&fkeys, "<Primary>0", |ui| zoom(ui, 0));
+        // Capture: the editor would take Ctrl+Tab to move focus out.
+        k(&fkeys, "<Primary>Tab", |ui| abas::vizinha(ui, 1));
+        k(&fkeys, "<Primary>Page_Down", |ui| abas::vizinha(ui, 1));
+        // Shift+Tab arrives as ISO_Left_Tab.
+        for accel in ["<Primary><Shift>Tab", "<Primary><Shift>ISO_Left_Tab"] {
+            k(&fkeys, accel, |ui| abas::vizinha(ui, -1));
+        }
+        k(&fkeys, "<Primary>Page_Up", |ui| abas::vizinha(ui, -1));
+        for n in 1..=9u32 {
+            let ui = Rc::clone(&ui);
+            add_shortcut(&fkeys, &format!("<Alt>{n}"), move || abas::numero(&ui, n));
+        }
+        k(&shortcuts, "<Primary><Shift>t", abas::reabrir);
+        k(&shortcuts, "<Primary>p", navegar::abrir_rapido);
+        k(&shortcuts, "<Primary><Shift>f", buscar_no_projeto);
+        k(&shortcuts, "<Primary><Shift>o", navegar::funcoes_do_arquivo);
+        k(&shortcuts, "<Primary>question", |ui| {
+            atalhos::mostrar(&ui.borrow().window)
+        });
         win.add_controller(fkeys);
         win.add_controller(shortcuts);
     }
@@ -530,16 +657,28 @@ fn build_ui(app: &Application) {
         ui.borrow().tree.add_controller(del);
     }
     {
+        let repl = Rc::downgrade(&ui.borrow().repl);
+        win.connect_unrealize(move |_| {
+            if let Some(repl) = repl.upgrade() {
+                repl.encerrar();
+            }
+        });
         let ui_close = Rc::clone(&ui);
         win.connect_close_request(move |w| {
             if ui_close.borrow().closing {
+                sessao::salvar(&ui_close);
+                sessao::limpar_copias(&ui_close);
                 fechar_janelas_filhas(&ui_close);
+                ui_close.borrow().repl.encerrar();
                 ui_close.borrow_mut().files.shutdown();
                 return glib::Propagation::Proceed;
             }
             let dirty: Vec<Rc<Doc>> = dirty_docs(&ui_close);
             if dirty.is_empty() {
+                sessao::salvar(&ui_close);
+                sessao::limpar_copias(&ui_close);
                 fechar_janelas_filhas(&ui_close);
+                ui_close.borrow().repl.encerrar();
                 ui_close.borrow_mut().files.shutdown();
                 return glib::Propagation::Proceed;
             }
@@ -554,12 +693,20 @@ fn build_ui(app: &Application) {
     }
 
     apply_theme(&ui);
+    if !startup {
+        return ui;
+    }
+    sessao::iniciar_copias(&ui);
     win.maximize();
     win.present();
     schedule_raise();
     {
         let ui_p = Rc::clone(&ui);
         glib::timeout_add_local_once(std::time::Duration::from_millis(250), move || {
+            if sessao::restaurar_sem_projeto(&ui_p) {
+                set_project_path(&ui_p, "", None);
+                return;
+            }
             let pasta = ui_p.borrow().prefs.pasta.clone();
             let pasta_path = expand_tilde(&pasta);
             let opened =
@@ -623,6 +770,7 @@ fn build_ui(app: &Application) {
             }
         });
     }
+    ui
 }
 
 fn encerrar(ui: &UiRc) {
@@ -778,14 +926,27 @@ fn install_menubar(
         }
     });
     add_win_action(win, ui, "fechar-aba", |ui| {
-        if let Some(d) = current_doc(ui) {
-            close_doc(ui, &d);
-        }
+        close_current_tab(ui);
     });
     add_win_action(win, ui, "pasta", |ui| {
         choose_local_folder(ui);
     });
     add_win_action(win, ui, "servidor", ask_server);
+    add_win_action(win, ui, "trocar-projeto", trocar_projeto);
+    add_win_action(win, ui, "recentes", navegar::recentes);
+    add_win_action(
+        win,
+        ui,
+        "servidores-anteriores",
+        navegar::servidores_anteriores,
+    );
+    add_win_action(win, ui, "novo-projeto-remoto", trocar_projeto);
+    add_win_action(win, ui, "sincronizacao", sincronizacao::show)
+        .set_enabled(ui.borrow().files.is_remote());
+    add_win_action(win, ui, "buscar-projeto", buscar_no_projeto);
+    add_win_action(win, ui, "repl", mostrar_repl);
+    add_win_action(win, ui, "abrir-rapido", navegar::abrir_rapido);
+    add_win_action(win, ui, "funcoes", navegar::funcoes_do_arquivo);
     add_win_action(win, ui, "executar", |ui| executar(ui, false));
     add_win_action(win, ui, "depurar", |ui| executar(ui, true));
     add_win_action(win, ui, "parar", |ui| send_debug_cmd(ui, "terminar"));
@@ -798,6 +959,9 @@ fn install_menubar(
     add_win_action(win, ui, "letra-menor", |ui| zoom(ui, -1));
     add_win_action(win, ui, "letra-normal", |ui| zoom(ui, 0));
     add_win_action(win, ui, "ajuda", open_ajuda);
+    add_win_action(win, ui, "atalhos", |ui| {
+        atalhos::mostrar(&ui.borrow().window)
+    });
     add_win_action(win, ui, "tutoriais", |ui| {
         if let Err(e) = tutoriais::spawn_tutorial() {
             set_status(ui, &e);
@@ -848,10 +1012,7 @@ fn install_menubar(
         "win.fechar-aba",
         Some("<Primary>w"),
     ));
-    let projeto = gio::Menu::new();
-    projeto.append_item(&menu_item("_Pasta…", "win.pasta", None));
-    projeto.append_item(&menu_item("Se_rvidor…", "win.servidor", None));
-    arquivo.append_section(None, &projeto);
+    projetos_menu::install(ui, &arquivo);
     let sair = gio::Menu::new();
     sair.append_item(&menu_item("Sa_ir", "win.encerrar", Some("<Primary>q")));
     arquivo.append_section(None, &sair);
@@ -872,6 +1033,22 @@ fn install_menubar(
     ver.append_item(&menu_item("_Arquivos", "win.mostrar-arquivos", Some("F7")));
     ver.append_item(&menu_item("_Painel", "win.mostrar-painel", Some("F8")));
     ver.append_item(&menu_item("_Buscar", "win.buscar", Some("<Primary>f")));
+    ver.append_item(&menu_item(
+        "Buscar no pro_jeto",
+        "win.buscar-projeto",
+        Some("<Primary><Shift>f"),
+    ));
+    ver.append_item(&menu_item("_REPL", "win.repl", None));
+    ver.append_item(&menu_item(
+        "Abrir arquivo do _projeto…",
+        "win.abrir-rapido",
+        Some("<Primary>p"),
+    ));
+    ver.append_item(&menu_item(
+        "_Funções do arquivo…",
+        "win.funcoes",
+        Some("<Primary><Shift>o"),
+    ));
     ver.append_item(&menu_item(
         "_Ir para linha",
         "win.ir-linha",
@@ -902,6 +1079,11 @@ fn install_menubar(
     let ajuda = gio::Menu::new();
     ajuda.append_item(&menu_item("_Tutoriais", "win.tutoriais", None));
     ajuda.append_item(&menu_item("_Funções nativas", "win.ajuda", Some("F1")));
+    ajuda.append_item(&menu_item(
+        "_Atalhos do teclado",
+        "win.atalhos",
+        Some("<Primary>question"),
+    ));
 
     let model = gio::Menu::new();
     model.append_submenu(Some("_Arquivo"), &arquivo);
@@ -914,6 +1096,7 @@ fn install_menubar(
         app.set_menubar(Some(&model));
     }
     win.set_show_menubar(true);
+    menu_teclado::install(win);
 }
 
 /// Like `add_shortcut`, but `f` returning false lets the key through.
@@ -1077,6 +1260,7 @@ fn remember_arquivo(ui: &UiRc, doc: &Doc) {
         u.prefs.arquivo = path;
         u.prefs.save();
     }
+    sessao::salvar(ui);
 }
 
 fn parse_run_args(s: &str) -> Vec<String> {
@@ -1099,11 +1283,32 @@ fn make_help(ui: &UiRc) -> Rc<Help> {
             if let Some(hit) = u.file_cache.borrow().get(path) {
                 return hit.clone();
             }
-            let text = u.files.read_file(&u.project, path).ok();
-            u.file_cache
-                .borrow_mut()
-                .insert(path.to_string(), text.clone());
-            text
+            if !u.files.is_remote() {
+                let text = u.files.read_file(&u.project, path).ok();
+                u.file_cache
+                    .borrow_mut()
+                    .insert(path.to_string(), text.clone());
+                return text;
+            }
+            // On a server, fetch it in the background: this hover goes
+            // without, the next one finds it in the cache.
+            u.file_cache.borrow_mut().insert(path.to_string(), None);
+            let (files, projeto, rel) = (u.files.clone(), u.project.clone(), path.to_string());
+            let chave = files.cache_key(&projeto);
+            drop(u);
+            let p = projeto.clone();
+            let r = rel.clone();
+            em_segundo_plano(
+                &ui,
+                move || files.read_file(&p, &r).ok(),
+                move |ui, text| {
+                    let u = ui.borrow();
+                    if u.files.cache_key(&u.project) == chave {
+                        u.file_cache.borrow_mut().insert(rel, text);
+                    }
+                },
+            );
+            None
         }),
         project_files: Box::new(move || {
             w2.upgrade()
@@ -1133,11 +1338,17 @@ fn current_doc(ui: &UiRc) -> Option<Rc<Doc>> {
 }
 
 fn doc_by_name(ui: &UiRc, name: &str) -> Option<Rc<Doc>> {
-    ui.borrow()
-        .docs
-        .iter()
-        .find(|(d, _)| exec::same_project_path(&d.name(), name))
-        .map(|(d, _)| Rc::clone(d))
+    documentos::find_by_name(&all_docs(ui), name)
+}
+
+/// Release the UI borrow before storage calls or buffer notifications.
+fn with_documents<T>(ui: &UiRc, f: impl FnOnce(Documents<'_>) -> T) -> T {
+    let (files, project) = {
+        let u = ui.borrow();
+        (u.files.clone(), u.project.clone())
+    };
+    let docs = all_docs(ui);
+    f(Documents::new(&files, &project, &docs))
 }
 
 fn view_help(ui: &UiRc, doc: &Rc<Doc>) -> Option<Rc<ViewHelp>> {
@@ -1206,6 +1417,44 @@ fn open_doc(ui: &UiRc, path: Option<String>, text: &str) -> Rc<Doc> {
                 }
             });
     }
+    {
+        let source = ui.borrow().run.as_ref().and_then(|_| {
+            ui.borrow()
+                .execution_sources
+                .get(&debug_sources::normalize_path(&doc.name()))
+                .cloned()
+        });
+        if source.is_some() {
+            ui.borrow_mut().execution_editors.insert(
+                debug_sources::normalize_path(&doc.name()),
+                Rc::downgrade(&doc),
+            );
+        }
+        doc.set_running_source(source);
+        let weak_ui = Rc::downgrade(ui);
+        let weak_doc = Rc::downgrade(&doc);
+        doc.inspect_source.connect_clicked(move |_| {
+            if let (Some(ui), Some(doc)) = (weak_ui.upgrade(), weak_doc.upgrade()) {
+                let source = doc.running_source.borrow().clone();
+                if let Some(source) = source {
+                    let paused = ui
+                        .borrow()
+                        .run
+                        .as_ref()
+                        .and_then(|run| run.paused.clone())
+                        .filter(|(path, _, _)| path == &source.path);
+                    let (_, line, error) =
+                        paused.clone().unwrap_or((source.path.clone(), 1, false));
+                    show_running_source(&ui, &source.path, line, error);
+                    if paused.is_none()
+                        && let Some(viewer) = ui.borrow().source_viewer.as_ref()
+                    {
+                        viewer.doc.clear_debug_line();
+                    }
+                }
+            }
+        });
+    }
     let help = ui.borrow().help.clone().expect("help");
     let vh = {
         let weak = Rc::downgrade(&doc);
@@ -1225,6 +1474,8 @@ fn open_doc(ui: &UiRc, path: Option<String>, text: &str) -> Rc<Doc> {
             }
         });
     }
+    abas::ligar(ui, &doc);
+    sessao::vigiar(ui, &doc);
     {
         let (dark, scheme) = theme_scheme(ui);
         doc.set_theme(scheme.as_ref(), dark);
@@ -1359,17 +1610,18 @@ fn new_untitled_tab(ui: &UiRc) {
 
 /// Open `path` from the project (or switch to its tab).
 fn open_path(ui: &UiRc, path: &str) -> Option<Rc<Doc>> {
-    if let Some(d) = doc_by_name(ui, path) {
-        switch_to(ui, &d);
-        return Some(d);
-    }
-    let result = {
-        let u = ui.borrow();
-        u.files.read_file(&u.project, path)
-    };
-    match result {
-        Ok(src) => {
-            let doc = open_doc(ui, Some(path.to_string()), &src);
+    match with_documents(ui, |documents| documents.open(path)) {
+        Ok(OpenDocument::Existing(doc)) => {
+            switch_to(ui, &doc);
+            Some(doc)
+        }
+        Ok(OpenDocument::Loaded {
+            path,
+            text,
+            revision,
+        }) => {
+            let doc = open_doc(ui, Some(path.clone()), &text);
+            *doc.revision.borrow_mut() = revision;
             set_status(ui, &format!("aberto {path}"));
             Some(doc)
         }
@@ -1401,62 +1653,85 @@ fn remove_tab(ui: &UiRc, doc: &Rc<Doc>) {
     if let Some(n) = nb.page_num(&doc.page) {
         nb.remove_page(Some(n));
     }
+    doc.vigia.replace(None);
+    if let Err(e) = documentos::forget_recovery(doc) {
+        ui.borrow()
+            .console
+            .stderr(&format!("aviso: cópia de recuperação preservada: {e}\n"));
+    }
     refresh_title(ui);
     refresh_diag_label(ui);
+    sessao::salvar(ui);
 }
 
+/// The user closes `doc` (asking about unsaved changes first). Unlike
+/// `remove_tab`, it can be reopened with Ctrl+Shift+T.
 fn close_doc(ui: &UiRc, doc: &Rc<Doc>) {
-    if !doc.is_dirty() {
+    if documentos::close_decision(doc) == CloseDecision::Close {
+        abas::lembrar_fechada(ui, doc);
         remove_tab(ui, doc);
         return;
     }
     let ui_c = Rc::clone(ui);
     let d = Rc::clone(doc);
-    confirm_unsaved(ui, vec![Rc::clone(doc)], move || remove_tab(&ui_c, &d));
+    confirm_unsaved(ui, vec![Rc::clone(doc)], move || {
+        abas::lembrar_fechada(&ui_c, &d);
+        remove_tab(&ui_c, &d);
+    });
 }
 
 /// Save one tab; an untitled one asks for a name. False if not saved.
 fn save_doc(ui: &UiRc, doc: &Rc<Doc>) -> bool {
-    if doc.is_untitled() {
+    let original_name = doc.name();
+    let new_name = if doc.is_untitled() {
         let window = ui.borrow().window.clone();
-        let Some(name) = perguntar_linha(&window, &format!("Salvar `{}` como:", doc.untitled))
-        else {
-            return false;
-        };
-        let name = name.trim().trim_start_matches('/').to_string();
-        if name.is_empty() {
-            return false;
-        }
-        let name = if name.contains('.') {
-            name
-        } else {
-            format!("{name}.lep")
-        };
-        if doc_by_name(ui, &name).is_some() {
-            set_status(ui, &format!("`{name}` já está aberto em outra aba"));
-            return false;
-        }
-        doc.set_path(name);
-    }
-    let name = doc.name();
-    let result = {
-        let u = ui.borrow();
-        u.files.write_file(&u.project, &name, &doc.text())
+        perguntar_linha(&window, &format!("Salvar `{}` como:", doc.untitled))
+    } else {
+        None
     };
-    match result {
-        Ok(()) => {
-            doc.mark_saved();
-            ui.borrow().file_cache.borrow_mut().remove(&name);
-            refresh_tree(ui);
-            refresh_title(ui);
-            set_status(ui, &format!("salvo {name}"));
+    if doc.name() != original_name || !all_docs(ui).iter().any(|d| Rc::ptr_eq(d, doc)) {
+        return false;
+    }
+    let outcome = with_documents(ui, |documents| documents.save(doc, new_name.as_deref()));
+    finish_save(ui, doc, outcome)
+}
+
+fn finish_save(ui: &UiRc, doc: &Rc<Doc>, outcome: Result<SaveOutcome, String>) -> bool {
+    match outcome {
+        Ok(SaveOutcome::Saved { name, warning }) => {
+            saved(ui, doc, &name);
+            if let Some(warning) = warning {
+                set_status(ui, "arquivo salvo com aviso — veja o console");
+                ui.borrow().console.stderr(&format!("aviso: {warning}\n"));
+            }
             true
         }
+        Ok(SaveOutcome::Cancelled) => false,
+        Ok(SaveOutcome::Conflict { name }) => {
+            set_status(
+                ui,
+                &format!("conflito ao salvar {name}; a aba foi preservada"),
+            );
+            conflitos::mostrar(ui, doc);
+            false
+        }
         Err(e) => {
-            set_status(ui, &format!("erro ao salvar {name}: {e}"));
+            set_status(ui, &e);
             false
         }
     }
+}
+
+/// UI bookkeeping after the document controller completed a save.
+fn saved(ui: &UiRc, doc: &Rc<Doc>, name: &str) {
+    // A first save gives the tab a file to watch.
+    if doc.vigia.borrow().is_none() {
+        sessao::vigiar(ui, doc);
+    }
+    ui.borrow().file_cache.borrow_mut().remove(name);
+    refresh_tree(ui);
+    refresh_title(ui);
+    set_status(ui, &format!("salvo {name}"));
 }
 
 /// Unsaved changes in `docs`: Salvar (all), Descartar or Cancelar. `then`
@@ -1503,11 +1778,12 @@ fn confirm_unsaved(ui: &UiRc, docs: Vec<Rc<Doc>>, then: impl FnOnce() + 'static)
     #[allow(deprecated)]
     dlg.connect_response(move |d, resp| {
         d.close();
-        let go = match resp {
-            gtk::ResponseType::Reject => true,
-            gtk::ResponseType::Accept => docs.iter().all(|doc| save_doc(&ui_c, doc)),
-            _ => false,
+        let choice = match resp {
+            gtk::ResponseType::Reject => UnsavedChoice::Discard,
+            gtk::ResponseType::Accept => UnsavedChoice::Save,
+            _ => UnsavedChoice::Cancel,
         };
+        let go = documentos::resolve_unsaved(choice, &docs, |doc| save_doc(&ui_c, doc));
         if go && let Some(f) = then.borrow_mut().take() {
             f();
         }
@@ -1515,18 +1791,28 @@ fn confirm_unsaved(ui: &UiRc, docs: Vec<Rc<Doc>>, then: impl FnOnce() + 'static)
     dlg.present();
 }
 
+/// How the window names the open project: the folder, or `aluno / projeto`.
+fn nome_do_projeto(u: &Ui) -> String {
+    match &u.files {
+        Files::Remote { projeto, .. } => format!("{} / {projeto}", u.project),
+        _ => u.project.clone(),
+    }
+}
+
 fn refresh_title(ui: &UiRc) {
     let doc = current_doc(ui);
     let Ok(u) = ui.try_borrow() else { return };
+    let projeto = nome_do_projeto(&u);
     let title = match &doc {
         Some(doc) => {
             let star = if doc.is_dirty() { "● " } else { "" };
-            format!("{star}{} — {} — Expressa Aula", doc.name(), u.project)
+            format!("{star}{} — {projeto} — Expressa Aula", doc.name())
         }
-        None if u.project.is_empty() => "Expressa Aula".to_string(),
-        None => format!("{} — Expressa Aula", u.project),
+        None if projeto.is_empty() => "Expressa Aula".to_string(),
+        None => format!("{projeto} — Expressa Aula"),
     };
     u.window.set_title(Some(&title));
+    set_action_enabled(&u.window, "sincronizacao", u.files.is_remote());
 }
 
 fn refresh_diag_label(ui: &UiRc) {
@@ -1607,6 +1893,9 @@ fn apply_theme(ui: &UiRc) {
     set_action_state_str(&win, "tema", if dark { "escuro" } else { "claro" });
     for d in all_docs(ui) {
         d.set_theme(scheme.as_ref(), dark);
+    }
+    if let Some(viewer) = ui.borrow().source_viewer.as_ref() {
+        viewer.doc.set_theme(scheme.as_ref(), dark);
     }
     ui.borrow().console.set_dark(dark);
 }
@@ -1772,8 +2061,9 @@ fn make_debug_panel(ui: &UiRc) -> GtkBox {
                     .ok()
                     .filter(|l| *l > 0)
                     .map(|l| (f.to_string(), l))
-            }) {
-                goto_file_line(&ui_s, &file, line);
+            }) && !show_running_source(&ui_s, &file, line, false)
+            {
+                set_status(&ui_s, "fonte desta execução não está disponível");
             }
         });
     }
@@ -1839,6 +2129,9 @@ fn send_debug_cmd(ui: &UiRc, cmd: &str) {
     // Resuming: the program runs until the next pause, so the step buttons
     // are off and the stopped line is no longer current.
     if sent && matches!(cmd, "continuar" | "proximo" | "entrar" | "sair") {
+        if let Some(run) = ui.borrow_mut().run.as_mut() {
+            run.paused = None;
+        }
         set_debug_buttons(ui, false, true);
         clear_debug_views(ui);
         set_status(ui, "executando… (Parar encerra)");
@@ -1862,14 +2155,13 @@ fn toggle_breakpoint_here(ui: &UiRc) {
 }
 
 fn toggle_breakpoint(ui: &UiRc, doc: &Rc<Doc>, line: u32) {
-    let on = doc.toggle_breakpoint(line);
-    // While running, tell the debugger (it names files by their copy).
-    let cmd = ui.borrow().run.as_ref().map(|run| {
-        let file = run.ws_dir.join(doc.name()).to_string_lossy().into_owned();
-        format!("{} {file}:{line}", if on { "ponto" } else { "remover" })
-    });
-    if let Some(cmd) = cmd {
-        send_debug_cmd(ui, &cmd);
+    doc.toggle_breakpoint(line);
+    sessao::salvar(ui);
+    if !matches!(ui.borrow().execution.availability(), Ok(())) {
+        set_status(
+            ui,
+            "ponto de parada alterado para a próxima execução; a execução atual usa os pontos iniciais",
+        );
     }
 }
 
@@ -1908,6 +2200,9 @@ fn fill_error_stack(ui: &UiRc, frames: &[exec::StackFrame]) {
 }
 
 fn clear_debug_views(ui: &UiRc) {
+    if let Some(viewer) = ui.borrow().source_viewer.as_ref() {
+        viewer.doc.clear_debug_line();
+    }
     {
         let u = ui.borrow();
         u.vars_store.clear();
@@ -1923,16 +2218,122 @@ fn show_pause(ui: &UiRc, p: &expressa::runtime::DebugPaused) {
     for d in all_docs(ui) {
         d.clear_debug_line();
     }
-    match doc_by_name(ui, &p.file).or_else(|| open_path(ui, &p.file)) {
-        Some(doc) => {
-            switch_to(ui, &doc);
-            doc.show_debug_line(p.line, p.error.is_some());
-        }
-        None => set_status(
+    if !show_running_source(ui, &p.file, p.line, p.error.is_some()) {
+        set_status(
             ui,
-            &format!("pausado em {}:{} (arquivo fora do projeto)", p.file, p.line),
-        ),
+            &format!(
+                "pausado em {}:{} (fonte da execução indisponível)",
+                p.file, p.line
+            ),
+        );
     }
+}
+
+fn close_current_tab(ui: &UiRc) {
+    if let Some(doc) = current_doc(ui) {
+        close_doc(ui, &doc);
+    } else {
+        close_source_viewer(ui);
+    }
+}
+
+fn execution_editor(ui: &UiRc, path: &str) -> Option<Rc<Doc>> {
+    let original = ui
+        .borrow()
+        .execution_editors
+        .get(path)
+        .and_then(std::rc::Weak::upgrade);
+    original
+        .filter(|d| all_docs(ui).iter().any(|open| Rc::ptr_eq(d, open)))
+        .or_else(|| doc_by_name(ui, path))
+        .or_else(|| open_path(ui, path))
+}
+
+fn execution_entry_doc(ui: &UiRc) -> Option<Rc<Doc>> {
+    current_doc(ui).or_else(|| {
+        let path = {
+            let u = ui.borrow();
+            let viewer = u.source_viewer.as_ref()?;
+            (u.notebook.current_page() == u.notebook.page_num(&viewer.page))
+                .then(|| viewer.source.path.clone())?
+        };
+        execution_editor(ui, &path)
+    })
+}
+
+/// Keep execution sources outside the editable document/recovery lifecycle.
+fn close_source_viewer(ui: &UiRc) {
+    let viewer = ui.borrow_mut().source_viewer.take();
+    if let Some(viewer) = viewer {
+        let notebook = ui.borrow().notebook.clone();
+        if let Some(n) = notebook.page_num(&viewer.page) {
+            notebook.remove_page(Some(n));
+        }
+    }
+}
+
+fn show_running_source(ui: &UiRc, path: &str, line: u32, error: bool) -> bool {
+    let source = ui
+        .borrow()
+        .execution_sources
+        .get(&debug_sources::normalize_path(path))
+        .cloned();
+    let Some(source) = source else { return false };
+    let existing = ui.borrow().source_viewer.clone();
+    let viewer = if let Some(viewer) =
+        existing.filter(|v| v.source.revision == source.revision && v.source.path == source.path)
+    {
+        viewer
+    } else {
+        close_source_viewer(ui);
+        let viewer = {
+            let u = ui.borrow();
+            Rc::new(debug_sources::Viewer::new(
+                Arc::clone(&source),
+                &u.languages,
+                &u.search_settings,
+            ))
+        };
+        let (dark, scheme) = theme_scheme(ui);
+        viewer.doc.set_theme(scheme.as_ref(), dark);
+        for (file, line) in &ui.borrow().execution_breakpoints {
+            if file == &source.path {
+                viewer.doc.toggle_breakpoint(*line);
+            }
+        }
+        let weak = Rc::downgrade(ui);
+        let path = source.path.clone();
+        viewer.edit.connect_clicked(move |_| {
+            let Some(ui) = weak.upgrade() else { return };
+            // Prefer the original tab even after Save As/rename.
+            if let Some(doc) = execution_editor(&ui, &path) {
+                switch_to(&ui, &doc);
+            }
+        });
+        let weak = Rc::downgrade(ui);
+        viewer.close.connect_clicked(move |_| {
+            if let Some(ui) = weak.upgrade() {
+                close_source_viewer(&ui);
+            }
+        });
+        let notebook = ui.borrow().notebook.clone();
+        notebook.append_page(
+            &viewer.page,
+            Some(&Label::new(Some(&format!("Execução: {}", source.path)))),
+        );
+        ui.borrow_mut().source_viewer = Some(Rc::clone(&viewer));
+        viewer
+    };
+    if ui.borrow().run.is_none() {
+        viewer.finish();
+    }
+    let notebook = ui.borrow().notebook.clone();
+    if let Some(n) = notebook.page_num(&viewer.page) {
+        notebook.set_current_page(Some(n));
+    }
+    viewer.doc.show_debug_line(line, error);
+    viewer.doc.view.grab_focus();
+    true
 }
 
 // ── Running ────────────────────────────────────────────────────────────────
@@ -1941,58 +2342,175 @@ fn show_pause(ui: &UiRc, p: &expressa::runtime::DebugPaused) {
 /// cannot freeze the window. The rest wait in the (bounded) channel.
 const EVENTS_PER_TICK: usize = 200;
 
+fn execution_available(ui: &UiRc, running_message: &str) -> bool {
+    let availability = ui.borrow().execution.availability();
+    let message = match availability {
+        Ok(()) => return true,
+        Err(Unavailable::Running) => running_message.to_string(),
+        Err(Unavailable::Preparing) => "aguarde: copiando o projeto para executar".to_string(),
+        Err(Unavailable::Uploading) => {
+            "aguarde: salvando os arquivos que o programa escreveu".to_string()
+        }
+    };
+    set_status(ui, &message);
+    false
+}
+
+fn can_change_project(ui: &UiRc) -> bool {
+    execution_available(ui, "pare o programa antes de trocar de projeto")
+}
+
 fn executar(ui: &UiRc, debug: bool) {
-    if ui.borrow().run.is_some() {
-        set_status(ui, "já tem um programa executando — aperte Parar primeiro");
+    if !execution_available(ui, "já tem um programa executando — aperte Parar primeiro") {
         return;
     }
-    let Some(doc) = current_doc(ui) else {
+    let Some(doc) = execution_entry_doc(ui) else {
         set_status(ui, "abra um arquivo para executar");
         return;
     };
     let name = doc.name();
-    let docs = all_docs(ui);
-    let (project, args) = {
-        let u = ui.borrow();
-        (u.project.clone(), parse_run_args(&u.args_entry.text()))
-    };
-    // Fresh copy of the project with the text of every open tab, so the
-    // program and its `importe`s run what is on screen (saved or not).
-    let ws = {
-        let u = ui.borrow();
-        Workspace::download(&u.files, &project).and_then(|mut ws| {
-            for d in &docs {
-                ws.write_editor_text(&d.name(), &d.text())?;
-            }
-            Ok(ws)
-        })
-    };
-    let ws = match ws {
-        Ok(ws) => ws,
-        Err(e) => {
-            set_status(ui, &format!("não copiou o projeto: {e}"));
-            return;
-        }
-    };
-    let bps: Vec<(String, u32)> = docs
+    let fonte = doc.text();
+    // The text of every open tab goes into the copy, so the program and its
+    // `importe`s run what is on screen (saved or not).
+    let textos: Vec<exec::EditorSource> = all_docs(ui)
         .iter()
-        .flat_map(|d| {
-            let n = d.name();
-            d.breakpoints
-                .borrow()
-                .iter()
-                .map(move |&l| (n.clone(), l))
-                .collect::<Vec<_>>()
+        .map(|doc| exec::EditorSource {
+            path: doc.name(),
+            text: doc.text(),
+            expected: if doc.is_untitled() {
+                store::Expected::Missing
+            } else {
+                doc.revision
+                    .borrow()
+                    .clone()
+                    .map(store::Expected::Revision)
+                    .unwrap_or(store::Expected::Unversioned)
+            },
         })
         .collect();
+    let launch_docs: Vec<_> = all_docs(ui)
+        .into_iter()
+        .map(|d| {
+            let path = debug_sources::normalize_path(&d.name());
+            (Rc::downgrade(&d), path)
+        })
+        .collect();
+    let bps: Vec<_> = all_docs(ui)
+        .iter()
+        .flat_map(|d| {
+            let name = debug_sources::normalize_path(&d.name());
+            d.breakpoint_lines()
+                .into_iter()
+                .map(move |line| (name.clone(), line))
+        })
+        .collect();
+    let entry_name = name.clone();
+    let (files, project, args) = {
+        let mut u = ui.borrow_mut();
+        u.execution
+            .transition(ExecutionEvent::Prepare)
+            .expect("idle before preparing a run");
+        let args = parse_run_args(&u.args_entry.text());
+        (u.files.clone(), u.project.clone(), args)
+    };
+    let chave = files.cache_key(&project);
+    set_status(ui, &format!("preparando {name}…"));
+    em_segundo_plano(
+        ui,
+        move || {
+            let mut ws = Workspace::sync(&files, &project)?;
+            for source in &textos {
+                ws.write_editor_source(source)?;
+            }
+            ws.arm()?;
+            let sources = ws.capture_sources()?;
+            Ok::<_, String>((ws, sources))
+        },
+        move |ui, ws| {
+            let outro_projeto = {
+                let u = ui.borrow();
+                u.files.cache_key(&u.project) != chave
+            };
+            if outro_projeto {
+                ui.borrow_mut()
+                    .execution
+                    .transition(ExecutionEvent::PreparationFailed)
+                    .expect("preparation abandoned after a project change");
+                return;
+            }
+            match ws {
+                Ok((ws, mut sources)) => {
+                    // The entry source has its own immutable identity, even if
+                    // its editor tab was renamed while preparation ran.
+                    let source = Arc::new(debug_sources::Source::new(&entry_name, fonte.clone()));
+                    sources.insert(source.path.clone(), source);
+                    close_source_viewer(ui);
+                    for d in all_docs(ui) {
+                        d.set_running_source(None);
+                    }
+                    ui.borrow_mut().execution_editors.clear();
+                    for (weak, path) in launch_docs {
+                        ui.borrow_mut()
+                            .execution_editors
+                            .insert(path.clone(), weak.clone());
+                        if let Some(d) = weak.upgrade() {
+                            d.set_running_source(sources.get(&path).cloned());
+                        }
+                    }
+                    ui.borrow_mut().execution_sources = Arc::new(sources);
+                    ui.borrow_mut().execution_breakpoints = bps;
+                    iniciar_execucao(ui, ws, entry_name, fonte, debug, args)
+                }
+                Err(e) => {
+                    ui.borrow_mut()
+                        .execution
+                        .transition(ExecutionEvent::PreparationFailed)
+                        .expect("preparing before a preparation failure");
+                    set_status(ui, &format!("não copiou o projeto: {e}"));
+                    if !ui.borrow().files.is_remote() {
+                        pendencias_ui::notify_local_failure(ui);
+                    }
+                }
+            }
+        },
+    );
+}
+
+/// Second half of [`executar`], once the copy is ready.
+fn iniciar_execucao(
+    ui: &UiRc,
+    ws: Workspace,
+    name: String,
+    fonte: String,
+    debug: bool,
+    args: Vec<String>,
+) {
+    mostrar_pagina_inferior(ui, PaginaInferior::Saida);
+    let (bps, unbound) = {
+        let u = ui.borrow();
+        u.execution_breakpoints
+            .iter()
+            .cloned()
+            .partition::<Vec<_>, _>(|(path, line)| {
+                u.execution_sources
+                    .get(path)
+                    .and_then(|s| s.lines.as_ref())
+                    .is_some_and(|lines| lines.contains(line))
+            })
+    };
     let console = Rc::clone(&ui.borrow().console);
     let graficos = Rc::clone(&ui.borrow().graficos);
     let telas_graf = Rc::clone(&ui.borrow().telas_graf);
     console.clear();
+    if debug {
+        for (path, line) in unbound {
+            console.stderr(&format!("ponto de parada inativo em {path}:{line}: sem instrução executável, ou fonte com erro de sintaxe\n"));
+        }
+    }
     graficos.limpar();
     ui.borrow().telas_graf.limpar();
     clear_debug_views(ui);
-    if let Some(d) = doc.diag.borrow().as_ref() {
+    if let Some(d) = docs::diagnose(&fonte) {
         set_status(
             ui,
             &format!(
@@ -2007,21 +2525,52 @@ fn executar(ui: &UiRc, debug: bool) {
         );
     }
 
-    let run = exec::spawn(&ws, &name, doc.text(), debug, bps, args);
+    let run = exec::spawn(&ws, &name, fonte, debug, bps, args);
     telas_graf.set_eventos(Some(run.graf_eventos.clone()));
-    ui.borrow_mut().run = Some(Run {
-        debug_cmd: run.debug_cmd.clone(),
-        ws_dir: ws.dir.clone(),
-    });
+    {
+        let mut u = ui.borrow_mut();
+        u.execution
+            .transition(ExecutionEvent::Started)
+            .expect("prepared before starting a run");
+        u.run = Some(Run {
+            debug_cmd: run.debug_cmd.clone(),
+            paused: None,
+        });
+    }
     set_debug_buttons(ui, false, true);
 
     let ui_ev = Rc::clone(ui);
+    // Taken when the run ends, to send back what the program wrote.
+    let mut ws = Some(ws);
     glib::timeout_add_local(std::time::Duration::from_millis(16), move || {
         for _ in 0..EVENTS_PER_TICK {
             match run.events.try_recv() {
                 Ok(ExecEvent::Stdout(s)) => console.stdout(&s),
                 Ok(ExecEvent::Stderr(s)) => console.stderr(&s),
+                Ok(ExecEvent::Source(source)) => {
+                    {
+                        let mut u = ui_ev.borrow_mut();
+                        Arc::make_mut(&mut u.execution_sources)
+                            .insert(source.path.clone(), Arc::clone(&source));
+                    }
+                    for doc in all_docs(&ui_ev) {
+                        let matches = doc
+                            .running_source
+                            .borrow()
+                            .as_ref()
+                            .map(|s| s.path == source.path)
+                            .unwrap_or_else(|| {
+                                debug_sources::normalize_path(&doc.name()) == source.path
+                            });
+                        if matches {
+                            doc.set_running_source(Some(Arc::clone(&source)));
+                        }
+                    }
+                }
                 Ok(ExecEvent::Paused(p)) => {
+                    if let Some(run) = ui_ev.borrow_mut().run.as_mut() {
+                        run.paused = Some((p.file.clone(), p.line, p.error.is_some()));
+                    }
                     fill_debug_views(&ui_ev, &p);
                     set_debug_buttons(&ui_ev, true, true);
                     show_pause(&ui_ev, &p);
@@ -2055,18 +2604,15 @@ fn executar(ui: &UiRc, debug: bool) {
                 Ok(ExecEvent::Finished(f)) => {
                     console.cancel_input();
                     telas_graf.set_eventos(None);
-                    ui_ev.borrow_mut().run = None;
                     set_debug_buttons(&ui_ev, false, false);
                     clear_debug_views(&ui_ev);
                     // Files the program wrote (salve_arquivo, …) go back to
-                    // the server.
-                    let sent = {
-                        let u = ui_ev.borrow();
-                        ws.upload_changes(&u.files, &project)
-                    };
-                    if matches!(sent, Ok(n) if n > 0) {
-                        refresh_tree(&ui_ev);
-                    }
+                    // the project.
+                    enviar_depois_da_execucao(
+                        &ui_ev,
+                        &console,
+                        ws.take().expect("workspace belongs to the finishing run"),
+                    );
                     if f.ok {
                         set_status(&ui_ev, &format!("ok — {name}"));
                     } else {
@@ -2099,19 +2645,29 @@ fn executar(ui: &UiRc, debug: bool) {
                             } else {
                                 f.error_file.clone()
                             };
-                            goto_file_line(&ui_ev, &file, f.error_line);
+                            show_running_source(&ui_ev, &file, f.error_line, true);
                         }
-                    }
-                    if let Err(e) = sent {
-                        set_status(&ui_ev, &format!("não enviou os arquivos: {e}"));
                     }
                     return glib::ControlFlow::Break;
                 }
                 Err(std::sync::mpsc::TryRecvError::Empty) => break,
                 Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                    // The run thread ended without `Finished`: clean up the
+                    // same way, and say it instead of stopping silently.
                     console.cancel_input();
-                    ui_ev.borrow_mut().run = None;
+                    telas_graf.set_eventos(None);
                     set_debug_buttons(&ui_ev, false, false);
+                    clear_debug_views(&ui_ev);
+                    enviar_depois_da_execucao(
+                        &ui_ev,
+                        &console,
+                        ws.take().expect("workspace belongs to the finishing run"),
+                    );
+                    console.stderr(&format!(
+                        "{}: a execução parou sem terminar.\n",
+                        exec::ERRO_INTERNO
+                    ));
+                    set_status(&ui_ev, "a execução parou com um erro interno");
                     return glib::ControlFlow::Break;
                 }
             }
@@ -2140,8 +2696,7 @@ fn open_shipped_exemplos(ui: &UiRc) -> bool {
 
 /// Ask for a local project folder. Does not block the GTK loop.
 fn choose_local_folder(ui: &UiRc) {
-    if ui.borrow().run.is_some() {
-        set_status(ui, "pare o programa antes de trocar de projeto");
+    if !can_change_project(ui) {
         return;
     }
     pause_raise();
@@ -2185,12 +2740,18 @@ fn open_local_project(ui: &UiRc, path: PathBuf) {
         refresh_tree(ui);
         return;
     }
+    ui.borrow_mut().navigation_epoch += 1;
     let ui_c = Rc::clone(ui);
     after_unsaved(ui, move || apply_local(&ui_c, path));
 }
 
 fn apply_local(ui: &UiRc, path: PathBuf) {
-    close_project_tabs(ui);
+    ui.borrow_mut().navigation_epoch += 1;
+    sincronizacao::close(ui);
+    if !matches!(ui.borrow().files, Files::None) {
+        close_project_tabs(ui);
+    }
+    ui.borrow_mut().sessao_pronta = false;
     let name = path
         .file_name()
         .map(|s| s.to_string_lossy().into_owned())
@@ -2203,6 +2764,8 @@ fn apply_local(ui: &UiRc, path: PathBuf) {
         u.files = Files::Local(path.clone());
         u.project = name;
         u.prefs.pasta = shown.clone();
+        u.prefs
+            .lembrar_recente(prefs::Recente::Local(shown.clone()));
         u.prefs.save();
         u.file_cache.borrow_mut().clear();
     }
@@ -2210,12 +2773,13 @@ fn apply_local(ui: &UiRc, path: PathBuf) {
     finish_open(ui);
 }
 
-/// URL and student name. Files on that server live in `aula-data/aluno`.
+/// URL and student name, then the student's project (`escolher_projeto`).
+/// Files on that server live in `aula-data/aluno/projeto`.
 fn ask_server(ui: &UiRc) {
-    if ui.borrow().run.is_some() {
-        set_status(ui, "pare o programa antes de trocar de projeto");
+    if !can_change_project(ui) {
         return;
     }
+    ui.borrow_mut().navigation_epoch += 1;
     let (url, aluno) = {
         let u = ui.borrow();
         let url = if u.prefs.servidor.is_empty() {
@@ -2243,24 +2807,150 @@ fn ask_server(ui: &UiRc) {
         return;
     }
     let url = normalize_url(&url);
-    match Rpc::connect(&url) {
-        Ok(rpc) => {
-            let ui_c = Rc::clone(ui);
-            after_unsaved(ui, move || apply_remote(&ui_c, rpc, url, aluno));
+    let atual = ui.borrow().prefs.projeto.clone();
+    conectar_servidor(ui, url, aluno, atual);
+}
+
+/// Arquivo → Remoto → Novo projeto: the project list of the connected student,
+/// or the server dialog when the window is not on a server.
+fn trocar_projeto(ui: &UiRc) {
+    let conectado = {
+        let u = ui.borrow();
+        match &u.files {
+            Files::Remote { rpc, .. } => {
+                Some((Arc::clone(rpc), u.prefs.servidor.clone(), u.project.clone()))
+            }
+            _ => None,
         }
-        Err(e) => set_status(ui, &format!("servidor: {e}")),
+    };
+    match conectado {
+        Some((rpc, url, aluno)) => abrir_projeto_remoto(ui, rpc, url, aluno),
+        None => ask_server(ui),
     }
 }
 
-fn apply_remote(ui: &UiRc, rpc: Rpc, url: String, aluno: String) {
-    close_project_tabs(ui);
-    let tip = format!("{url} — aula-data/{aluno}");
+/// Shows `aluno`'s projects on `rpc`; the one chosen opens, after the usual
+/// question about unsaved tabs.
+fn abrir_projeto_remoto(ui: &UiRc, rpc: Arc<Rpc>, url: String, aluno: String) {
+    if !can_change_project(ui) {
+        return;
+    }
+    let atual = {
+        let u = ui.borrow();
+        match &u.files {
+            Files::Remote { projeto, .. } if u.project == aluno => projeto.clone(),
+            _ => u.prefs.projeto.clone(),
+        }
+    };
+    listar_e_escolher(ui, rpc, url, aluno, atual, true);
+}
+
+fn navigation_task<T: Send + 'static>(
+    ui: &UiRc,
+    work: impl FnOnce() -> Result<T, String> + Send + 'static,
+    done: impl FnOnce(&UiRc, T) + 'static,
+) {
+    let epoch = ui.borrow().navigation_epoch;
+    let reply = background::Reply::spawn(epoch, work);
+    let ui = Rc::clone(ui);
+    let mut done = Some(done);
+    glib::timeout_add_local(std::time::Duration::from_millis(30), move || {
+        let epoch = ui.borrow().navigation_epoch;
+        match reply.poll(epoch) {
+            background::Poll::Ready(Ok(value)) => {
+                done.take().unwrap()(&ui, value);
+                glib::ControlFlow::Break
+            }
+            background::Poll::Ready(Err(e)) => {
+                set_status(&ui, &e);
+                glib::ControlFlow::Break
+            }
+            background::Poll::Pending => glib::ControlFlow::Continue,
+            background::Poll::Obsolete => glib::ControlFlow::Break,
+        }
+    });
+}
+
+fn conectar_servidor(ui: &UiRc, url: String, aluno: String, atual: String) {
+    if !can_change_project(ui) {
+        return;
+    }
+    ui.borrow_mut().navigation_epoch += 1;
+    let url = normalize_url(&url);
+    let address = url.clone();
+    set_status(ui, "conectando ao servidor…");
+    navigation_task(
+        ui,
+        move || Rpc::connect(&address).map(Arc::new),
+        move |ui, rpc| listar_e_escolher(ui, rpc, url, aluno, atual, false),
+    );
+}
+
+fn listar_e_escolher(
+    ui: &UiRc,
+    rpc: Arc<Rpc>,
+    url: String,
+    aluno: String,
+    atual: String,
+    novo: bool,
+) {
+    let client = Arc::clone(&rpc);
+    let student = aluno.clone();
+    navigation_task(
+        ui,
+        move || client.list_projects(&student),
+        move |ui, projetos| {
+            if !can_change_project(ui) {
+                return;
+            }
+            let window = ui.borrow().window.clone();
+            let ui = Rc::clone(ui);
+            let epoch = ui.borrow().navigation_epoch;
+            let titulo = aluno.clone();
+            let chooser_ui = Rc::clone(&ui);
+            escolher_projeto(
+                &chooser_ui,
+                &window,
+                Arc::clone(&rpc),
+                &titulo,
+                projetos,
+                &atual,
+                novo,
+                move |projeto| {
+                    if ui.borrow().navigation_epoch != epoch {
+                        return;
+                    }
+                    let ui_c = Rc::clone(&ui);
+                    after_unsaved(&ui, move || apply_remote(&ui_c, rpc, url, aluno, projeto));
+                },
+            );
+        },
+    );
+}
+
+fn apply_remote(ui: &UiRc, rpc: Arc<Rpc>, url: String, aluno: String, projeto: String) {
+    ui.borrow_mut().navigation_epoch += 1;
+    sincronizacao::close(ui);
+    if !matches!(ui.borrow().files, Files::None) {
+        close_project_tabs(ui);
+    }
+    ui.borrow_mut().sessao_pronta = false;
+    let tip = format!("{url} — aula-data/{aluno}/{projeto}");
     {
         let mut u = ui.borrow_mut();
         u.files.shutdown();
-        u.files = Files::Remote(rpc);
-        u.project = aluno.clone();
+        u.files = Files::Remote {
+            rpc,
+            projeto: projeto.clone(),
+        };
+        u.prefs.lembrar_recente(prefs::Recente::Servidor {
+            url: url.clone(),
+            aluno: aluno.clone(),
+            projeto: projeto.clone(),
+        });
+        u.project = aluno;
         u.prefs.servidor = url;
+        u.prefs.projeto = projeto;
         u.prefs.save();
         u.file_cache.borrow_mut().clear();
     }
@@ -2268,9 +2958,210 @@ fn apply_remote(ui: &UiRc, rpc: Rpc, url: String, aluno: String) {
     finish_open(ui);
 }
 
+/// The student's projects: pick one (double-click, Enter or Abrir) or
+/// create a new one. Calls `done` with the chosen name; closing or
+/// Cancelar calls nothing. Does not block the GTK loop.
+fn escolher_projeto(
+    ui: &UiRc,
+    parent: &impl IsA<gtk::Window>,
+    rpc: Arc<Rpc>,
+    aluno: &str,
+    projetos: Vec<String>,
+    atual: &str,
+    novo_projeto: bool,
+    done: impl FnOnce(String) + 'static,
+) {
+    let dialog = gtk::Window::builder()
+        .transient_for(parent)
+        .modal(true)
+        .title(format!("Projetos de {aluno}"))
+        .default_width(420)
+        .default_height(380)
+        .build();
+    let v = GtkBox::new(Orientation::Vertical, 10);
+    v.set_margin_start(16);
+    v.set_margin_end(16);
+    v.set_margin_top(16);
+    v.set_margin_bottom(16);
+    let info = Label::new(Some("Escolha um projeto ou crie um novo."));
+    info.set_xalign(0.0);
+    let lista = gtk::ListBox::new();
+    lista.set_selection_mode(gtk::SelectionMode::Single);
+    let rolagem = ScrolledWindow::builder()
+        .child(&lista)
+        .vexpand(true)
+        .min_content_height(160)
+        .build();
+    let novo = Entry::builder()
+        .placeholder_text("novo projeto (ex.: aula-03)")
+        .hexpand(true)
+        .build();
+    let criar = Button::with_label("Criar");
+    let linha_novo = GtkBox::new(Orientation::Horizontal, 8);
+    linha_novo.append(&novo);
+    linha_novo.append(&criar);
+    let aviso = Label::new(None);
+    aviso.set_xalign(0.0);
+    aviso.set_wrap(true);
+    let buttons = GtkBox::new(Orientation::Horizontal, 8);
+    buttons.set_halign(gtk::Align::End);
+    let cancelar = Button::with_label("Cancelar");
+    let abrir = Button::with_label("Abrir");
+    abrir.add_css_class("suggested-action");
+    buttons.append(&cancelar);
+    buttons.append(&abrir);
+    v.append(&info);
+    v.append(&rolagem);
+    v.append(&linha_novo);
+    v.append(&aviso);
+    v.append(&buttons);
+    dialog.set_child(Some(&v));
+
+    // Row i of `lista` is `nomes[i]`.
+    let nomes = Rc::new(RefCell::new(Vec::<String>::new()));
+    let preencher = Rc::new({
+        let lista = lista.clone();
+        let abrir = abrir.clone();
+        let nomes = Rc::clone(&nomes);
+        move |novos: Vec<String>, escolhido: &str| {
+            while let Some(row) = lista.first_child() {
+                lista.remove(&row);
+            }
+            for nome in &novos {
+                let label = Label::new(Some(nome));
+                label.set_xalign(0.0);
+                label.set_margin_top(6);
+                label.set_margin_bottom(6);
+                label.set_margin_start(8);
+                lista.append(&label);
+            }
+            let i = novos
+                .iter()
+                .position(|n| n == escolhido)
+                .or((!novos.is_empty()).then_some(0));
+            if let Some(i) = i {
+                lista.select_row(lista.row_at_index(i as i32).as_ref());
+            }
+            abrir.set_sensitive(i.is_some());
+            *nomes.borrow_mut() = novos;
+        }
+    });
+    let vazio = projetos.is_empty();
+    preencher(projetos, atual);
+    if vazio {
+        aviso.set_text("Você ainda não tem projetos: crie o primeiro.");
+    }
+
+    let done: RefCell<Option<Box<dyn FnOnce(String)>>> = RefCell::new(Some(Box::new(done)));
+    let escolher = Rc::new({
+        let lista = lista.clone();
+        let nomes = Rc::clone(&nomes);
+        let dialog = dialog.clone();
+        move || {
+            let Some(row) = lista.selected_row() else {
+                return;
+            };
+            let Some(nome) = nomes.borrow().get(row.index() as usize).cloned() else {
+                return;
+            };
+            dialog.close();
+            if let Some(done) = done.borrow_mut().take() {
+                done(nome);
+            }
+        }
+    });
+    {
+        let escolher = Rc::clone(&escolher);
+        abrir.connect_clicked(move |_| escolher());
+    }
+    lista.connect_row_activated(move |_, _| escolher());
+    {
+        let abrir = abrir.clone();
+        lista.connect_row_selected(move |_, row| abrir.set_sensitive(row.is_some()));
+    }
+
+    let criar_projeto = Rc::new({
+        let novo = novo.clone();
+        let aviso = aviso.clone();
+        let aluno = aluno.to_string();
+        let ui = Rc::clone(ui);
+        let criar = criar.clone();
+        let dialog = dialog.clone();
+        move || {
+            if !can_change_project(&ui) || !criar.is_sensitive() {
+                return;
+            }
+            let nome = novo.text().trim().to_string();
+            if !valid_aluno(&nome) {
+                aviso.set_text("nome do projeto: letras, números, _ e - (sem espaços)");
+                return;
+            }
+            criar.set_sensitive(false);
+            let rpc = Arc::clone(&rpc);
+            let aluno = aluno.clone();
+            let criado = nome.clone();
+            let preencher = Rc::clone(&preencher);
+            let novo = novo.clone();
+            let aviso = aviso.clone();
+            let criar = criar.clone();
+            let dialog = dialog.clone();
+            navigation_task(
+                &ui,
+                move || {
+                    Ok(rpc
+                        .create_project(&aluno, &nome)
+                        .and_then(|()| rpc.list_projects(&aluno)))
+                },
+                move |ui, result| {
+                    criar.set_sensitive(true);
+                    if !dialog.is_visible() {
+                        return;
+                    }
+                    match result {
+                        Ok(lista) => {
+                            preencher(lista, &criado);
+                            novo.set_text("");
+                            aviso.set_text(&format!("criado `{criado}`: aperte Abrir"));
+                            projetos_menu::refresh(ui);
+                        }
+                        Err(e) => aviso.set_text(&e),
+                    }
+                },
+            );
+        }
+    });
+    {
+        let criar_projeto = Rc::clone(&criar_projeto);
+        criar.connect_clicked(move |_| criar_projeto());
+    }
+    novo.connect_activate(move |_| criar_projeto());
+    {
+        let dialog = dialog.clone();
+        cancelar.connect_clicked(move |_| dialog.close());
+    }
+    dialog.present();
+    if vazio || novo_projeto {
+        novo.grab_focus();
+    } else {
+        lista.grab_focus();
+    }
+}
+
 fn after_unsaved(ui: &UiRc, then: impl FnOnce() + 'static) {
-    if ui.borrow().run.is_some() {
-        set_status(ui, "pare o programa antes de trocar de projeto");
+    let epoch = ui.borrow().navigation_epoch;
+    let next = Rc::clone(ui);
+    let then = move || {
+        if next.borrow().navigation_epoch == epoch && can_change_project(&next) {
+            then();
+        }
+    };
+    if !can_change_project(ui) {
+        return;
+    }
+    // Choosing the first project adopts scratch/recovered tabs instead of
+    // forcing a save to a repository that has not been selected yet.
+    if matches!(ui.borrow().files, Files::None) {
+        then();
         return;
     }
     let dirty = dirty_docs(ui);
@@ -2282,6 +3173,20 @@ fn after_unsaved(ui: &UiRc, then: impl FnOnce() + 'static) {
 }
 
 fn close_project_tabs(ui: &UiRc) {
+    close_source_viewer(ui);
+    ui.borrow_mut().execution_sources = Arc::new(debug_sources::Sources::new());
+    ui.borrow_mut().execution_breakpoints.clear();
+    ui.borrow_mut().execution_editors.clear();
+    // Keep this project's tabs for next time. Its unsaved tabs were saved
+    // or discarded already, so their copies go.
+    sessao::salvar(ui);
+    sessao::limpar_copias(ui);
+    {
+        let mut u = ui.borrow_mut();
+        u.sessao_pronta = false;
+        // Paths of the project being left mean nothing in the next one.
+        u.abas_fechadas.clear();
+    }
     for d in all_docs(ui) {
         d.mark_saved();
         remove_tab(ui, &d);
@@ -2290,28 +3195,27 @@ fn close_project_tabs(ui: &UiRc) {
 
 /// Show the project tree. Reopens the last file of this project, if it is still there.
 fn finish_open(ui: &UiRc) {
-    refresh_tree(ui);
+    projetos_menu::rebuild(ui);
+    projetos_menu::refresh(ui);
     refresh_title(ui);
     refresh_diag_label(ui);
-    let arquivo = ui.borrow().prefs.arquivo.clone();
-    if arquivo.is_empty() {
-        return;
-    }
-    let known = ui.borrow().project_files.iter().any(|p| p == &arquivo);
-    if known {
-        let _ = open_path(ui, &arquivo);
-    }
+    // Reopen the tabs of last time once the listing says what is there.
+    refresh_tree_e(ui, |ui| {
+        sessao::restaurar(ui);
+        sincronizacao::notify(ui);
+    });
 }
 
 fn normalize_url(url: &str) -> String {
     let url = url.trim();
-    if url.is_empty() {
+    let url = if url.is_empty() {
         DEFAULT_URL.to_string()
-    } else if url.starts_with("http://") || url.starts_with("https://") {
+    } else if url.contains("://") {
         url.to_string()
     } else {
         format!("http://{url}")
-    }
+    };
+    identidade::normalize_endpoint(&url).unwrap_or(url)
 }
 
 /// Folder picker. `FileChooserNative` never maps a window on this desktop, and
@@ -2359,7 +3263,9 @@ fn perguntar_servidor(
     v.set_margin_end(16);
     v.set_margin_top(16);
     v.set_margin_bottom(16);
-    let info = Label::new(Some("Os arquivos ficam em aula-data/aluno nesse servidor."));
+    let info = Label::new(Some(
+        "Depois de conectar, escolha um dos seus projetos ou crie um novo.",
+    ));
     info.set_wrap(true);
     info.set_xalign(0.0);
     let url_entry = Entry::builder().text(url).hexpand(true).build();
@@ -2422,20 +3328,71 @@ fn perguntar_servidor(
     out.borrow_mut().take()
 }
 
+/// Runs `trabalho` (network, disk) on a worker thread and `depois` back on
+/// the GTK thread with its result, so the window keeps responding while a
+/// server is slow. Nothing runs if the window is gone by then.
+fn em_segundo_plano<T: Send + 'static>(
+    ui: &UiRc,
+    trabalho: impl FnOnce() -> T + Send + 'static,
+    depois: impl FnOnce(&UiRc, T) + 'static,
+) {
+    let ui = Rc::downgrade(ui);
+    let tarefa = gio::spawn_blocking(trabalho);
+    glib::spawn_future_local(async move {
+        let resultado = tarefa.await;
+        let Some(ui) = ui.upgrade() else { return };
+        match resultado {
+            Ok(r) => depois(&ui, r),
+            Err(_) => set_status(&ui, "erro interno ao falar com o servidor"),
+        }
+    });
+}
+
 fn refresh_tree(ui: &UiRc) {
-    let (entries, projeto, err, onde) = {
-        let u = ui.borrow();
-        let projeto = u.project.clone();
+    refresh_tree_e(ui, |_| {});
+}
+
+/// Lists the project off the GTK thread, then fills the tree and runs
+/// `depois`. A listing that comes back after a newer one started (another
+/// refresh, another project) is dropped.
+fn refresh_tree_e(ui: &UiRc, depois: impl FnOnce(&UiRc) + 'static) {
+    let (files, projeto, onde, geracao) = {
+        let mut u = ui.borrow_mut();
+        u.geracao_arvore += 1;
         let onde = match &u.files {
             Files::None => "sem pasta".to_string(),
             Files::Local(p) => p.display().to_string(),
-            Files::Remote(_) => format!("servidor {} \\ {}", u.prefs.servidor, projeto),
+            Files::Remote { .. } => {
+                format!("servidor {} \\ {}", u.prefs.servidor, nome_do_projeto(&u))
+            }
         };
-        match u.files.list_tree(&projeto) {
-            Ok(p) => (p, projeto, None, onde),
-            Err(e) => (Vec::new(), projeto, Some(e), onde),
-        }
+        (u.files.clone(), u.project.clone(), onde, u.geracao_arvore)
     };
+    let p = projeto.clone();
+    em_segundo_plano(
+        ui,
+        move || files.list_tree(&p),
+        move |ui, listagem| {
+            if ui.borrow().geracao_arvore != geracao {
+                return;
+            }
+            let (entries, err) = match listagem {
+                Ok(p) => (p, None),
+                Err(e) => (Vec::new(), Some(e)),
+            };
+            mostrar_arvore(ui, &projeto, &entries, err, &onde);
+            depois(ui);
+        },
+    );
+}
+
+fn mostrar_arvore(
+    ui: &UiRc,
+    projeto: &str,
+    entries: &[expressa_aula_proto::TreeEntry],
+    err: Option<String>,
+    onde: &str,
+) {
     {
         let mut u = ui.borrow_mut();
         u.project_files = entries
@@ -2445,7 +3402,7 @@ fn refresh_tree(ui: &UiRc) {
             .collect();
         u.file_cache.borrow_mut().clear();
     }
-    preencher_arvore(ui, &projeto, &entries);
+    preencher_arvore(ui, projeto, entries);
     ui.borrow().tree.expand_all();
     // Long names must not leave the list scrolled sideways.
     {
@@ -2542,6 +3499,33 @@ fn parent_dir(path: &str, is_dir: bool) -> String {
     }
 }
 
+/// Select `rel` in the file tree, opening its folders and scrolling to it.
+#[allow(deprecated)]
+fn revelar_na_arvore(ui: &UiRc, rel: &str) {
+    let (tree, store) = {
+        let u = ui.borrow();
+        (u.tree.clone(), u.store.clone())
+    };
+    let model = store.upcast_ref::<gtk::TreeModel>();
+    let mut achado = None;
+    model.foreach(|m, path, iter| {
+        let caminho: String = m.get(iter, 1);
+        if exec::same_project_path(&caminho, rel) {
+            achado = Some(path.clone());
+            return true;
+        }
+        false
+    });
+    match achado {
+        Some(path) => {
+            tree.expand_to_path(&path);
+            tree.selection().select_path(&path);
+            tree.scroll_to_cell(Some(&path), None::<&TreeViewColumn>, true, 0.5, 0.0);
+        }
+        None => set_status(ui, &format!("`{rel}` não está na árvore")),
+    }
+}
+
 #[allow(deprecated)]
 fn selected_tree_entry(ui: &UiRc) -> (String, bool) {
     let u = ui.borrow();
@@ -2562,8 +3546,68 @@ fn tree_popup(ui: &UiRc, x: f64, y: f64) {
         tree.selection().select_path(&path);
     }
     let (rel, is_dir) = selected_tree_entry(ui);
+    let mut itens: Vec<(&str, Box<dyn FnOnce()>)> = Vec::new();
+    let dir = parent_dir(&rel, is_dir);
+    let novo_arq = if is_dir && !rel.is_empty() {
+        "Novo arquivo nesta pasta…"
+    } else {
+        "Novo arquivo…"
+    };
+    let nova_pasta = if is_dir && !rel.is_empty() {
+        "Nova pasta nesta pasta…"
+    } else {
+        "Nova pasta…"
+    };
+    itens.push((
+        novo_arq,
+        Box::new({
+            let ui = Rc::clone(ui);
+            let dir = dir.clone();
+            move || criar_arquivo(&ui, &dir)
+        }),
+    ));
+    itens.push((
+        nova_pasta,
+        Box::new({
+            let ui = Rc::clone(ui);
+            let dir = dir.clone();
+            move || criar_pasta(&ui, &dir)
+        }),
+    ));
+    if !rel.is_empty() {
+        itens.push((
+            "Renomear…",
+            Box::new({
+                let ui = Rc::clone(ui);
+                let rel = rel.clone();
+                move || renomear_entrada(&ui, &rel)
+            }),
+        ));
+        itens.push((
+            "Apagar",
+            Box::new({
+                let ui = Rc::clone(ui);
+                let rel = rel.clone();
+                move || confirmar_apagar(&ui, &rel)
+            }),
+        ));
+    }
+    mostrar_menu(ui, tree.upcast_ref(), x, y, itens);
+}
+
+/// A right-click menu at `(x, y)` of `widget`: one button per item, and the
+/// chosen item runs after the menu closes.
+fn mostrar_menu(
+    ui: &UiRc,
+    widget: &gtk::Widget,
+    x: f64,
+    y: f64,
+    itens: Vec<(&str, Box<dyn FnOnce()>)>,
+) {
     let window = ui.borrow().window.clone();
-    let (px, py) = tree.translate_coordinates(&window, x, y).unwrap_or((x, y));
+    let (px, py) = widget
+        .translate_coordinates(&window, x, y)
+        .unwrap_or((x, y));
     let pop = gtk::Popover::new();
     pop.add_css_class("menu");
     pop.set_parent(&window);
@@ -2583,7 +3627,7 @@ fn tree_popup(ui: &UiRc, x: f64, y: f64) {
         });
     }
     let box_ = GtkBox::new(Orientation::Vertical, 0);
-    let add_item = |box_: &GtkBox, label: &str, action: Box<dyn FnOnce() + 'static>| {
+    for (label, action) in itens {
         let btn = Button::with_label(label);
         btn.set_has_frame(false);
         btn.set_halign(gtk::Align::Start);
@@ -2597,60 +3641,115 @@ fn tree_popup(ui: &UiRc, x: f64, y: f64) {
             }
         });
         box_.append(&btn);
-    };
-    let dir = parent_dir(&rel, is_dir);
-    let novo_arq = if is_dir && !rel.is_empty() {
-        "Novo arquivo nesta pasta…"
-    } else {
-        "Novo arquivo…"
-    };
-    let nova_pasta = if is_dir && !rel.is_empty() {
-        "Nova pasta nesta pasta…"
-    } else {
-        "Nova pasta…"
-    };
-    add_item(
-        &box_,
-        novo_arq,
-        Box::new({
-            let ui = Rc::clone(ui);
-            let dir = dir.clone();
-            move || criar_arquivo(&ui, &dir)
-        }),
-    );
-    add_item(
-        &box_,
-        nova_pasta,
-        Box::new({
-            let ui = Rc::clone(ui);
-            let dir = dir.clone();
-            move || criar_pasta(&ui, &dir)
-        }),
-    );
-    if !rel.is_empty() {
-        add_item(
-            &box_,
-            "Renomear…",
-            Box::new({
-                let ui = Rc::clone(ui);
-                let rel = rel.clone();
-                move || renomear_entrada(&ui, &rel)
-            }),
-        );
-        add_item(
-            &box_,
-            "Apagar",
-            Box::new({
-                let ui = Rc::clone(ui);
-                let rel = rel.clone();
-                move || confirmar_apagar(&ui, &rel)
-            }),
-        );
     }
     pop.set_child(Some(&box_));
     glib::idle_add_local_once(move || {
         pop.popup();
     });
+}
+
+/// After a run: send what the program wrote back to the project off the
+/// GTK thread; failures remain in the durable journal for explicit retry.
+fn enviar_depois_da_execucao(ui: &UiRc, console: &Rc<Console>, ws: Workspace) {
+    for doc in all_docs(ui) {
+        doc.set_running_source(None);
+    }
+    if let Some(viewer) = ui.borrow().source_viewer.as_ref() {
+        viewer.finish();
+    }
+
+    let (files, project) = {
+        let mut u = ui.borrow_mut();
+        u.execution
+            .transition(ExecutionEvent::Finished)
+            .expect("running before uploading its files");
+        u.run = None;
+        (u.files.clone(), u.project.clone())
+    };
+    let console = Rc::clone(console);
+    em_segundo_plano(
+        ui,
+        move || ws.upload_changes(&files, &project),
+        move |ui, envio| {
+            {
+                let mut u = ui.borrow_mut();
+                u.execution
+                    .transition(ExecutionEvent::Uploaded)
+                    .expect("uploading before completing uploads");
+            }
+            let nao_enviados = mostrar_envio(ui, &console, envio);
+            if nao_enviados > 0 {
+                if !ui.borrow().files.is_remote() {
+                    pendencias_ui::show(ui);
+                }
+                set_status(
+                    ui,
+                    &format!("não enviou {nao_enviados} arquivo(s): veja o console"),
+                );
+            }
+        },
+    );
+}
+
+/// After a run: refresh what the program changed, and say what failed.
+/// Returns how many files could not be sent.
+fn mostrar_envio(ui: &UiRc, console: &Console, envio: exec::Envio) -> usize {
+    if let Some(path) = &envio.pending_dir {
+        let help = if ui.borrow().files.is_remote() {
+            "Revise os arquivos em Arquivo → Sincronização…"
+        } else {
+            "As cópias foram preservadas para tentar salvar novamente ou exportar."
+        };
+        console.stderr(&format!(
+            "arquivos que não puderam ser salvos foram preservados em {}. {help}\n",
+            path.display()
+        ));
+    }
+    for (rel, texto) in &envio.enviados {
+        ui.borrow().file_cache.borrow_mut().remove(rel);
+        let (Some(doc), Some(texto)) = (doc_by_name(ui, rel), texto) else {
+            continue;
+        };
+        if doc.is_dirty() {
+            // Saving the tab now would replace what the program wrote.
+            console.stderr(&format!(
+                "aviso: o programa alterou `{rel}`, que tem alterações não salvas \
+                 na aba. Salvar exigirá resolver o conflito.\n"
+            ));
+        } else if doc.text() != *texto {
+            doc.recarregar(texto);
+        }
+    }
+    for warning in &envio.avisos {
+        console.stderr(&format!("aviso: {warning}\n"));
+    }
+    for conflict in &envio.conflitos {
+        console.stderr(&format!(
+            "conflito: `{}` mudou no projeto; a saída do programa não substituiu o arquivo.\n",
+            conflict.path
+        ));
+        if let Ok(source) = std::str::from_utf8(&conflict.bytes) {
+            let recovered = open_doc(ui, None, source);
+            recovered.buffer.set_modified(true);
+            recovered.tab.set_tooltip_text(Some(&format!(
+                "Saída do programa para {} — salva como uma nova cópia",
+                conflict.path
+            )));
+            sessao::copiar_nao_salvos(ui);
+        } else {
+            console
+                .stderr("arquivo binário preservado; você pode salvar uma cópia em outra pasta.\n");
+        }
+    }
+    for erro in &envio.erros {
+        console.stderr(&format!(
+            "erro: o arquivo que o programa escreveu não foi salvo no projeto: {erro}\n"
+        ));
+    }
+    if !envio.enviados.is_empty() {
+        refresh_tree(ui);
+    }
+    envio.erros.len() + envio.conflitos.len()
 }
 
 fn criar_arquivo(ui: &UiRc, dir: &str) {
@@ -2670,7 +3769,7 @@ fn criar_arquivo(ui: &UiRc, dir: &str) {
     let path = join_path(dir, &name);
     let result = {
         let u = ui.borrow();
-        u.files.write_file(&u.project, &path, "escreva(\"Olá\")\n")
+        u.files.create_file(&u.project, &path, "escreva(\"Olá\")\n")
     };
     match result {
         Ok(()) => {
@@ -2724,8 +3823,10 @@ fn renomear_entrada(ui: &UiRc, rel: &str) {
                 let n = d.name();
                 if n == rel {
                     d.set_path(to.clone());
+                    sessao::vigiar(ui, &d);
                 } else if let Some(rest) = n.strip_prefix(&format!("{rel}/")) {
                     d.set_path(format!("{to}/{rest}"));
+                    sessao::vigiar(ui, &d);
                 }
             }
             refresh_tree(ui);
@@ -2838,6 +3939,36 @@ fn ir_para_linha(ui: &UiRc) {
     entry.grab_focus();
 }
 
+/// Which tab of the panel below the editor shows.
+enum PaginaInferior {
+    Saida = 0,
+    Busca = 1,
+    Repl = 2,
+}
+
+fn mostrar_pagina_inferior(ui: &UiRc, p: PaginaInferior) {
+    ui.borrow().painel_inferior.set_current_page(Some(p as u32));
+}
+
+/// Ctrl+Shift+F: the Busca tab, starting from the selected text.
+fn buscar_no_projeto(ui: &UiRc) {
+    mostrar_pagina_inferior(ui, PaginaInferior::Busca);
+    let selecionado = current_doc(ui).and_then(|d| {
+        d.buffer
+            .selection_bounds()
+            .map(|(a, b)| d.buffer.text(&a, &b, false).to_string())
+    });
+    if let Some(b) = ui.borrow().busca.clone() {
+        b.focar(selecionado);
+    }
+}
+
+fn mostrar_repl(ui: &UiRc) {
+    mostrar_pagina_inferior(ui, PaginaInferior::Repl);
+    let repl = Rc::clone(&ui.borrow().repl);
+    repl.focar();
+}
+
 fn show_search(ui: &UiRc) {
     let u = ui.borrow();
     u.search_revealer.set_reveal_child(true);
@@ -2872,7 +4003,15 @@ fn search_next(ui: &UiRc) {
         d.buffer.select_range(&a, &b);
         d.view.scroll_to_iter(&mut a.clone(), 0.2, false, 0.0, 0.0);
     } else {
-        set_status(ui, "não encontrado");
+        set_status(ui, &nao_encontrado(&d));
+    }
+}
+
+/// Why a search found nothing: a broken regular expression says so.
+fn nao_encontrado(d: &Doc) -> String {
+    match d.search.regex_error() {
+        Some(e) => format!("expressão regular inválida: {e}"),
+        None => "não encontrado".to_string(),
     }
 }
 
@@ -2883,7 +4022,7 @@ fn search_prev(ui: &UiRc) {
         d.buffer.select_range(&a, &b);
         d.view.scroll_to_iter(&mut a.clone(), 0.2, false, 0.0, 0.0);
     } else {
-        set_status(ui, "não encontrado");
+        set_status(ui, &nao_encontrado(&d));
     }
 }
 
@@ -2929,6 +4068,76 @@ fn resume_raise() {
 /// GTK may only be used from the thread that initialized it, but tests run
 /// on many threads: every GTK test runs its body on one shared thread.
 #[cfg(test)]
+mod debug_ui_tests {
+    use super::*;
+
+    #[test]
+    fn snapshot_navigation_keeps_editor_identity_and_frozen_breakpoints() {
+        gtk_test::run(|| {
+            let app = Application::builder()
+                .application_id("dev.expressa.aula.tests.sources")
+                .flags(gio::ApplicationFlags::NON_UNIQUE)
+                .build();
+            app.register(None::<&gio::Cancellable>).unwrap();
+            let ui = build_ui_state(&app, false);
+            let doc = open_doc(&ui, Some("lib/a.lep".into()), "escreva(1)\n");
+            let source = Arc::new(debug_sources::Source::new(&doc.name(), doc.text()));
+            ui.borrow_mut().execution_sources =
+                Arc::new(HashMap::from([(source.path.clone(), source.clone())]));
+            ui.borrow_mut()
+                .execution_editors
+                .insert(source.path.clone(), Rc::downgrade(&doc));
+            ui.borrow_mut()
+                .execution_breakpoints
+                .push((source.path.clone(), 1));
+            let (sender, receiver) = std::sync::mpsc::channel();
+            ui.borrow_mut().run = Some(Run {
+                debug_cmd: sender,
+                paused: Some((source.path.clone(), 1, false)),
+            });
+            doc.set_running_source(Some(source.clone()));
+            doc.buffer
+                .insert(&mut doc.buffer.start_iter(), "// edited\n");
+            doc.set_path("lib/renamed.lep".into());
+            toggle_breakpoint(&ui, &doc, 2);
+            assert!(
+                receiver.try_recv().is_err(),
+                "editor breakpoints must not change this run"
+            );
+            assert!(show_running_source(&ui, "lib\\a.lep", 1, false));
+            assert!(
+                current_doc(&ui).is_none(),
+                "snapshot must not become a save/recovery document"
+            );
+            assert_eq!(all_docs(&ui).len(), 1);
+            let viewer = ui.borrow().source_viewer.clone().unwrap();
+            assert_eq!(viewer.doc.text(), "escreva(1)\n");
+            assert_eq!(
+                viewer.doc.breakpoint_lines(),
+                std::collections::BTreeSet::from([1])
+            );
+            assert!(
+                Rc::ptr_eq(&execution_entry_doc(&ui).unwrap(), &doc),
+                "restarting from the snapshot uses the renamed editor"
+            );
+            viewer.edit.emit_clicked();
+            assert!(Rc::ptr_eq(&current_doc(&ui).unwrap(), &doc));
+            doc.inspect_source.emit_clicked();
+            assert!(current_doc(&ui).is_none());
+            send_debug_cmd(&ui, "proximo");
+            assert_eq!(receiver.try_recv().unwrap(), "proximo");
+            assert!(ui.borrow().run.as_ref().unwrap().paused.is_none());
+            close_current_tab(&ui);
+            assert!(ui.borrow().source_viewer.is_none());
+            assert!(Rc::ptr_eq(&current_doc(&ui).unwrap(), &doc));
+            ui.borrow_mut().run = None;
+            doc.mark_saved();
+            ui.borrow().window.destroy();
+        });
+    }
+}
+
+#[cfg(test)]
 mod gtk_test {
     use std::panic::{AssertUnwindSafe, catch_unwind, resume_unwind};
     use std::sync::mpsc::{Sender, channel};
@@ -2936,7 +4145,8 @@ mod gtk_test {
 
     type Job = (Box<dyn FnOnce() + Send>, Sender<std::thread::Result<()>>);
 
-    /// Runs `f` on the GTK thread; skips (returns) when there is no display.
+    /// Runs `f` on the GTK thread. A display is required: never report an
+    /// unexecuted GTK assertion as a passing test.
     pub fn run(f: impl FnOnce() + Send + 'static) {
         static JOBS: OnceLock<Option<Mutex<Sender<Job>>>> = OnceLock::new();
         let jobs = JOBS.get_or_init(|| {
@@ -2951,9 +4161,18 @@ mod gtk_test {
                     }
                 }
             });
-            ready_rx.recv().unwrap_or(false).then(|| Mutex::new(tx))
+            if ready_rx.recv().unwrap_or(false) {
+                eprintln!("GTK initialized: executing GUI test assertions");
+                Some(Mutex::new(tx))
+            } else {
+                None
+            }
         });
-        let Some(jobs) = jobs else { return };
+        // Cache initialization failure too: retrying GTK on different threads
+        // after a failure is unsafe and can crash the rest of the test process.
+        let jobs = jobs.as_ref().expect(
+            "GTK tests require a working display; run with a desktop display or a virtual display",
+        );
         let (done_tx, done_rx) = channel();
         jobs.lock().unwrap().send((Box::new(f), done_tx)).unwrap();
         if let Err(panic) = done_rx.recv().unwrap() {

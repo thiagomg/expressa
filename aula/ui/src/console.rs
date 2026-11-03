@@ -230,7 +230,7 @@ pub fn parse_error_location(line: &str) -> Option<(String, u32)> {
 const MAX_OUTPUT_LINES: i32 = 5000;
 
 /// Drops the oldest lines past [`MAX_OUTPUT_LINES`]; returns how many.
-fn trim_output(buf: &gtk::TextBuffer) -> i32 {
+pub(crate) fn trim_output(buf: &gtk::TextBuffer) -> i32 {
     let extra = buf.line_count() - MAX_OUTPUT_LINES;
     if extra <= 0 {
         return 0;

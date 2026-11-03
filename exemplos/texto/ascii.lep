@@ -20,7 +20,7 @@ escreva("")
 escreva("vendas da semana")
 dias = ["seg", "ter", "qua", "qui", "sex"]
 vendas = [4, 8, 5, 11, 7]
-i = 1
+i = 0
 repita tamanho(dias) vezes
 inicio
     escreva(dias[i] + " " + repete("#", vendas[i]) + " " + vendas[i])

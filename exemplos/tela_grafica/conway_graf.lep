@@ -4,8 +4,8 @@ importe "matriz"
 importe "mat"
 
 inicia_jogo = funcao(m) {
-    para i de 1 até m.nlinhas() {
-        para j de 1 até m.ncolunas() {
+    para i de 0 até m.nlinhas() - 1 {
+        para j de 0 até m.ncolunas() - 1 {
             m[i, j] = aleatorio(0, 1)
         }
     }
@@ -48,8 +48,8 @@ cria_ser = funcao(cel, cor) {
 ser_grande = funcao(w, estado, x, y) {
     // imagem centra o sprite; (px, py) é o meio da célula
     meio = ser_tamanho / 2
-    px = (x - 1) * ser_tamanho + meio
-    py = começo_y + (y - 1) * ser_tamanho + meio
+    px = x * ser_tamanho + meio
+    py = começo_y + y * ser_tamanho + meio
     figura = se estado == :vivo { ser_vivo } senão { ser_morto }
     w.tela::imagem(figura, px, py)
 }
@@ -60,8 +60,8 @@ ser = funcao(w, x, y) {
 }
 
 desenha = funcao(w, m) {
-    para l de 1 até m.nlinhas() {
-        para c de 1 até m.ncolunas() {
+    para l de 0 até m.nlinhas() - 1 {
+        para c de 0 até m.ncolunas() - 1 {
             estado = se m[l, c] == 0 {
                 :morto
             } senao {
@@ -75,14 +75,14 @@ desenha = funcao(w, m) {
 }
 
 pos_lin = função(m, l) {
-    se l < 1 { m.nlinhas() }
-    ou se l > m.nlinhas() { 1 }
+    se l < 0 { m.nlinhas() - 1 }
+    ou se l >= m.nlinhas() { 0 }
     senão { l }
 }
 
 pos_col = função(m, c) {
-    se c < 1 { m.ncolunas() }
-    ou se c > m.ncolunas() { 1 }
+    se c < 0 { m.ncolunas() - 1 }
+    ou se c >= m.ncolunas() { 0 }
     senão { c }
 }
 
@@ -95,41 +95,41 @@ vizinhos = função(m, l, c) {
     v = zeros(3)
 
     // Noroeste
-    v[1,1] = m[ m.pos_lin(l-1), m.pos_col(c-1) ]
+    v[0,0] = m[ m.pos_lin(l-1), m.pos_col(c-1) ]
     // Norte
-    v[1,2] = m[ m.pos_lin(l-1), m.pos_col(c) ]
+    v[0,1] = m[ m.pos_lin(l-1), m.pos_col(c) ]
     // Nordeste
-    v[1,3] = m[ m.pos_lin(l-1), m.pos_col(c+1) ]
+    v[0,2] = m[ m.pos_lin(l-1), m.pos_col(c+1) ]
 
     // Oeste
-    v[2,1] = m[ m.pos_lin(l), m.pos_col(c-1) ]
+    v[1,0] = m[ m.pos_lin(l), m.pos_col(c-1) ]
     // Centro
-    v[2,2] = m[l, c]
+    v[1,1] = m[l, c]
     // Leste
-    v[2,3] = m[ m.pos_lin(l), m.pos_col(c+1) ]
+    v[1,2] = m[ m.pos_lin(l), m.pos_col(c+1) ]
 
     // Sudoeste
-    v[3,1] = m[ m.pos_lin(l+1), m.pos_col(c-1) ]
+    v[2,0] = m[ m.pos_lin(l+1), m.pos_col(c-1) ]
     // Sul
-    v[3,2] = m[ m.pos_lin(l+1), m.pos_col(c) ]
+    v[2,1] = m[ m.pos_lin(l+1), m.pos_col(c) ]
     // Sudeste
-    v[3,3] = m[ m.pos_lin(l+1), m.pos_col(c+1) ]
+    v[2,2] = m[ m.pos_lin(l+1), m.pos_col(c+1) ]
 
     v
 }
 
 // Conta a quantidade de vizinhos numa matrix 3x3
-// da celula na posição (2, 2)
+// da celula na posição (1, 1)
 conta_vizinhos = função(m) {
     se m.nlinhas() != 3 ou m.ncolunas() != 3 {
         escreva_erro("a função conta_vizinhos só aceita matrizes de 3x3")
-        sair(1)
+        saia(1)
     }
 
     items = [
-        m[1,1], m[1,2], m[1,3], 
-        m[2,1], m[2,3], 
-        m[3,1], m[3,2], m[3,3], 
+        m[0,0], m[0,1], m[0,2],
+        m[1,0], m[1,2],
+        m[2,0], m[2,1], m[2,2],
     ]
 
     total_vizinhos = 0
@@ -156,8 +156,8 @@ nova_geracao = função(m) {
     // Se eu mudar a matriz de origem, uma celula vai influenciar a outra
     nm = zeros(tl, tc)
 
-    para i de 1 até m.nlinhas() {
-        para j de 1 até m.ncolunas() {
+    para i de 0 até m.nlinhas() - 1 {
+        para j de 0 até m.ncolunas() - 1 {
             // Aqui vamos pegar os vizinhos de cada uma das celular da matriz de origem m
             v = m.vizinhos(i, j)
             // e vamos contas a quatidade de vizinhos para aplicar cada uma das regras

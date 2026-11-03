@@ -11,7 +11,7 @@ escreva("primeira: " + primeiro(palavras))
 escreva("última: " + ultimo(palavras))
 escreva("título: " + maiuscula(verso))
 escreva("sussurro: " + minuscula(verso))
-escreva("início: " + verso[1..5])
+escreva("início: " + verso[0..4])
 escreva("tem rio? " + (verso contem "rio"))
 escreva("tem mar? " + (verso contem "mar"))
 

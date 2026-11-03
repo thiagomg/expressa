@@ -11,7 +11,7 @@ media_ponderada = funcao(notas, pesos)
 inicio
     soma_np = 0
     soma_p = 0
-    k = 1
+    k = 0
     repita tamanho(notas) vezes
     inicio
         soma_np = soma_np + notas[k] * pesos[k]
@@ -38,7 +38,7 @@ inicio
 fim
 
 escreva("boletim")
-i = 1
+i = 0
 repita tamanho(atividades) vezes
 inicio
     escreva("  " + atividades[i] + ": " + notas[i] + "  (peso " + pesos[i] + ")")

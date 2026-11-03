@@ -21,24 +21,24 @@
     "importe" "contem" "contém"))
 
 (defconst expressa-builtins
-  '("escreva" "escreva_erro" "sair" "cls" "limpe_tela" "casa" "quadro" "bloco" "escreva_em" "colunas" "linhas" "nova_linha" "durma" "pinte" "fundo" "negrito" "leia" "leia_linhas"
+  '("escreva" "escreva_erro" "saia" "cls" "limpe_tela" "casa" "quadro" "bloco" "escreva_em" "colunas" "linhas" "nova_linha" "durma" "pinte" "fundo" "negrito" "leia" "leia_linhas"
     "eh_terminal" "é_terminal" "argumentos"
-    "numero" "número" "formato" "formate" "avaliar" "catalogo" "catálogo" "ajuda" "tipo" "tipos" "raiz" "aleatorio" "aleatório" "semente"
+    "numero" "número" "formato" "formate" "avalie" "catalogo" "catálogo" "ajuda" "tipo" "tipos" "raiz" "aleatorio" "aleatório" "semente"
     "nova" "linha" "circulo" "círculo" "ponto" "retangulo" "retângulo" "texto" "imagem" "apague" "pixel" "como_imagem" "salve" "evento"
-    "carregue" "rotacione" "escala" "largura" "altura"
+    "carregue" "rotacione" "redimensione" "largura" "altura"
     "pi" "seno" "sen" "cosseno" "cos" "tangente" "tan" "arcoseno" "arcocosseno" "arcotangente" "arcotangente2"
     "radianos" "graus" "exp" "log" "log10" "potencia" "piso" "teto" "arredonde"
     "mapa" "conjunto" "matriz"
     "transposta" "det" "identidade" "zeros" "uns" "cheia" "nlinhas" "ncolunas"
     "tamanho" "primeiro" "ultimo"
-    "maiuscula" "minuscula" "sem_acento" "remova" "substitua" "procurar" "separe" "junte" "limpe"
+    "maiuscula" "minuscula" "sem_acento" "remova" "substitua" "procure" "separe" "junte" "limpe"
     "leia_arquivo" "salve_arquivo" "adicione_arquivo"
     "leia_csv" "salve_csv"
     "execute" "linhas_de"
     "existe" "eh_pasta" "é_pasta" "liste" "crie_pasta" "apague_arquivo" "apague_pasta" "mova" "copie"
     "junte_caminho" "nome_do_arquivo" "pasta_de" "extensao" "extensão" "pasta_atual"
     "ambiente" "ordene" "comeca_com" "começa_com" "termina_com" "agora" "formate_data"
-    "documento" "grafico" "eixos" "plotar" "adicione" "mostre"))
+    "documento" "grafico" "eixos" "plote" "adicione" "mostre"))
 
 (defconst expressa-constants
   '("verdadeiro" "falso"))

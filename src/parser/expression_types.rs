@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use crate::lexer::Span;
 use crate::parser::block_types::Block;
 use crate::parser::operator_types::{BinaryOp, UnaryOp};
@@ -31,7 +33,9 @@ pub enum Expr {
     /// `funcao (a, b) inicio ... fim` or `{ ... }`
     Function {
         params: Vec<Param>,
-        body: Block,
+        /// Shared with every closure made from it: creating a function
+        /// value does not copy its body.
+        body: Rc<Block>,
         span: Span,
         /// `///` lines immediately above `nome = funcao(...)`.
         doc: Option<String>,

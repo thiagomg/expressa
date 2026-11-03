@@ -1,6 +1,6 @@
 //! Runs and debugs programs in this process. The server is only a file
 //! repository: before a run the student's project is copied into a local
-//! cache folder, and files the program created or changed are sent back.
+//! durable run folder, and files the program created or changed are sent back.
 
 use std::collections::HashMap;
 use std::io::{self, Write};
@@ -13,7 +13,23 @@ use expressa::runtime::{
     LeiaHost, StopHook, TelaGrafica, run_with_hosts,
 };
 
-use crate::store::Files;
+use crate::store::{Expected, Files};
+
+/// Start of the message for a crash inside the interpreter.
+pub const ERRO_INTERNO: &str =
+    "erro interno da Expressa (não é um erro do seu programa; avise o professor)";
+
+/// What the console shows for a panic in the interpreter.
+fn mensagem_de_panico(panico: &(dyn std::any::Any + Send)) -> String {
+    let detalhe = panico
+        .downcast_ref::<&str>()
+        .map(|s| s.to_string())
+        .or_else(|| panico.downcast_ref::<String>().cloned());
+    match detalhe {
+        Some(d) => format!("{ERRO_INTERNO}: {d}"),
+        None => ERRO_INTERNO.to_string(),
+    }
+}
 
 /// Events the UI may lag behind before the program blocks. Keeps a program
 /// that prints forever from piling up memory or starving the UI.
@@ -25,6 +41,7 @@ pub enum ExecEvent {
     Leia(String),
     Folha(FolhaPronta),
     TelaGraf(TelaGrafica),
+    Source(std::sync::Arc<crate::debug_sources::Source>),
     Paused(DebugPaused),
     Finished(Finished),
 }
@@ -48,70 +65,119 @@ pub struct Finished {
 }
 
 /// Local copy of one student's project.
+/// What [`Workspace::upload_changes`] did.
+#[derive(Default)]
+pub struct Envio {
+    /// Files sent, with their new text (`None` for binary files).
+    pub enviados: Vec<(String, Option<String>)>,
+    /// Files that could not be sent, as messages for the console.
+    pub erros: Vec<String>,
+    pub avisos: Vec<String>,
+    pub conflitos: Vec<UploadConflict>,
+    pub pending_dir: Option<PathBuf>,
+}
+
+pub struct UploadConflict {
+    pub path: String,
+    pub bytes: Vec<u8>,
+}
+
+pub struct EditorSource {
+    pub path: String,
+    pub text: String,
+    pub expected: Expected,
+}
+
+/// Each execution owns a unique durable directory. Journals remain after a
+/// crash or failed upload and are never synchronized over by a later run.
 pub struct Workspace {
     pub dir: PathBuf,
-    /// Contents as downloaded, to find what the run changed.
-    snapshot: HashMap<String, String>,
-}
-
-fn cache_root() -> PathBuf {
-    std::env::var_os("XDG_CACHE_HOME")
-        .map(PathBuf::from)
-        .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".cache")))
-        .unwrap_or_else(std::env::temp_dir)
-        .join("expressa-aula")
-}
-
-/// Cache folder name. Local directories may contain spaces; remote student
-/// names are already a single path segment.
-fn cache_name(project: &str) -> String {
-    let s: String = project
-        .chars()
-        .map(|c| {
-            if c.is_ascii_alphanumeric() || c == '_' || c == '-' {
-                c
-            } else {
-                '_'
-            }
-        })
-        .collect();
-    if s.is_empty() || s.chars().all(|c| c == '_') {
-        "projeto".to_string()
-    } else {
-        s
-    }
+    revisions: HashMap<String, Expected>,
+    journal: crate::pendencias::Journal,
 }
 
 impl Workspace {
-    /// Replace the local copy with the project's files.
-    pub fn download(files: &Files, project: &str) -> Result<Self, String> {
-        let dir = cache_root().join(cache_name(project));
-        if dir.exists() {
-            std::fs::remove_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
-        }
-        std::fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
-        let dir = dir.canonicalize().map_err(|e| e.to_string())?;
-        let mut snapshot = HashMap::new();
+    pub fn sync(files: &Files, project: &str) -> Result<Self, String> {
+        Self::sync_em(&crate::pendencias::root(), files, project, None)
+    }
+
+    fn sync_em(
+        root: &Path,
+        files: &Files,
+        project: &str,
+        anterior: Option<Self>,
+    ) -> Result<Self, String> {
+        // Release only our old lease. Its outputs remain durable and are
+        // discovered independently; this run never writes into that directory.
+        drop(anterior);
+        let identity = files.identity(project)?;
+        let journal = crate::pendencias::Journal::create(root, identity)?;
+        let dir = journal.dir().canonicalize().map_err(|e| e.to_string())?;
+        let mut revisions = HashMap::new();
         for entry in files.list_tree(project)? {
+            if !crate::pendencias::valid_relative(&entry.path) {
+                return Err(format!("caminho inválido no projeto: {}", entry.path));
+            }
             let local = dir.join(&entry.path);
             if entry.is_dir {
                 std::fs::create_dir_all(&local).map_err(|e| e.to_string())?;
-                continue;
-            }
-            if let Some(source) = copy_project_file(files, project, &entry.path, &local)? {
-                snapshot.insert(entry.path, source);
+            } else if let Some(expected) = copy_project_file(files, project, &entry.path, &local)? {
+                revisions.insert(entry.path.clone(), expected);
             }
         }
-        Ok(Self { dir, snapshot })
+        journal.baseline(&revisions)?;
+        Ok(Self {
+            dir,
+            revisions,
+            journal,
+        })
     }
 
     /// Put the editor's text of `rel` in the copy (open tabs, saved or not).
-    /// It counts as already on the server: only what the program itself
-    /// writes is uploaded afterwards.
+    /// Only subsequent program changes are uploaded. Repository revisions stay
+    /// separate: unsaved text never grants permission to replace newer files.
+    #[cfg(test)]
     pub fn write_editor_text(&mut self, rel: &str, source: &str) -> Result<(), String> {
-        write_file(&self.dir.join(rel), source)?;
-        self.snapshot.insert(rel.to_string(), source.to_string());
+        if !crate::pendencias::valid_relative(rel) {
+            return Err("caminho de aba inválido".into());
+        }
+        let expected = self
+            .revisions
+            .get(rel)
+            .cloned()
+            .unwrap_or(Expected::Missing);
+        self.journal.overlay(rel, source.as_bytes(), &expected)?;
+        self.revisions.insert(rel.to_string(), expected);
+        self.arm()
+    }
+
+    pub fn write_editor_source(&mut self, source: &EditorSource) -> Result<(), String> {
+        if !crate::pendencias::valid_relative(&source.path) {
+            return Err("caminho de aba inválido".into());
+        }
+        self.journal
+            .overlay(&source.path, source.text.as_bytes(), &source.expected)?;
+        self.revisions
+            .insert(source.path.clone(), source.expected.clone());
         Ok(())
+    }
+
+    pub fn arm(&self) -> Result<(), String> {
+        self.journal.arm()
+    }
+
+    /// Capture before the worker starts: later writes by the program must not
+    /// change the source displayed for an existing run.
+    pub fn capture_sources(&self) -> Result<crate::debug_sources::Sources, String> {
+        let mut sources = crate::debug_sources::Sources::new();
+        for path in self.revisions.keys().filter(|p| p.ends_with(".lep")) {
+            let bytes = std::fs::read(self.dir.join(path)).map_err(|e| e.to_string())?;
+            if let Ok(text) = String::from_utf8(bytes) {
+                let source = std::sync::Arc::new(crate::debug_sources::Source::new(path, text));
+                sources.insert(source.path.clone(), source);
+            }
+        }
+        Ok(sources)
     }
 
     /// Absolute path of `rel` in the copy, as the interpreter names files.
@@ -119,42 +185,26 @@ impl Workspace {
         self.dir.join(rel).to_string_lossy().into_owned()
     }
 
-    /// Send files that are new or differ from the download. Returns how many.
-    pub fn upload_changes(&self, files: &Files, project: &str) -> Result<usize, String> {
-        let mut paths = Vec::new();
-        walk(&self.dir, &mut paths).map_err(|e| e.to_string())?;
-        let mut sent = 0;
-        for path in paths {
-            let rel = self.relative(&path);
-            let bytes = std::fs::read(&path).map_err(|e| format!("{}: {e}", path.display()))?;
-            match String::from_utf8(bytes) {
-                Ok(source) => {
-                    if self.snapshot.get(&rel) != Some(&source) {
-                        files.write_file(project, &rel, &source)?;
-                        sent += 1;
-                    }
-                }
-                Err(err) => {
-                    // PNG and other binaries are not in the text snapshot.
-                    // A remote project has no byte API, so leave them there.
-                    if files.is_remote() {
-                        continue;
-                    }
-                    let bytes = err.into_bytes();
-                    let same = files.read_bytes(project, &rel).ok().as_ref() == Some(&bytes);
-                    if !same {
-                        files.write_bytes(project, &rel, &bytes)?;
-                        sent += 1;
-                    }
-                }
-            }
+    /// Send files that are new or differ from the download. One file that
+    /// fails does not stop the others: every failure is reported.
+    pub fn upload_changes(&self, files: &Files, project: &str) -> Envio {
+        let delivery = self.journal.retry(files, project);
+        let pending_dir = if delivery.errors.is_empty() && delivery.conflicts.is_empty() {
+            None
+        } else {
+            Some(self.journal.run_dir.clone())
+        };
+        Envio {
+            enviados: delivery.sent,
+            erros: delivery.errors,
+            avisos: delivery.warnings,
+            conflitos: delivery
+                .conflicts
+                .into_iter()
+                .map(|(path, bytes)| UploadConflict { path, bytes })
+                .collect(),
+            pending_dir,
         }
-        Ok(sent)
-    }
-
-    /// `/cache/ana/lib/m.lep` -> `lib/m.lep`; other paths unchanged.
-    pub fn relative(&self, path: &Path) -> String {
-        display_path(&self.dir, &path.to_string_lossy())
     }
 }
 
@@ -175,27 +225,31 @@ pub fn same_project_path(a: &str, b: &str) -> bool {
     a.replace('\\', "/") == b.replace('\\', "/")
 }
 
-/// Copy one project file into the cache. Text is returned for the snapshot.
-/// A PNG (or anything else that is not UTF-8) is copied as bytes and omitted
-/// from the snapshot. On a remote project the file API is text-only, so a
-/// binary file is skipped instead of failing the whole run.
+/// Download text and local binary data, preserving the repository revision.
+/// Binary download from a server remains item 04.
 fn copy_project_file(
     files: &Files,
     project: &str,
     rel: &str,
     dest: &Path,
-) -> Result<Option<String>, String> {
+) -> Result<Option<Expected>, String> {
     if !files.is_remote() {
-        let bytes = files.read_bytes(project, rel)?;
-        write_bytes(dest, &bytes)?;
-        return Ok(String::from_utf8(bytes).ok());
+        let snapshot = files.read_bytes_snapshot(rel)?;
+        write_bytes(dest, &snapshot.bytes)?;
+        return Ok(Some(Expected::Revision(snapshot.revision)));
     }
-    match files.read_file(project, rel) {
-        Ok(source) => {
-            write_file(dest, &source)?;
-            Ok(Some(source))
+    match files.current_text(project, rel) {
+        Ok(Some(snapshot)) => {
+            write_file(dest, &snapshot.text)?;
+            Ok(Some(
+                snapshot
+                    .revision
+                    .map(Expected::Revision)
+                    .unwrap_or(Expected::Unversioned),
+            ))
         }
-        Err(e) if e.contains("valid UTF-8") => Ok(None),
+        Ok(None) => Err(format!("arquivo `{rel}` foi removido durante a cópia")),
+        Err(e) if e.to_lowercase().contains("utf-8") => Ok(None),
         Err(e) => Err(e),
     }
 }
@@ -209,18 +263,6 @@ fn write_bytes(path: &Path, bytes: &[u8]) -> Result<(), String> {
 
 fn write_file(path: &Path, source: &str) -> Result<(), String> {
     write_bytes(path, source.as_bytes())
-}
-
-fn walk(dir: &Path, out: &mut Vec<PathBuf>) -> io::Result<()> {
-    for entry in std::fs::read_dir(dir)? {
-        let path = entry?.path();
-        if path.is_dir() {
-            walk(&path, out)?;
-        } else {
-            out.push(path);
-        }
-    }
-    Ok(())
 }
 
 struct ChannelLeia {
@@ -315,6 +357,52 @@ pub struct RunHandle {
     pub debug_cmd: Sender<String>,
 }
 
+/// Report the source actually loaded by the interpreter before forwarding a
+/// pause. This also covers modules generated by a program before importing
+/// them; their contents cannot be inferred by rereading a mutable run folder.
+struct SourceDebugger {
+    inner: ChannelDebugger,
+    root: PathBuf,
+    events: SyncSender<ExecEvent>,
+    seen: HashMap<String, std::sync::Arc<crate::debug_sources::Source>>,
+}
+impl SourceDebugger {
+    fn report(&mut self, ctx: &expressa::runtime::DebugCtx<'_>) -> bool {
+        if self
+            .seen
+            .get(ctx.file)
+            .is_some_and(|source| source.text == ctx.source)
+        {
+            return true;
+        }
+        let source = std::sync::Arc::new(crate::debug_sources::Source::new(
+            &display_path(&self.root, ctx.file),
+            ctx.source.to_string(),
+        ));
+        self.seen.insert(ctx.file.to_string(), source.clone());
+        self.events.send(ExecEvent::Source(source)).is_ok()
+    }
+}
+impl DebugHook for SourceDebugger {
+    fn before_stmt(
+        &mut self,
+        ctx: &expressa::runtime::DebugCtx<'_>,
+    ) -> expressa::runtime::DebugAction {
+        if !self.report(ctx) {
+            return expressa::runtime::DebugAction::Quit;
+        }
+        self.inner.before_stmt(ctx)
+    }
+    fn on_error(&mut self, ctx: &expressa::runtime::DebugCtx<'_>, message: &str) {
+        if self.report(ctx) {
+            self.inner.on_error(ctx, message);
+        }
+    }
+    fn interrupted(&mut self) -> bool {
+        self.inner.interrupted()
+    }
+}
+
 /// Run `rel_path` inside `ws` on a new thread. No time limit: Parar
 /// (`terminar`) is how a program that never ends is stopped.
 pub fn spawn(
@@ -375,7 +463,9 @@ pub fn spawn(
         });
     }
 
+    let lease = ws.journal.lease();
     std::thread::spawn(move || {
+        let _lease = lease; // Keep the run owned even if its window closes.
         let mut host = ChannelLeia {
             prompts: event_tx.clone(),
             lines: line_rx,
@@ -400,24 +490,46 @@ pub fn spawn(
             for bp in breakpoints {
                 dbg.session.breakpoints.insert(bp);
             }
-            Box::new(dbg)
+            Box::new(SourceDebugger {
+                inner: dbg,
+                root: ws_dir.clone(),
+                events: event_tx.clone(),
+                seen: HashMap::new(),
+            })
         } else {
             drop(pause_tx);
             Box::new(StopHook::new(dcmd_rx))
         };
-        let result = run_with_hosts(
-            &source,
-            &file,
-            hook,
-            Some(ws_dir),
-            None,
-            &mut out,
-            &mut err,
-            &mut host,
-            Some(&mut cart),
-            Some(&mut graf),
-            &args,
-        );
+        // A panic is a bug in the interpreter, not in the student's program:
+        // say so, and still end the run normally (upload files, clean up).
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            run_with_hosts(
+                &source,
+                &file,
+                hook,
+                Some(ws_dir),
+                None,
+                &mut out,
+                &mut err,
+                &mut host,
+                Some(&mut cart),
+                Some(&mut graf),
+                &args,
+            )
+        }));
+        let result = match result {
+            Ok(result) => result,
+            Err(panico) => {
+                let _ = event_tx.send(ExecEvent::Finished(Finished {
+                    ok: false,
+                    error_message: mensagem_de_panico(panico.as_ref()),
+                    error_file: String::new(),
+                    error_line: 0,
+                    stack: Vec::new(),
+                }));
+                return;
+            }
+        };
         let finished = match result {
             Ok(0) => Finished {
                 ok: true,
@@ -469,14 +581,327 @@ pub fn spawn(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::execution_state::{Event, ExecutionState, Unavailable};
+
+    struct RunProject {
+        root: PathBuf,
+        files: Files,
+        project: String,
+        cache: PathBuf,
+    }
+
+    impl RunProject {
+        fn new(name: &str) -> Self {
+            let (root, files, project, cache) = projeto_para_sync(name);
+            Self {
+                root,
+                files,
+                project,
+                cache,
+            }
+        }
+
+        fn workspace(&self) -> Workspace {
+            let ws = Workspace::sync_em(&self.cache, &self.files, &self.project, None).unwrap();
+            ws.arm().unwrap();
+            ws
+        }
+    }
+
+    impl Drop for RunProject {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.cache);
+            let _ = std::fs::remove_dir_all(&self.root);
+        }
+    }
 
     #[test]
-    fn cache_name_keeps_letters_and_replaces_the_rest() {
-        assert_eq!(cache_name("ana"), "ana");
-        assert_eq!(cache_name("turma-1_b"), "turma-1_b");
-        assert_eq!(cache_name("Meu Projeto"), "Meu_Projeto");
-        assert_eq!(cache_name(""), "projeto");
-        assert_eq!(cache_name("../x"), "___x");
+    fn lifecycle_with_worker_completion_error_and_stop() {
+        let project = RunProject::new("lifecycle");
+        let mut state = ExecutionState::default();
+        state.transition(Event::Prepare).unwrap();
+        assert!(Workspace::sync_em(&project.cache, &Files::None, "", None).is_err());
+        state.transition(Event::PreparationFailed).unwrap();
+        assert_eq!(state.availability(), Ok(()));
+
+        for (source, stop, succeeds) in [
+            ("escreva(1)\n", false, true),
+            ("escreva(nome_inexistente)\n", false, false),
+            ("leia(\"nome: \")\n", true, true),
+        ] {
+            state.transition(Event::Prepare).unwrap();
+            let mut ws = project.workspace();
+            ws.write_editor_text("a.lep", source).unwrap();
+            let run = spawn(&ws, "a.lep", source.into(), false, vec![], vec![]);
+            state.transition(Event::Started).unwrap();
+            let mut stopped = false;
+            loop {
+                match run
+                    .events
+                    .recv_timeout(Duration::from_secs(5))
+                    .expect("run should finish or request input")
+                {
+                    ExecEvent::Leia(_) => {
+                        assert!(stop);
+                        assert_eq!(state.availability(), Err(Unavailable::Running));
+                        run.debug_cmd.send("terminar".into()).unwrap();
+                        stopped = true;
+                    }
+                    ExecEvent::Finished(finished) => {
+                        if !stop {
+                            assert_eq!(finished.ok, succeeds, "{}", finished.error_message);
+                        }
+                        assert_eq!(stopped, stop);
+                        state.transition(Event::Finished).unwrap();
+                        break;
+                    }
+                    _ => {}
+                }
+            }
+            assert_eq!(state.availability(), Err(Unavailable::Uploading));
+            // Failed uploads finish the lifecycle while the journal retains output.
+            write_file(&ws.dir.join("generated.txt"), "output from the run").unwrap();
+            let failed = ws.upload_changes(&Files::None, "");
+            assert!(!failed.erros.is_empty());
+            state.transition(Event::Uploaded).unwrap();
+            assert_eq!(state.availability(), Ok(()));
+        }
+    }
+
+    #[test]
+    fn debug_uses_unsaved_import_and_project_relative_breakpoint() {
+        let project = RunProject::new("debug-import");
+        let mut ws = project.workspace();
+        let source = "importe \"lib/b\"\nescreva(dobro(3))\n";
+        ws.write_editor_text("a.lep", source).unwrap();
+        ws.write_editor_text("lib/b.lep", "dobro = funcao(x) {\n    retorne x * 2\n}\n")
+            .unwrap();
+        let run = spawn(
+            &ws,
+            "a.lep",
+            source.into(),
+            true,
+            vec![("lib/b.lep".into(), 2)],
+            vec![],
+        );
+        let mut paused_in_import = false;
+        let mut output = String::new();
+        loop {
+            match run
+                .events
+                .recv_timeout(Duration::from_secs(5))
+                .expect("debugger should pause or finish")
+            {
+                ExecEvent::Paused(pause) => {
+                    assert!(pause.error.is_none(), "{:?}", pause.error);
+                    // Import evaluation can also pause at the module's first
+                    // statement. The breakpoint must still pause inside the call.
+                    if pause.file == "lib/b.lep" && pause.line == 2 {
+                        assert_eq!(pause.source_line.trim(), "retorne x * 2");
+                        paused_in_import = true;
+                    }
+                    run.debug_cmd.send("continuar".into()).unwrap();
+                }
+                ExecEvent::Stdout(text) => output.push_str(&text),
+                ExecEvent::Finished(finished) => {
+                    assert!(finished.ok, "{}", finished.error_message);
+                    break;
+                }
+                _ => {}
+            }
+        }
+        assert!(paused_in_import);
+        assert_eq!(output, "6\n");
+        assert_eq!(
+            std::fs::read_to_string(project.root.join("lib/b.lep")).unwrap(),
+            "b"
+        );
+    }
+
+    #[test]
+    fn moved_breakpoint_pauses_on_snapshot_statement_and_next_run_applies_edits() {
+        crate::gtk_test::run(|| {
+            use gtk::prelude::*;
+            let project = RunProject::new("anchored-debug-source");
+            let language = sourceview5::LanguageManager::new();
+            let search = sourceview5::SearchSettings::new();
+            let imported = crate::docs::Doc::new(
+                Some("lib/b.lep".into()),
+                String::new(),
+                "dobro = funcao(x) {\n    retorne x * 2\n}\n",
+                &language,
+                &search,
+            );
+            imported.toggle_breakpoint(2);
+            imported.buffer.insert(
+                &mut imported.buffer.start_iter(),
+                "// inserted before breakpoint\n",
+            );
+            assert_eq!(
+                imported.breakpoint_lines(),
+                std::collections::BTreeSet::from([3])
+            );
+            let initial = imported.text();
+            for (iteration, expected) in [(0, "6\n"), (1, "297\n")] {
+                let mut ws = project.workspace();
+                let path = imported.name();
+                let source = format!(
+                    "importe \"{}\"\nescreva(dobro(3))\n",
+                    path.trim_end_matches(".lep")
+                );
+                ws.write_editor_text("a.lep", &source).unwrap();
+                ws.write_editor_text(&path, &imported.text()).unwrap();
+                let sources = ws.capture_sources().unwrap();
+                let snapshot = sources[&path].clone();
+                imported.set_running_source(Some(snapshot.clone()));
+                let points = imported
+                    .breakpoint_lines()
+                    .into_iter()
+                    .map(|line| (path.clone(), line))
+                    .collect();
+                let run = spawn(&ws, "a.lep", source, true, points, vec![]);
+                let mut hit = false;
+                let mut output = String::new();
+                let mut observed = HashMap::new();
+                loop {
+                    match run
+                        .events
+                        .recv_timeout(Duration::from_secs(5))
+                        .expect("debugger event")
+                    {
+                        ExecEvent::Source(source) => {
+                            observed.insert(source.path.clone(), source);
+                        }
+                        ExecEvent::Paused(pause) => {
+                            assert!(pause.error.is_none(), "{:?}", pause.error);
+                            assert!(
+                                observed.contains_key(&pause.file),
+                                "source must precede its pause"
+                            );
+                            if iteration == 0 && !hit {
+                                // Change and rename the editor while its original source is running.
+                                imported.buffer.set_text(
+                                    "// next run\ndobro = funcao(x) {\n    retorne x * 99\n}\n",
+                                );
+                                imported.set_path("lib/renamed.lep".into());
+                            }
+                            if pause.file == path && pause.line == 3 {
+                                hit = true;
+                                assert_eq!(
+                                    pause.source_line.trim(),
+                                    if iteration == 0 {
+                                        "retorne x * 2"
+                                    } else {
+                                        "retorne x * 99"
+                                    }
+                                );
+                                assert!(pause.vars.iter().any(|v| v.name == "x" && v.value == "3"));
+                                assert!(!pause.stack.is_empty());
+                                assert_eq!(observed[&path].revision, snapshot.revision);
+                                let viewer = crate::debug_sources::Viewer::new(
+                                    snapshot.clone(),
+                                    &language,
+                                    &search,
+                                );
+                                assert_eq!(viewer.doc.text(), snapshot.text);
+                                assert!(!viewer.doc.view.is_editable());
+                                if iteration == 0 {
+                                    assert_eq!(snapshot.text, initial);
+                                }
+                            }
+                            run.debug_cmd.send("continuar".into()).unwrap();
+                        }
+                        ExecEvent::Stdout(text) => output.push_str(&text),
+                        ExecEvent::Finished(finished) => {
+                            assert!(finished.ok, "{}", finished.error_message);
+                            break;
+                        }
+                        _ => (),
+                    }
+                }
+                assert!(
+                    hit,
+                    "breakpoint must pause on the imported function statement"
+                );
+                assert_eq!(output, expected);
+                imported.set_running_source(None);
+                if iteration == 0 {
+                    // Replacing all text moves old anchors to EOF by policy;
+                    // the user sets the desired breakpoint for the next run.
+                    for line in imported.breakpoint_lines() {
+                        imported.toggle_breakpoint(line);
+                    }
+                    imported.toggle_breakpoint(3);
+                }
+            }
+        });
+    }
+
+    #[test]
+    fn source_capture_survives_workspace_file_replacement() {
+        let project = RunProject::new("immutable-source");
+        let mut ws = project.workspace();
+        ws.write_editor_text("a.lep", "escreva(1)\n").unwrap();
+        let sources = ws.capture_sources().unwrap();
+        std::fs::write(ws.dir.join("a.lep"), "escreva(999)\n").unwrap();
+        assert_eq!(sources["a.lep"].text, "escreva(1)\n");
+    }
+
+    #[test]
+    fn uploads_detect_changes_to_text_binary_and_new_file_destinations() {
+        let project = RunProject::new("upload-conflicts");
+        std::fs::write(project.root.join("asset.bin"), [0xff, 0x01]).unwrap();
+        let ws = project.workspace();
+        std::fs::write(ws.dir.join("a.lep"), "program output").unwrap();
+        std::fs::write(ws.dir.join("asset.bin"), [0xff, 0x02]).unwrap();
+        std::fs::write(ws.dir.join("new.lep"), "new program output").unwrap();
+        // A user/editor changes all three destination files during execution.
+        std::fs::write(project.root.join("a.lep"), "user text").unwrap();
+        std::fs::write(project.root.join("asset.bin"), [0xff, 0x03]).unwrap();
+        std::fs::write(project.root.join("new.lep"), "user creation").unwrap();
+        let upload = ws.upload_changes(&project.files, &project.project);
+        assert!(upload.enviados.is_empty());
+        assert_eq!(upload.conflitos.len(), 3);
+        assert_eq!(
+            std::fs::read_to_string(project.root.join("a.lep")).unwrap(),
+            "user text"
+        );
+        assert_eq!(
+            std::fs::read(project.root.join("asset.bin")).unwrap(),
+            [0xff, 0x03]
+        );
+        assert_eq!(
+            std::fs::read_to_string(project.root.join("new.lep")).unwrap(),
+            "user creation"
+        );
+        assert!(
+            upload
+                .conflitos
+                .iter()
+                .any(|c| c.bytes == b"program output")
+        );
+    }
+
+    #[test]
+    fn editor_overlay_keeps_its_original_revision_even_if_preparation_reads_newer_disk_text() {
+        let project = RunProject::new("stale-editor");
+        let old_revision = expressa_aula_storage::revision(b"a");
+        std::fs::write(project.root.join("a.lep"), "external update before F5").unwrap();
+        let mut ws = project.workspace();
+        ws.write_editor_source(&EditorSource {
+            path: "a.lep".into(),
+            text: "unsaved editor text".into(),
+            expected: Expected::Revision(old_revision),
+        })
+        .unwrap();
+        ws.arm().unwrap();
+        std::fs::write(ws.dir.join("a.lep"), "program changed stale editor text").unwrap();
+        let upload = ws.upload_changes(&project.files, &project.project);
+        assert_eq!(upload.conflitos.len(), 1);
+        assert_eq!(
+            std::fs::read_to_string(project.root.join("a.lep")).unwrap(),
+            "external update before F5"
+        );
     }
 
     #[test]
@@ -506,7 +931,8 @@ mod tests {
         std::fs::write(root.join("tela_grafica/casa.png"), png).unwrap();
         let files = Files::Local(root.clone());
         let name = format!("png{}", std::process::id());
-        let ws = Workspace::download(&files, &name).unwrap();
+        let cache = root.with_extension("cache");
+        let ws = Workspace::sync_em(&cache, &files, &name, None).unwrap();
         assert_eq!(
             std::fs::read_to_string(ws.dir.join("jogos/estrela.lep")).unwrap(),
             "escreva(1)\n"
@@ -515,7 +941,129 @@ mod tests {
             std::fs::read(ws.dir.join("tela_grafica/casa.png")).unwrap(),
             png
         );
-        let _ = std::fs::remove_dir_all(&ws.dir);
+        let _ = std::fs::remove_dir_all(&cache);
         let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// A local project, under a fresh folder, with `a.lep` and `lib/b.lep`,
+    /// and a folder for its run copies.
+    fn projeto_para_sync(nome: &str) -> (PathBuf, Files, String, PathBuf) {
+        let root =
+            std::env::temp_dir().join(format!("expressa-sync-{nome}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(root.join("lib")).unwrap();
+        std::fs::write(root.join("a.lep"), "a").unwrap();
+        std::fs::write(root.join("lib/b.lep"), "b").unwrap();
+        let projeto = format!("sync-{nome}-{}", std::process::id());
+        let cache = root.with_extension("copias");
+        (root.clone(), Files::Local(root), projeto, cache)
+    }
+
+    #[test]
+    fn sync_always_uses_a_fresh_directory() {
+        let project = RunProject::new("fresh");
+        let first = project.workspace();
+        let first_dir = first.dir.clone();
+        let second = project.workspace();
+        assert_ne!(first.dir, second.dir);
+        assert!(
+            first_dir.join("a.lep").exists(),
+            "another run deleted the active copy"
+        );
+        assert_eq!(first.journal.identity(), second.journal.identity());
+    }
+
+    #[test]
+    fn sync_refreshes_sources_without_touching_prior_output() {
+        let project = RunProject::new("refresh");
+        let first = project.workspace();
+        let first_dir = first.dir.clone();
+        std::fs::write(first.dir.join("new.txt"), "not uploaded").unwrap();
+        std::fs::write(project.root.join("a.lep"), "a2").unwrap();
+        let second = Workspace::sync_em(
+            &project.cache,
+            &project.files,
+            &project.project,
+            Some(first),
+        )
+        .unwrap();
+        assert_eq!(
+            std::fs::read_to_string(second.dir.join("a.lep")).unwrap(),
+            "a2"
+        );
+        assert!(!second.dir.join("new.txt").exists());
+        assert_eq!(
+            std::fs::read_to_string(first_dir.join("new.txt")).unwrap(),
+            "not uploaded"
+        );
+        let scan = crate::pendencias::scan(&project.cache);
+        assert!(scan.errors.is_empty(), "{:?}", scan.errors);
+        assert_eq!(scan.runs.len(), 1);
+        assert_eq!(scan.runs[0].files[0].0, "new.txt");
+    }
+
+    #[test]
+    fn identical_folder_names_in_distinct_locations_have_distinct_identities() {
+        let temp = tempfile::tempdir().unwrap();
+        let a = temp.path().join("one/project");
+        let b = temp.path().join("two/project");
+        std::fs::create_dir_all(&a).unwrap();
+        std::fs::create_dir_all(&b).unwrap();
+        let first = Files::Local(a.clone());
+        let second = Files::Local(b);
+        assert_ne!(first.cache_key("project"), second.cache_key("project"));
+        assert_eq!(
+            first.cache_key("display name"),
+            Files::Local(a.join(".")).cache_key("other display name")
+        );
+        #[cfg(unix)]
+        {
+            let alias = temp.path().join("alias");
+            std::os::unix::fs::symlink(&a, &alias).unwrap();
+            assert_eq!(first.cache_key("a"), Files::Local(alias).cache_key("b"));
+        }
+        let cache = temp.path().join("runs");
+        let wa = Workspace::sync_em(&cache, &first, "project", None).unwrap();
+        let wb = Workspace::sync_em(&cache, &second, "project", None).unwrap();
+        assert_ne!(
+            wa.dir.parent().unwrap().parent(),
+            wb.dir.parent().unwrap().parent()
+        );
+    }
+
+    #[test]
+    fn panico_vira_erro_interno_com_o_detalhe() {
+        let texto = std::panic::catch_unwind(|| panic!("índice fora")).unwrap_err();
+        assert_eq!(
+            mensagem_de_panico(texto.as_ref()),
+            format!("{ERRO_INTERNO}: índice fora")
+        );
+        let formatado = std::panic::catch_unwind(|| panic!("valor {}", 3)).unwrap_err();
+        assert_eq!(
+            mensagem_de_panico(formatado.as_ref()),
+            format!("{ERRO_INTERNO}: valor 3")
+        );
+        let outro = std::panic::catch_unwind(|| std::panic::panic_any(7)).unwrap_err();
+        assert_eq!(mensagem_de_panico(outro.as_ref()), ERRO_INTERNO);
+    }
+
+    #[test]
+    fn upload_changes_continua_depois_de_uma_falha() {
+        let project = RunProject::new("upload-partial");
+        std::fs::write(project.root.join("sub"), "blocker").unwrap();
+        let ws = project.workspace();
+        write_file(&ws.dir.join("b.lep"), "novo").unwrap();
+        std::fs::remove_file(ws.dir.join("sub")).unwrap();
+        write_file(&ws.dir.join("sub/d.lep"), "x").unwrap();
+        let envio = ws.upload_changes(&project.files, &project.project);
+        assert_eq!(envio.enviados, [("b.lep".into(), Some("novo".into()))]);
+        assert_eq!(envio.erros.len(), 1, "{:?}", envio.erros);
+        assert!(envio.erros[0].starts_with("sub/d.lep"));
+        assert_eq!(
+            std::fs::read_to_string(project.root.join("a.lep")).unwrap(),
+            "a"
+        );
+        assert!(envio.pending_dir.is_some());
+        assert_eq!(ws.journal.outputs().unwrap().len(), 1);
     }
 }

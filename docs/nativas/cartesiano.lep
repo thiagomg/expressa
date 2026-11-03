@@ -5,7 +5,7 @@
 /// Exemplo: c = documento()
 documento = funcao() { mapa() }
 
-/// Plano xy vazio. Defina eixos e depois plotar.
+/// Plano xy vazio. Defina eixos e depois plote.
 ///
 /// tipo(g) continua "mapa".
 ///
@@ -14,7 +14,7 @@ grafico = funcao() { mapa() }
 
 /// Limites do plano. xmin < xmax e ymin < ymax. y cresce para cima.
 ///
-/// Sem eixos, plotar é erro.
+/// Sem eixos, plote é erro.
 ///
 /// Exemplo: g.eixos(-2 * pi, 2 * pi, -1.5, 1.5)
 eixos = funcao(grafico, xmin, xmax, ymin, ymax) { 0 }
@@ -24,8 +24,8 @@ eixos = funcao(grafico, xmin, xmax, ymin, ymax) { 0 }
 /// A função recebe um número e devolve um número. y não finito vira um furo na linha.
 /// Cores: as mesmas da tela (azul, vermelho, …).
 ///
-/// Exemplo: g.plotar(função(x) { seno(x) }, :azul)
-plotar = funcao(grafico, f, cor) { 0 }
+/// Exemplo: g.plote(função(x) { seno(x) }, :azul)
+plote = funcao(grafico, f, cor) { 0 }
 
 /// Copia o gráfico para o documento (congela as curvas).
 ///

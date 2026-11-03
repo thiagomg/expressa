@@ -2,26 +2,57 @@ syntax = "proto3";
 
 package expressa.aula;
 
-// Student files under {root}/{student}/. Identity is a folder name, not a UUID.
-// The server only stores files; the editor runs and debugs programs itself.
+// Student projects under {root}/{student}/{project}/. Identity is a folder
+// name, not a UUID. The server only stores files; the editor runs and debugs
+// programs itself.
+//
+// `project` uses the same characters as `student` (letters, digits, `_`,
+// `-`). Empty means "principal", where files from before projects existed
+// were moved, so older editors keep working on them.
 
 service Turma {
+  rpc ListProjects(ListProjectsRequest) returns (ListProjectsResponse);
+  rpc CreateProject(CreateProjectRequest) returns (CreateProjectResponse);
   rpc ListFiles(ListFilesRequest) returns (ListFilesResponse);
   rpc ReadFile(ReadFileRequest) returns (ReadFileResponse);
   rpc WriteFile(WriteFileRequest) returns (WriteFileResponse);
+  // New editors use this method so an old server cannot silently ignore CAS.
+  rpc WriteFileChecked(WriteFileRequest) returns (WriteFileResponse);
   rpc DeleteFile(DeleteFileRequest) returns (DeleteFileResponse);
   rpc Mkdir(MkdirRequest) returns (MkdirResponse);
   rpc Rename(RenameRequest) returns (RenameResponse);
 }
 
-message ListFilesRequest {
+message ListProjectsRequest {
   string student = 1;
 }
 
+message ListProjectsResponse {
+  // Sorted by name.
+  repeated string projects = 1;
+}
+
+// Fails with ALREADY_EXISTS when the project exists.
+message CreateProjectRequest {
+  string student = 1;
+  string project = 2;
+}
+
+message CreateProjectResponse {}
+
+message ListFilesRequest {
+  string student = 1;
+  string project = 2;
+}
+
 message TreeEntry {
-  // Path relative to the student folder, e.g. "lib" or "lib/mat.lep".
+  // Path relative to the project folder, e.g. "lib" or "lib/mat.lep".
   string path = 1;
   bool is_dir = 2;
+  // Files only. The editor copies a file again only when these change;
+  // both 0 (older servers) means "unknown, always copy".
+  uint64 size = 3;
+  int64 modified_ns = 4;
 }
 
 message ListFilesResponse {
@@ -31,23 +62,35 @@ message ListFilesResponse {
 message ReadFileRequest {
   string student = 1;
   string path = 2;
+  string project = 3;
 }
 
 message ReadFileResponse {
   string source = 1;
+  string revision = 2;
 }
 
 message WriteFileRequest {
   string student = 1;
   string path = 2;
   string source = 3;
+  // Only create: fail with ALREADY_EXISTS instead of replacing a file.
+  bool create_new = 4;
+  string project = 5;
+  // Required for replacement. Empty is accepted only with create_new=true.
+  string expected_revision = 6;
 }
 
-message WriteFileResponse {}
+message WriteFileResponse {
+  string revision = 1;
+  // The file was committed; a later flush/cleanup failed.
+  string warning = 2;
+}
 
 message DeleteFileRequest {
   string student = 1;
   string path = 2;
+  string project = 3;
 }
 
 message DeleteFileResponse {}
@@ -55,14 +98,17 @@ message DeleteFileResponse {}
 message MkdirRequest {
   string student = 1;
   string path = 2;
+  string project = 3;
 }
 
 message MkdirResponse {}
 
+// Fails with ALREADY_EXISTS when `to` exists: a rename never replaces.
 message RenameRequest {
   string student = 1;
   string from = 2;
   string to = 3;
+  string project = 4;
 }
 
 message RenameResponse {}
