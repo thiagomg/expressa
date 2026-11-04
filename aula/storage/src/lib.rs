@@ -87,6 +87,29 @@ pub fn read(path: &Path) -> io::Result<Snapshot> {
     Ok(Snapshot { bytes, revision })
 }
 
+/// Read at most `max_bytes` plus one sentinel byte, including files which grow
+/// after the metadata check. Revision always describes the returned bytes.
+pub fn read_limited(path: &Path, max_bytes: usize) -> io::Result<Snapshot> {
+    use std::io::Read;
+    let file = fs::File::open(path)?;
+    if file.metadata()?.len() > max_bytes as u64 {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "arquivo grande demais",
+        ));
+    }
+    let mut bytes = Vec::new();
+    file.take(max_bytes as u64 + 1).read_to_end(&mut bytes)?;
+    if bytes.len() > max_bytes {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "arquivo grande demais",
+        ));
+    }
+    let revision = revision(&bytes);
+    Ok(Snapshot { bytes, revision })
+}
+
 /// Keep binary run output outside a disposable workspace after a conflict.
 /// No project file is changed; the returned path can be exported by the student.
 pub fn preserve_output(root: &Path, name: &str, bytes: &[u8]) -> io::Result<std::path::PathBuf> {
@@ -339,6 +362,22 @@ fn replace(temp: tempfile::NamedTempFile, path: &Path) -> io::Result<Option<Stri
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn limited_reads_accept_exact_bounds_and_reject_larger_files() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("a.bin");
+        fs::write(&path, b"abc").unwrap();
+        let snapshot = read_limited(&path, 3).unwrap();
+        assert_eq!(snapshot.bytes, b"abc");
+        assert_eq!(snapshot.revision, revision(b"abc"));
+        assert_eq!(
+            read_limited(&path, 2).unwrap_err().kind(),
+            io::ErrorKind::InvalidData
+        );
+        fs::write(&path, []).unwrap();
+        assert!(read_limited(&path, 0).unwrap().bytes.is_empty());
+    }
 
     #[test]
     fn failure_before_publication_preserves_original_and_cleans_temporary_files() {

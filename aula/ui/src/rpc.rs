@@ -176,15 +176,21 @@ impl Rpc {
             .enable_all()
             .build()
             .map_err(|e| e.to_string())?;
-        let channel = rt.block_on(async {
-            Endpoint::from_shared(normalized.clone())
-                .map_err(|e| e.to_string())?
-                .connect_timeout(limit)
-                .timeout(TEMPO_POR_PEDIDO)
-                .connect()
-                .await
-                .map_err(|e| e.to_string())
-        })?;
+        let flag = crate::background::current_cancellation();
+        let channel = rt
+            .block_on(cancellable(
+                async {
+                    Endpoint::from_shared(normalized.clone())
+                        .map_err(|e| e.to_string())?
+                        .connect_timeout(limit)
+                        .timeout(TEMPO_POR_PEDIDO)
+                        .connect()
+                        .await
+                        .map_err(|e| e.to_string())
+                },
+                flag,
+            ))
+            .map_err(|_| "operação cancelada".to_string())??;
         Ok(Self {
             endpoint: normalized,
             rt,
@@ -238,13 +244,40 @@ fn mensagem(status: tonic::Status) -> String {
     }
 }
 
+async fn cancellable<F: std::future::Future>(
+    future: F,
+    flag: Option<std::sync::Arc<std::sync::atomic::AtomicBool>>,
+) -> Result<F::Output, ()> {
+    let Some(flag) = flag else {
+        return Ok(future.await);
+    };
+    tokio::pin!(future);
+    loop {
+        if flag.load(Ordering::Acquire) {
+            return Err(());
+        }
+        tokio::select! {
+            value = &mut future => return Ok(value),
+            _ = tokio::time::sleep(std::time::Duration::from_millis(10)) => {},
+        }
+    }
+}
+
 impl Rpc {
+    fn wait<T>(
+        &self,
+        future: impl std::future::Future<Output = Result<T, tonic::Status>>,
+    ) -> Result<T, tonic::Status> {
+        let flag = crate::background::current_cancellation();
+        self.rt
+            .block_on(cancellable(future, flag))
+            .map_err(|_| tonic::Status::cancelled("operação cancelada"))?
+    }
     /// The student's projects, sorted.
     pub fn list_projects(&self, student: &str) -> Result<Vec<String>, String> {
         let mut c = TurmaClient::new(self.channel.clone());
         let resp = self
-            .rt
-            .block_on(c.list_projects(ListProjectsRequest {
+            .wait(c.list_projects(ListProjectsRequest {
                 student: student.to_string(),
             }))
             .map_err(mensagem)?;
@@ -254,20 +287,18 @@ impl Rpc {
     /// Fails with `já existe o projeto …` when it exists.
     pub fn create_project(&self, student: &str, project: &str) -> Result<(), String> {
         let mut c = TurmaClient::new(self.channel.clone());
-        self.rt
-            .block_on(c.create_project(CreateProjectRequest {
-                student: student.to_string(),
-                project: project.to_string(),
-            }))
-            .map_err(mensagem)?;
+        self.wait(c.create_project(CreateProjectRequest {
+            student: student.to_string(),
+            project: project.to_string(),
+        }))
+        .map_err(mensagem)?;
         Ok(())
     }
 
     pub fn list_tree(&self, student: &str, project: &str) -> Result<Vec<TreeEntry>, String> {
         let mut c = TurmaClient::new(self.channel.clone());
         let resp = self
-            .rt
-            .block_on(c.list_files(ListFilesRequest {
+            .wait(c.list_files(ListFilesRequest {
                 student: student.to_string(),
                 project: project.to_string(),
             }))
@@ -282,7 +313,7 @@ impl Rpc {
         path: &str,
     ) -> Result<Option<crate::store::TextSnapshot>, String> {
         let mut c = TurmaClient::new(self.channel.clone());
-        match self.rt.block_on(c.read_file(ReadFileRequest {
+        match self.wait(c.read_file(ReadFileRequest {
             student: student.to_string(),
             project: project.to_string(),
             path: path.to_string(),
@@ -315,8 +346,7 @@ impl Rpc {
         };
         let mut c = TurmaClient::new(self.channel.clone());
         let response = self
-            .rt
-            .block_on(c.write_file_checked(WriteFileRequest {
+            .wait(c.write_file_checked(WriteFileRequest {
                 student: student.to_string(),
                 project: project.to_string(),
                 path: path.to_string(),
@@ -344,38 +374,35 @@ impl Rpc {
 
     pub fn delete_file(&self, student: &str, project: &str, path: &str) -> Result<(), String> {
         let mut c = TurmaClient::new(self.channel.clone());
-        self.rt
-            .block_on(c.delete_file(DeleteFileRequest {
-                student: student.to_string(),
-                project: project.to_string(),
-                path: path.to_string(),
-            }))
-            .map_err(mensagem)?;
+        self.wait(c.delete_file(DeleteFileRequest {
+            student: student.to_string(),
+            project: project.to_string(),
+            path: path.to_string(),
+        }))
+        .map_err(mensagem)?;
         Ok(())
     }
 
     pub fn mkdir(&self, student: &str, project: &str, path: &str) -> Result<(), String> {
         let mut c = TurmaClient::new(self.channel.clone());
-        self.rt
-            .block_on(c.mkdir(MkdirRequest {
-                student: student.to_string(),
-                project: project.to_string(),
-                path: path.to_string(),
-            }))
-            .map_err(mensagem)?;
+        self.wait(c.mkdir(MkdirRequest {
+            student: student.to_string(),
+            project: project.to_string(),
+            path: path.to_string(),
+        }))
+        .map_err(mensagem)?;
         Ok(())
     }
 
     pub fn rename(&self, student: &str, project: &str, from: &str, to: &str) -> Result<(), String> {
         let mut c = TurmaClient::new(self.channel.clone());
-        self.rt
-            .block_on(c.rename(RenameRequest {
-                student: student.to_string(),
-                project: project.to_string(),
-                from: from.to_string(),
-                to: to.to_string(),
-            }))
-            .map_err(mensagem)?;
+        self.wait(c.rename(RenameRequest {
+            student: student.to_string(),
+            project: project.to_string(),
+            from: from.to_string(),
+            to: to.to_string(),
+        }))
+        .map_err(mensagem)?;
         Ok(())
     }
 }
@@ -397,5 +424,45 @@ mod tests {
         kill_pid(pid);
         let _ = child.wait();
         assert!(!pid_is_alive(pid), "processo encerrado");
+    }
+}
+
+#[cfg(test)]
+mod cancellation_tests {
+    use super::*;
+    #[test]
+    fn cancelling_a_background_operation_aborts_a_pending_rpc_future() {
+        use std::sync::{Arc, atomic::AtomicBool};
+        use std::time::{Duration, Instant};
+        let started = Arc::new(AtomicBool::new(false));
+        let finished = Arc::new(AtomicBool::new(false));
+        let s = started.clone();
+        let f = finished.clone();
+        let reply = crate::background::Reply::spawn(1, move || {
+            let rt = tokio::runtime::Builder::new_current_thread()
+                .enable_time()
+                .build()
+                .unwrap();
+            let cancellation = crate::background::current_cancellation();
+            assert!(cancellation.is_some());
+            s.store(true, Ordering::Release);
+            let result = rt.block_on(cancellable(std::future::pending::<()>(), cancellation));
+            assert!(result.is_err());
+            f.store(true, Ordering::Release);
+            Ok(())
+        });
+        let end = Instant::now() + Duration::from_secs(10);
+        while !started.load(Ordering::Acquire) {
+            assert!(Instant::now() < end);
+            std::thread::sleep(Duration::from_millis(1));
+        }
+        reply.cancel();
+        while !finished.load(Ordering::Acquire) {
+            assert!(
+                Instant::now() < end,
+                "cancelled RPC kept its worker blocked"
+            );
+            std::thread::sleep(Duration::from_millis(1));
+        }
     }
 }

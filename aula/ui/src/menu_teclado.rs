@@ -212,12 +212,51 @@ mod tests {
     use super::*;
     use gtk::{gio, glib};
 
+    struct WindowCleanup(gtk::Window);
+    impl Drop for WindowCleanup {
+        fn drop(&mut self) {
+            self.0.destroy();
+        }
+    }
+
+    fn keyboard_only(menu: &PopoverMenu) {
+        // A real desktop pointer can enter a popup when it is laid out and
+        // change focus during spin(). These assertions exercise keyboard
+        // navigation, so exclude pointer targeting without changing focusability.
+        visit(menu.upcast_ref(), &mut |widget| {
+            widget.set_can_target(false);
+            if let Some(stack) = widget.downcast_ref::<gtk::Stack>() {
+                stack.set_transition_type(gtk::StackTransitionType::None);
+                stack.set_transition_duration(0);
+            }
+        });
+    }
+
     fn spin() {
         let context = glib::MainContext::default();
         while context.pending() {
             context.iteration(false);
         }
     }
+    fn frame(window: &impl IsA<Widget>) {
+        let ready = std::rc::Rc::new(std::cell::Cell::new(false));
+        let flag = ready.clone();
+        window.add_tick_callback(move |_, _| {
+            flag.set(true);
+            glib::ControlFlow::Break
+        });
+        let end = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        while !ready.get() {
+            assert!(
+                std::time::Instant::now() < end,
+                "menu window did not render a frame"
+            );
+            spin();
+            std::thread::sleep(std::time::Duration::from_millis(1));
+        }
+        spin();
+    }
+
     fn row(menu: &PopoverMenu, text: &str) -> Widget {
         let mut found = None;
         visit(&page(menu).unwrap(), &mut |widget| {
@@ -226,6 +265,23 @@ mod tests {
             }
         });
         found.unwrap_or_else(|| panic!("menu row missing: {text}"))
+    }
+
+    fn focus_description(menu: &PopoverMenu) -> String {
+        menu.root().and_then(|r| r.focus()).map_or_else(
+            || "none".into(),
+            |w| {
+                let text = w
+                    .find_property("text")
+                    .map(|_| w.property::<String>("text"));
+                format!(
+                    "{} {text:?} visible={} mapped={}",
+                    w.type_().name(),
+                    w.is_visible(),
+                    w.is_mapped()
+                )
+            },
+        )
     }
 
     #[test]
@@ -259,11 +315,12 @@ mod tests {
                 .default_width(640)
                 .default_height(400)
                 .build();
+            let _cleanup = WindowCleanup(window.clone().upcast());
             window.set_show_menubar(true);
             window.insert_action_group("win", Some(&actions));
             install(&window);
             window.present();
-            spin();
+            frame(&window);
             let mut bar = None;
             visit(window.upcast_ref(), &mut |widget| {
                 if bar.is_none() {
@@ -274,7 +331,7 @@ mod tests {
             remote.remove_all();
             remote.append_submenu(Some("Projects"), &projects);
             remote.append(Some("Connect"), Some("win.open"));
-            spin();
+            frame(&window);
             let mut popover = None;
             visit(bar.upcast_ref(), &mut |w| {
                 if popover.is_none() {
@@ -282,33 +339,34 @@ mod tests {
                 }
             });
             let menu = popover.expect("menu bar popover");
+            keyboard_only(&menu);
             window.present();
-            spin();
+            frame(&window);
             menu.popup();
-            spin();
+            frame(&window);
             for _ in 0..3 {
                 for label in ["Local", "Remote"] {
                     let opener = row(&menu, label);
                     assert!(opener.grab_focus());
                     menu.emit_by_name::<()>("move-focus", &[&DirectionType::Right]);
-                    spin();
+                    frame(&window);
                     let submenu = nested_menu(&opener).expect("menubar uses nested popovers");
                     assert!(submenu.is_visible(), "Right did not open {label}");
                     if label == "Remote" {
                         let projects = row(&submenu, "Projects");
                         assert!(projects.grab_focus());
                         submenu.emit_by_name::<()>("move-focus", &[&DirectionType::Right]);
-                        spin();
+                        frame(&window);
                         let child = nested_menu(&projects).unwrap();
                         assert!(child.is_visible(), "Right did not open Projects");
                         assert!(row(&child, "Project A").grab_focus());
                         child.emit_by_name::<()>("move-focus", &[&DirectionType::Left]);
-                        spin();
+                        frame(&window);
                         assert!(!child.is_visible(), "Left did not close Projects");
                         assert!(submenu.is_visible(), "Left closed Remote as well");
                         assert!(projects.is_focus(), "focus did not return to Projects");
                         submenu.emit_by_name::<()>("move-focus", &[&DirectionType::Down]);
-                        spin();
+                        frame(&window);
                         assert!(
                             row(&submenu, "Connect").is_focus(),
                             "Down after Left did not move to Connect"
@@ -317,7 +375,7 @@ mod tests {
                         assert!(row(&submenu, "Open project").grab_focus());
                     }
                     submenu.emit_by_name::<()>("move-focus", &[&DirectionType::Left]);
-                    spin();
+                    frame(&window);
                     assert!(!submenu.is_visible(), "Left did not return from {label}");
                     assert!(menu.is_visible(), "Left closed File as well");
                     assert!(opener.is_focus(), "focus did not return to {label}");
@@ -329,7 +387,7 @@ mod tests {
                             DirectionType::Up
                         }],
                     );
-                    spin();
+                    frame(&window);
                     assert!(
                         row(&menu, if label == "Local" { "Remote" } else { "Local" }).is_focus(),
                         "cannot move to sibling after returning from {label}"
@@ -366,16 +424,18 @@ mod tests {
                 .default_width(400)
                 .default_height(300)
                 .build();
+            let _cleanup = WindowCleanup(window.clone());
+            keyboard_only(&menu);
             window.insert_action_group("win", Some(&actions));
             install(&button);
             window.present();
-            spin();
+            frame(&window);
             menu.popup();
-            spin();
+            frame(&window);
             for _ in 0..3 {
                 assert!(row(&menu, "Local").grab_focus());
                 menu.emit_by_name::<()>("move-focus", &[&DirectionType::Right]);
-                spin();
+                frame(&window);
                 assert_ne!(menu.visible_submenu().as_deref(), Some("main"));
                 let leaf = row(&menu, "Open");
                 assert!(leaf.grab_focus());
@@ -384,22 +444,27 @@ mod tests {
                     "Right must not execute a leaf action"
                 );
                 menu.emit_by_name::<()>("move-focus", &[&DirectionType::Left]);
-                spin();
+                frame(&window);
                 assert_eq!(menu.visible_submenu().as_deref(), Some("main"));
                 assert!(menu.is_visible() && row(&menu, "Local").is_focus());
                 menu.emit_by_name::<()>("move-focus", &[&DirectionType::Down]);
-                spin();
-                assert!(row(&menu, "Other").is_focus());
+                let immediate = focus_description(&menu);
+                frame(&window);
+                assert!(
+                    row(&menu, "Other").is_focus(),
+                    "immediate={immediate}; after frame={}",
+                    focus_description(&menu)
+                );
                 menu.emit_by_name::<()>("move-focus", &[&DirectionType::Up]);
-                spin();
+                frame(&window);
                 assert!(row(&menu, "Local").is_focus());
             }
             assert_eq!(count.get(), 0);
             row(&menu, "Local").grab_focus();
             menu.emit_by_name::<()>("move-focus", &[&DirectionType::Right]);
-            spin();
+            frame(&window);
             row(&menu, "Open").activate();
-            spin();
+            frame(&window);
             assert_eq!(count.get(), 1, "normal menu activation stopped working");
             assert!(!menu.is_visible());
             window.close();

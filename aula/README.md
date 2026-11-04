@@ -38,6 +38,14 @@ A execução não lê nem grava fora da pasta do projeto (`..`, caminhos absolut
 
 O painel conserva até 5000 linhas e 262144 caracteres, removendo o texto mais antigo. **Limpar** apaga apenas o texto exibido. A fila aceita até 16 avaliações, cada uma com até 64 KiB de código; se estiver cheia, o comando fica na entrada para tentar novamente. Resultados muito longos são abreviados com um aviso. `saia()` encerra a sessão do painel; **Reiniciar** permite começar outra. Se a sessão falhar ou perder a conexão com seu interpretador, o painel informa o problema e oferece o mesmo reinício.
 
+## Operações e responsividade
+
+Abrir, salvar, listar arquivos e analisar a sintaxe usam trabalho em segundo plano. **Operações**, na barra inferior, mostra o que está em andamento e permite cancelar leituras, conexões e a preparação de uma execução. A edição continua disponível enquanto você aguarda.
+
+Salvar grava a versão enviada ao iniciar a operação. Se você continuar digitando, as novas alterações permanecem marcadas na aba e serão gravadas na próxima vez que salvar. Fechar a janela ou trocar de projeto aguarda a confirmação dos salvamentos; uma gravação antiga não autoriza descartar edições mais novas.
+
+Leituras de texto aceitam até 8 MiB em projetos locais; o servidor aceita até 3 MiB por arquivo de texto. O servidor recusa gravações acima desse limite antes de substituir o arquivo existente. Listagens têm limite de 20000 entradas e 64 níveis de pastas.
+
 ## Subir o servidor
 
 ```bash
@@ -52,7 +60,7 @@ O instalador (Windows e `.deb`) copia os exemplos para `Documentos/Expressa Aula
 
 **Ajuda → Tutoriais** abre o binário `expressa-tutorial`. A Aula reabre a última pasta e o último arquivo. A barra de baixo mostra `linha:coluna`. **Ver → Ir para linha** (Ctrl+G) salta para um número.
 
-Os comandos ficam no menu do topo (**Arquivo**, **Executar**, **Depurar**, **Ver**, **Ajuda**), cada um com o atalho à direita. **Arquivo → Sair** (Ctrl+Q) fecha o editor (com pergunta se houver alterações). F5 executa a aba atual, **F6 depura**, F7 mostra/oculta arquivos, F8 o painel do depurador, F9 (ou clique no número da linha) ponto de parada, F10 próximo, F11 entrar, Shift+F11 sair, Ctrl+S salva. O caminho do projeto aparece à direita da barra de baixo. `mostre()` do módulo `cartesiano` abre o painel **Gráficos** (Destacar vira janela irmã e fica assim até Acoplar ou fechar). `mostre()` de `tela_grafica` abre uma janela irmã por `nova()`. Clique e tecla nessa janela voltam em `evento()`. O desenho ocupa o retângulo que o painel ou a janela lhe dão, como o `expressa-grafico`.
+Os comandos ficam no menu do topo (**Arquivo**, **Executar**, **Depurar**, **Ver**, **Ajuda**), cada um com o atalho à direita. **Arquivo → Sair** (Ctrl+Q) fecha o editor (com pergunta se houver alterações). F5 executa a aba atual ou **continua uma depuração pausada**, **F6 inicia a depuração**, F7 mostra/oculta arquivos, F8 o painel do depurador, F9 (ou clique no número da linha) ponto de parada, F10 próximo, F11 entrar, Shift+F11 sair, Ctrl+S salva. O caminho do projeto aparece à direita da barra de baixo. `mostre()` do módulo `cartesiano` abre o painel **Gráficos** (Destacar vira janela irmã e fica assim até Acoplar ou fechar). `mostre()` de `tela_grafica` abre uma janela irmã por `nova()`. Clique e tecla nessa janela voltam em `evento()`. O desenho ocupa o retângulo que o painel ou a janela lhe dão, como o `expressa-grafico`.
 
 A linha **argumentos** vai para `argumentos[1]…` no programa. `escreva_erro` aparece em vermelho. **Parar** encerra Executar e Depurar. Clique na linha `erro: … em arquivo:linha` abre o arquivo na linha. Executar usa o texto de todas as abas abertas, salvas ou não.
 
@@ -92,6 +100,10 @@ primeiro projeto, as abas que já estavam abertas continuam abertas para serem s
 Fechar o editor fecha as janelas irmãs (gráficos destacados e Ajuda) e encerra o `expressa-aula-server` que ele mesmo tiver iniciado. A janela abre maximizada; o código ocupa a maior parte da tela. Em janela estreita os painéis encolhem.
 
 No depurador: a linha atual fica amarela na aba **Execução: arquivo**, uma cópia somente para leitura da fonte executada (inclusive módulos importados). Um erro durante a depuração para na linha em vermelho, com as variáveis visíveis, e Continuar encerra. **Observados** guarda nomes para ver o valor a cada passo; **Variáveis** lista o que está no escopo; **Pilha** as chamadas.
+
+**Parar** fecha essa aba imediatamente e devolve o foco ao editor, enquanto o interpretador termina. Pausas que já estavam na fila não reabrem a visualização. Quando o programa termina normalmente ou encerra após um erro, a aba temporária também fecha. Se você já voltou a editar outra aba, ela continua selecionada.
+
+Erros de **Executar (F5)** permanecem no console e destacam a linha na aba editável quando seu texto corresponde ao código executado. Se houve edições durante a execução, a IDE preserva o cursor e avisa que a posição pertence à versão anterior. **Ver → Ver código executado** abre essa versão somente quando solicitado; ela fica disponível até a próxima execução preparada ou a troca de projeto. Clicar em erros e na pilha após o término também navega para o editor, sem abrir automaticamente uma cópia somente leitura.
 
 Cada execução usa uma fonte fixa e os pontos de parada definidos ao iniciá-la. Editar ou salvar um arquivo durante a execução não altera o programa em andamento: as mudanças, inclusive nos pontos de parada, valem na próxima execução. O editor mostra um aviso quando a fonte foi editada; **Ver fonte em execução** abre a cópia executada, e **Voltar ao editor** retorna à aba editável. F5/F6 na aba de execução inicia a próxima execução usando a versão atual do editor depois que a anterior terminar.
 

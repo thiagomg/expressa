@@ -57,7 +57,26 @@ impl Files {
         }
     }
 
+    /// UI identity for a root already canonicalized when the project opened.
+    /// Filesystem validation and the authoritative identity stay on workers.
+    pub fn known_identity(
+        &self,
+        student: &str,
+    ) -> Result<crate::identidade::ProjectIdentity, String> {
+        use crate::identidade::ProjectIdentity;
+        match self {
+            Self::None => Err("escolha uma pasta para o projeto".into()),
+            Self::Local(root) => Ok(ProjectIdentity::Local { root: root.clone() }),
+            Self::Remote { rpc, projeto } => Ok(ProjectIdentity::Remote {
+                endpoint: rpc.endpoint.clone(),
+                student: student.into(),
+                project: projeto.clone(),
+            }),
+        }
+    }
+
     /// Full identity hash, for rejecting late callbacks from another project.
+    #[cfg(test)]
     pub fn cache_key(&self, student: &str) -> Option<String> {
         self.identity(student).ok().map(|id| id.key())
     }
@@ -88,7 +107,7 @@ impl Files {
             Files::None => Err("escolha uma pasta para o projeto".into()),
             Files::Local(root) => {
                 let path = local_file(root, path)?;
-                match storage::read(&path) {
+                match storage::read_limited(&path, MAX_DOCUMENT_BYTES) {
                     Ok(snapshot) => Ok(Some(TextSnapshot {
                         text: String::from_utf8(snapshot.bytes).map_err(|e| e.to_string())?,
                         revision: Some(snapshot.revision),
@@ -252,7 +271,9 @@ pub fn pasta_larga(path: &Path) -> bool {
     }
 }
 
+pub const MAX_DOCUMENT_BYTES: usize = 8 * 1024 * 1024;
 const MAX_TREE_ENTRIES: usize = 20_000;
+const MAX_TREE_DEPTH: usize = 64;
 
 /// Modification time in nanoseconds since 1970, or 0 if the system has none
 /// (same as the server sends).
@@ -287,10 +308,17 @@ fn skip_name(name: &std::ffi::OsStr) -> bool {
 }
 
 fn walk(dir: &Path, root: &Path, out: &mut Vec<TreeEntry>) -> Result<(), String> {
+    if dir.strip_prefix(root).map_or(0, |p| p.components().count()) > MAX_TREE_DEPTH {
+        return Err("projeto com pastas profundas demais".into());
+    }
     let mut entries = std::fs::read_dir(dir)
         .map_err(|e| e.to_string())?
+        .take(MAX_TREE_ENTRIES + 1)
         .collect::<Result<Vec<_>, _>>()
         .map_err(|e| e.to_string())?;
+    if entries.len() > MAX_TREE_ENTRIES {
+        return Err("pasta com arquivos demais".into());
+    }
     entries.sort_by(|a, b| {
         let a_dir = a.file_type().map(|t| t.is_dir()).unwrap_or(false);
         let b_dir = b.file_type().map(|t| t.is_dir()).unwrap_or(false);

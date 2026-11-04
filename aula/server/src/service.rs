@@ -14,13 +14,22 @@ use tonic::{Request, Response, Status};
 
 use crate::{paths, projetos};
 
+const MAX_DISK_OPERATIONS: usize = 4;
+const MAX_TREE_ENTRIES: usize = 20_000;
+const MAX_TREE_DEPTH: usize = 64;
+const MAX_TEXT_BYTES: usize = 3 * 1024 * 1024;
+
 /// The message the editor shows as is.
 fn ja_existe(rel: &str) -> Status {
     Status::already_exists(format!("já existe `{rel}`"))
 }
 
 fn interno(e: std::io::Error) -> Status {
-    Status::internal(e.to_string())
+    if e.kind() == std::io::ErrorKind::InvalidData {
+        Status::resource_exhausted(e.to_string())
+    } else {
+        Status::internal(e.to_string())
+    }
 }
 
 #[derive(Clone)]
@@ -31,6 +40,7 @@ pub struct Aula {
     preparando: Arc<Mutex<()>>,
     /// Serialize mutations (including rename/delete) with revision checks.
     arquivos: Arc<Mutex<()>>,
+    disco: Arc<tokio::sync::Semaphore>,
 }
 
 impl Aula {
@@ -39,7 +49,29 @@ impl Aula {
             root,
             preparando: Arc::new(Mutex::new(())),
             arquivos: Arc::new(Mutex::new(())),
+            disco: Arc::new(tokio::sync::Semaphore::new(MAX_DISK_OPERATIONS)),
         }
+    }
+
+    async fn blocking<T: Send + 'static>(
+        &self,
+        work: impl FnOnce(Self) -> Result<T, Status> + Send + 'static,
+    ) -> Result<T, Status> {
+        // Acquire before spawning: neither waiting requests nor blocking jobs
+        // can grow without bound. The permit stays with a running OS call even
+        // if its RPC future is dropped.
+        let permit = self
+            .disco
+            .clone()
+            .try_acquire_owned()
+            .map_err(|_| Status::resource_exhausted("servidor ocupado; tente novamente"))?;
+        let aula = self.clone();
+        tokio::task::spawn_blocking(move || {
+            let _permit = permit;
+            work(aula)
+        })
+        .await
+        .map_err(|_| Status::internal("falha na operação de arquivos"))?
     }
 
     /// The student's folder, laid out as one folder per project.
@@ -85,10 +117,29 @@ fn modificado_ns(meta: &fs::Metadata) -> i64 {
 }
 
 fn walk_tree(dir: &Path, out: &mut Vec<TreeEntry>, prefix: &Path) -> std::io::Result<()> {
+    if out.len() >= MAX_TREE_ENTRIES
+        || dir
+            .strip_prefix(prefix)
+            .map_or(0, |p| p.components().count())
+            > MAX_TREE_DEPTH
+    {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "projeto grande demais para listar",
+        ));
+    }
     if !dir.exists() {
         return Ok(());
     }
-    let mut entries: Vec<_> = fs::read_dir(dir)?.collect::<Result<Vec<_>, _>>()?;
+    let mut entries: Vec<_> = fs::read_dir(dir)?
+        .take(MAX_TREE_ENTRIES + 1)
+        .collect::<Result<Vec<_>, _>>()?;
+    if entries.len() > MAX_TREE_ENTRIES {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "pasta com arquivos demais",
+        ));
+    }
     entries.sort_by(|a, b| {
         let a_dir = a.path().is_dir();
         let b_dir = b.path().is_dir();
@@ -100,6 +151,15 @@ fn walk_tree(dir: &Path, out: &mut Vec<TreeEntry>, prefix: &Path) -> std::io::Re
     });
     for entry in entries {
         if storage::is_internal(&entry.file_name()) {
+            continue;
+        }
+        if out.len() >= MAX_TREE_ENTRIES {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "projeto com arquivos demais",
+            ));
+        }
+        if entry.file_type()?.is_symlink() {
             continue;
         }
         let path = entry.path();
@@ -130,91 +190,109 @@ impl Turma for Aula {
         &self,
         request: Request<ListProjectsRequest>,
     ) -> Result<Response<ListProjectsResponse>, Status> {
-        let req = request.into_inner();
-        let dir = self.aluno(&req.student)?;
-        let projects = projetos::listar(&dir).map_err(interno)?;
-        Ok(Response::new(ListProjectsResponse { projects }))
+        self.blocking(move |aula| {
+            let req = request.into_inner();
+            let dir = aula.aluno(&req.student)?;
+            let projects = projetos::listar(&dir).map_err(interno)?;
+            Ok(Response::new(ListProjectsResponse { projects }))
+        })
+        .await
     }
 
     async fn create_project(
         &self,
         request: Request<CreateProjectRequest>,
     ) -> Result<Response<CreateProjectResponse>, Status> {
-        let req = request.into_inner();
-        if req.project.trim().is_empty() {
-            return Err(Status::invalid_argument("dê um nome ao projeto"));
-        }
-        self.aluno(&req.student)?;
-        let dir = paths::project_dir(&self.root, &req.student, &req.project)
-            .map_err(Status::invalid_argument)?;
-        fs::create_dir(&dir).map_err(|e| match e.kind() {
-            std::io::ErrorKind::AlreadyExists => {
-                Status::already_exists(format!("já existe o projeto `{}`", req.project.trim()))
+        self.blocking(move |aula| {
+            let req = request.into_inner();
+            if req.project.trim().is_empty() {
+                return Err(Status::invalid_argument("dê um nome ao projeto"));
             }
-            _ => interno(e),
-        })?;
-        Ok(Response::new(CreateProjectResponse {}))
+            aula.aluno(&req.student)?;
+            let dir = paths::project_dir(&aula.root, &req.student, &req.project)
+                .map_err(Status::invalid_argument)?;
+            fs::create_dir(&dir).map_err(|e| match e.kind() {
+                std::io::ErrorKind::AlreadyExists => {
+                    Status::already_exists(format!("já existe o projeto `{}`", req.project.trim()))
+                }
+                _ => interno(e),
+            })?;
+            Ok(Response::new(CreateProjectResponse {}))
+        })
+        .await
     }
 
     async fn list_files(
         &self,
         request: Request<ListFilesRequest>,
     ) -> Result<Response<ListFilesResponse>, Status> {
-        let req = request.into_inner();
-        let dir = self.projeto(&req.student, &req.project)?;
-        let mut entries = Vec::new();
-        walk_tree(&dir, &mut entries, &dir).map_err(|e| Status::internal(e.to_string()))?;
-        Ok(Response::new(ListFilesResponse { entries }))
+        self.blocking(move |aula| {
+            let req = request.into_inner();
+            let dir = aula.projeto(&req.student, &req.project)?;
+            let mut entries = Vec::new();
+            walk_tree(&dir, &mut entries, &dir).map_err(interno)?;
+            Ok(Response::new(ListFilesResponse { entries }))
+        })
+        .await
     }
 
     async fn read_file(
         &self,
         request: Request<ReadFileRequest>,
     ) -> Result<Response<ReadFileResponse>, Status> {
-        let req = request.into_inner();
-        let path = self.file(&req.student, &req.project, &req.path)?;
-        let snapshot = storage::read(&path).map_err(|e| {
-            if e.kind() == std::io::ErrorKind::NotFound {
-                Status::not_found(e.to_string())
-            } else {
-                interno(e)
-            }
-        })?;
-        let source = String::from_utf8(snapshot.bytes)
-            .map_err(|e| Status::invalid_argument(e.to_string()))?;
-        Ok(Response::new(ReadFileResponse {
-            source,
-            revision: snapshot.revision,
-        }))
+        self.blocking(move |aula| {
+            let req = request.into_inner();
+            let path = aula.file(&req.student, &req.project, &req.path)?;
+            let snapshot = storage::read_limited(&path, MAX_TEXT_BYTES).map_err(|e| {
+                if e.kind() == std::io::ErrorKind::NotFound {
+                    Status::not_found(e.to_string())
+                } else {
+                    interno(e)
+                }
+            })?;
+            let source = String::from_utf8(snapshot.bytes)
+                .map_err(|e| Status::invalid_argument(e.to_string()))?;
+            Ok(Response::new(ReadFileResponse {
+                source,
+                revision: snapshot.revision,
+            }))
+        })
+        .await
     }
 
     async fn write_file(
         &self,
         request: Request<WriteFileRequest>,
     ) -> Result<Response<WriteFileResponse>, Status> {
-        let req = request.into_inner();
-        let _vez = self.arquivos.lock().unwrap_or_else(|e| e.into_inner());
-        let path = self.file(&req.student, &req.project, &req.path)?;
-        let expected = if req.create_new {
-            Expected::Missing
-        } else {
-            if req.expected_revision.is_empty() {
-                return Err(Status::failed_precondition(
-                    "atualize o editor: salvar exige a revisão lida anteriormente",
-                ));
+        self.blocking(move |aula| {
+            let req = request.into_inner();
+            if req.source.len() > MAX_TEXT_BYTES {
+                return Err(Status::resource_exhausted("arquivo grande demais"));
             }
-            Expected::Revision(req.expected_revision)
-        };
-        let saved =
-            storage::save(&path, req.source.as_bytes(), &expected).map_err(|e| match e {
-                SaveError::Conflict => Status::aborted("o arquivo mudou desde que foi lido"),
-                SaveError::AlreadyExists => ja_existe(&req.path),
-                other => Status::internal(other.to_string()),
-            })?;
-        Ok(Response::new(WriteFileResponse {
-            revision: saved.revision,
-            warning: saved.warning.unwrap_or_default(),
-        }))
+            let _vez = aula.arquivos.lock().unwrap_or_else(|e| e.into_inner());
+            let path = aula.file(&req.student, &req.project, &req.path)?;
+            let expected = if req.create_new {
+                Expected::Missing
+            } else {
+                if req.expected_revision.is_empty() {
+                    return Err(Status::failed_precondition(
+                        "atualize o editor: salvar exige a revisão lida anteriormente",
+                    ));
+                }
+                Expected::Revision(req.expected_revision)
+            };
+            let saved =
+                storage::save(&path, req.source.as_bytes(), &expected).map_err(|e| match e {
+                    SaveError::Conflict => Status::aborted("o arquivo mudou desde que foi lido"),
+                    SaveError::AlreadyExists => ja_existe(&req.path),
+                    other => Status::internal(other.to_string()),
+                })?;
+            Ok(Response::new(WriteFileResponse {
+                revision: saved.revision,
+                warning: saved.warning.unwrap_or_default(),
+            }))
+        })
+        .await
     }
 
     async fn write_file_checked(
@@ -228,47 +306,56 @@ impl Turma for Aula {
         &self,
         request: Request<DeleteFileRequest>,
     ) -> Result<Response<DeleteFileResponse>, Status> {
-        let req = request.into_inner();
-        let _vez = self.arquivos.lock().unwrap_or_else(|e| e.into_inner());
-        let path = self.file(&req.student, &req.project, &req.path)?;
-        if path.is_dir() {
-            fs::remove_dir_all(&path).map_err(|e| Status::internal(e.to_string()))?;
-        } else {
-            fs::remove_file(&path).map_err(|e| Status::not_found(e.to_string()))?;
-        }
-        Ok(Response::new(DeleteFileResponse {}))
+        self.blocking(move |aula| {
+            let req = request.into_inner();
+            let _vez = aula.arquivos.lock().unwrap_or_else(|e| e.into_inner());
+            let path = aula.file(&req.student, &req.project, &req.path)?;
+            if path.is_dir() {
+                fs::remove_dir_all(&path).map_err(|e| Status::internal(e.to_string()))?;
+            } else {
+                fs::remove_file(&path).map_err(|e| Status::not_found(e.to_string()))?;
+            }
+            Ok(Response::new(DeleteFileResponse {}))
+        })
+        .await
     }
 
     async fn mkdir(
         &self,
         request: Request<MkdirRequest>,
     ) -> Result<Response<MkdirResponse>, Status> {
-        let req = request.into_inner();
-        let path = self.file(&req.student, &req.project, &req.path)?;
-        fs::create_dir_all(&path).map_err(|e| Status::internal(e.to_string()))?;
-        Ok(Response::new(MkdirResponse {}))
+        self.blocking(move |aula| {
+            let req = request.into_inner();
+            let path = aula.file(&req.student, &req.project, &req.path)?;
+            fs::create_dir_all(&path).map_err(|e| Status::internal(e.to_string()))?;
+            Ok(Response::new(MkdirResponse {}))
+        })
+        .await
     }
 
     async fn rename(
         &self,
         request: Request<RenameRequest>,
     ) -> Result<Response<RenameResponse>, Status> {
-        let req = request.into_inner();
-        let _vez = self.arquivos.lock().unwrap_or_else(|e| e.into_inner());
-        let from = self.file(&req.student, &req.project, &req.from)?;
-        let to = self.file(&req.student, &req.project, &req.to)?;
-        if from == to {
-            return Ok(Response::new(RenameResponse {}));
-        }
-        // `fs::rename` replaces an existing file on Unix.
-        if to.symlink_metadata().is_ok() {
-            return Err(ja_existe(&req.to));
-        }
-        if let Some(parent) = to.parent() {
-            fs::create_dir_all(parent).map_err(|e| Status::internal(e.to_string()))?;
-        }
-        fs::rename(&from, &to).map_err(|e| Status::internal(e.to_string()))?;
-        Ok(Response::new(RenameResponse {}))
+        self.blocking(move |aula| {
+            let req = request.into_inner();
+            let _vez = aula.arquivos.lock().unwrap_or_else(|e| e.into_inner());
+            let from = aula.file(&req.student, &req.project, &req.from)?;
+            let to = aula.file(&req.student, &req.project, &req.to)?;
+            if from == to {
+                return Ok(Response::new(RenameResponse {}));
+            }
+            // `fs::rename` replaces an existing file on Unix.
+            if to.symlink_metadata().is_ok() {
+                return Err(ja_existe(&req.to));
+            }
+            if let Some(parent) = to.parent() {
+                fs::create_dir_all(parent).map_err(|e| Status::internal(e.to_string()))?;
+            }
+            fs::rename(&from, &to).map_err(|e| Status::internal(e.to_string()))?;
+            Ok(Response::new(RenameResponse {}))
+        })
+        .await
     }
 }
 
@@ -276,6 +363,71 @@ impl Turma for Aula {
 mod tests {
     use super::*;
     use tonic::Code;
+
+    #[tokio::test]
+    async fn blocked_disk_work_keeps_async_runtime_responsive_and_admission_is_bounded() {
+        let aula = Aula::new(PathBuf::new());
+        let (release, wait) = std::sync::mpsc::channel();
+        let (started, mut start) = tokio::sync::mpsc::channel(1);
+        let worker = aula.clone();
+        let task = tokio::spawn(async move {
+            worker
+                .blocking(move |_| {
+                    started.blocking_send(()).unwrap();
+                    wait.recv_timeout(std::time::Duration::from_secs(10))
+                        .unwrap();
+                    Ok(())
+                })
+                .await
+        });
+        tokio::time::timeout(std::time::Duration::from_secs(5), start.recv())
+            .await
+            .unwrap()
+            .unwrap();
+        // This timer is on the single async test thread, while disk work waits.
+        tokio::time::sleep(std::time::Duration::from_millis(1)).await;
+        let permits = aula
+            .disco
+            .clone()
+            .try_acquire_many_owned((MAX_DISK_OPERATIONS - 1) as u32)
+            .unwrap();
+        assert_eq!(
+            aula.blocking(|_| Ok(())).await.unwrap_err().code(),
+            Code::ResourceExhausted
+        );
+        task.abort();
+        let _ = task.await;
+        assert_eq!(
+            aula.disco.available_permits(),
+            0,
+            "dropped RPC released a running disk call's permit"
+        );
+        release.send(()).unwrap();
+        drop(permits);
+        let end = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        while aula.disco.available_permits() != MAX_DISK_OPERATIONS {
+            assert!(std::time::Instant::now() < end);
+            tokio::task::yield_now().await;
+        }
+        aula.blocking(|_| Ok(())).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn oversized_text_is_rejected_before_replacing_a_valid_file() {
+        let aula = servidor("text-size-limit");
+        aula.list_projects(Request::new(ListProjectsRequest {
+            student: "ana".into(),
+        }))
+        .await
+        .unwrap();
+        let req = escrever("a.lep", &"x".repeat(MAX_TEXT_BYTES + 1), false);
+        assert_eq!(
+            aula.write_file(req).await.unwrap_err().code(),
+            Code::ResourceExhausted
+        );
+        assert_eq!(ler(&aula, "a.lep"), "original");
+        let _ = fs::remove_dir_all(&aula.root);
+    }
 
     /// A fresh root where `ana` has one file from before projects existed,
     /// `ana/a.lep` = "original" (moved to `principal` on first use).

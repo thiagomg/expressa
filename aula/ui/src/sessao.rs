@@ -24,7 +24,7 @@ use crate::recuperacao::{
 };
 use crate::store::Files;
 use crate::{
-    Ui, UiRc, all_docs, current_doc, open_doc, open_path, remember_arquivo, set_status, switch_to,
+    Ui, UiRc, all_docs, current_doc, open_doc, remember_arquivo, set_status, switch_to,
     with_documents,
 };
 
@@ -152,10 +152,15 @@ pub fn salvar(ui: &UiRc) {
             .map(|d| d.name()),
     };
     let arquivo = arquivo_da_sessao(&chave);
-    if let Some(pasta) = arquivo.parent() {
-        let _ = std::fs::create_dir_all(pasta);
+    let texto = sessao_em_texto(&sessao);
+    if let Err(e) = crate::background::persistence().dispatch(move || {
+        if let Some(pasta) = arquivo.parent() {
+            std::fs::create_dir_all(pasta).map_err(|e| e.to_string())?;
+        }
+        std::fs::write(arquivo, texto).map_err(|e| e.to_string())
+    }) {
+        set_status(ui, &e);
     }
-    let _ = std::fs::write(arquivo, sessao_em_texto(&sessao));
 }
 
 /// The project was just listed: reopen its tabs, then offer copies of text
@@ -167,38 +172,66 @@ pub fn restaurar(ui: &UiRc) {
         oferecer_copias(ui, "sem-projeto");
         return;
     };
-    let sessao = std::fs::read_to_string(arquivo_da_sessao(&chave))
-        .map(|t| sessao_de_texto(&t))
-        .unwrap_or_default();
-    let existe = |c: &str| ui.borrow().project_files.iter().any(|p| p == c);
-    if sessao.abas.is_empty() {
-        let ultimo = ui.borrow().prefs.arquivo.clone();
-        if !ultimo.is_empty() && existe(&ultimo) {
-            let _ = open_path(ui, &ultimo);
-        }
-    }
-    for aba in sessao.abas.iter().filter(|a| existe(&a.caminho)) {
-        let Some(doc) = open_path(ui, &aba.caminho) else {
-            continue;
-        };
-        for &p in &aba.pontos {
-            if !doc.breakpoint_lines().contains(&p) {
-                doc.toggle_breakpoint(p);
+    let arquivo = arquivo_da_sessao(&chave);
+    crate::async_result(
+        ui,
+        "Restaurando abas",
+        true,
+        move || {
+            Ok(std::fs::read_to_string(arquivo)
+                .map(|t| sessao_de_texto(&t))
+                .unwrap_or_default())
+        },
+        move |ui, result| {
+            let Ok(mut sessao) = result else {
+                ui.borrow_mut().sessao_pronta = true;
+                return;
+            };
+            let paths = ui.borrow().project_files.clone();
+            if sessao.abas.is_empty() {
+                let ultimo = ui.borrow().prefs.arquivo.clone();
+                if !ultimo.is_empty() && paths.contains(&ultimo) {
+                    sessao.abas.push(AbaSalva {
+                        caminho: ultimo,
+                        linha: 1,
+                        pontos: Vec::new(),
+                    });
+                }
             }
+            sessao.abas.retain(|a| paths.contains(&a.caminho));
+            restore_next(ui, Rc::new(sessao), 0, chave);
+        },
+    );
+}
+
+fn restore_next(ui: &UiRc, sessao: Rc<Sessao>, index: usize, key: String) {
+    if let Some(aba) = sessao.abas.get(index) {
+        let path = aba.caminho.clone();
+        crate::open_path_then(ui, &path, move |ui, doc| {
+            if let Some(doc) = doc {
+                let aba = &sessao.abas[index];
+                for &p in &aba.pontos {
+                    if !doc.breakpoint_lines().contains(&p) {
+                        doc.toggle_breakpoint(p);
+                    }
+                }
+                doc.goto_line(aba.linha);
+            }
+            restore_next(ui, sessao, index + 1, key);
+        });
+    } else {
+        if let Some(doc) = sessao
+            .ativa
+            .as_deref()
+            .and_then(|a| crate::doc_by_name(ui, a))
+        {
+            switch_to(ui, &doc);
+            remember_arquivo(ui, &doc);
         }
-        doc.goto_line(aba.linha);
-    }
-    if let Some(doc) = sessao
-        .ativa
-        .as_deref()
-        .and_then(|a| crate::doc_by_name(ui, a))
-    {
-        switch_to(ui, &doc);
-        remember_arquivo(ui, &doc);
-    }
-    ui.borrow_mut().sessao_pronta = true;
-    if !ui.borrow().files.is_remote() {
-        oferecer_copias(ui, &chave);
+        ui.borrow_mut().sessao_pronta = true;
+        if !ui.borrow().files.is_remote() {
+            oferecer_copias(ui, &key);
+        }
     }
 }
 
@@ -209,12 +242,13 @@ fn chave_das_copias(u: &Ui) -> String {
 
 /// Offer scratch recovery before automatically opening the last project. Keep
 /// recovered tabs when a project is subsequently chosen (see `after_unsaved`).
-pub fn restaurar_sem_projeto(ui: &UiRc) -> bool {
+pub fn restaurar_sem_projeto(ui: &UiRc, done: impl FnOnce(&UiRc, bool) + 'static) {
     if !matches!(ui.borrow().files, Files::None) {
-        return false;
+        done(ui, false);
+        return;
     }
     ui.borrow_mut().sessao_pronta = true;
-    oferecer_copias(ui, "sem-projeto")
+    oferecer_copias_then(ui, "sem-projeto", done);
 }
 
 pub fn synchronization_context(ui: &UiRc) -> Option<(RecoveryStore, Vec<PathBuf>)> {
@@ -238,56 +272,67 @@ fn oferecer_copias_atual(ui: &UiRc) {
 }
 
 fn revisar_copias(ui: &UiRc, somente_atual: bool) {
-    // Retry failed autosaves too, not only copies left by a previous session.
-    copiar_nao_salvos(ui);
+    copy_async(
+        ui,
+        Some(Box::new(move |ui, success| {
+            if success {
+                revisar_copias_prontas(ui, somente_atual);
+            } else {
+                let key = chave_das_copias(&ui.borrow());
+                mostrar_falhas(ui, RecoveryStore(pasta_das_copias(&key)), vec!["As edições ainda não foram todas guardadas. Tente novamente ou exporte o texto das abas.".into()]);
+            }
+        })),
+    );
+}
+
+fn revisar_copias_prontas(ui: &UiRc, somente_atual: bool) {
     let key = chave_das_copias(&ui.borrow());
-    let store = RecoveryStore(pasta_das_copias(&key));
-    let unprotected = all_docs(ui).iter().any(|doc| {
-        doc.is_dirty() && !copia_atual(&store, doc, resumo(&doc.text()), &nome_de_backup(doc))
-    });
-    if unprotected {
-        mostrar_falhas(ui, store, vec![
-            "Não foi possível guardar todas as alterações abertas. Tente novamente ou exporte o texto para outra pasta.".to_string(),
-        ]);
-        return;
-    }
     if somente_atual {
         oferecer_copias(ui, &key);
         return;
     }
     let owned = copias_abertas(ui);
-    let keys = match projetos_com_copias(&pasta_base().join("recuperacao"), &owned) {
-        Ok(keys) => keys,
-        Err(e) => {
-            mostrar_falhas(ui, store, vec![e]);
-            return;
-        }
-    };
-    if keys.is_empty() {
-        set_status(ui, "não há alterações pendentes para recuperar");
-    } else if keys.len() == 1 && keys[0] == key {
-        oferecer_copias(ui, &key);
-    } else {
-        // Recovery is local even for server projects: no connection is needed.
-        let items = keys
-            .iter()
-            .map(|key| crate::escolher::Item {
-                rotulo: key.clone(),
-                detalhe: "alterações guardadas neste computador".into(),
-            })
-            .collect();
-        let window = crate::sincronizacao::parent(ui);
-        let ui = Rc::clone(ui);
-        crate::escolher::mostrar(
-            &window,
-            "Revisar edições guardadas",
-            "projeto de origem",
-            items,
-            move |i| {
-                oferecer_copias(&ui, &keys[i]);
-            },
-        );
-    }
+    let root = pasta_base().join("recuperacao");
+    crate::async_result(
+        ui,
+        "Procurando edições guardadas",
+        true,
+        move || projetos_com_copias(&root, &owned),
+        move |ui, result| {
+            let keys = match result {
+                Ok(keys) => keys,
+                Err(e) => {
+                    mostrar_falhas(ui, RecoveryStore(pasta_das_copias(&key)), vec![e]);
+                    return;
+                }
+            };
+            if keys.is_empty() {
+                set_status(ui, "não há alterações pendentes para recuperar");
+            } else if keys.len() == 1 && keys[0] == key {
+                oferecer_copias(ui, &key);
+            } else {
+                // Recovery is local even for server projects: no connection is needed.
+                let items = keys
+                    .iter()
+                    .map(|key| crate::escolher::Item {
+                        rotulo: key.clone(),
+                        detalhe: "alterações guardadas neste computador".into(),
+                    })
+                    .collect();
+                let window = crate::sincronizacao::parent(ui);
+                let ui = Rc::clone(ui);
+                crate::escolher::mostrar(
+                    &window,
+                    "Revisar edições guardadas",
+                    "projeto de origem",
+                    items,
+                    move |i| {
+                        oferecer_copias(&ui, &keys[i]);
+                    },
+                );
+            }
+        },
+    );
 }
 
 fn copias_abertas(ui: &UiRc) -> Vec<PathBuf> {
@@ -334,17 +379,48 @@ fn projetos_com_copias(root: &Path, owned: &[PathBuf]) -> Result<Vec<String>, St
 
 /// Return whether pending copies/errors need attention. Cancellation and failed
 /// reads leave every affected copy on disk, including across a normal shutdown.
-fn oferecer_copias(ui: &UiRc, key: &str) -> bool {
-    use resposta_recuperacao as resposta;
+fn oferecer_copias(ui: &UiRc, key: &str) {
+    oferecer_copias_then(ui, key, |_, _| {});
+}
 
+fn oferecer_copias_then(ui: &UiRc, key: &str, done: impl FnOnce(&UiRc, bool) + 'static) {
     if ui.borrow().recuperacao_aberta {
-        return true;
+        done(ui, true);
+        return;
     }
-    let store = RecoveryStore(pasta_das_copias(key));
-    let mut scan = store.scan();
+    ui.borrow_mut().recuperacao_aberta = true;
+    let key = key.to_string();
+    let store = RecoveryStore(pasta_das_copias(&key));
+    let work_store = store.clone();
     let owned = copias_abertas(ui);
-    scan.copies
-        .retain(|copy| !copy.backup.paths.iter().any(|path| owned.contains(path)));
+    crate::async_result(
+        ui,
+        "Lendo edições guardadas",
+        true,
+        move || {
+            let mut scan = work_store.scan();
+            scan.copies
+                .retain(|c| !c.backup.paths.iter().any(|p| owned.contains(p)));
+            Ok(scan)
+        },
+        move |ui, result| {
+            ui.borrow_mut().recuperacao_aberta = false;
+            match result {
+                Ok(scan) => {
+                    let offered = mostrar_copias(ui, &key, store, scan);
+                    done(ui, offered);
+                }
+                Err(e) => {
+                    set_status(ui, &e);
+                    done(ui, false);
+                }
+            }
+        },
+    );
+}
+
+fn mostrar_copias(ui: &UiRc, key: &str, store: RecoveryStore, scan: recuperacao::Scan) -> bool {
+    use resposta_recuperacao as resposta;
     if scan.copies.is_empty() && scan.errors.is_empty() {
         return false;
     }
@@ -398,73 +474,62 @@ fn oferecer_copias(ui: &UiRc, key: &str) -> bool {
         let mut errors = scan.errors;
         match result {
             Ok(resposta::DESCARTAR) => {
-                for copy in &scan.copies {
-                    if let Err(e) = copy.backup.remove() {
-                        errors.push(e);
-                    }
-                }
-                set_status(
-                    &ui,
-                    "as cópias selecionadas foram descartadas; falhas foram preservadas",
-                );
+                crate::async_on(crate::background::persistence(), true, &ui, "Descartando cópias", false,
+                    move || { for copy in scan.copies { if let Err(e) = copy.backup.remove() { errors.push(e); } } Ok(errors) },
+                    move |ui, result| match result {
+                        Ok(errors) if errors.is_empty() => set_status(ui, "as cópias selecionadas foram descartadas"),
+                        Ok(errors) => mostrar_falhas(ui, store, errors),
+                        Err(e) => mostrar_falhas(ui, store, vec![e]),
+                    });
             }
             Ok(resposta::RECUPERAR) => {
-                let mut restored = 0;
-                for copy in &scan.copies {
-                    let result = if detached {
-                        // Never read/write a similarly named file in the current
-                        // project when recovering a different (possibly offline) one.
-                        let files = Files::None;
-                        crate::documentos::Documents::new(&files, "", &[])
-                            .recover(copy, |path, text| Ok(open_doc(&ui, path, text)))
-                            .map(|mut recovered| {
-                                recovered.warning =
-                                    Some(format!("o projeto de origem não está aberto: {key}"));
-                                recovered
-                            })
-                    } else {
-                        with_documents(&ui, |documents| {
-                            documents.recover(copy, |path, text| Ok(open_doc(&ui, path, text)))
-                        })
-                    };
-                    match result {
-                        Ok(recovered) => {
-                            recovered.doc.resumo_da_copia.set(Some(resumo(&copy.text)));
-                            switch_to(&ui, &recovered.doc);
-                            if let Some(warning) = recovered.warning {
-                                ui.borrow().console.stderr(&format!(
-                                    "aviso: `{}` recuperado em uma nova aba: {warning}\n",
-                                    sem_prefixo(&copy.backup.name)
-                                ));
-                            }
-                            restored += 1;
+                let (files, student) = { let u = ui.borrow(); (u.files.clone(), u.project.clone()) };
+                let existing: Vec<_> = all_docs(&ui).iter().map(|d| d.name()).collect();
+                crate::async_result(&ui, "Abrindo edições guardadas", true,
+                    move || Ok(scan.copies.into_iter().map(|copy| {
+                        let hash = resumo(&copy.text);
+                        let original = if detached { Err(format!("o projeto de origem não está aberto: {key}")) }
+                            else if copy.backup.name.starts_with(PREFIXO_SEM_TITULO) || existing.contains(&copy.backup.name) { Ok(None) }
+                            else { files.current_text(&student, &copy.backup.name) };
+                        (copy, hash, original)
+                    }).collect::<Vec<_>>()),
+                    move |ui, result| {
+                        let mut restored = 0;
+                        match result {
+                            Ok(copies) => for (copy, hash, original) in copies {
+                                let result = if detached {
+                                    crate::documentos::Documents::new(&Files::None, "", &[]).recover_loaded(&copy, original, |_, text| Ok(open_doc(ui, None, text)))
+                                } else {
+                                    with_documents(ui, |documents| documents.recover_loaded(&copy, original, |path, text| Ok(open_doc(ui, path, text))))
+                                };
+                                match result {
+                                    Ok(recovered) => {
+                                        recovered.doc.resumo_da_copia.set(Some(hash));
+                                        switch_to(ui, &recovered.doc);
+                                        if let Some(warning) = recovered.warning { ui.borrow().console.stderr(&format!("aviso: `{}` recuperado em uma nova aba: {warning}\n", sem_prefixo(&copy.backup.name))); }
+                                        restored += 1;
+                                    }
+                                    Err(e) => errors.push(e),
+                                }
+                            },
+                            Err(e) => errors.push(e),
                         }
-                        Err(e) => errors.push(format!("{}: {e}", copy.backup.name)),
-                    }
-                }
-                set_status(
-                    &ui,
-                    &format!("{restored} arquivo(s) recuperado(s): confira e salve"),
-                );
+                        set_status(ui, &format!("{restored} arquivo(s) recuperado(s): confira e salve"));
+                        if !errors.is_empty() { mostrar_falhas(ui, store, errors); }
+                    });
             }
             Ok(resposta::EXPORTAR) => {
                 exportar_copias(&ui, store);
-                return;
             }
             Ok(resposta::TENTAR_NOVAMENTE) => {
                 oferecer_copias(&ui, &key);
-                return;
             }
             _ => {
                 set_status(
                     &ui,
                     "edições preservadas neste computador; você poderá revisá-las ao abrir o projeto ou em Sincronização, para projetos no servidor",
                 );
-                return;
             }
-        }
-        if !errors.is_empty() {
-            mostrar_falhas(&ui, store, errors);
         }
     });
     true
@@ -506,9 +571,7 @@ fn exportar_copias(ui: &UiRc, store: RecoveryStore) {
         let Some(folder) = result.ok().and_then(|file| file.path()) else {
             return;
         };
-        let mut scan = store.scan();
-        // Export remains available when autosave itself failed: include the
-        // current buffers instead of relying solely on readable disk copies.
+        let mut current = Vec::new();
         if pasta_das_copias(&chave_das_copias(&ui.borrow())) == store.0 {
             for (index, doc) in all_docs(&ui)
                 .iter()
@@ -525,28 +588,42 @@ fn exportar_copias(ui: &UiRc, store: RecoveryStore) {
                             revision: 0,
                             paths: Vec::new(),
                         });
-                scan.copies.retain(|copy| copy.backup.id != backup.id);
-                scan.copies.push(recuperacao::Copy {
+                current.push(recuperacao::Copy {
                     backup,
                     text: doc.text(),
                 });
             }
         }
-        let mut errors = if scan.unreadable.is_empty() {
-            scan.errors
-        } else {
-            Vec::new()
-        };
-        errors.extend(recuperacao::export(&scan.copies, &folder));
-        errors.extend(recuperacao::export_unreadable(&scan.unreadable, &folder));
-        if errors.is_empty() {
-            set_status(
-                &ui,
-                "cópias exportadas; as cópias de recuperação foram preservadas",
-            );
-        } else {
-            mostrar_falhas(&ui, store, errors);
-        }
+
+        let work_store = store.clone();
+        crate::async_result(
+            &ui,
+            "Exportando edições",
+            false,
+            move || {
+                let mut scan = work_store.scan();
+                for copy in current {
+                    scan.copies.retain(|old| old.backup.id != copy.backup.id);
+                    scan.copies.push(copy);
+                }
+                let mut errors = if scan.unreadable.is_empty() {
+                    scan.errors
+                } else {
+                    Vec::new()
+                };
+                errors.extend(recuperacao::export(&scan.copies, &folder));
+                errors.extend(recuperacao::export_unreadable(&scan.unreadable, &folder));
+                Ok(errors)
+            },
+            move |ui, result| match result {
+                Ok(errors) if errors.is_empty() => set_status(
+                    ui,
+                    "cópias exportadas; as cópias de recuperação foram preservadas",
+                ),
+                Ok(errors) => mostrar_falhas(ui, store, errors),
+                Err(e) => mostrar_falhas(ui, store, vec![e]),
+            },
+        );
     });
 }
 
@@ -579,6 +656,7 @@ fn nome_de_backup(doc: &Doc) -> String {
     }
 }
 
+#[cfg(test)]
 fn copia_atual(store: &RecoveryStore, doc: &Doc, hash: u64, name: &str) -> bool {
     doc.resumo_da_copia.get() == Some(hash)
         && doc
@@ -595,6 +673,7 @@ fn copia_atual(store: &RecoveryStore, doc: &Doc, hash: u64, name: &str) -> bool 
 
 /// Persist a dirty document's next snapshot before retiring its previous copy.
 /// The store is explicit so filesystem failures and restart behavior are testable.
+#[cfg(test)]
 fn copiar_documento(store: &RecoveryStore, doc: &Doc) -> Result<(), String> {
     if !doc.is_dirty() {
         return Ok(());
@@ -613,50 +692,132 @@ fn copiar_documento(store: &RecoveryStore, doc: &Doc) -> Result<(), String> {
 }
 
 pub fn copiar_nao_salvos(ui: &UiRc) {
-    let key = {
-        let Ok(u) = ui.try_borrow() else { return };
-        chave_das_copias(&u)
-    };
-    let store = RecoveryStore(pasta_das_copias(&key));
-    for doc in all_docs(ui) {
-        if let Err(e) = copiar_documento(&store, &doc) {
-            set_status(
-                ui,
-                &format!(
-                    "não foi possível guardar a cópia de segurança de `{}`; salve a aba ou exporte seu texto",
-                    doc.name()
-                ),
-            );
-            ui.borrow()
-                .console
-                .stderr(&format!("erro na cópia de recuperação: {e}\n"));
-        }
+    if ui.borrow().closing.get() || ui.borrow().recuperacao_aberta {
+        return;
     }
-    // Never sweep unowned files: cancelled, unreadable and failed recoveries
-    // must survive autosave, tab changes and a clean application shutdown.
+    copy_async(ui, None);
 }
 
-/// Normal close only acknowledges the documents the student actually closed.
-/// Copies that were cancelled or could not be recovered remain on disk.
+fn copy_async(ui: &UiRc, done: Option<Box<dyn FnOnce(&UiRc, bool)>>) {
+    if let Some(done) = done {
+        *ui.borrow().backup_review.borrow_mut() = Some(done);
+    }
+    if ui.borrow().backup_busy.replace(true) {
+        return;
+    }
+    let key = chave_das_copias(&ui.borrow());
+    let store = RecoveryStore(pasta_das_copias(&key));
+    let docs: Vec<_> = all_docs(ui).into_iter().filter(|d| d.is_dirty()).collect();
+    let snapshots: Vec<_> = docs
+        .iter()
+        .map(|d| {
+            (
+                nome_de_backup(d),
+                d.text(),
+                d.edit_epoch.get(),
+                d.copia_recuperacao.borrow().clone(),
+                d.resumo_da_copia.get(),
+                d.recovery.clone(),
+            )
+        })
+        .collect();
+    let docs: Vec<_> = docs.iter().map(Rc::downgrade).collect();
+    crate::async_on(
+        crate::background::persistence(),
+        true,
+        ui,
+        "",
+        false,
+        move || {
+            Ok(snapshots
+                .into_iter()
+                .map(|(name, text, epoch, previous, old_hash, owner)| {
+                    let hash = resumo(&text);
+                    owner
+                        .save(
+                            &store,
+                            &name,
+                            &text,
+                            epoch,
+                            previous,
+                            old_hash == Some(hash),
+                        )
+                        .map(|backup| (hash, backup))
+                })
+                .collect::<Vec<Result<_, String>>>())
+        },
+        move |ui, result| {
+            ui.borrow().backup_busy.set(false);
+            let mut success = true;
+            match result {
+                Ok(results) => {
+                    for (doc, result) in docs.into_iter().zip(results) {
+                        match result {
+                            Ok((hash, Some(backup))) => {
+                                if let Some(doc) = doc.upgrade()
+                                    && all_docs(ui).iter().any(|open| Rc::ptr_eq(open, &doc))
+                                {
+                                    *doc.copia_recuperacao.borrow_mut() = Some(backup);
+                                    doc.resumo_da_copia.set(Some(hash));
+                                }
+                            }
+                            Ok((_, None)) => {}
+                            Err(e) => {
+                                success = false;
+                                set_status(
+                                    ui,
+                                    "não foi possível guardar uma cópia de segurança; salve ou exporte a aba",
+                                );
+                                ui.borrow()
+                                    .console
+                                    .stderr(&format!("erro na cópia de recuperação: {e}\n"));
+                            }
+                        }
+                    }
+                }
+                Err(e) => {
+                    success = false;
+                    set_status(ui, &e);
+                }
+            }
+            let done = ui.borrow().backup_review.borrow_mut().take();
+            if let Some(done) = done {
+                done(ui, success);
+            }
+        },
+    );
+}
+
+/// Explicit acknowledgement, ordered after pending recovery writes.
 pub fn limpar_copias(ui: &UiRc) {
-    for doc in all_docs(ui) {
-        if let Err(e) = crate::documentos::forget_recovery(&doc) {
-            ui.borrow()
-                .console
-                .stderr(&format!("aviso: cópia de recuperação preservada: {e}\n"));
-        }
+    let docs = all_docs(ui);
+    for doc in &docs {
+        doc.recovery.close();
+    }
+    crate::forget_recovery_docs_async(ui, docs);
+}
+
+pub fn stop_copies(ui: &UiRc) {
+    if let Some(source) = ui.borrow().recovery_timer.borrow_mut().take() {
+        source.remove();
     }
 }
 
 pub fn iniciar_copias(ui: &UiRc) {
-    let ui = Rc::downgrade(ui);
-    glib::timeout_add_seconds_local(INTERVALO_DAS_COPIAS, move || match ui.upgrade() {
-        Some(ui) => {
-            copiar_nao_salvos(&ui);
-            glib::ControlFlow::Continue
+    stop_copies(ui);
+    let weak = Rc::downgrade(ui);
+    let source = glib::timeout_add_seconds_local(INTERVALO_DAS_COPIAS, move || {
+        let Some(ui) = weak.upgrade() else {
+            return glib::ControlFlow::Break;
+        };
+        if ui.borrow().closing.get() {
+            ui.borrow().recovery_timer.borrow_mut().take();
+            return glib::ControlFlow::Break;
         }
-        None => glib::ControlFlow::Break,
+        copiar_nao_salvos(&ui);
+        glib::ControlFlow::Continue
     });
+    *ui.borrow().recovery_timer.borrow_mut() = Some(source);
 }
 
 /// Local projects: watch `doc`'s file. Changed by another program, the tab
@@ -691,35 +852,69 @@ pub fn vigiar(ui: &UiRc, doc: &Rc<Doc>) {
         if let (Some(ui), Some(doc)) = (ui_w.upgrade(), doc_w.upgrade())
             && doc.name() == nome
         {
-            mudou_fora(&ui, &doc, &caminho);
+            mudou_fora(&ui, &doc);
         }
     });
     doc.vigia.replace(Some(monitor));
 }
 
-fn mudou_fora(ui: &UiRc, doc: &Rc<Doc>, caminho: &Path) {
-    let Ok(texto) = std::fs::read_to_string(caminho) else {
+pub(crate) fn check_deferred(ui: &UiRc, doc: &Rc<Doc>) {
+    if doc.pending_external_change.replace(false) {
+        mudou_fora(ui, doc);
+    }
+}
+
+fn mudou_fora(ui: &UiRc, doc: &Rc<Doc>) {
+    if doc.saving.get() {
+        doc.pending_external_change.set(true);
         return;
+    }
+    doc.io_epoch.set(doc.io_epoch.get() + 1);
+    let (files, project) = {
+        let u = ui.borrow();
+        (u.files.clone(), u.project.clone())
     };
-    // A write-access check can emit a close-write event without changing bytes.
-    // Do not mistake that, our own save, or a repeated event for an outside edit.
-    let revision = expressa_aula_storage::revision(texto.as_bytes());
-    if doc.revision.borrow().as_ref() == Some(&revision) || texto == doc.text() {
-        return;
-    }
-    let nome = doc.name();
-    if doc.is_dirty() {
-        set_status(
-            ui,
-            &format!("`{nome}` mudou fora do editor; salvar exigirá resolver o conflito"),
-        );
-    } else {
-        doc.recarregar(&texto);
-        set_status(
-            ui,
-            &format!("`{nome}` mudou fora do editor e foi recarregado"),
-        );
-    }
+    let name = doc.name();
+    let path = name.clone();
+    let epoch = doc.edit_epoch.get();
+    let io = doc.io_epoch.get();
+    let weak = Rc::downgrade(doc);
+    crate::async_result(
+        ui,
+        "",
+        false,
+        move || files.current_text(&project, &path),
+        move |ui, result| {
+            let (Some(doc), Ok(Some(snapshot))) = (weak.upgrade(), result) else {
+                return;
+            };
+            if doc.saving.get() {
+                doc.pending_external_change.set(true);
+                return;
+            }
+            if doc.name() != name
+                || doc.io_epoch.get() != io
+                || !all_docs(ui).iter().any(|open| Rc::ptr_eq(open, &doc))
+            {
+                return;
+            }
+            if *doc.revision.borrow() == snapshot.revision || snapshot.text == doc.text() {
+                return;
+            }
+            if doc.is_dirty() || doc.edit_epoch.get() != epoch {
+                set_status(
+                    ui,
+                    &format!("`{name}` mudou fora do editor; salvar exigirá resolver o conflito"),
+                );
+            } else {
+                doc.recarregar_snapshot(&snapshot.text, snapshot.revision);
+                set_status(
+                    ui,
+                    &format!("`{name}` mudou fora do editor e foi recarregado"),
+                );
+            }
+        },
+    );
 }
 
 #[cfg(test)]

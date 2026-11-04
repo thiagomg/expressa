@@ -52,6 +52,7 @@ impl Recente {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Prefs {
+    pub config_path: Option<PathBuf>,
     pub font_size: u32,
     pub dark: bool,
     /// Last local project folder. The chooser starts there.
@@ -69,6 +70,7 @@ pub struct Prefs {
 impl Default for Prefs {
     fn default() -> Self {
         Self {
+            config_path: None,
             font_size: DEFAULT_FONT,
             dark: false,
             pasta: String::new(),
@@ -147,17 +149,27 @@ impl Prefs {
     }
 
     pub fn load() -> Self {
-        std::fs::read_to_string(path())
+        let target = path();
+        let mut prefs = std::fs::read_to_string(&target)
             .map(|t| Self::parse(&t))
-            .unwrap_or_default()
+            .unwrap_or_default();
+        prefs.config_path = Some(target);
+        prefs
     }
 
     pub fn save(&self) {
-        let p = path();
-        if let Some(dir) = p.parent() {
-            let _ = std::fs::create_dir_all(dir);
+        let Some(p) = self.config_path.clone() else {
+            return;
+        };
+        let text = self.to_text();
+        if let Err(e) = crate::background::persistence().dispatch(move || {
+            if let Some(dir) = p.parent() {
+                std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+            }
+            std::fs::write(p, text).map_err(|e| e.to_string())
+        }) {
+            eprintln!("preferências: {e}");
         }
-        let _ = std::fs::write(p, self.to_text());
     }
 
     /// Ctrl+= / Ctrl+- ; 0 resets.
@@ -204,7 +216,6 @@ fn path_for_display_with_home(path: &Path, home: Option<PathBuf>) -> String {
     let Some(home) = home else {
         return shown;
     };
-    let home = home.canonicalize().unwrap_or(home);
     let home_s = home.display().to_string();
     if shown == home_s {
         return "~".to_string();
@@ -213,15 +224,6 @@ fn path_for_display_with_home(path: &Path, home: Option<PathBuf>) -> String {
     let prefix = format!("{home_s}{sep}");
     if let Some(rest) = shown.strip_prefix(&prefix) {
         return format!("~{sep}{rest}");
-    }
-    if let Ok(canon) = path.canonicalize() {
-        let cs = canon.display().to_string();
-        if cs == home_s {
-            return "~".to_string();
-        }
-        if let Some(rest) = cs.strip_prefix(&prefix) {
-            return format!("~{sep}{rest}");
-        }
     }
     shown
 }
