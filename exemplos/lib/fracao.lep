@@ -1,9 +1,25 @@
+
+// transforma uma fração em texto
+em_texto = função(fr)
+inicio
+    se fr:denominador == 1
+    início
+        formate("{}", fr:numerador)
+    fim
+    senão
+    início
+        formate("{}/{}", fr:numerador, fr:denominador)
+    fim
+fim
+
+
 // cria uma nova fração
 nova = função(numerador, denominador)
 inicio
     mapa([
         :numerador -> numerador,
         :denominador -> denominador,
+        :_como_texto -> em_texto
     ])
 fim
 
@@ -24,19 +40,6 @@ fim
 mmc = funcao(x, y)
 inicio
     x * y / mdc(x, y)
-fim
-
-// transforma uma fração em texto
-em_texto = função(fr)
-inicio
-    se fr:denominador == 1
-    início
-        formate("{}", fr:numerador)
-    fim
-    senão
-    início
-        formate("{}/{}", fr:numerador, fr:denominador)
-    fim
 fim
 
 // transforma um número em fração
@@ -92,3 +95,41 @@ inicio
     simplifica(resultado)    
 fim
 
+// Se fr1 for maior, retorna -1
+// Se fr2 for maior, retorna 1 
+// Se fr1 for igual a fr2, retorna 0
+compara = função(fr1, fr2)
+início
+    fr1 = em_fracao(fr1)
+    fr2 = em_fracao(fr2)
+
+    // Precisamos calcular o MMC do denominador primeiro
+    novo_den = mmc(fr1:denominador, fr2:denominador)
+    // E agora dividir por cada denominador e multiplicar pelo numerador
+    novo_num = função(valor_mmc, num, den)
+    inicio
+        (valor_mmc / den) * num
+    fim
+    num1 = novo_num(novo_den, fr1:numerador, fr1:denominador)
+    num2 = novo_num(novo_den, fr2:numerador, fr2:denominador)
+        
+    fr1n = nova(num1, novo_den)
+    fr2n = nova(num2, novo_den)
+
+    // Descomente esta linha se você quiser ver as frações depois do MMC
+    // escreva(formate("- {} -> {}", fr1, fr1n))
+    // escreva(formate("- {} -> {}", fr2, fr2n))
+    
+    se fr1n:numerador > fr2n:numerador
+    inicio
+        -1
+    fim
+    ou se fr1n:numerador < fr2n:numerador
+    inicio
+        1
+    fim
+    senão
+    início
+        0
+    fim
+fim

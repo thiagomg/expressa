@@ -1,0 +1,36 @@
+fr = importe "../lib/fracao"
+
+comp_e_mostre = função(fr1, fr2)
+início
+    res = fr::compara(fr1, fr2)
+    sinal = se res == -1
+    início
+        ">"
+    fim
+    ou se res == 1
+    início
+        "<"
+    fim
+    senão
+    início
+        "="
+    fim
+    
+    escreva(formate("{} {} {}", fr1, sinal, fr2)) 
+fim
+
+fr1 = fr::nova(3, 4)
+fr2 = fr::nova(2, 3)
+comp_e_mostre(fr1, fr2)
+
+fr1 = fr::nova(1, 6)
+fr2 = fr::nova(5, 8)
+comp_e_mostre(fr1, fr2)
+
+fr1 = fr::nova(1, 4)
+fr2 = fr::nova(2, 8)
+comp_e_mostre(fr1, fr2)
+
+fr1 = fr::nova(7, 11)
+fr2 = fr::nova(7, 11)
+comp_e_mostre(fr1, fr2)
