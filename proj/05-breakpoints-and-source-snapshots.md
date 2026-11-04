@@ -57,7 +57,17 @@ Implemented in the working tree; no commit created.
 - The runtime hook reports loaded source before a pause, including imported or
   generated modules. The view does not reread mutable workspace files to explain
   existing execution positions. Completed sources remain inspectable until the
-  next successful preparation or project switch.
+  next successful preparation or project switch, through **Ver → Ver código
+  executado**. The temporary source tab closes immediately on Stop and when
+  execution ends, returning to its editable source if it was selected. A different
+  editor already selected by the user keeps its selection/cursor.
+- Stop marks the run as stopping before returning focus, clears debugger controls
+  and input, and ignores queued pause/input events. Closing the viewer does not
+  require a worker acknowledgement and cannot be undone by a late pause event.
+- Ordinary F5 failures stay in the console and navigate to matching editable
+  source. Changed source is never given a stale execution-line marker; the IDE
+  offers explicit snapshot inspection instead. Error/stack navigation after
+  termination also uses editable documents.
 - Lines without a parsed executable statement use a hollow gray breakpoint marker
   and a tooltip. Launch reports inactive points and omits them from the debugger.
   A point on an executable statement is eligible to bind; this does not imply that

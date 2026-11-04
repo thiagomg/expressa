@@ -766,7 +766,15 @@ continuar (c)   proximo (n)   entrar (s)   sair (o)
 vars (v)   pilha (k)   ponto N   terminar (q)
 ```
 
-Na Aula: **F6** depura; F9 ponto de parada; F10 próximo; F11 entrar.
+Na Aula: **F6** inicia a depuração; **F5** continua quando pausado no depurador
+(ou executa normalmente quando não há uma execução em andamento); F9 ponto de
+parada; F10 próximo; F11 entrar.
+
+Durante uma pausa, a fonte executada aparece somente para leitura. **Parar** fecha
+essa visualização imediatamente e retorna ao editor; o término da execução também
+a fecha. Erros de **F5** aparecem no console e apontam para o código editável quando
+ele corresponde à versão executada. **Ver → Ver código executado** permite consultar
+essa versão explicitamente, inclusive quando você já alterou o texto atual.
 
 ---
 

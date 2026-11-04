@@ -97,6 +97,11 @@ pub struct Workspace {
 }
 
 impl Workspace {
+    #[cfg(test)]
+    pub(crate) fn sync_at(root: &Path, files: &Files, project: &str) -> Result<Self, String> {
+        Self::sync_em(root, files, project, None)
+    }
+
     pub fn sync(files: &Files, project: &str) -> Result<Self, String> {
         Self::sync_em(&crate::pendencias::root(), files, project, None)
     }

@@ -48,7 +48,7 @@ const ATALHOS: &[(&str, &[(&str, &str)])] = &[
     (
         "Executar e depurar",
         &[
-            ("F5", "executar"),
+            ("F5", "executar · continuar quando pausado no depurador"),
             ("F6", "depurar"),
             ("F9", "ponto de parada"),
             ("F10", "próxima linha"),

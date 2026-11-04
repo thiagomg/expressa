@@ -74,12 +74,14 @@ const DEFAULT_URL: &str = "http://127.0.0.1:50051";
 
 /// A program running or being debugged.
 struct Run {
+    stopping: bool,
     debug_cmd: std::sync::mpsc::Sender<String>,
     paused: Option<(String, u32, bool)>,
 }
 
 struct Ui {
     execution_sources: Arc<debug_sources::Sources>,
+    last_execution_location: Option<(String, u32, bool)>,
     execution_breakpoints: Vec<(String, u32)>,
     execution_editors: HashMap<String, std::rc::Weak<Doc>>,
     source_viewer: Option<Rc<debug_sources::Viewer>>,
@@ -298,6 +300,7 @@ fn build_ui_with_prefs(app: &Application, startup: bool, prefs: Prefs) -> UiRc {
 
     let ui: UiRc = Rc::new(RefCell::new(Ui {
         execution_sources: Arc::new(debug_sources::Sources::new()),
+        last_execution_location: None,
         execution_breakpoints: Vec::new(),
         execution_editors: HashMap::new(),
         source_viewer: None,
@@ -536,7 +539,7 @@ fn build_ui_with_prefs(app: &Application, startup: bool, prefs: Prefs) -> UiRc {
                 .line_at(x, y)
                 .and_then(|l| console::parse_error_location(&l))
             {
-                goto_file_line(&ui_o, &file, line);
+                navigate_execution_error(&ui_o, &file, line, false);
             }
         });
         ui.borrow().console.view.add_controller(click);
@@ -1007,6 +1010,8 @@ fn install_menubar(
         .set_enabled(ui.borrow().files.is_remote());
     add_win_action(win, ui, "buscar-projeto", buscar_no_projeto);
     add_win_action(win, ui, "repl", mostrar_repl);
+    add_win_action(win, ui, "ver-fonte-executada", inspect_execution_source);
+    set_action_enabled(win, "ver-fonte-executada", false);
     add_win_action(win, ui, "abrir-rapido", navegar::abrir_rapido);
     add_win_action(win, ui, "funcoes", navegar::funcoes_do_arquivo);
     add_win_action(win, ui, "executar", |ui| executar(ui, false));
@@ -1085,7 +1090,7 @@ fn install_menubar(
     exec.append_item(&menu_item("_Parar", "win.parar", None));
 
     let debug = gio::Menu::new();
-    debug.append_item(&menu_item("_Continuar", "win.continuar", None));
+    debug.append_item(&menu_item("_Continuar", "win.continuar", Some("F5")));
     debug.append_item(&menu_item("_Próximo", "win.proximo", Some("F10")));
     debug.append_item(&menu_item("E_ntrar", "win.entrar", Some("F11")));
     debug.append_item(&menu_item("_Sair", "win.sair", Some("<Shift>F11")));
@@ -1101,6 +1106,11 @@ fn install_menubar(
         Some("<Primary><Shift>f"),
     ));
     ver.append_item(&menu_item("_REPL", "win.repl", None));
+    ver.append_item(&menu_item(
+        "Ver código executado",
+        "win.ver-fonte-executada",
+        None,
+    ));
     ver.append_item(&menu_item(
         "Abrir arquivo do _projeto…",
         "win.abrir-rapido",
@@ -2452,9 +2462,19 @@ fn make_debug_panel(ui: &UiRc) -> GtkBox {
                     .ok()
                     .filter(|l| *l > 0)
                     .map(|l| (f.to_string(), l))
-            }) && !show_running_source(&ui_s, &file, line, false)
-            {
-                set_status(&ui_s, "fonte desta execução não está disponível");
+            }) {
+                if ui_s
+                    .borrow()
+                    .run
+                    .as_ref()
+                    .is_some_and(|run| run.paused.is_some() && !run.stopping)
+                {
+                    if !show_running_source(&ui_s, &file, line, false) {
+                        set_status(&ui_s, "fonte desta execução não está disponível");
+                    }
+                } else {
+                    navigate_execution_error(&ui_s, &file, line, false);
+                }
             }
         });
     }
@@ -2513,6 +2533,19 @@ fn refresh_watch_values(ui: &UiRc, vars: &[expressa::runtime::DebugBinding]) {
 }
 
 fn send_debug_cmd(ui: &UiRc, cmd: &str) {
+    if cmd == "terminar" {
+        if let Some(run) = ui.borrow_mut().run.as_mut() {
+            run.stopping = true;
+            run.paused = None;
+        }
+        ui.borrow().console.cancel_input();
+        clear_debug_views(ui);
+        finish_execution_view(ui, true);
+        set_debug_buttons(ui, false, false);
+        set_status(ui, "parando…");
+    } else if ui.borrow().run.as_ref().is_some_and(|run| run.stopping) {
+        return;
+    }
     let sent = match &ui.borrow().run {
         Some(run) => run.debug_cmd.send(cmd.to_string()).is_ok(),
         None => false,
@@ -2604,8 +2637,35 @@ fn clear_debug_views(ui: &UiRc) {
     }
 }
 
+fn handle_debug_pause(ui: &UiRc, p: &expressa::runtime::DebugPaused) -> bool {
+    if !ui.borrow().run.as_ref().is_some_and(|run| !run.stopping) {
+        return false;
+    }
+    if let Some(run) = ui.borrow_mut().run.as_mut() {
+        run.paused = Some((p.file.clone(), p.line, p.error.is_some()));
+    }
+    fill_debug_views(ui, p);
+    set_debug_buttons(ui, true, true);
+    show_pause(ui, p);
+    match &p.error {
+        Some(e) => set_status(
+            ui,
+            &format!(
+                "erro em {}:{}: {e} — veja as variáveis; Continuar encerra",
+                p.file, p.line
+            ),
+        ),
+        None => set_status(
+            ui,
+            &format!("pausado {}:{}  {}", p.file, p.line, p.source_line.trim()),
+        ),
+    }
+    true
+}
+
 /// Show where the debugger stopped, opening that file if needed.
 fn show_pause(ui: &UiRc, p: &expressa::runtime::DebugPaused) {
+    remember_execution_location(ui, &p.file, p.line, p.error.is_some());
     for d in all_docs(ui) {
         d.clear_debug_line();
     }
@@ -2624,7 +2684,7 @@ fn close_current_tab(ui: &UiRc) {
     if let Some(doc) = current_doc(ui) {
         close_doc(ui, &doc);
     } else {
-        close_source_viewer(ui);
+        return_to_editor(ui, true);
     }
 }
 
@@ -2655,10 +2715,98 @@ fn execution_entry_doc(ui: &UiRc) -> Option<Rc<Doc>> {
 fn close_source_viewer(ui: &UiRc) {
     let viewer = ui.borrow_mut().source_viewer.take();
     if let Some(viewer) = viewer {
+        viewer.doc.cancel_pending();
         let notebook = ui.borrow().notebook.clone();
         if let Some(n) = notebook.page_num(&viewer.page) {
             notebook.remove_page(Some(n));
         }
+    }
+}
+
+/// Close the temporary page without taking focus from another editor the user
+/// already selected. Stop explicitly returns keyboard focus to editable code.
+fn return_to_editor(ui: &UiRc, force_focus: bool) {
+    let (path, was_active) = {
+        let u = ui.borrow();
+        match u.source_viewer.as_ref() {
+            Some(viewer) => (
+                Some(viewer.source.path.clone()),
+                u.notebook.current_page() == u.notebook.page_num(&viewer.page),
+            ),
+            None => (None, false),
+        }
+    };
+    let target = current_doc(ui).or_else(|| path.as_deref().and_then(|p| execution_editor(ui, p)));
+    close_source_viewer(ui);
+    if (force_focus || was_active)
+        && let Some(doc) = target
+            .or_else(|| current_doc(ui))
+            .or_else(|| all_docs(ui).into_iter().next())
+    {
+        switch_to(ui, &doc);
+    }
+}
+
+fn finish_execution_view(ui: &UiRc, force_focus: bool) {
+    for doc in all_docs(ui) {
+        doc.set_running_source(None);
+    }
+    return_to_editor(ui, force_focus);
+}
+
+fn remember_execution_location(ui: &UiRc, file: &str, line: u32, error: bool) {
+    let path = debug_sources::normalize_path(file);
+    let available = ui.borrow().execution_sources.contains_key(&path);
+    ui.borrow_mut().last_execution_location = Some((path, line, error));
+    set_action_enabled(&ui.borrow().window, "ver-fonte-executada", available);
+}
+
+fn inspect_execution_source(ui: &UiRc) {
+    let location = ui.borrow().last_execution_location.clone();
+    if let Some((path, line, error)) = location
+        && show_running_source(ui, &path, line, error)
+    {
+        return;
+    }
+    set_status(ui, "fonte da última execução indisponível");
+}
+
+/// Execution errors belong in editable code. A diverged document must not be
+/// given a line marker from an earlier source revision or an automatic viewer.
+fn navigate_execution_error(ui: &UiRc, file: &str, line: u32, automatic: bool) {
+    let path = debug_sources::normalize_path(file);
+    let source = ui.borrow().execution_sources.get(&path).cloned();
+    let Some(source) = source else {
+        if !automatic {
+            open_path(ui, file);
+        }
+        return;
+    };
+    if let Some(doc) = execution_editor(ui, &path) {
+        highlight_execution_error(ui, &doc, &source, line);
+    } else if !automatic {
+        open_path_then(ui, file, move |ui, doc| {
+            if let Some(doc) = doc
+                && ui
+                    .borrow()
+                    .execution_sources
+                    .get(&source.path)
+                    .is_some_and(|current| Arc::ptr_eq(current, &source))
+            {
+                highlight_execution_error(ui, &doc, &source, line);
+            }
+        });
+    }
+}
+
+fn highlight_execution_error(ui: &UiRc, doc: &Rc<Doc>, source: &debug_sources::Source, line: u32) {
+    if doc.text() == source.text {
+        switch_to(ui, doc);
+        doc.show_debug_line(line, true);
+    } else {
+        let message =
+            "o código foi alterado desde esta execução; consulte Ver → Ver código executado";
+        set_status(ui, message);
     }
 }
 
@@ -2705,7 +2853,7 @@ fn show_running_source(ui: &UiRc, path: &str, line: u32, error: bool) -> bool {
         let weak = Rc::downgrade(ui);
         viewer.close.connect_clicked(move |_| {
             if let Some(ui) = weak.upgrade() {
-                close_source_viewer(&ui);
+                return_to_editor(&ui, true);
             }
         });
         let notebook = ui.borrow().notebook.clone();
@@ -2738,6 +2886,9 @@ fn execution_available(ui: &UiRc, running_message: &str) -> bool {
     let availability = ui.borrow().execution.availability();
     let message = match availability {
         Ok(()) => return true,
+        Err(Unavailable::Running) if ui.borrow().run.as_ref().is_some_and(|run| run.stopping) => {
+            "aguarde a execução parar".to_string()
+        }
         Err(Unavailable::Running) => running_message.to_string(),
         Err(Unavailable::Preparing) => "aguarde: copiando o projeto para executar".to_string(),
         Err(Unavailable::Uploading) => {
@@ -2753,6 +2904,18 @@ fn can_change_project(ui: &UiRc) -> bool {
 }
 
 fn executar(ui: &UiRc, debug: bool) {
+    // F5 resumes the paused run, including from the read-only source tab.
+    // It must not prepare a new run or pick up edits made since it started.
+    if !debug
+        && ui
+            .borrow()
+            .run
+            .as_ref()
+            .is_some_and(|run| run.paused.is_some() && !run.stopping)
+    {
+        send_debug_cmd(ui, "continuar");
+        return;
+    }
     if !execution_available(ui, "já tem um programa executando — aperte Parar primeiro") {
         return;
     }
@@ -2893,6 +3056,7 @@ fn iniciar_execucao(
     args: Vec<String>,
 ) {
     mostrar_pagina_inferior(ui, PaginaInferior::Saida);
+    remember_execution_location(ui, &name, 1, false);
     let (bps, unbound) = {
         let u = ui.borrow();
         u.execution_breakpoints
@@ -2940,6 +3104,7 @@ fn iniciar_execucao(
             .transition(ExecutionEvent::Started)
             .expect("prepared before starting a run");
         u.run = Some(Run {
+            stopping: false,
             debug_cmd: run.debug_cmd.clone(),
             paused: None,
         });
@@ -2960,6 +3125,9 @@ fn iniciar_execucao(
                         Arc::make_mut(&mut u.execution_sources)
                             .insert(source.path.clone(), Arc::clone(&source));
                     }
+                    if ui_ev.borrow().run.as_ref().is_some_and(|run| run.stopping) {
+                        continue;
+                    }
                     for doc in all_docs(&ui_ev) {
                         let matches = doc
                             .running_source
@@ -2975,27 +3143,12 @@ fn iniciar_execucao(
                     }
                 }
                 Ok(ExecEvent::Paused(p)) => {
-                    if let Some(run) = ui_ev.borrow_mut().run.as_mut() {
-                        run.paused = Some((p.file.clone(), p.line, p.error.is_some()));
-                    }
-                    fill_debug_views(&ui_ev, &p);
-                    set_debug_buttons(&ui_ev, true, true);
-                    show_pause(&ui_ev, &p);
-                    match &p.error {
-                        Some(e) => set_status(
-                            &ui_ev,
-                            &format!(
-                                "erro em {}:{}: {e} — veja as variáveis; Continuar encerra",
-                                p.file, p.line
-                            ),
-                        ),
-                        None => set_status(
-                            &ui_ev,
-                            &format!("pausado {}:{}  {}", p.file, p.line, p.source_line.trim()),
-                        ),
-                    }
+                    handle_debug_pause(&ui_ev, &p);
                 }
                 Ok(ExecEvent::Leia(prompt)) => {
+                    if ui_ev.borrow().run.as_ref().is_some_and(|run| run.stopping) {
+                        continue;
+                    }
                     console.begin_input(&prompt, run.lines.clone());
                     set_status(
                         &ui_ev,
@@ -3015,13 +3168,18 @@ fn iniciar_execucao(
                     clear_debug_views(&ui_ev);
                     // Files the program wrote (salve_arquivo, …) go back to
                     // the project.
+                    let stopped = ui_ev.borrow().run.as_ref().is_some_and(|run| run.stopping);
                     enviar_depois_da_execucao(
                         &ui_ev,
                         &console,
                         ws.take().expect("workspace belongs to the finishing run"),
                     );
                     if f.ok {
-                        set_status(&ui_ev, &format!("ok — {name}"));
+                        if stopped {
+                            set_status(&ui_ev, "execução interrompida");
+                        } else {
+                            set_status(&ui_ev, &format!("ok — {name}"));
+                        }
                     } else {
                         console.error_link(&format!(
                             "erro: {} em {}:{}\n",
@@ -3052,7 +3210,10 @@ fn iniciar_execucao(
                             } else {
                                 f.error_file.clone()
                             };
-                            show_running_source(&ui_ev, &file, f.error_line, true);
+                            remember_execution_location(&ui_ev, &file, f.error_line, true);
+                            if !stopped {
+                                navigate_execution_error(&ui_ev, &file, f.error_line, true);
+                            }
                         }
                     }
                     return glib::ControlFlow::Break;
@@ -3618,6 +3779,8 @@ fn after_unsaved(ui: &UiRc, then: impl FnOnce() + 'static) {
 
 fn close_project_tabs(ui: &UiRc) {
     close_source_viewer(ui);
+    ui.borrow_mut().last_execution_location = None;
+    set_action_enabled(&ui.borrow().window, "ver-fonte-executada", false);
     ui.borrow_mut().execution_sources = Arc::new(debug_sources::Sources::new());
     ui.borrow_mut().execution_breakpoints.clear();
     ui.borrow_mut().execution_editors.clear();
@@ -4151,12 +4314,7 @@ fn mostrar_menu(
 /// After a run: send what the program wrote back to the project off the
 /// GTK thread; failures remain in the durable journal for explicit retry.
 fn enviar_depois_da_execucao(ui: &UiRc, console: &Rc<Console>, ws: Workspace) {
-    for doc in all_docs(ui) {
-        doc.set_running_source(None);
-    }
-    if let Some(viewer) = ui.borrow().source_viewer.as_ref() {
-        viewer.finish();
-    }
+    finish_execution_view(ui, false);
 
     let (files, project) = {
         let mut u = ui.borrow_mut();
@@ -4634,6 +4792,262 @@ fn resume_raise() {
 mod debug_ui_tests {
     use super::*;
 
+    struct DebugFixture {
+        ui: UiRc,
+        doc: Rc<Doc>,
+        commands: std::sync::mpsc::Receiver<String>,
+        _app: Application,
+    }
+    impl DebugFixture {
+        fn new(text: &str) -> Self {
+            static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+            let id = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            let app = Application::builder()
+                .application_id(format!("dev.expressa.aula.tests.debugview.t{id}"))
+                .flags(gio::ApplicationFlags::NON_UNIQUE)
+                .build();
+            app.register(None::<&gio::Cancellable>).unwrap();
+            let ui = build_ui_state(&app, false);
+            let doc = open_doc(&ui, Some("main.lep".into()), text);
+            let source = Arc::new(debug_sources::Source::new("main.lep", text.into()));
+            ui.borrow_mut().execution_sources =
+                Arc::new(HashMap::from([(source.path.clone(), source.clone())]));
+            ui.borrow_mut()
+                .execution_editors
+                .insert(source.path.clone(), Rc::downgrade(&doc));
+            doc.set_running_source(Some(source));
+            let (tx, commands) = std::sync::mpsc::channel();
+            ui.borrow_mut().run = Some(Run {
+                stopping: false,
+                debug_cmd: tx,
+                paused: None,
+            });
+            remember_execution_location(&ui, "main.lep", 1, false);
+            set_debug_buttons(&ui, true, true);
+            Self {
+                ui,
+                doc,
+                commands,
+                _app: app,
+            }
+        }
+        fn pause(&self) -> expressa::runtime::DebugPaused {
+            expressa::runtime::DebugPaused {
+                file: "main.lep".into(),
+                line: 1,
+                col: 1,
+                source_line: self.doc.text(),
+                vars: Vec::new(),
+                stack: Vec::new(),
+                error: None,
+            }
+        }
+    }
+    impl Drop for DebugFixture {
+        fn drop(&mut self) {
+            self.ui.borrow().closing.set(true);
+            self.ui.borrow().repl.encerrar();
+            for doc in all_docs(&self.ui) {
+                doc.cancel_pending();
+            }
+            close_source_viewer(&self.ui);
+            self.ui.borrow_mut().run = None;
+            self.ui.borrow().window.destroy();
+        }
+    }
+    fn spin_until(ready: impl Fn() -> bool) {
+        let end = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        while !ready() {
+            assert!(
+                std::time::Instant::now() < end,
+                "execution UI did not complete"
+            );
+            glib::MainContext::default().iteration(false);
+            std::thread::sleep(std::time::Duration::from_millis(1));
+        }
+    }
+
+    #[test]
+    fn f5_resumes_the_paused_run_from_the_read_only_source() {
+        gtk_test::run(|| {
+            let fixture = DebugFixture::new("escreva(1)\n");
+            let ui = &fixture.ui;
+            assert!(handle_debug_pause(ui, &fixture.pause()));
+            let source = ui.borrow().execution_sources.clone();
+            fixture.doc.buffer.set_text("escreva(2)\n");
+            let window = ui.borrow().window.clone();
+            let controllers = window.observe_controllers();
+            let shortcut = (0..controllers.n_items())
+                .filter_map(|i| {
+                    controllers
+                        .item(i)?
+                        .downcast::<gtk::ShortcutController>()
+                        .ok()
+                })
+                .filter(|c| c.propagation_phase() == gtk::PropagationPhase::Capture)
+                .flat_map(|c| {
+                    (0..c.n_items())
+                        .filter_map(|i| c.item(i)?.downcast::<gtk::Shortcut>().ok())
+                        .collect::<Vec<_>>()
+                })
+                .find(|s| s.trigger().is_some_and(|t| t.to_str() == "F5"))
+                .expect("F5 must be registered in capture phase");
+            assert!(shortcut.action().unwrap().activate(
+                gtk::ShortcutActionFlags::empty(),
+                &window,
+                None,
+            ));
+            assert_eq!(fixture.commands.try_recv().unwrap(), "continuar");
+            assert!(ui.borrow().run.as_ref().unwrap().paused.is_none());
+            assert!(Arc::ptr_eq(&source, &ui.borrow().execution_sources));
+            assert!(ui.borrow().source_viewer.is_some());
+            assert!(!window.lookup_action("continuar").unwrap().is_enabled());
+            // Repeated F5 while running must not send another resume or launch.
+            executar(ui, false);
+            assert!(fixture.commands.try_recv().is_err());
+            assert!(Arc::ptr_eq(&source, &ui.borrow().execution_sources));
+        });
+    }
+
+    #[test]
+    fn stop_closes_the_snapshot_before_worker_ack_and_rejects_late_pauses() {
+        gtk_test::run(|| {
+            let fixture = DebugFixture::new("escreva(1)\n");
+            let ui = &fixture.ui;
+            assert!(handle_debug_pause(ui, &fixture.pause()));
+            let viewer = ui.borrow().source_viewer.clone().unwrap();
+            assert!(!viewer.doc.view.is_editable());
+            fixture.doc.set_path("renamed.lep".into());
+            let (input, _answer) = std::sync::mpsc::channel();
+            ui.borrow().console.begin_input("entrada:", input);
+            let window = ui.borrow().window.clone();
+            trigger_win_action(&window, "parar");
+            assert_eq!(fixture.commands.try_recv().unwrap(), "terminar");
+            assert!(ui.borrow().run.as_ref().unwrap().stopping);
+            assert!(
+                ui.borrow().source_viewer.is_none(),
+                "Stop waited for Finished"
+            );
+            assert!(ui.borrow().notebook.page_num(&viewer.page).is_none());
+            assert!(Rc::ptr_eq(&current_doc(ui).unwrap(), &fixture.doc));
+            assert!(fixture.doc.view.is_editable());
+            assert!(fixture.doc.running_source.borrow().is_none());
+            assert!(!ui.borrow().console.is_reading());
+            assert!(
+                !handle_debug_pause(ui, &fixture.pause()),
+                "queued pause was accepted after Stop"
+            );
+            assert!(ui.borrow().source_viewer.is_none());
+            send_debug_cmd(ui, "proximo");
+            assert!(fixture.commands.try_recv().is_err());
+            assert!(
+                !ui.borrow()
+                    .window
+                    .lookup_action("continuar")
+                    .unwrap()
+                    .is_enabled()
+            );
+            finish_execution_view(ui, false);
+            assert!(ui.borrow().source_viewer.is_none());
+        });
+    }
+
+    #[test]
+    fn natural_end_returns_to_editor_and_preserves_another_selected_tab() {
+        gtk_test::run(|| {
+            let fixture = DebugFixture::new("escreva(1)\n");
+            let ui = &fixture.ui;
+            assert!(handle_debug_pause(ui, &fixture.pause()));
+            finish_execution_view(ui, false);
+            assert!(ui.borrow().source_viewer.is_none());
+            assert!(Rc::ptr_eq(&current_doc(ui).unwrap(), &fixture.doc));
+            assert!(handle_debug_pause(ui, &fixture.pause()));
+            let other = open_doc(ui, None, "another edit");
+            other.buffer.place_cursor(&other.buffer.iter_at_offset(4));
+            finish_execution_view(ui, false);
+            assert!(ui.borrow().source_viewer.is_none());
+            assert!(Rc::ptr_eq(&current_doc(ui).unwrap(), &other));
+            assert_eq!(other.cursor().offset(), 4);
+            assert_eq!(other.text(), "another edit");
+        });
+    }
+
+    #[test]
+    fn changed_source_is_not_given_old_error_positions_and_snapshot_is_explicit() {
+        gtk_test::run(|| {
+            let fixture = DebugFixture::new("a = 1\n1 / 0\n");
+            let ui = &fixture.ui;
+            fixture
+                .doc
+                .buffer
+                .insert(&mut fixture.doc.buffer.start_iter(), "// new line\n");
+            fixture
+                .doc
+                .buffer
+                .place_cursor(&fixture.doc.buffer.end_iter());
+            let cursor = fixture.doc.cursor().offset();
+            ui.borrow_mut().run = None;
+            finish_execution_view(ui, false);
+            remember_execution_location(ui, "main.lep", 2, true);
+            navigate_execution_error(ui, "main.lep", 2, true);
+            assert!(ui.borrow().source_viewer.is_none());
+            assert_eq!(fixture.doc.cursor().offset(), cursor);
+            assert!(
+                ui.borrow()
+                    .status
+                    .text()
+                    .contains("alterado desde esta execução")
+            );
+            let window = ui.borrow().window.clone();
+            trigger_win_action(&window, "ver-fonte-executada");
+            let viewer = ui.borrow().source_viewer.clone().unwrap();
+            assert_eq!(viewer.doc.text(), "a = 1\n1 / 0\n");
+            assert!(!viewer.doc.view.is_editable());
+            viewer.close.emit_clicked();
+            assert!(ui.borrow().source_viewer.is_none());
+            assert!(Rc::ptr_eq(&current_doc(ui).unwrap(), &fixture.doc));
+        });
+    }
+
+    #[test]
+    fn repeated_f5_errors_finish_in_editable_code_without_snapshot_tabs() {
+        gtk_test::run(|| {
+            let text = "a = 1\n1 / 0\n";
+            let fixture = DebugFixture::new(text);
+            let ui = &fixture.ui;
+            let project = tempfile::tempdir().unwrap();
+            let runs = tempfile::tempdir().unwrap();
+            std::fs::write(project.path().join("main.lep"), text).unwrap();
+            let files = Files::Local(project.path().to_path_buf());
+            ui.borrow_mut().files = files.clone();
+            ui.borrow_mut().project = "local".into();
+            ui.borrow_mut().run = None;
+            for _ in 0..3 {
+                let ws = Workspace::sync_at(runs.path(), &files, "local").unwrap();
+                ws.arm().unwrap();
+                ui.borrow_mut()
+                    .execution
+                    .transition(ExecutionEvent::Prepare)
+                    .unwrap();
+                iniciar_execucao(ui, ws, "main.lep".into(), text.into(), false, Vec::new());
+                spin_until(|| {
+                    ui.borrow().run.is_none() && ui.borrow().execution.availability().is_ok()
+                });
+                assert!(ui.borrow().source_viewer.is_none());
+                assert_eq!(all_docs(ui).len(), 1);
+                assert!(Rc::ptr_eq(&current_doc(ui).unwrap(), &fixture.doc));
+                assert!(fixture.doc.view.is_editable());
+                assert_eq!(fixture.doc.cursor().line(), 1);
+                let buffer = ui.borrow().console.view.buffer();
+                assert!(
+                    buffer
+                        .text(&buffer.start_iter(), &buffer.end_iter(), false)
+                        .contains("divisão por zero")
+                );
+            }
+        });
+    }
+
     #[test]
     fn snapshot_navigation_keeps_editor_identity_and_frozen_breakpoints() {
         gtk_test::run(|| {
@@ -4655,6 +5069,7 @@ mod debug_ui_tests {
                 .push((source.path.clone(), 1));
             let (sender, receiver) = std::sync::mpsc::channel();
             ui.borrow_mut().run = Some(Run {
+                stopping: false,
                 debug_cmd: sender,
                 paused: Some((source.path.clone(), 1, false)),
             });
