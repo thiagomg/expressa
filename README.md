@@ -41,4 +41,27 @@ Compilar: `cargo build --release` (Rust, edition 2024). Binários em `target/rel
 
 Pacote `.deb` (Ubuntu 24.04 e 26.04, via Docker): `./empacotar-deb.sh`. Os arquivos saem em `dist/`.
 
+### Builds no GitHub
+
+O workflow [Build packages](.github/workflows/build.yml) compila e empacota a cada
+push na `main`, incluindo merges de pull requests. Ele não roda para outras
+branches, pull requests ainda não integrados ou tags.
+
+No GitHub, abra **Actions → Build packages → execução → Artifacts** para baixar:
+
+| Artefato | Conteúdo |
+| --- | --- |
+| `expressa-ubuntu-24.04-x64` | Pacote `.deb` para Ubuntu 24.04 |
+| `expressa-ubuntu-26.04-x64` | Pacote `.deb` para Ubuntu 26.04 |
+| `expressa-windows-x64` | ZIP portátil com executáveis, GTK e runtime do Visual C++ |
+
+Os três pacotes incluem o interpretador, visualizador de gráficos, IDE Aula,
+servidor e tutoriais. Os artefatos ficam disponíveis por **30 dias**. No Windows,
+extraia o ZIP e abra `expressa-aula.exe` dentro da pasta `expressa-aula`; no Ubuntu,
+instale o `.deb` correspondente com `sudo apt install ./expressa_*.deb`.
+
+Os arquivos são produzidos em `dist/` nos runners e enviados como artefatos da
+execução. Esse workflow não publica uma GitHub Release. O workflow separado
+**Project storage** mantém seus próprios gatilhos de testes.
+
 Especificação: [especificacao-linguagem.md](especificacao-linguagem.md).

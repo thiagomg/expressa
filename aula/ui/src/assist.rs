@@ -1,6 +1,5 @@
-//! Language help in the editor: completion (GtkSourceView provider),
-//! hover and F1 help, the signature popup while typing arguments, and
-//! go to definition. The analysis is in `lang.rs`.
+//! Language help on demand: Ctrl+Space completion, F1 documentation,
+//! and go to definition. The analysis is in `lang.rs`.
 
 use std::cell::{Cell, RefCell};
 use std::collections::{HashMap, HashSet};
@@ -433,18 +432,6 @@ fn prefix_of(ctx: &Completion) -> &str {
     }
 }
 
-/// GtkSourceView only pops the list when `is_trigger` is true. Identifier
-/// letters must count: otherwise typing `esc` never opens completion.
-pub fn triggers_completion(before: &str, c: char) -> bool {
-    match lang::completion_context(before) {
-        Completion::Nothing => false,
-        Completion::Import { .. } => c == '"' || c == '/' || lang::is_ident_char(c),
-        Completion::Module { .. } => c == ':' || lang::is_ident_char(c),
-        Completion::Method { .. } => c == '.' || lang::is_ident_char(c),
-        Completion::Name { .. } => lang::is_ident_char(c) || c == '.',
-    }
-}
-
 /// Prefix the GtkSourceView `refilter` must use: the Expressa token at the
 /// cursor (`lib/a` after `importe "`, not the Gtk word `a` after `/`).
 fn prefix_before_cursor(buffer: &impl IsA<gtk::TextBuffer>) -> String {
@@ -653,11 +640,9 @@ mod imp {
             false
         }
 
-        fn is_trigger(&self, iter: &gtk::TextIter, c: char) -> bool {
-            let buffer = iter.buffer();
-            let start = buffer.start_iter();
-            let before = start.text(iter).to_string();
-            super::triggers_completion(&before, c)
+        fn is_trigger(&self, _iter: &gtk::TextIter, _c: char) -> bool {
+            // Only explicit Ctrl+Space requests should start completion.
+            false
         }
 
         fn populate_future(
@@ -666,6 +651,11 @@ mod imp {
         ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<gio::ListModel, glib::Error>>>>
         {
             let store = gio::ListStore::new::<super::Proposal>();
+            // GtkSourceView also starts completion for words independently of
+            // is_trigger(). Return before reading or analyzing the document.
+            if context.activation() != sourceview5::CompletionActivation::UserRequested {
+                return Box::pin(std::future::ready(Ok(store.upcast())));
+            }
             if let (Some(help), Some(buffer)) = (self.help.borrow().clone(), context.buffer()) {
                 let path = (help.path_of)(&buffer).unwrap_or_default();
                 let (s, e) = buffer.bounds();
@@ -781,73 +771,6 @@ mod imp {
             buffer.end_user_action();
         }
     }
-
-    #[derive(Default)]
-    pub struct HoverInfo {
-        pub help: RefCell<Option<Rc<Help>>>,
-        pub diag: RefCell<Option<Box<dyn Fn(&SourceBuffer, i32) -> Option<String>>>>,
-    }
-
-    #[glib::object_subclass]
-    impl ObjectSubclass for HoverInfo {
-        const NAME: &'static str = "ExpressaHover";
-        type Type = super::HoverInfo;
-        type Interfaces = (sourceview5::HoverProvider,);
-    }
-    impl ObjectImpl for HoverInfo {}
-
-    impl HoverProviderImpl for HoverInfo {
-        fn populate_future(
-            &self,
-            context: &sourceview5::HoverContext,
-            display: &sourceview5::HoverDisplay,
-        ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<(), glib::Error>> + 'static>>
-        {
-            let none = || -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<(), glib::Error>>>> {
-                Box::pin(std::future::ready(Err(glib::Error::new(gio::IOErrorEnum::NotSupported, "sem ajuda"))))
-            };
-            let buffer = context.buffer();
-            let mut iter = buffer.start_iter();
-            if !context.is_iter(&mut iter) {
-                return none();
-            }
-            let mut shown = false;
-            if let Some(msg) = self
-                .diag
-                .borrow()
-                .as_ref()
-                .and_then(|f| f(&buffer, iter.offset()))
-            {
-                display.append(&super::help_label(&format!(
-                    "<span foreground=\"#e53935\"><b>erro:</b></span> {}",
-                    esc(&msg)
-                )));
-                shown = true;
-            }
-            if let Some(help) = self.help.borrow().clone() {
-                let path = (help.path_of)(&buffer).unwrap_or_default();
-                let (s, e) = buffer.bounds();
-                let text = buffer.text(&s, &e, true).to_string();
-                let mut ls = iter;
-                ls.set_line_offset(0);
-                let mut le = iter;
-                if !le.ends_line() {
-                    le.forward_to_line_end();
-                }
-                let line = ls.text(&le).to_string();
-                let col = ls.text(&iter).len();
-                if let Some(m) = super::help_markup(&help, &path, &text, &line, col) {
-                    display.append(&super::help_label(&m));
-                    shown = true;
-                }
-            }
-            if shown {
-                Box::pin(std::future::ready(Ok(())))
-            } else {
-                none()
-            }
-        }
-    }
 }
 
 glib::wrapper! {
@@ -870,10 +793,6 @@ glib::wrapper! {
     pub struct Provider(ObjectSubclass<imp::Provider>) @implements sourceview5::CompletionProvider;
 }
 
-glib::wrapper! {
-    pub struct HoverInfo(ObjectSubclass<imp::HoverInfo>) @implements sourceview5::HoverProvider;
-}
-
 fn help_label(markup: &str) -> gtk::Label {
     let l = gtk::Label::new(None);
     l.set_markup(markup);
@@ -887,43 +806,29 @@ fn help_label(markup: &str) -> gtk::Label {
 
 /// Per-view help widgets; `detach` before the view goes away.
 pub struct ViewHelp {
-    signature: gtk::Popover,
-    signature_label: gtk::Label,
     info: gtk::Popover,
     info_label: gtk::Label,
-    pending: Rc<Cell<bool>>,
-    /// GtkSourceCompletion list is showing: keep our popover down so the
-    /// two GtkPopovers do not steal the grab / hide each other.
+    diag: Box<dyn Fn(&SourceBuffer, i32) -> Option<String>>,
     completion_open: Cell<bool>,
-    /// Escape hid the signature; stay down until the cursor leaves the call.
-    signature_held: Cell<bool>,
 }
 
 impl ViewHelp {
     pub fn detach(&self) {
-        self.signature.unparent();
         self.info.unparent();
     }
 
-    /// Escape: hide signature/F1 popovers and drop the GtkSourceCompletion
-    /// context. The list widget hides itself on Escape without cancelling;
-    /// a leftover context then never shows the list again. Holds the
-    /// signature down until the cursor leaves the current call, otherwise
-    /// the idle updater shows it again on the next keystroke.
+    /// Close manual help and cancel the current completion context.
     pub fn dismiss(&self, view: &SourceView) -> bool {
-        let completion = view.completion();
-        let had =
-            self.completion_open.get() || self.signature.is_visible() || self.info.is_visible();
-        if had {
-            self.signature_held.set(true);
-        }
-        self.signature.popdown();
+        let had = self.completion_open.get() || self.info.is_visible();
         self.info.popdown();
-        completion.hide();
-        completion.block_interactive();
-        completion.unblock_interactive();
+        view.completion().hide();
         self.completion_open.set(false);
         had
+    }
+
+    pub fn show_completion(&self, view: &SourceView) {
+        self.info.popdown();
+        view.completion().show();
     }
 }
 
@@ -947,7 +852,7 @@ fn cursor_rect(view: &SourceView, dest: &impl IsA<gtk::Widget>) -> gtk::gdk::Rec
     gtk::gdk::Rectangle::new(x.round() as i32, y.round() as i32, 1, r.height().max(1))
 }
 
-/// Completion, hover, the signature popup and F1 for one editor view.
+/// Manual completion and F1 help for one editor view.
 pub fn attach(
     view: &SourceView,
     help: &Rc<Help>,
@@ -964,31 +869,8 @@ pub fn attach(
     // Default page-size is 5; show more names before the list scrolls.
     completion.set_page_size(12);
 
-    let hover = view.hover();
-    let info: HoverInfo = glib::Object::new();
-    *info.imp().help.borrow_mut() = Some(Rc::clone(help));
-    *info.imp().diag.borrow_mut() = Some(Box::new(diag));
-    hover.add_provider(&info);
-    hover.set_hover_delay(400);
-
-    let signature_label = gtk::Label::new(None);
-    signature_label.set_xalign(0.0);
-    signature_label.set_wrap(true);
-    signature_label.set_wrap_mode(pango::WrapMode::WordChar);
-    signature_label.set_max_width_chars(60);
-    let signature = gtk::Popover::new();
-    signature.set_child(Some(&signature_label));
-    signature.set_autohide(false);
-    signature.set_has_arrow(false);
-    signature.set_can_focus(false);
-    signature.set_cascade_popdown(false);
-    signature.set_position(gtk::PositionType::Top);
-    // Not on the SourceView: GtkSourceCompletion's list is also a popover
-    // child of the view, and GTK 4 hides one when the other pops up.
+    // No hover providers: documentation is requested explicitly with F1.
     let host = view.parent().unwrap_or_else(|| view.clone().upcast());
-    signature.set_parent(&host);
-    signature.add_css_class("aula-signature");
-
     let info_label = help_label("");
     let info_scroll = gtk::ScrolledWindow::new();
     info_scroll.set_policy(gtk::PolicyType::Automatic, gtk::PolicyType::Automatic);
@@ -1005,112 +887,29 @@ pub fn attach(
     info_pop.set_parent(&host);
 
     let vh = Rc::new(ViewHelp {
-        signature,
-        signature_label,
         info: info_pop,
         info_label,
-        pending: Rc::new(Cell::new(false)),
+        diag: Box::new(diag),
         completion_open: Cell::new(false),
-        signature_held: Cell::new(false),
     });
-    // Signature popup follows the cursor and the typing (once per idle).
-    let update = {
-        let weak_vh = Rc::downgrade(&vh);
-        let help = Rc::clone(help);
-        let view = view.clone();
-        move || {
-            let Some(vh) = weak_vh.upgrade() else { return };
-            if vh.pending.replace(true) {
-                return;
-            }
-            let weak_vh = Rc::downgrade(&vh);
-            let help = Rc::clone(&help);
-            let view = view.clone();
-            glib::idle_add_local_once(move || {
-                let Some(vh) = weak_vh.upgrade() else { return };
-                vh.pending.set(false);
-                if vh.completion_open.get() || !view.has_focus() {
-                    vh.signature.popdown();
-                    return;
-                }
-                let buffer = view.buffer();
-                let (s, e) = buffer.bounds();
-                let cursor = buffer.iter_at_mark(&buffer.get_insert());
-                let mut from = cursor;
-                from.backward_lines(30);
-                from.set_line_offset(0);
-                let before = buffer.text(&from, &cursor, true).to_string();
-                let text = buffer.text(&s, &e, true).to_string();
-                let sb = buffer.downcast_ref::<SourceBuffer>();
-                let path = sb.and_then(|b| (help.path_of)(b)).unwrap_or_default();
-                match signature_markup(&help, &path, &text, &before) {
-                    Some(m) if !buffer.has_selection() => {
-                        if vh.signature_held.get() {
-                            vh.signature.popdown();
-                            return;
-                        }
-                        vh.signature_label.set_markup(&m);
-                        // A popover is centered on its target: aim at a box as
-                        // wide as the popup so it starts at the cursor.
-                        let dest = vh
-                            .signature
-                            .parent()
-                            .unwrap_or_else(|| view.clone().upcast());
-                        let r = cursor_rect(&view, &dest);
-                        let (_, width, _, _) =
-                            vh.signature.measure(gtk::Orientation::Horizontal, -1);
-                        let r = gtk::gdk::Rectangle::new(r.x(), r.y(), width.max(1), r.height());
-                        vh.signature.set_pointing_to(Some(&r));
-                        if !vh.signature.is_visible() {
-                            vh.signature.popup();
-                        }
-                    }
-                    _ => {
-                        vh.signature_held.set(false);
-                        vh.signature.popdown();
-                    }
-                }
-            });
-        }
-    };
-    let update = Rc::new(update);
-    {
-        let u = Rc::clone(&update);
-        view.buffer().connect_cursor_position_notify(move |_| u());
-    }
-    {
-        let u = Rc::clone(&update);
-        view.buffer().connect_changed(move |_| u());
-    }
     {
         let weak_vh = Rc::downgrade(&vh);
         completion.connect_show(move |_| {
             if let Some(vh) = weak_vh.upgrade() {
+                vh.info.popdown();
                 vh.completion_open.set(true);
-                vh.signature.popdown();
             }
         });
     }
     {
         let weak_vh = Rc::downgrade(&vh);
-        let u = Rc::clone(&update);
         completion.connect_hide(move |_| {
             if let Some(vh) = weak_vh.upgrade() {
                 vh.completion_open.set(false);
             }
-            u();
         });
     }
-    {
-        let weak_vh = Rc::downgrade(&vh);
-        let focus = gtk::EventControllerFocus::new();
-        focus.connect_leave(move |_| {
-            if let Some(vh) = weak_vh.upgrade() {
-                vh.signature.popdown();
-            }
-        });
-        view.add_controller(focus);
-    }
+
     vh
 }
 
@@ -1133,9 +932,20 @@ pub fn show_info(view: &SourceView, vh: &ViewHelp, help: &Help) -> bool {
     }
     let line = ls.text(&le).to_string();
     let col = ls.text(&cursor).len();
-    let Some(m) = help_markup(help, &path, &text, &line, col) else {
+    let before = buffer.text(&s, &cursor, true).to_string();
+    let mut markup = help_markup(help, &path, &text, &line, col)
+        .or_else(|| signature_markup(help, &path, &text, &before));
+    if let Some(msg) = (vh.diag)(sb, cursor.offset()) {
+        let error = format!("<b>erro:</b> {}", esc(&msg));
+        markup = Some(match markup {
+            Some(m) => format!("{error}\n\n{m}"),
+            None => error,
+        });
+    }
+    let Some(m) = markup else {
         return false;
     };
+    vh.dismiss(view);
     vh.info_label.set_wrap(true);
     vh.info_label.remove_css_class("aula-catalogo");
     vh.info_label.set_markup(&m);
@@ -1180,6 +990,70 @@ mod tests {
 
     fn labels(items: &[Item]) -> Vec<&str> {
         items.iter().map(|i| i.label.as_str()).collect()
+    }
+
+    #[test]
+    fn help_only_analyzes_on_explicit_request() {
+        crate::gtk_test::run(|| {
+            let analyses = Rc::new(Cell::new(0));
+            let count = analyses.clone();
+            let help = Rc::new(Help {
+                file_text: Box::new(|_| None),
+                project_files: Box::new(Vec::new),
+                path_of: Box::new(move |_| {
+                    count.set(count.get() + 1);
+                    None
+                }),
+            });
+            let buffer = SourceBuffer::new(None);
+            let view = SourceView::with_buffer(&buffer);
+            let host = gtk::Box::new(gtk::Orientation::Vertical, 0);
+            host.append(&view);
+            let window = gtk::Window::builder().child(&host).build();
+            let vh = attach(&view, &help, |_, _| None);
+            window.present();
+            view.grab_focus();
+            let spin = |duration| {
+                let end = std::time::Instant::now() + duration;
+                while std::time::Instant::now() < end {
+                    while glib::MainContext::default().pending() {
+                        glib::MainContext::default().iteration(false);
+                    }
+                    std::thread::sleep(std::time::Duration::from_millis(1));
+                }
+            };
+            for c in "escreva(".chars() {
+                buffer.insert_at_cursor(&c.to_string());
+                spin(std::time::Duration::from_millis(20));
+            }
+            spin(std::time::Duration::from_millis(300));
+            assert_eq!(analyses.get(), 0, "typing must not analyze help");
+            assert!(!vh.completion_open.get());
+            assert!(!vh.info.is_visible());
+
+            buffer.set_text("esc");
+            buffer.place_cursor(&buffer.end_iter());
+            vh.show_completion(&view);
+            spin(std::time::Duration::from_millis(300));
+            assert!(
+                analyses.get() > 0,
+                "manual completion must load suggestions"
+            );
+            assert!(vh.completion_open.get());
+            assert!(vh.dismiss(&view));
+            assert!(!show_info(&view, &vh, &help));
+            buffer.set_text("escreva");
+            buffer.place_cursor(&buffer.start_iter());
+            assert!(show_info(&view, &vh, &help));
+            assert!(vh.info.is_visible());
+            assert!(!vh.completion_open.get());
+            assert!(vh.dismiss(&view));
+            spin(std::time::Duration::from_millis(300));
+            assert!(!vh.info.is_visible());
+            assert!(!vh.completion_open.get());
+            vh.detach();
+            window.close();
+        });
     }
 
     #[test]
@@ -1241,18 +1115,6 @@ mod tests {
 
         let (_, it) = items(&h, "main.lep", text, r#"importe "lib/a"#);
         assert!(labels(&it).contains(&"lib/ajuda"));
-    }
-
-    #[test]
-    fn letters_trigger_name_completion() {
-        assert!(triggers_completion("esc", 'c'));
-        assert!(triggers_completion("escreva", 'a'));
-        assert!(triggers_completion("xs.", '.'));
-        assert!(triggers_completion("m::", ':'));
-        assert!(triggers_completion(r#"importe "te"#, 'e'));
-        assert!(!triggers_completion("x = 3", '3'));
-        assert!(!triggers_completion("x // esc", 'c'));
-        assert!(!triggers_completion("x = \"te", 'e'));
     }
 
     #[test]

@@ -1208,9 +1208,6 @@ fn install_css() {
         paned.aula-paned > separator:hover {
             background-color: alpha(currentColor, 0.28);
         }
-        popover.aula-signature > contents {
-            padding: 4px 8px;
-        }
         /* GtkSourceView default is 150px; that clips name, params and nativa. */
         popover.completion > contents,
         assistant.completion > contents {
@@ -1632,6 +1629,15 @@ fn attach_editor_input(ui: &UiRc, doc: &Rc<Doc>, vh: &Rc<ViewHelp>) {
     on("<Primary>d", editing::duplicate_lines);
     on("<Alt>Up", |b| editing::move_lines(b, true));
     on("<Alt>Down", |b| editing::move_lines(b, false));
+    {
+        let weak = Rc::downgrade(doc);
+        let vh = Rc::downgrade(vh);
+        add_shortcut(&keys, "<Control>space", move || {
+            if let (Some(doc), Some(vh)) = (weak.upgrade(), vh.upgrade()) {
+                vh.show_completion(&doc.view);
+            }
+        });
+    }
     {
         let ui_h = Rc::clone(ui);
         let weak = Rc::downgrade(doc);

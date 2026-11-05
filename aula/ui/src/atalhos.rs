@@ -27,6 +27,7 @@ const ATALHOS: &[(&str, &[(&str, &str)])] = &[
         &[
             ("Ctrl+/", "comentar ou descomentar as linhas"),
             ("Ctrl+D", "duplicar as linhas"),
+            ("Ctrl+Espaço", "mostrar sugestões de código"),
             ("Alt+↑ · Alt+↓", "mover as linhas"),
             ("Tab · Shift+Tab", "aumentar ou diminuir o recuo"),
             ("Ctrl+Alt+\\", "arrumar o recuo"),

@@ -1,0 +1,118 @@
+name: Build packages
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-packages-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  ubuntu:
+    name: Ubuntu ${{ matrix.ubuntu }} (x64)
+    strategy:
+      fail-fast: false
+      matrix:
+        ubuntu: ['24.04', '26.04']
+    runs-on: ubuntu-${{ matrix.ubuntu }}
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Build Debian package
+        env:
+          UBUNTU_VERSION: ${{ matrix.ubuntu }}
+        run: ./empacotar-deb.sh "$UBUNTU_VERSION"
+
+      - name: Upload Debian package
+        uses: actions/upload-artifact@v4
+        with:
+          name: expressa-ubuntu-${{ matrix.ubuntu }}-x64
+          path: dist/expressa_*_amd64.deb
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
+
+  windows:
+    name: Windows (x64)
+    runs-on: windows-2022
+    timeout-minutes: 90
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable-x86_64-pc-windows-msvc
+
+      # Same native dependency versions recorded in deps/versoes.txt.
+      - name: Download GTK and Protocol Buffers
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $downloads = Join-Path $env:RUNNER_TEMP 'expressa-deps'
+          New-Item -ItemType Directory -Force $downloads | Out-Null
+          gh release download 2026.8.0 --repo wingtk/gvsbuild --pattern GTK4_Gvsbuild_2026.8.0_x64.zip --dir $downloads
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          gh release download v36.2 --repo protocolbuffers/protobuf --pattern protoc-36.2-win64.zip --dir $downloads
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $gtkZip = Join-Path $downloads 'GTK4_Gvsbuild_2026.8.0_x64.zip'
+          $protocZip = Join-Path $downloads 'protoc-36.2-win64.zip'
+          if ((Get-FileHash $gtkZip -Algorithm SHA256).Hash -ne '1f95a92d037f5292da05e6ab1037032ff21ddb7b20d4ac8e83e3674c864c07b0') {
+            throw 'GTK archive checksum mismatch'
+          }
+          if ((Get-FileHash $protocZip -Algorithm SHA256).Hash -ne 'f0c128dc0d8492eceece83bb459a4c0e316764b929ffbf1aa416357fd644edd3') {
+            throw 'Protocol Buffers archive checksum mismatch'
+          }
+          Expand-Archive $gtkZip -DestinationPath deps/gtk
+          Expand-Archive $protocZip -DestinationPath deps/protoc
+
+      - name: Build portable package
+        run: |
+          . ./deps/ativar.ps1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          ./empacotar.ps1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Include Visual C++ runtime and repack
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio/Installer/vswhere.exe'
+          $runtime = @(& $vswhere -latest -products * -find 'VC/Redist/MSVC/*/x64/Microsoft.VC*.CRT/vcruntime140.dll')
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if ($runtime.Count -eq 0) { throw 'Visual C++ runtime not found' }
+          $crt = Split-Path -Parent $runtime[-1]
+          Copy-Item (Join-Path $crt '*.dll') dist/expressa-aula -Force
+          Remove-Item dist/expressa-aula-windows.zip
+          tar -a -c -f dist/expressa-aula-windows.zip -C dist expressa-aula
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Smoke test packaged interpreter
+        run: |
+          # Only Windows system paths: no build-time GTK or Rust on PATH.
+          $env:PATH = "$env:SystemRoot\System32;$env:SystemRoot"
+          & ./dist/expressa-aula/bin/expressa.exe --help
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Upload portable package
+        uses: actions/upload-artifact@v4
+        with:
+          name: expressa-windows-x64
+          path: dist/expressa-aula-windows.zip
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0

@@ -25,7 +25,7 @@ if (-not (Test-Path (Join-Path $gtk "bin\gtk-4-1.dll"))) {
 }
 
 Write-Output "Compilando expressa, expressa-aula, expressa-aula-server e expressa-tutorial (release)..."
-cargo build --release -p expressa -p expressa-aula -p expressa-aula-server -p expressa-tutorial
+cargo build --release --locked -p expressa -p expressa-aula -p expressa-aula-server -p expressa-tutorial
 if ($LASTEXITCODE -ne 0) {
     exit $LASTEXITCODE
 }
