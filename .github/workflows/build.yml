@@ -34,13 +34,12 @@ jobs:
         run: ./empacotar-deb.sh "$UBUNTU_VERSION"
 
       - name: Upload Debian package
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
-          name: expressa-ubuntu-${{ matrix.ubuntu }}-x64
           path: dist/expressa_*_amd64.deb
           if-no-files-found: error
           retention-days: 30
-          compression-level: 0
+          archive: false
 
   windows:
     name: Windows (x64)
@@ -81,24 +80,22 @@ jobs:
           Expand-Archive $gtkZip -DestinationPath deps/gtk
           Expand-Archive $protocZip -DestinationPath deps/protoc
 
-      - name: Build portable package
+      - name: Install Inno Setup 7
+        run: |
+          $installer = Join-Path $env:RUNNER_TEMP 'innosetup-7.1.1-x64.exe'
+          Invoke-WebRequest 'https://github.com/jrsoftware/issrc/releases/download/is-7_1_1/innosetup-7.1.1-x64.exe' -OutFile $installer
+          $signature = Get-AuthenticodeSignature $installer
+          if ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notmatch 'CN=Pyrsys B.V.') {
+            throw 'Inno Setup installer signature verification failed'
+          }
+          $setup = Start-Process -FilePath $installer -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/SP-' -Wait -PassThru
+          if ($setup.ExitCode -ne 0) { throw "Inno Setup installation failed: $($setup.ExitCode)" }
+
+      - name: Build Windows installer
         run: |
           . ./deps/ativar.ps1
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          ./empacotar.ps1
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-
-      - name: Include Visual C++ runtime and repack
-        run: |
-          $ErrorActionPreference = 'Stop'
-          $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio/Installer/vswhere.exe'
-          $runtime = @(& $vswhere -latest -products * -find 'VC/Redist/MSVC/*/x64/Microsoft.VC*.CRT/vcruntime140.dll')
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          if ($runtime.Count -eq 0) { throw 'Visual C++ runtime not found' }
-          $crt = Split-Path -Parent $runtime[-1]
-          Copy-Item (Join-Path $crt '*.dll') dist/expressa-aula -Force
-          Remove-Item dist/expressa-aula-windows.zip
-          tar -a -c -f dist/expressa-aula-windows.zip -C dist expressa-aula
+          ./criar-instalador.ps1
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Smoke test packaged interpreter
@@ -108,11 +105,10 @@ jobs:
           & ./dist/expressa-aula/bin/expressa.exe --help
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-      - name: Upload portable package
-        uses: actions/upload-artifact@v4
+      - name: Upload Windows installer
+        uses: actions/upload-artifact@v7
         with:
-          name: expressa-windows-x64
-          path: dist/expressa-aula-windows.zip
+          path: dist/ExpressaAula-*-Setup.exe
           if-no-files-found: error
           retention-days: 30
-          compression-level: 0
+          archive: false

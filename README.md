@@ -51,17 +51,17 @@ No GitHub, abra **Actions → Build packages → execução → Artifacts** para
 
 | Artefato | Conteúdo |
 | --- | --- |
-| `expressa-ubuntu-24.04-x64` | Pacote `.deb` para Ubuntu 24.04 |
-| `expressa-ubuntu-26.04-x64` | Pacote `.deb` para Ubuntu 26.04 |
-| `expressa-windows-x64` | ZIP portátil com executáveis, GTK e runtime do Visual C++ |
+| `expressa_*-1~ubuntu24.04_amd64.deb` | Pacote para Ubuntu 24.04 |
+| `expressa_*-1~ubuntu26.04_amd64.deb` | Pacote para Ubuntu 26.04 |
+| `ExpressaAula-*-Setup.exe` | Instalador Windows com executáveis, GTK e runtime do Visual C++ |
 
 Os três pacotes incluem o interpretador, visualizador de gráficos, IDE Aula,
 servidor e tutoriais. Os artefatos ficam disponíveis por **30 dias**. No Windows,
-extraia o ZIP e abra `expressa-aula.exe` dentro da pasta `expressa-aula`; no Ubuntu,
+execute `ExpressaAula-*-Setup.exe`; no Ubuntu,
 instale o `.deb` correspondente com `sudo apt install ./expressa_*.deb`.
 
-Os arquivos são produzidos em `dist/` nos runners e enviados como artefatos da
-execução. Esse workflow não publica uma GitHub Release. O workflow separado
+Os arquivos são produzidos em `dist/` nos runners e enviados diretamente, sem
+um ZIP adicional, como artefatos da execução. Esse workflow não publica uma GitHub Release. O workflow separado
 **Project storage** mantém seus próprios gatilhos de testes.
 
 Especificação: [especificacao-linguagem.md](especificacao-linguagem.md).

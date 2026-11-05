@@ -470,6 +470,8 @@ mod tests {
             Err(SaveError::Conflict)
         ));
         let mut permissions = fs::metadata(&path).unwrap().permissions();
+        #[cfg(windows)]
+        let original_permissions = permissions.clone();
         permissions.set_readonly(true);
         let expected = Expected::Revision(read(&path).unwrap().revision);
         assert!(
@@ -490,9 +492,7 @@ mod tests {
         assert_eq!(fs::read(&path).unwrap(), b"external");
         #[cfg(windows)]
         {
-            let mut permissions = fs::metadata(&path).unwrap().permissions();
-            permissions.set_readonly(false);
-            fs::set_permissions(&path, permissions).unwrap();
+            fs::set_permissions(&path, original_permissions).unwrap();
         }
     }
 
