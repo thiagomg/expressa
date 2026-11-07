@@ -1,6 +1,5 @@
 //! Keywords and string/comment blanking, shared with indent and search.
 
-#[allow(dead_code)]
 pub const KEYWORDS: &[&str] = &[
     "se",
     "senao",

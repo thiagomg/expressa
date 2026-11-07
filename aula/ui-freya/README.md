@@ -28,6 +28,8 @@ F5 roda o texto da aba (mesmo sem salvar) no interpretador do processo;
 a saída aparece no console. `leia` pede a resposta ali mesmo; **Parar**
 interrompe um laço infinito. A cópia de execução fica em
 `~/.local/share/expressa-aula/exec-freya` (ou o cache do sistema).
+F1 mostra a ficha da nativa sob o cursor; fora de um nome abre o catálogo.
+Ctrl+Espaço sugere nomes; Ajuda → Tutoriais abre `expressa-tutorial`.
 Rascunhos sujos são gravados a cada 5 s em `~/.cache/expressa-aula/rascunho-freya`.
 
 Plano: `docs/tarefas/freya-tasks.md`.

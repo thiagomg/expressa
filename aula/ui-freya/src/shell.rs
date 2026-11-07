@@ -6,6 +6,7 @@ use freya::{
 };
 
 use crate::{
+    ajuda::Sugestao,
     atalhos::{Acao, ATALHOS},
     console::Console,
     documentos::Abas,
@@ -707,6 +708,124 @@ pub fn dialogo_nome(
                         .child("Cancelar"),
                 ),
         )
+}
+
+pub fn painel_ficha(
+    texto: String,
+    paleta: Paleta,
+    on_fechar: impl Fn() + Copy + 'static,
+) -> impl IntoElement {
+    rect()
+        .position(Position::new_global().top(80.).right(16.))
+        .width(Size::px(420.0))
+        .height(Size::px(360.0))
+        .background(paleta.fundo)
+        .color(paleta.texto)
+        .corner_radius(8.0)
+        .border(
+            Border::new()
+                .width(BorderWidth {
+                    top: 1.0,
+                    right: 1.0,
+                    bottom: 1.0,
+                    left: 1.0,
+                })
+                .fill(paleta.borda),
+        )
+        .child(
+            rect()
+                .direction(Direction::Vertical)
+                .width(Size::fill())
+                .height(Size::fill())
+                .child(
+                    rect()
+                        .direction(Direction::Horizontal)
+                        .width(Size::fill())
+                        .main_align(Alignment::SpaceBetween)
+                        .padding(8.0)
+                        .child(label().font_weight(FontWeight::BOLD).text("Ajuda"))
+                        .child(
+                            Button::new()
+                                .flat()
+                                .compact()
+                                .on_press(move |_| on_fechar())
+                                .child("×"),
+                        ),
+                )
+                .child(ScrollView::new().child(label().font_size(13.0).text(texto))),
+        )
+}
+
+pub fn painel_catalogo(
+    itens: Vec<(String, String)>,
+    paleta: Paleta,
+    on_item: impl Fn(String) + Copy + 'static,
+    on_fechar: impl Fn() + Copy + 'static,
+) -> impl IntoElement {
+    let mut lista = rect().direction(Direction::Vertical).spacing(2.0).padding(8.0);
+    for (nome, _) in itens {
+        let n = nome.clone();
+        lista = lista.child(
+            Button::new()
+                .flat()
+                .on_press(move |_| on_item(n.clone()))
+                .child(nome),
+        );
+    }
+    rect()
+        .position(Position::new_global().top(80.).left(260.))
+        .width(Size::px(360.0))
+        .height(Size::px(480.0))
+        .background(paleta.fundo)
+        .color(paleta.texto)
+        .corner_radius(8.0)
+        .child(
+            rect()
+                .direction(Direction::Vertical)
+                .width(Size::fill())
+                .height(Size::fill())
+                .child(
+                    rect()
+                        .direction(Direction::Horizontal)
+                        .width(Size::fill())
+                        .main_align(Alignment::SpaceBetween)
+                        .padding(8.0)
+                        .child(label().font_weight(FontWeight::BOLD).text("Funções nativas"))
+                        .child(
+                            Button::new()
+                                .flat()
+                                .compact()
+                                .on_press(move |_| on_fechar())
+                                .child("×"),
+                        ),
+                )
+                .child(ScrollView::new().child(lista)),
+        )
+}
+
+pub fn painel_sugestoes(
+    itens: Vec<Sugestao>,
+    paleta: Paleta,
+    on_item: impl Fn(Sugestao) + Copy + 'static,
+) -> impl IntoElement {
+    let mut lista = rect().direction(Direction::Vertical).spacing(2.0).padding(6.0);
+    for s in itens {
+        let escolhida = s.clone();
+        lista = lista.child(
+            Button::new()
+                .flat()
+                .on_press(move |_| on_item(escolhida.clone()))
+                .child(s.rotulo),
+        );
+    }
+    rect()
+        .position(Position::new_global().top(120.).left(280.))
+        .width(Size::px(320.0))
+        .content(Content::fit())
+        .background(paleta.fundo)
+        .color(paleta.texto)
+        .corner_radius(6.0)
+        .child(lista)
 }
 
 pub fn dialogo_apagar(

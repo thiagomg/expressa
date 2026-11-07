@@ -36,6 +36,8 @@ pub enum Acao {
     MoverCima,
     MoverBaixo,
     Ajuda,
+    Completar,
+    IrDefinicao,
     Catalogo,
     Atalhos,
     Tutoriais,
@@ -110,6 +112,7 @@ pub fn acao_de_tecla(key: &Key, modifiers: Modifiers) -> Option<Acao> {
         Key::Named(NamedKey::F11) if !control && !alt && shift => Some(Acao::SairFuncao),
         Key::Named(NamedKey::F11) if !control && !alt => Some(Acao::Entrar),
         Key::Named(NamedKey::F1) if !control && !alt => Some(Acao::Ajuda),
+        Key::Named(NamedKey::F12) if !control && !alt => Some(Acao::IrDefinicao),
         Key::Named(NamedKey::Escape) => Some(Acao::Escapar),
         Key::Named(NamedKey::Enter) if control && !alt => Some(Acao::BuscarProxima),
         Key::Named(NamedKey::ArrowUp) if alt && !control => Some(Acao::MoverCima),
@@ -121,6 +124,7 @@ pub fn acao_de_tecla(key: &Key, modifiers: Modifiers) -> Option<Acao> {
             "s" if shift => Some(Acao::SalvarComo),
             "w" if !shift => Some(Acao::FecharAba),
             "q" if !shift => Some(Acao::Sair),
+            " " if !shift => Some(Acao::Completar),
             "f" if !shift => Some(Acao::Buscar),
             "g" if !shift => Some(Acao::IrParaLinha),
             "/" if !shift => Some(Acao::Comentar),
@@ -148,9 +152,7 @@ pub fn mensagem_reservada(acao: Acao) -> &'static str {
         Acao::MostrarPainel => "Painel do depurador (F8) ainda não está nesta versão Freya.",
         Acao::IrParaLinha => "",
         Acao::Buscar | Acao::BuscarProxima | Acao::Escapar => "",
-        Acao::Ajuda => "Ajuda (F1) ainda não está nesta versão Freya.",
-        Acao::Catalogo => "Catálogo de funções nativas ainda não está nesta versão Freya.",
-        Acao::Tutoriais => "Tutoriais ainda não estão nesta versão Freya.",
+        Acao::Ajuda | Acao::Completar | Acao::IrDefinicao | Acao::Catalogo | Acao::Tutoriais => "",
         Acao::Repl => "REPL ainda não está nesta versão Freya.",
         Acao::Atalhos => "Atalhos do teclado",
         Acao::Sair
@@ -195,6 +197,7 @@ mod tests {
         assert_eq!(tecla("s", Modifiers::empty()), None);
         assert_eq!(tecla("/", ctrl), Some(Acao::Comentar));
         assert_eq!(tecla("f", ctrl), Some(Acao::Buscar));
+        assert_eq!(tecla(" ", ctrl), Some(Acao::Completar));
         assert_eq!(tecla("d", ctrl), Some(Acao::Duplicar));
         assert_eq!(
             acao_de_tecla(&Key::Named(NamedKey::Escape), Modifiers::empty()),

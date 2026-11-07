@@ -6,6 +6,9 @@ use freya::code_editor::CodeEditorData;
 use freya::prelude::*;
 use freya::text_edit::TextEditor;
 
+use crate::ajuda::{
+    Sugestao, completar, ficha, garantir_importe, palavra_em, prefixo_em, spawn_tutorial,
+};
 use crate::atalhos::{Acao, mensagem_reservada};
 use crate::documentos::{
     Abas, Depois, DepoisNome, Dialogo, Fechar, carregar_editor, escolher_abrir, escolher_salvar,
@@ -38,6 +41,9 @@ pub fn aplicar(
     mut exec: State<Execucao>,
     console: State<Console>,
     args: State<String>,
+    mut ajuda: State<Option<String>>,
+    mut catalogo: State<bool>,
+    mut sugestoes: State<Vec<Sugestao>>,
 ) {
     match acao {
         Acao::Sair => sair(prefs, editor, status, abas, dialogo),
@@ -88,7 +94,25 @@ pub fn aplicar(
             busca_aberta.set(false);
             dialogo.set(Dialogo::Nenhum);
             atalhos_visiveis.set(false);
+            ajuda.set(None);
+            catalogo.set(false);
+            sugestoes.set(Vec::new());
         }
+        Acao::Ajuda => mostrar_ajuda(editor, status, ajuda, catalogo),
+        Acao::Catalogo => {
+            catalogo.set(true);
+            status.set("Funções nativas".into());
+        }
+        Acao::Tutoriais => match spawn_tutorial() {
+            Ok(()) => status.set("Tutoriais".into()),
+            Err(e) => status.set(e),
+        },
+        Acao::Completar => {
+            let texto = editor.read().rope.to_string();
+            let byte = crate::editor::byte_do_cursor(&editor.read());
+            sugestoes.set(completar(&texto, byte));
+        }
+        Acao::IrDefinicao => ir_definicao(editor, status),
         Acao::Comentar => {
             comentar(&mut editor.write());
             status.set("Comentário".into());
@@ -662,6 +686,70 @@ pub fn ir_para_saida(
         abrir_caminho(path, editor, prefs, abas, status);
         ir_para_linha(&n.to_string(), editor, status, dialogo);
     }
+}
+
+pub fn mostrar_ajuda(
+    editor: State<CodeEditorData>,
+    mut status: State<String>,
+    mut ajuda: State<Option<String>>,
+    mut catalogo: State<bool>,
+) {
+    let texto = editor.read().rope.to_string();
+    let byte = crate::editor::byte_do_cursor(&editor.read());
+    let nome = palavra_em(&texto, byte);
+    match ficha(&nome) {
+        Some(f) => {
+            ajuda.set(Some(f));
+            status.set(format!("Ajuda: {nome}"));
+        }
+        None => {
+            catalogo.set(true);
+            status.set("Coloque o cursor num nome de função (F1)".into());
+        }
+    }
+}
+
+pub fn aplicar_sugestao(
+    s: Sugestao,
+    mut editor: State<CodeEditorData>,
+    mut sugestoes: State<Vec<Sugestao>>,
+) {
+    let texto = editor.read().rope.to_string();
+    let byte = crate::editor::byte_do_cursor(&editor.read());
+    let prefix = prefixo_em(&texto, byte);
+    let start = byte.saturating_sub(prefix.len());
+    let mut novo = String::new();
+    novo.push_str(&texto[..start]);
+    novo.push_str(&s.inserir);
+    novo.push_str(&texto[byte..]);
+    if let Some(m) = &s.importe
+        && let Some(com) = garantir_importe(&novo, m)
+    {
+        novo = com;
+    }
+    crate::editor::aplicar_texto(&mut editor.write(), &novo, start + s.inserir.encode_utf16().count());
+    sugestoes.set(Vec::new());
+}
+
+fn ir_definicao(mut editor: State<CodeEditorData>, mut status: State<String>) {
+    let texto = editor.read().rope.to_string();
+    let byte = crate::editor::byte_do_cursor(&editor.read());
+    let nome = palavra_em(&texto, byte);
+    if nome.is_empty() {
+        status.set("Nenhuma definição".into());
+        return;
+    }
+    for (i, linha) in texto.lines().enumerate() {
+        let t = linha.trim_start();
+        if (t.starts_with(&format!("{nome} =")) || t.starts_with(&format!("{nome}=")))
+            && let Some(pos) = crate::documentos::posicao_linha(&texto, i + 1)
+        {
+            editor.write().move_cursor_to(pos);
+            status.set(format!("Definição de {nome}"));
+            return;
+        }
+    }
+    status.set(format!("Não achou definição de {nome}"));
 }
 
 pub fn achar(

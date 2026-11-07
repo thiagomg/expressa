@@ -233,9 +233,9 @@ Work:
 
 Acceptance:
 
-- [ ] F1 on `escreva` shows the same ficha as the REPL.
-- [ ] Completion lists `matriz::zeros` after `importe "matriz"`.
-- [ ] Ajuda window can sit beside the editor while typing.
+- [x] F1 on `escreva` shows the same ficha as the REPL.
+- [x] Completion lists `matriz::zeros` after `importe "matriz"`.
+- [x] Ajuda window can sit beside the editor while typing.
 
 ---
 

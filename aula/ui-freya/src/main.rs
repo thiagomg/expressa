@@ -5,6 +5,7 @@
     windows_subsystem = "windows"
 )]
 
+mod ajuda;
 mod atalhos;
 mod busca;
 mod comandos;
@@ -28,11 +29,12 @@ use freya::{
 use crate::{
     atalhos::{Acao, acao_de_tecla},
     comandos::{
-        achar, aplicar, aplicar_eventos, clicar_arvore, confirmar_apagar, confirmar_descarte,
-        confirmar_nome, escolher_projeto, fechar_aba, ir_para_linha, ir_para_saida,
-        pasta_selecionada, pedir_apagar, pedir_nome, responder_leia, restaurar_arquivo,
-        selecionar_aba,
+        achar, aplicar, aplicar_eventos, aplicar_sugestao, clicar_arvore, confirmar_apagar,
+        confirmar_descarte, confirmar_nome, escolher_projeto, fechar_aba, ir_para_linha,
+        ir_para_saida, pasta_selecionada, pedir_apagar, pedir_nome, responder_leia,
+        restaurar_arquivo, selecionar_aba,
     },
+    ajuda::{Sugestao, catalogo, ficha},
     console::Console,
     execucao::Execucao,
     documentos::{Abas, Depois, DepoisNome, Dialogo, gravar_rascunhos, sincronizar},
@@ -43,7 +45,8 @@ use crate::{
     shell::{
         MenuAberto, Paleta, barra_abas, barra_argumentos, barra_busca, barra_ferramentas,
         barra_menus, barra_status, dialogo_apagar, dialogo_confirmar, dialogo_linha, dialogo_nome,
-        editor_inicial, painel_arvore, painel_atalhos, painel_console, tema_freya,
+        editor_inicial, painel_arvore, painel_atalhos, painel_catalogo, painel_console,
+        painel_ficha, painel_sugestoes, tema_freya,
     },
 };
 
@@ -85,6 +88,9 @@ fn app() -> impl IntoElement {
     let console = use_state(Console::default);
     let args = use_state(String::new);
     let leia_entrada = use_state(String::new);
+    let ajuda = use_state(|| None::<String>);
+    let catalogo_aberto = use_state(|| false);
+    let sugestoes = use_state(Vec::<Sugestao>::new);
 
     use_future(move || async move {
         loop {
@@ -159,6 +165,9 @@ fn app() -> impl IntoElement {
             exec,
             console,
             args,
+            ajuda,
+            catalogo_aberto,
+            sugestoes,
         );
     };
 
@@ -259,6 +268,31 @@ fn app() -> impl IntoElement {
         .child(barra_status(linha, coluna, &pasta, &recado, paleta))
         .maybe_child(atalhos_visiveis().then(move || {
             painel_atalhos(paleta, move || atalhos_visiveis.set(false))
+        }))
+        .maybe_child(ajuda.read().clone().map(|texto| {
+            painel_ficha(texto, paleta, move || {
+                let mut ajuda = ajuda;
+                ajuda.set(None);
+            })
+        }))
+        .maybe_child(catalogo_aberto().then(move || {
+            painel_catalogo(
+                catalogo(),
+                paleta,
+                move |nome| {
+                    let mut ajuda = ajuda;
+                    ajuda.set(ficha(&nome));
+                },
+                move || {
+                    let mut catalogo_aberto = catalogo_aberto;
+                    catalogo_aberto.set(false);
+                },
+            )
+        }))
+        .maybe_child((!sugestoes.read().is_empty()).then(move || {
+            painel_sugestoes(sugestoes.read().clone(), paleta, move |s| {
+                aplicar_sugestao(s, editor, sugestoes)
+            })
         }))
         .maybe_child(matches!(dialogo_agora, Dialogo::Confirmar { .. }).then(move || {
             dialogo_confirmar(
