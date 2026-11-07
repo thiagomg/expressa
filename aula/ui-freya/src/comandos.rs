@@ -11,6 +11,7 @@ use crate::ajuda::{
 };
 use crate::atalhos::Acao;
 use crate::debug::Depuracao;
+use crate::grafico::Graficos;
 use crate::repl::Repl;
 use crate::documentos::{
     Abas, Depois, DepoisNome, Dialogo, Fechar, carregar_editor, escolher_abrir, escolher_salvar,
@@ -48,6 +49,7 @@ pub fn aplicar(
     mut sugestoes: State<Vec<Sugestao>>,
     mut depuracao: State<Depuracao>,
     mut repl: State<Repl>,
+    graficos: State<Graficos>,
 ) {
     match acao {
         Acao::Sair => sair(prefs, editor, status, abas, dialogo),
@@ -68,6 +70,7 @@ pub fn aplicar(
             } else {
                 executar(
                     editor, prefs, abas, status, projeto, exec, console, args, false, depuracao,
+                    graficos,
                 );
             }
         }
@@ -76,7 +79,7 @@ pub fn aplicar(
             status.set("Parando…".into());
         }
         Acao::Depurar => executar(
-            editor, prefs, abas, status, projeto, exec, console, args, true, depuracao,
+            editor, prefs, abas, status, projeto, exec, console, args, true, depuracao, graficos,
         ),
         Acao::Ponto => alternar_ponto(editor, prefs, abas, status, projeto, exec, depuracao),
         Acao::Proximo => comando_debug("proximo", exec, status, depuracao),
@@ -592,6 +595,7 @@ pub fn executar(
     args: State<String>,
     debug: bool,
     mut depuracao: State<Depuracao>,
+    mut graficos: State<Graficos>,
 ) {
     if exec.read().rodando {
         status.set("Já está rodando — use Parar".into());
@@ -600,6 +604,7 @@ pub fn executar(
     sincronizar(&mut abas.write(), &editor.read());
     console.write().limpar();
     depuracao.write().fim();
+    graficos.write().limpar();
     let fonte = editor.read().rope.to_string();
     let raiz = projeto.read().raiz.clone();
     let rel = caminho_relativo(
@@ -744,6 +749,40 @@ pub fn fechar_repl(mut repl: State<Repl>) {
     repl.write().visivel = false;
 }
 
+pub fn destacar_graficos(mut graficos: State<Graficos>) {
+    let v = !graficos.read().destacado;
+    graficos.write().destacado = v;
+}
+
+pub fn fechar_tela_graf(
+    id: u64,
+    mut graficos: State<Graficos>,
+    exec: State<Execucao>,
+) {
+    let ev = graficos.write().fechar_tela(id);
+    exec.read().evento_graf(ev);
+}
+
+pub fn clique_tela_graf(
+    id: u64,
+    x: f64,
+    y: f64,
+    w: f64,
+    h: f64,
+    graficos: State<Graficos>,
+    exec: State<Execucao>,
+) {
+    let ev = graficos
+        .read()
+        .telas
+        .iter()
+        .find(|t| t.id == id)
+        .map(|t| crate::grafico::clique_na_tela(t, x, y, w, h));
+    if let Some(ev) = ev {
+        exec.read().evento_graf(ev);
+    }
+}
+
 pub fn aplicar_eventos(
     eventos: Vec<EventoExec>,
     mut console: State<Console>,
@@ -755,6 +794,7 @@ pub fn aplicar_eventos(
     abas: State<Abas>,
     projeto: State<Projeto>,
     dialogo: State<Dialogo>,
+    mut graficos: State<Graficos>,
 ) {
     for ev in eventos {
         match ev {
@@ -795,6 +835,12 @@ pub fn aplicar_eventos(
                         dialogo,
                     );
                 }
+            }
+            EventoExec::Folha(folha) => {
+                graficos.write().aplicar_folha(folha);
+            }
+            EventoExec::TelaGraf(tela) => {
+                graficos.write().aplicar_tela(tela);
             }
             EventoExec::Fim {
                 ok,

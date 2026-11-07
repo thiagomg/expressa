@@ -36,6 +36,9 @@ o painel (Observados, Variáveis, Pilha). A fonte que roda é a cópia em
 `exec-freya`: editar a aba no meio da execução não muda o que já está rodando.
 **Ver → REPL** abre um painel: as variáveis ficam entre linhas; Parar interrompe
 um laço; Reiniciar esquece a sessão. `saia()` encerra até o próximo Reiniciar.
+`mostre()` de `cartesiano` e `tela_grafica` abre o painel Gráficos acima do
+console. Destacar solta a janela; clicar na tela envia `evento()`. Fechar X
+não recria a tela até o próximo F5.
 Rascunhos sujos são gravados a cada 5 s em `~/.cache/expressa-aula/rascunho-freya`.
 
 Plano: `docs/tarefas/freya-tasks.md`.

@@ -19,3 +19,5 @@ freya = { version = "0.5", features = ["code-editor"] }
 dirs = "6"
 rfd = "0.17"
 tokio = { workspace = true, features = ["time"] }
+bytes = "1"
+png = "0.17"

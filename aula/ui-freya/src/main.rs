@@ -14,6 +14,7 @@ mod debug;
 mod documentos;
 mod execucao;
 mod edicao;
+mod grafico;
 mod editor;
 mod indent;
 mod lang;
@@ -33,14 +34,16 @@ use crate::{
     comandos::{
         achar, adicionar_observado, aplicar, aplicar_eventos, aplicar_sugestao, clicar_arvore,
         confirmar_apagar, confirmar_descarte, confirmar_nome, escolher_projeto, fechar_aba,
-        enviar_repl, fechar_repl, ir_para_linha, ir_para_pausa, ir_para_saida, limpar_repl,
-        parar_repl, pasta_selecionada, pedir_apagar, pedir_nome, reiniciar_repl, remover_observado,
-        responder_leia, restaurar_arquivo, selecionar_aba,
+        clique_tela_graf, destacar_graficos, enviar_repl, fechar_repl, fechar_tela_graf,
+        ir_para_linha, ir_para_pausa, ir_para_saida, limpar_repl, parar_repl, pasta_selecionada,
+        pedir_apagar, pedir_nome, reiniciar_repl, remover_observado, responder_leia,
+        restaurar_arquivo, selecionar_aba,
     },
     ajuda::{Sugestao, catalogo, ficha},
     console::Console,
     debug::Depuracao,
     execucao::Execucao,
+    grafico::Graficos,
     repl::Repl,
     documentos::{Abas, Depois, DepoisNome, Dialogo, gravar_rascunhos, sincronizar},
     edicao::tratar_tecla,
@@ -51,7 +54,7 @@ use crate::{
         MenuAberto, Paleta, barra_abas, barra_argumentos, barra_busca, barra_ferramentas,
         barra_menus, barra_status, dialogo_apagar, dialogo_confirmar, dialogo_linha, dialogo_nome,
         editor_inicial, painel_arvore, painel_atalhos, painel_catalogo, painel_console,
-        painel_debug, painel_ficha, painel_repl, painel_sugestoes, tema_freya,
+        painel_debug, painel_ficha, painel_graficos, painel_repl, painel_sugestoes, tema_freya,
     },
 };
 
@@ -100,6 +103,7 @@ fn app() -> impl IntoElement {
     let observado_campo = use_state(String::new);
     let mut repl = use_state(Repl::default);
     let repl_entrada = use_state(String::new);
+    let graficos = use_state(Graficos::default);
 
     use_future(move || async move {
         loop {
@@ -133,6 +137,7 @@ fn app() -> impl IntoElement {
                     abas,
                     projeto,
                     dialogo,
+                    graficos,
                 );
             }
         }
@@ -179,6 +184,9 @@ fn app() -> impl IntoElement {
     let projeto_agora = projeto.read().clone();
     let depuracao_agora = depuracao.read().clone();
     let repl_agora = repl.read().clone();
+    let graficos_agora = graficos.read().clone();
+    let graficos_dock = graficos_agora.clone();
+    let graficos_float = graficos_agora.clone();
 
     let on_acao = move |acao: Acao| {
         aplicar(
@@ -201,6 +209,7 @@ fn app() -> impl IntoElement {
             sugestoes,
             depuracao,
             repl,
+            graficos,
         );
     };
 
@@ -281,6 +290,20 @@ fn app() -> impl IntoElement {
                                     tratar_tecla(&e, &mut editor.write())
                                 }),
                         )
+                        .maybe_child(
+                            (graficos_dock.visivel() && !graficos_dock.destacado).then(move || {
+                                painel_graficos(
+                                    graficos_dock.clone(),
+                                    paleta,
+                                    false,
+                                    move || destacar_graficos(graficos),
+                                    move |id| fechar_tela_graf(id, graficos, exec),
+                                    move |id, x, y, w, h| {
+                                        clique_tela_graf(id, x, y, w, h, graficos, exec)
+                                    },
+                                )
+                            }),
+                        )
                         .child(painel_console(
                             console.read().clone(),
                             paleta,
@@ -315,6 +338,18 @@ fn app() -> impl IntoElement {
                         },
                     )
                 })),
+        )
+        .maybe_child(
+            (graficos_float.visivel() && graficos_float.destacado).then(move || {
+                painel_graficos(
+                    graficos_float.clone(),
+                    paleta,
+                    true,
+                    move || destacar_graficos(graficos),
+                    move |id| fechar_tela_graf(id, graficos, exec),
+                    move |id, x, y, w, h| clique_tela_graf(id, x, y, w, h, graficos, exec),
+                )
+            }),
         )
         .maybe_child(repl_agora.visivel.then(move || {
             painel_repl(

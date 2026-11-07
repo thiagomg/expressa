@@ -5,8 +5,12 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::sync::mpsc::{self, Receiver, Sender, SyncSender, TryRecvError};
+use std::time::Duration;
 
-use expressa::runtime::{ChannelDebugger, DebugHook, LeiaHost, StopHook, run_with_hosts};
+use expressa::runtime::{
+    CartesianoHost, ChannelDebugger, DebugHook, EventoGraf, FolhaPronta, GrafHost, LeiaHost,
+    StopHook, TelaGrafica, run_with_hosts,
+};
 
 use crate::debug::{Quadro, Variavel};
 
@@ -26,6 +30,8 @@ pub enum EventoExec {
         pilha: Vec<Quadro>,
         erro: Option<String>,
     },
+    Folha(FolhaPronta),
+    TelaGraf(TelaGrafica),
     Fim { ok: bool, erro: String, arquivo: String, linha: u32, pilha: Vec<String> },
 }
 
@@ -33,6 +39,7 @@ struct Inner {
     rx: Option<Receiver<EventoExec>>,
     leia: Option<Sender<String>>,
     parar: Option<Sender<String>>,
+    graf: Option<Sender<EventoGraf>>,
 }
 
 #[derive(Clone)]
@@ -49,6 +56,7 @@ impl Default for Execucao {
                 rx: None,
                 leia: None,
                 parar: None,
+                graf: None,
             })),
             rodando: false,
             args: String::new(),
@@ -79,12 +87,15 @@ impl Execucao {
         let (leia_tx, leia_rx) = mpsc::channel::<String>();
         let (parar_ui, parar_mid) = mpsc::channel::<String>();
         let (parar_tx, parar_rx) = mpsc::channel::<String>();
+        let (graf_tx, graf_rx) = mpsc::channel::<EventoGraf>();
         {
             let leia_tx = leia_tx.clone();
+            let graf_tx = graf_tx.clone();
             std::thread::spawn(move || {
                 while let Ok(cmd) = parar_mid.recv() {
                     if matches!(cmd.trim(), "terminar" | "q" | "quit") {
                         let _ = leia_tx.send(String::new());
+                        let _ = graf_tx.send(EventoGraf::sair());
                     }
                     if parar_tx.send(cmd).is_err() {
                         break;
@@ -97,6 +108,7 @@ impl Execucao {
             g.rx = Some(events);
             g.leia = Some(leia_tx);
             g.parar = Some(parar_ui);
+            g.graf = Some(graf_tx);
         }
         self.rodando = true;
         let pontos = pontos
@@ -116,6 +128,7 @@ impl Execucao {
                     event_tx,
                     leia_rx,
                     parar_rx,
+                    graf_rx,
                 );
             })
             .expect("thread de execução");
@@ -161,6 +174,12 @@ impl Execucao {
             let _ = tx.send(cmd.to_string());
         }
     }
+
+    pub fn evento_graf(&self, ev: EventoGraf) {
+        if let Some(tx) = self.inner.lock().unwrap().graf.as_ref() {
+            let _ = tx.send(ev);
+        }
+    }
 }
 
 struct ChannelOut {
@@ -179,6 +198,50 @@ impl Write for ChannelOut {
     }
     fn flush(&mut self) -> io::Result<()> {
         Ok(())
+    }
+}
+
+struct ChannelCartesiano {
+    tx: SyncSender<EventoExec>,
+}
+
+impl CartesianoHost for ChannelCartesiano {
+    fn mostre(&mut self, folha: FolhaPronta) -> Result<(), String> {
+        self.tx
+            .send(EventoExec::Folha(folha))
+            .map_err(|_| "IDE fechada".to_string())
+    }
+}
+
+struct ChannelGraf {
+    tx: SyncSender<EventoExec>,
+    eventos: Receiver<EventoGraf>,
+}
+
+impl GrafHost for ChannelGraf {
+    fn mostre(&mut self, tela: TelaGrafica) -> Result<(), String> {
+        self.tx
+            .send(EventoExec::TelaGraf(tela))
+            .map_err(|_| "IDE fechada".to_string())
+    }
+
+    fn evento(
+        &mut self,
+        _tela: &TelaGrafica,
+        timeout: Option<Duration>,
+    ) -> Result<EventoGraf, String> {
+        match timeout {
+            None => self.eventos.recv().map_err(|_| "IDE fechada".to_string()),
+            Some(d) if d.is_zero() => Ok(self
+                .eventos
+                .try_recv()
+                .unwrap_or_else(|_| EventoGraf::nada())),
+            Some(d) => match self.eventos.recv_timeout(d) {
+                Ok(e) => Ok(e),
+                Err(std::sync::mpsc::RecvTimeoutError::Timeout) => Ok(EventoGraf::nada()),
+                Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => Err("IDE fechada".into()),
+            },
+        }
     }
 }
 
@@ -222,6 +285,7 @@ fn correr(
     tx: SyncSender<EventoExec>,
     leia_rx: Receiver<String>,
     parar_rx: Receiver<String>,
+    graf_rx: Receiver<EventoGraf>,
 ) {
     let mut out = ChannelOut {
         tx: tx.clone(),
@@ -234,6 +298,11 @@ fn correr(
     let mut leia = ChannelLeia {
         tx: tx.clone(),
         linhas: leia_rx,
+    };
+    let mut cart = ChannelCartesiano { tx: tx.clone() };
+    let mut graf = ChannelGraf {
+        tx: tx.clone(),
+        eventos: graf_rx,
     };
     let hook: Box<dyn DebugHook> = if debug {
         let (pause_tx, pause_rx) = mpsc::channel::<expressa::runtime::DebugPaused>();
@@ -290,8 +359,8 @@ fn correr(
             &mut out,
             &mut err,
             &mut leia,
-            None,
-            None,
+            Some(&mut cart),
+            Some(&mut graf),
             &args,
         )
     }));
@@ -649,6 +718,83 @@ escreva(n)"#;
         assert!(
             evs.iter()
                 .any(|ev| matches!(ev, EventoExec::Fim { ok: true, .. })),
+            "{evs:?}"
+        );
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn mostre_cartesiano_emite_folha() {
+        let dir = std::env::temp_dir().join(format!(
+            "aula-cart-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let src = r#"
+cart = importe "cartesiano"
+g = cart::grafico()
+g.cart::eixos(-1, 1, -1, 1)
+g.cart::plote(função(x) { x }, :azul)
+d = cart::documento()
+d.cart::adicione(g)
+d.cart::mostre()
+"#;
+        std::fs::write(dir.join("t.lep"), src).unwrap();
+        let mut e = Execucao::default();
+        e.iniciar(
+            src.into(),
+            dir.join("t.lep").display().to_string(),
+            dir.clone(),
+            vec![],
+            false,
+            vec![],
+        );
+        let evs = espera_evento(&mut e, 400);
+        assert!(
+            evs.iter().any(|ev| matches!(ev, EventoExec::Folha(_))),
+            "{evs:?}"
+        );
+        assert!(
+            evs.iter().any(|ev| matches!(ev, EventoExec::Fim { ok: true, .. })),
+            "{evs:?}"
+        );
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn mostre_tela_emite_pixels() {
+        let dir = std::env::temp_dir().join(format!(
+            "aula-graf-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let src = r#"
+tela_grafica = importe "tela_grafica"
+g = tela_grafica::nova(8, 8)
+g.tela_grafica::ponto(1, 1)
+g.tela_grafica::mostre()
+"#;
+        std::fs::write(dir.join("t.lep"), src).unwrap();
+        let mut e = Execucao::default();
+        e.iniciar(
+            src.into(),
+            dir.join("t.lep").display().to_string(),
+            dir.clone(),
+            vec![],
+            false,
+            vec![],
+        );
+        let evs = espera_evento(&mut e, 400);
+        assert!(
+            evs.iter().any(|ev| matches!(ev, EventoExec::TelaGraf(_))),
             "{evs:?}"
         );
         let _ = std::fs::remove_dir_all(dir);

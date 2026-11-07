@@ -12,6 +12,7 @@ use crate::{
     debug::{Depuracao, valor_observado},
     documentos::Abas,
     editor::new_editor,
+    grafico::{Graficos, png_folha, png_tela},
     projeto::Projeto,
     repl::{Repl, TipoLinha},
 };
@@ -1112,6 +1113,108 @@ pub fn painel_repl(
                         .child("Reiniciar"),
                 ),
         )
+}
+
+pub fn painel_graficos(
+    g: Graficos,
+    paleta: Paleta,
+    destacado: bool,
+    on_destacar: impl Fn() + Copy + 'static,
+    on_fechar_tela: impl Fn(u64) + Copy + 'static,
+    on_clique: impl Fn(u64, f64, f64, f64, f64) + Copy + 'static,
+) -> impl IntoElement {
+    let mut corpo = rect()
+        .direction(Direction::Vertical)
+        .width(Size::fill())
+        .spacing(6.0)
+        .padding(6.0);
+    for folha in &g.folhas {
+        let (w, h, png) = png_folha(folha);
+        corpo = corpo.child(
+            ImageViewer::new((format!("folha-{}", folha.id), Bytes::from(png)))
+                .width(Size::px(w as f32))
+                .height(Size::px(h as f32)),
+        );
+    }
+    for tela in &g.telas {
+        let id = tela.id;
+        let (w, h, png) = png_tela(tela);
+        let wf = w as f32;
+        let hf = h as f32;
+        corpo = corpo.child(
+            rect()
+                .direction(Direction::Vertical)
+                .child(
+                    rect()
+                        .direction(Direction::Horizontal)
+                        .width(Size::fill())
+                        .main_align(Alignment::SpaceBetween)
+                        .child(label().font_size(12.0).text(format!("tela {id}")))
+                        .child(
+                            Button::new()
+                                .flat()
+                                .compact()
+                                .on_press(move |_| on_fechar_tela(id))
+                                .child("×"),
+                        ),
+                )
+                .child(
+                    rect()
+                        .on_press(move |e: Event<PressEventData>| {
+                            if let PressEventData::Mouse(m) = &*e {
+                                let p = m.element_location;
+                                on_clique(id, p.x, p.y, wf as f64, hf as f64);
+                            }
+                        })
+                        .child(
+                            ImageViewer::new((format!("tela-{id}"), Bytes::from(png)))
+                                .width(Size::px(wf))
+                                .height(Size::px(hf)),
+                        ),
+                ),
+        );
+    }
+    let mut caixa = rect()
+        .direction(Direction::Vertical)
+        .width(if destacado { Size::px(440.0) } else { Size::fill() })
+        .height(if destacado { Size::px(360.0) } else { Size::px(240.0) })
+        .background(paleta.status)
+        .color(paleta.texto)
+        .border(
+            Border::new()
+                .width(BorderWidth {
+                    top: 1.0,
+                    right: 1.0,
+                    bottom: 1.0,
+                    left: 1.0,
+                })
+                .fill(paleta.borda),
+        )
+        .child(
+            rect()
+                .direction(Direction::Horizontal)
+                .width(Size::fill())
+                .padding((4.0, 6.0, 4.0, 6.0))
+                .main_align(Alignment::SpaceBetween)
+                .child(
+                    label()
+                        .font_size(12.0)
+                        .font_weight(FontWeight::BOLD)
+                        .text("Gráficos"),
+                )
+                .child(
+                    Button::new()
+                        .flat()
+                        .compact()
+                        .on_press(move |_| on_destacar())
+                        .child(if destacado { "Acoplar" } else { "Destacar" }),
+                ),
+        )
+        .child(ScrollView::new().height(Size::fill()).child(corpo));
+    if destacado {
+        caixa = caixa.position(Position::new_global().top(80.).right(20.));
+    }
+    caixa
 }
 
 

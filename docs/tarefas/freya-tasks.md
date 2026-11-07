@@ -1,6 +1,6 @@
 # Port Expressa Aula GUI to Freya
 
-Status: Stages 0–8 on `aula/ui-freya`. **Linux and Windows are both product targets.** GTK `expressa-aula` keeps shipping until Freya reaches local-editor + run parity.
+Status: Stages 0–9 on `aula/ui-freya`. **Linux and Windows are both product targets.** GTK `expressa-aula` keeps shipping until Freya reaches local-editor + run parity.
 
 ## Platforms
 
@@ -287,9 +287,9 @@ Work:
 
 Acceptance:
 
-- [ ] `eixos` + `plotar` + `mostre()` updates the same window.
-- [ ] Pixel `nova()` click returns in `evento()`.
-- [ ] Closing X does not recreate the window until the next F5.
+- [x] `eixos` + `plotar` + `mostre()` updates the same window.
+- [x] Pixel `nova()` click returns in `evento()`.
+- [x] Closing X does not recreate the window until the next F5.
 
 ---
 
