@@ -1,7 +1,8 @@
 # Expressa Aula (Freya)
 
 Editor Freya da Expressa Aula. Corre **em paralelo** ao binário GTK
-`expressa-aula` (`aula/ui`). Não substitui o GTK até o port estar completo.
+`expressa-aula` (`aula/ui`). O GTK permanece; este crate não o substitui.
+Correções: `freya-tasks/`.
 
 ```bash
 LIBCLANG_PATH=/usr/lib/llvm-22/lib cargo run -p expressa-aula-freya

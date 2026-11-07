@@ -1,6 +1,8 @@
 # Port Expressa Aula GUI to Freya
 
-Status: Stages 0–9 on `aula/ui-freya`. **Linux and Windows are both product targets.** GTK `expressa-aula` keeps shipping until Freya reaches local-editor + run parity.
+Status: Stages 0–9 on `aula/ui-freya`. **Linux and Windows are both product targets.** GTK `expressa-aula` **keeps shipping**. Freya is a second editor (`expressa-aula-freya`); there is no cutover and `aula/ui` is not archived.
+
+Bug-fix slices after the port: [`freya-tasks/`](../../freya-tasks/README.md) (one markdown file per task).
 
 ## Platforms
 
@@ -69,8 +71,8 @@ aula/ui-freya/       crate expressa-aula-freya (GTK aula/ui stays)
   src/grafico.rs     cartesiano + tela_grafica hosts
 ```
 
-Binary name during dual-ship: `expressa-aula-freya` (`expressa-aula-freya.exe` on Windows).
-After cutover: this crate becomes `expressa-aula` and GTK `aula/ui` is archived.
+Binary name: `expressa-aula-freya` (`expressa-aula-freya.exe` on Windows).
+The GTK binary stays `expressa-aula`. Dual-ship is the product, not a temporary phase.
 
 Freya features to turn on as needed: `code-editor`, `sdk-tokio` (Exec on a Tokio runtime), `devtools` in debug builds, `plot` only if cartesiano uses plotters. Leave `terminal` / PTY off; Aula’s console is a bounded text pane, not a system shell.
 
@@ -158,7 +160,7 @@ Acceptance:
 
 Work:
 
-- Syntax highlight: `freya-code-editor` wants a **tree-sitter** grammar (`EditorLanguage { language, highlights_query }`). There is no `tree-sitter-expressa` yet. Add a small grammar covering keywords (both accented and ASCII forms from `KEYWORDS`), comments, strings, numbers, `:ident`. Keep `expressa.lang` for GTK until cutover.
+- Syntax highlight: `freya-code-editor` wants a **tree-sitter** grammar (`EditorLanguage { language, highlights_query }`). There is no `tree-sitter-expressa` yet. Add a small grammar covering keywords (both accented and ASCII forms from `KEYWORDS`), comments, strings, numbers, `:ident`. Keep `expressa.lang` for GTK Aula (it stays).
 - Indent: extract the pure algorithm from `indent.rs` (today it reads `SourceBuffer`). Apply on Enter, `}` / `fim`, Tab / Shift+Tab, Ctrl+Alt+\\.
 - Ctrl+/ comment toggle, Ctrl+D duplicate line, Alt+↑/↓ move, matching `inicio`/`fim` / `{`/`}` highlight.
 - Ctrl+F search (Esc closes).
@@ -313,9 +315,9 @@ Acceptance:
 
 ---
 
-## Stage 11 — Packaging, Windows pass, cutover
+## Stage 11 — Packaging and Windows pass
 
-**Goal:** ship Linux and Windows without GTK. This is the first time the Freya UI is walked through on Windows.
+**Goal:** ship Linux and Windows **with both** editors. This is the first time the Freya UI is walked through on Windows. GTK Aula remains the classroom default.
 
 Work:
 
@@ -324,7 +326,7 @@ Work:
 - Inno Setup (or successor of `criar-instalador.ps1`): `expressa-aula-freya.exe`, server, tutorial, exemplos, VC++ CRT. **No** GTK DLLs.
 - Full Windows checklist: ABNT IME, file dialogs, F5, `leia`, theme, exemplos path, installer.
 - Optional software-renderer note in README for both OSes.
-- When Stages 0–10 match `aula/README.md` on Linux **and** the Windows walkthrough passes: rename binary to `expressa-aula`, stop shipping GTK UI, keep GTK crate in-tree one release if needed.
+- Do **not** rename Freya to `expressa-aula` or archive `aula/ui`. Details: `freya-tasks/25-windows-ime-empacote.md`.
 
 Acceptance:
 
@@ -332,7 +334,7 @@ Acceptance:
 - [ ] Linux: instalar o `.deb` numa máquina limpa e F5 um exemplo (precisa de `./empacotar-deb.sh` com Docker; Skia no container).
 - [ ] Windows: walkthrough nativo (IME `função`/`não`, F5, instalador). Script pronto: `empacotar-freya.ps1` (sem DLLs GTK). Sem cross a partir do Linux.
 - [x] `aula/README.md` e `aula/ui-freya/README.md` documentam o binário Freya em paralelo ao GTK.
-- [ ] Cutover (renomear para `expressa-aula` e arquivar GTK): **só quando o usuário pedir**.
+- [x] Cutover (renomear para `expressa-aula` e arquivar GTK): **fora de âmbito**. O GTK permanece.
 
 ---
 
@@ -358,8 +360,9 @@ After PR 7 the app is worth daily use on Linux. Debugger, help, graphics, and Tu
 - GTK Aula tests stay green; do not regress the shipping IDE
 - Manual Windows: only Stage 11 (IME, dialogs, F5, installer)
 
-## Out of scope until cutover
+## Out of scope
 
+- Replacing GTK Aula or renaming Freya to `expressa-aula`
 - Replacing `expressa-tutorial` with Freya
 - Android / Web Freya targets
 - PTY terminal instead of the console pane
