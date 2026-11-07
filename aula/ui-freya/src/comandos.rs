@@ -7,7 +7,8 @@ use freya::prelude::*;
 use freya::text_edit::TextEditor;
 
 use crate::ajuda::{
-    Sugestao, completar, ficha, garantir_importe, palavra_em, prefixo_em, spawn_tutorial,
+    Sugestao, achar_importe, completar_em, deslocamento_importe, ficha, garantir_importe,
+    nome_no_cursor, prefixo_em, spawn_tutorial,
 };
 use crate::atalhos::Acao;
 use crate::debug::Depuracao;
@@ -56,6 +57,7 @@ pub fn aplicar(
     mut repl: State<Repl>,
     graficos: State<Graficos>,
     turma: State<Turma>,
+    mut assinatura_oculta: State<bool>,
 ) {
     match acao {
         Acao::Sair => sair(prefs, editor, status, abas, dialogo),
@@ -152,6 +154,7 @@ pub fn aplicar(
             ajuda.set(None);
             catalogo.set(false);
             sugestoes.set(Vec::new());
+            assinatura_oculta.set(true);
         }
         Acao::Ajuda => mostrar_ajuda(editor, status, ajuda, catalogo),
         Acao::Catalogo => {
@@ -165,9 +168,17 @@ pub fn aplicar(
         Acao::Completar => {
             let texto = editor.read().rope.to_string();
             let byte = crate::editor::byte_do_cursor(&editor.read());
-            sugestoes.set(completar(&texto, byte));
+            let caminho = caminho_aba(&abas.read(), &projeto.read());
+            let arquivos: Vec<String> = projeto
+                .read()
+                .todos
+                .iter()
+                .filter(|n| !n.is_dir && n.rel.ends_with(".lep"))
+                .map(|n| n.rel.clone())
+                .collect();
+            sugestoes.set(completar_em(&texto, byte, &caminho, &arquivos));
         }
-        Acao::IrDefinicao => ir_definicao(editor, status),
+        Acao::IrDefinicao => ir_definicao(editor, status, prefs, abas, projeto),
         Acao::Comentar => {
             comentar(&mut editor.write());
             status.set("Comentário".into());
@@ -1516,15 +1527,16 @@ pub fn mostrar_ajuda(
 ) {
     let texto = editor.read().rope.to_string();
     let byte = crate::editor::byte_do_cursor(&editor.read());
-    let nome = palavra_em(&texto, byte);
-    match ficha(&nome) {
-        Some(f) => {
+    match nome_no_cursor(&texto, byte).and_then(|n| ficha(&n).map(|f| (n, f))) {
+        Some((nome, f)) => {
             ajuda.set(Some(f));
+            catalogo.set(false);
             status.set(format!("Ajuda: {nome}"));
         }
         None => {
+            ajuda.set(None);
             catalogo.set(true);
-            status.set("Coloque o cursor num nome de função (F1)".into());
+            status.set("Funções nativas".into());
         }
     }
 }
@@ -1542,40 +1554,113 @@ pub fn aplicar_sugestao(
     novo.push_str(&texto[..start]);
     novo.push_str(&s.inserir);
     novo.push_str(&texto[byte..]);
+    let mut extra = 0usize;
     if let Some(m) = &s.importe
         && let Some(com) = garantir_importe(&novo, m)
     {
+        extra = deslocamento_importe(&novo, &com, start);
         novo = com;
     }
     {
         let mut ed = editor.write();
         crate::editor::substituir_texto(&mut ed, &novo);
-        let cursor = start + s.inserir.encode_utf16().count();
+        let cursor = crate::editor::posicao_utf16(&texto, start)
+            + s.inserir.encode_utf16().count()
+            + extra;
         let max = ed.len_utf16_cu();
         ed.move_cursor_to(cursor.min(max));
     }
     sugestoes.set(Vec::new());
 }
 
-fn ir_definicao(mut editor: State<CodeEditorData>, mut status: State<String>) {
+fn caminho_aba(abas: &Abas, projeto: &Projeto) -> String {
+    let Some(path) = abas.atual().caminho.as_ref() else {
+        return String::new();
+    };
+    if let Some(raiz) = projeto.raiz.as_ref()
+        && let Ok(rel) = path.strip_prefix(raiz)
+    {
+        return rel.to_string_lossy().replace('\\', "/");
+    }
+    path.file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_default()
+}
+
+fn ir_definicao(
+    mut editor: State<CodeEditorData>,
+    mut status: State<String>,
+    prefs: State<Prefs>,
+    abas: State<Abas>,
+    projeto: State<Projeto>,
+) {
+    use crate::lang::{native_module, parse_definitions, parse_imports, word_at};
+
     let texto = editor.read().rope.to_string();
     let byte = crate::editor::byte_do_cursor(&editor.read());
-    let nome = palavra_em(&texto, byte);
-    if nome.is_empty() {
-        status.set("Nenhuma definição".into());
+    let (_, linha, col) = crate::lang::linha_no_byte(&texto, byte);
+    let atual = abas.read().atual().caminho.clone();
+    let raiz = projeto.read().raiz.clone();
+
+    if let Some(imp) = parse_imports(linha).first()
+        && native_module(&imp.spec).is_none()
+        && let Some(p) = achar_importe(&imp.spec, atual.as_deref(), raiz.as_deref())
+    {
+        status.set(format!("Abriu {}", p.display()));
+        abrir_caminho(p, editor, prefs, abas, status);
         return;
     }
-    for (i, linha) in texto.lines().enumerate() {
-        let t = linha.trim_start();
-        if (t.starts_with(&format!("{nome} =")) || t.starts_with(&format!("{nome}=")))
-            && let Some(pos) = crate::documentos::posicao_linha(&texto, i + 1)
-        {
-            editor.write().move_cursor_to(pos);
-            status.set(format!("Definição de {nome}"));
-            return;
+
+    let Some(w) = word_at(linha, col) else {
+        status.set("Nenhuma definição".into());
+        return;
+    };
+
+    if w.alias.is_none() {
+        for d in parse_definitions(&texto) {
+            if d.name == w.name
+                && let Some(pos) = crate::documentos::posicao_linha(&texto, d.line + 1)
+            {
+                editor.write().move_cursor_to(pos);
+                status.set(format!("Definição de {}", w.name));
+                return;
+            }
         }
     }
-    status.set(format!("Não achou definição de {nome}"));
+
+    if let Some(alias) = &w.alias {
+        for imp in parse_imports(&texto) {
+            let nome = imp.alias.as_deref().unwrap_or(imp.spec.as_str());
+            if nome != alias.as_str() && imp.spec != *alias {
+                continue;
+            }
+            if native_module(&imp.spec).is_some() {
+                status.set(format!("{} é nativa (F1)", w.name));
+                return;
+            }
+            if let Some(p) = achar_importe(&imp.spec, atual.as_deref(), raiz.as_deref()) {
+                let src = std::fs::read_to_string(&p).unwrap_or_default();
+                let linha_def = parse_definitions(&src)
+                    .into_iter()
+                    .find(|d| d.top_level && d.name == w.name)
+                    .map(|d| d.line + 1);
+                abrir_caminho(p, editor, prefs, abas, status);
+                if let Some(n) = linha_def
+                    && let Some(pos) = crate::documentos::posicao_linha(&src, n)
+                {
+                    editor.write().move_cursor_to(pos);
+                }
+                return;
+            }
+        }
+    }
+
+    if let Some(p) = achar_importe(&w.name, atual.as_deref(), raiz.as_deref()) {
+        status.set(format!("Abriu {}", p.display()));
+        abrir_caminho(p, editor, prefs, abas, status);
+        return;
+    }
+    status.set(format!("Não achou definição de {}", w.name));
 }
 
 pub fn achar(

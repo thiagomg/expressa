@@ -44,7 +44,7 @@ use crate::{
         pedir_apagar, pedir_nome, recuperar_rascunhos, reiniciar_repl, remover_observado,
         resolver_conflito, responder_leia, restaurar_arquivo, selecionar_aba,
     },
-    ajuda::{Sugestao, catalogo, ficha},
+    ajuda::{Sugestao, assinatura, catalogo, ficha},
     console::Console,
     debug::Depuracao,
     execucao::Execucao,
@@ -66,7 +66,7 @@ use crate::{
         dialogo_apagar, dialogo_comparar, dialogo_confirmar, dialogo_conflito, dialogo_linha,
         dialogo_nome, dialogo_projetos, dialogo_recuperar, dialogo_servidor, editor_inicial,
         painel_arvore, painel_atalhos, painel_catalogo, painel_console, painel_debug, painel_ficha,
-        painel_graficos, painel_repl, painel_sugestoes, tema_freya,
+        painel_assinatura, painel_graficos, painel_repl, painel_sugestoes, tema_freya,
     },
 };
 
@@ -111,6 +111,7 @@ fn app() -> impl IntoElement {
     let ajuda = use_state(|| None::<String>);
     let catalogo_aberto = use_state(|| false);
     let sugestoes = use_state(Vec::<Sugestao>::new);
+    let mut assinatura_oculta = use_state(|| false);
     let depuracao = use_state(Depuracao::default);
     let observado_campo = use_state(String::new);
     let mut repl = use_state(Repl::default);
@@ -183,6 +184,13 @@ fn app() -> impl IntoElement {
                     turma,
                     dialogo,
                 );
+            }
+            if assinatura_oculta() {
+                let texto = editor.read().rope.to_string();
+                let byte = crate::editor::byte_do_cursor(&editor.read());
+                if assinatura(&texto, byte).is_none() {
+                    assinatura_oculta.set(false);
+                }
             }
         }
             }
@@ -284,6 +292,7 @@ fn app() -> impl IntoElement {
             repl,
             graficos,
             turma,
+            assinatura_oculta,
         );
     };
 
@@ -557,6 +566,16 @@ fn app() -> impl IntoElement {
                 },
             )
         }))
+        .maybe_child({
+            let texto = editor.read().rope.to_string();
+            let byte = crate::editor::byte_do_cursor(&editor.read());
+            let dica = if assinatura_oculta() || !sugestoes.read().is_empty() {
+                None
+            } else {
+                assinatura(&texto, byte)
+            };
+            dica.map(|texto| painel_assinatura(texto, paleta))
+        })
         .maybe_child((!sugestoes.read().is_empty()).then(move || {
             painel_sugestoes(sugestoes.read().clone(), paleta, move |s| {
                 aplicar_sugestao(s, editor, sugestoes)

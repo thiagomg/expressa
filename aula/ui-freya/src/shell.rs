@@ -977,6 +977,27 @@ pub fn painel_catalogo(
         )
 }
 
+pub fn painel_assinatura(texto: String, paleta: Paleta) -> impl IntoElement {
+    rect()
+        .position(Position::new_global().top(72.).left(280.))
+        .content(Content::fit())
+        .background(paleta.fundo)
+        .color(paleta.texto)
+        .corner_radius(6.0)
+        .padding(8.0)
+        .border(
+            Border::new()
+                .width(BorderWidth {
+                    top: 1.0,
+                    right: 1.0,
+                    bottom: 1.0,
+                    left: 1.0,
+                })
+                .fill(paleta.borda),
+        )
+        .child(label().font_size(13.0).text(texto))
+}
+
 pub fn painel_sugestoes(
     itens: Vec<Sugestao>,
     paleta: Paleta,
