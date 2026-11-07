@@ -188,8 +188,11 @@ pub fn garantir_lep_nome(nome: &str) -> String {
     }
 }
 
-pub fn escolher_pasta() -> Option<PathBuf> {
-    rfd::FileDialog::new().pick_folder()
+pub async fn escolher_pasta() -> Option<PathBuf> {
+    rfd::AsyncFileDialog::new()
+        .pick_folder()
+        .await
+        .map(|h| h.path().to_path_buf())
 }
 
 pub fn instalar_exemplos() -> Result<PathBuf, String> {

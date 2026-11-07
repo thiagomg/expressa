@@ -387,19 +387,22 @@ pub fn expected_da_aba(aba: &Aba, path: &Path) -> expressa_aula_storage::Expecte
     }
 }
 
-pub fn escolher_abrir() -> Option<PathBuf> {
-    rfd::FileDialog::new()
+pub async fn escolher_abrir() -> Option<PathBuf> {
+    rfd::AsyncFileDialog::new()
         .add_filter("Expressa", &["lep"])
         .add_filter("Todos", &["*"])
         .pick_file()
+        .await
+        .map(|h| h.path().to_path_buf())
 }
 
-pub fn escolher_salvar(sugerido: &str) -> Option<PathBuf> {
-    rfd::FileDialog::new()
+pub async fn escolher_salvar(sugerido: &str) -> Option<PathBuf> {
+    rfd::AsyncFileDialog::new()
         .add_filter("Expressa", &["lep"])
         .set_file_name(sugerido)
         .save_file()
-        .map(garantir_lep)
+        .await
+        .map(|h| garantir_lep(h.path().to_path_buf()))
 }
 
 pub fn sincronizar(abas: &mut Abas, editor: &CodeEditorData) {

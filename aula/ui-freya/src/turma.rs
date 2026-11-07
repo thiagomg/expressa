@@ -215,6 +215,17 @@ impl Turma {
         Ok(())
     }
 
+    pub fn aplicar_de(&mut self, outra: Turma) {
+        self.canal = outra.canal;
+        self.spawned = outra.spawned;
+        self.url = outra.url;
+        self.aluno = outra.aluno;
+        self.projeto = outra.projeto;
+        self.projetos = outra.projetos;
+        self.conectado = outra.conectado;
+        self.recado = outra.recado;
+    }
+
     fn canal(&self) -> Result<Channel, String> {
         self.canal
             .lock()

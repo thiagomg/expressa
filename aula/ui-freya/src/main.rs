@@ -14,6 +14,7 @@ mod debug;
 mod documentos;
 mod execucao;
 mod edicao;
+mod fundo;
 mod grafico;
 mod editor;
 mod indent;
@@ -33,7 +34,7 @@ use freya::{
 use crate::{
     atalhos::{Acao, acao_de_tecla_com_foco},
     comandos::{
-        achar, adicionar_observado, abrir_projeto_servidor, aplicar, aplicar_eventos,
+        achar, adicionar_observado, abrir_projeto_servidor, aplicar, aplicar_eventos, aplicar_fundo,
         aplicar_sugestao, alternar_ponto_em, clicar_arvore, confirmar_apagar, confirmar_descarte, confirmar_nome,
         conectar_servidor, criar_projeto_servidor, descartar_rascunhos, escolher_projeto,
         fechar_dialogo_rascunhos,
@@ -47,6 +48,7 @@ use crate::{
     console::Console,
     debug::Depuracao,
     execucao::Execucao,
+    fundo::Fundo,
     grafico::Graficos,
     repl::Repl,
     documentos::{Abas, Depois, DepoisNome, Dialogo, gravar_rascunhos, sincronizar},
@@ -124,6 +126,7 @@ fn app() -> impl IntoElement {
     let mut largura_debug = use_state(|| LARGURA_DEBUG);
     let mut arrasto_arvore = use_state(|| None::<f32>);
     let mut arrasto_debug = use_state(|| None::<f32>);
+    let fundo = use_provide_root_context(Fundo::default);
     let foco_campos = use_provide_root_context(FocoCampos::default);
     let scroll_editor = use_scroll_controller(ScrollConfig::default);
     let servidor_campo = use_state(|| prefs_iniciais.servidor.clone());
@@ -145,7 +148,11 @@ fn app() -> impl IntoElement {
         }
     });
 
-    use_future(move || async move {
+    use_future({
+        let fundo = fundo.clone();
+        move || {
+            let fundo = fundo.clone();
+            async move {
         loop {
             tokio::time::sleep(std::time::Duration::from_millis(16)).await;
             let eventos = exec.write().drenar();
@@ -163,6 +170,21 @@ fn app() -> impl IntoElement {
                     dialogo,
                     graficos,
                 );
+            }
+            let pendentes = fundo.drenar();
+            if !pendentes.is_empty() {
+                aplicar_fundo(
+                    pendentes,
+                    editor,
+                    prefs,
+                    abas,
+                    status,
+                    projeto,
+                    turma,
+                    dialogo,
+                );
+            }
+        }
             }
         }
     });
