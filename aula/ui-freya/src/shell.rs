@@ -158,10 +158,28 @@ impl Component for CampoTexto {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct MarcasVer {
+    pub arquivos: bool,
+    pub painel: bool,
+    pub escuro: bool,
+    pub repl: bool,
+}
+
+pub fn rotulo_menu(nome: &str, atalho: &str, marcado: bool) -> String {
+    let marca = if marcado { "✓ " } else { "" };
+    if atalho.is_empty() {
+        format!("{marca}{nome}")
+    } else {
+        format!("{marca}{nome}    {atalho}")
+    }
+}
+
 pub fn barra_menus(
     aberto: State<MenuAberto>,
     paleta: Paleta,
     on_acao: impl Fn(Acao) + Copy + 'static,
+    marcas: MarcasVer,
 ) -> impl IntoElement {
     rect()
         .direction(Direction::Horizontal)
@@ -196,6 +214,7 @@ pub fn barra_menus(
                 ("Salvar como…", "Ctrl+Shift+S", Acao::SalvarComo),
                 ("Sair", "Ctrl+Q", Acao::Sair),
             ],
+            |_| false,
         ))
         .child(botao_menu(
             "Executar",
@@ -207,6 +226,7 @@ pub fn barra_menus(
                 ("Executar", "F5", Acao::Executar),
                 ("Parar", "", Acao::Parar),
             ],
+            |_| false,
         ))
         .child(botao_menu(
             "Depurar",
@@ -221,6 +241,7 @@ pub fn barra_menus(
                 ("Entrar", "F11", Acao::Entrar),
                 ("Sair da função", "Shift+F11", Acao::SairFuncao),
             ],
+            |_| false,
         ))
         .child(botao_menu(
             "Ver",
@@ -240,6 +261,14 @@ pub fn barra_menus(
                 ("Buscar…", "Ctrl+F", Acao::Buscar),
                 ("REPL", "", Acao::Repl),
             ],
+            move |acao| match acao {
+                Acao::MostrarArquivos => marcas.arquivos,
+                Acao::MostrarPainel => marcas.painel,
+                Acao::TemaEscuro => marcas.escuro,
+                Acao::TemaClaro => !marcas.escuro,
+                Acao::Repl => marcas.repl,
+                _ => false,
+            },
         ))
         .child(botao_menu(
             "Ajuda",
@@ -252,6 +281,7 @@ pub fn barra_menus(
                 ("Atalhos", "Ctrl+?", Acao::Atalhos),
                 ("Tutoriais", "", Acao::Tutoriais),
             ],
+            |_| false,
         ))
 }
 
@@ -262,6 +292,7 @@ fn botao_menu(
     _paleta: Paleta,
     on_acao: impl Fn(Acao) + Copy + 'static,
     itens: &'static [(&'static str, &'static str, Acao)],
+    marcado: impl Fn(Acao) -> bool + Copy + 'static,
 ) -> impl IntoElement {
     let esta = aberto() == id;
     rect()
@@ -283,11 +314,7 @@ fn botao_menu(
             let mut menu = Menu::new().on_close(move |_| aberto.set(MenuAberto::Nenhum));
             for (nome, atalho, acao) in itens {
                 let acao = *acao;
-                let texto = if atalho.is_empty() {
-                    (*nome).to_string()
-                } else {
-                    format!("{nome}    {atalho}")
-                };
+                let texto = rotulo_menu(nome, atalho, marcado(acao));
                 menu = menu.child(
                     MenuButton::new()
                         .on_press(move |_| {
@@ -1679,6 +1706,13 @@ pub fn painel_graficos(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn menu_ver_marca_o_tema_ativo() {
+        assert_eq!(rotulo_menu("Escuro", "", true), "✓ Escuro");
+        assert_eq!(rotulo_menu("Claro", "", false), "Claro");
+        assert_eq!(rotulo_menu("Arquivos", "F7", true), "✓ Arquivos    F7");
+    }
 
     #[test]
     fn arrasto_respeita_minimo_e_maximo() {

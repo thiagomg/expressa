@@ -51,7 +51,7 @@ use crate::{
     fundo::Fundo,
     grafico::Graficos,
     repl::Repl,
-    documentos::{Abas, Depois, DepoisNome, Dialogo, gravar_rascunhos, sincronizar},
+    documentos::{Abas, Depois, DepoisNome, Dialogo, gravar_rascunhos, sincronizar, titulo_da_janela},
     execucao::caminho_relativo,
     turma::Turma,
     edicao::{reindentar_depois, tecla_pede_indent, tratar_tecla},
@@ -61,6 +61,7 @@ use crate::{
     shell::{
         MenuAberto, Paleta, barra_abas, barra_argumentos, barra_busca, barra_ferramentas,
         LARGURA_ARVORE, LARGURA_DEBUG, alca_vertical, aplicar_arrasto, barra_menus, barra_status,
+        MarcasVer,
         linha_gutter,
         FocoCampos,
         dialogo_apagar, dialogo_comparar, dialogo_confirmar, dialogo_conflito, dialogo_linha,
@@ -250,6 +251,7 @@ fn app() -> impl IntoElement {
     let coluna = editor.read().cursor_col();
     let mut abas_agora = abas.read().clone();
     abas_agora.atual_mut().dirty = editor.read().is_edited();
+    Platform::get().set_window_title(Platform::window_id(), titulo_da_janela(abas_agora.atual()));
     let dialogo_agora = dialogo.read().clone();
     let projeto_agora = projeto.read().clone();
     let depuracao_agora = depuracao.read().clone();
@@ -327,7 +329,17 @@ fn app() -> impl IntoElement {
             arrasto_arvore.set(None);
             arrasto_debug.set(None);
         })
-        .child(barra_menus(menu, paleta, on_acao))
+        .child(barra_menus(
+            menu,
+            paleta,
+            on_acao,
+            MarcasVer {
+                arquivos: projeto_agora.visivel,
+                painel: depuracao_agora.visivel,
+                escuro: dark,
+                repl: repl_agora.visivel,
+            },
+        ))
         .child(barra_ferramentas(paleta, on_acao))
         .child(barra_argumentos(paleta, args))
         .child(barra_abas(

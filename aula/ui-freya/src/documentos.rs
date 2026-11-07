@@ -244,6 +244,15 @@ impl Abas {
     }
 }
 
+/// OS window title: `Expressa Aula — nome.lep *` when the current tab is dirty.
+pub fn titulo_da_janela(aba: &Aba) -> String {
+    if aba.dirty {
+        format!("Expressa Aula — {} *", aba.nome)
+    } else {
+        format!("Expressa Aula — {}", aba.nome)
+    }
+}
+
 /// 1-based line → UTF-16 cursor at the start of that line.
 pub fn posicao_linha(texto: &str, linha: usize) -> Option<usize> {
     if linha == 0 {
@@ -496,6 +505,15 @@ mod tests {
         a.snapshot = true;
         a.dirty = false;
         assert_eq!(Abas::rotulo(&a), "a.lep 🔒");
+    }
+
+    #[test]
+    fn titulo_mostra_estrela_quando_sujo() {
+        let mut a = Aba::vazia(1, "");
+        a.nome = "poema.lep".into();
+        assert_eq!(titulo_da_janela(&a), "Expressa Aula — poema.lep");
+        a.dirty = true;
+        assert_eq!(titulo_da_janela(&a), "Expressa Aula — poema.lep *");
     }
 
     #[test]
