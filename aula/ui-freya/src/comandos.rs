@@ -1092,7 +1092,7 @@ fn alternar_ponto(
     abas: State<Abas>,
     mut status: State<String>,
     projeto: State<Projeto>,
-    mut exec: State<Execucao>,
+    exec: State<Execucao>,
     mut depuracao: State<Depuracao>,
 ) {
     let linha = (editor.read().cursor_row() + 1) as u32;
@@ -1101,19 +1101,17 @@ fn alternar_ponto(
         abas.read().atual().caminho.as_deref(),
     );
     let ligado = depuracao.write().alternar_ponto(rel.clone(), linha);
-    if exec.read().rodando {
-        let cmd = if ligado {
-            format!("ponto {rel}:{linha}")
-        } else {
-            format!("remover {rel}:{linha}")
-        };
-        exec.write().comando(&cmd);
+    let rodando = exec.read().rodando;
+    status.set(recado_ponto(ligado, &rel, linha, rodando));
+}
+
+pub fn recado_ponto(ligado: bool, rel: &str, linha: u32, rodando: bool) -> String {
+    match (ligado, rodando) {
+        (true, true) => format!("Ponto em {rel}:{linha} vale na próxima execução"),
+        (false, true) => format!("Sem ponto em {rel}:{linha} na próxima execução"),
+        (true, false) => format!("Ponto em {rel}:{linha}"),
+        (false, false) => format!("Removeu ponto {rel}:{linha}"),
     }
-    status.set(if ligado {
-        format!("Ponto em {rel}:{linha}")
-    } else {
-        format!("Removeu ponto {rel}:{linha}")
-    });
 }
 
 pub fn adicionar_observado(nome: &str, mut depuracao: State<Depuracao>, mut campo: State<String>) {
@@ -1442,4 +1440,16 @@ pub fn selecionar_aba(
         return;
     }
     trocar_aba(&mut editor.write(), &mut abas.write(), idx, &prefs.read());
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn ponto_durante_corrida_vale_depois() {
+        assert!(recado_ponto(true, "app.lep", 2, true).contains("próxima execução"));
+        assert!(!recado_ponto(true, "app.lep", 2, false).contains("próxima"));
+        assert!(recado_ponto(false, "app.lep", 2, false).contains("Removeu"));
+    }
 }
