@@ -1,0 +1,18 @@
+[package]
+name = "expressa-aula-freya"
+version.workspace = true
+edition.workspace = true
+publish = false
+description = "Editor Freya da Expressa Aula (em paralelo ao GTK)"
+
+[lints]
+workspace = true
+
+[[bin]]
+name = "expressa-aula-freya"
+path = "src/main.rs"
+
+[dependencies]
+expressa = { workspace = true }
+freya = { version = "0.5", features = ["code-editor"] }
+dirs = "6"

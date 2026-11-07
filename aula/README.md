@@ -8,7 +8,8 @@ IDE integrada para ser usada por alunos
 | `expressa-aula-proto` | protobuf do gRPC |
 | `expressa-aula-storage` | gravação atômica e revisões dos arquivos do projeto |
 | `expressa-aula-server` | Repositório de arquivos: diretórios dos estudantes e local |
-| `expressa-aula` (`aula/ui`) | editor de texto: lista, Executar (F5) / Depurar (F6) no próprio processo |
+| `expressa-aula` (`aula/ui`) | editor GTK: lista, Executar (F5) / Depurar (F6) no próprio processo |
+| `expressa-aula-freya` (`aula/ui-freya`) | o mesmo editor em Freya, em paralelo; o GTK continua |
 
 ## Layout no disco
 

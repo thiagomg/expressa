@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = [".", "aula/proto", "aula/storage", "aula/server", "aula/ui", "aula/tutorial"]
+members = [".", "aula/proto", "aula/storage", "aula/server", "aula/ui", "aula/ui-freya", "aula/tutorial"]
 # Built by cargo-fuzz with nightly; see fuzz/README.md.
 exclude = ["fuzz"]
 
@@ -28,6 +28,11 @@ too_many_arguments = "allow"
 result_large_err = "allow"
 large_enum_variant = "allow"
 type_complexity = "allow"
+
+# bindgen 0.73 allows syn 3, but prettyplease 0.2 still speaks syn 2.
+# serde_derive 1.0.229 pulls syn 3 into the workspace; pin bindgen to syn 2.
+[patch.crates-io]
+bindgen = { path = "vendor/bindgen" }
 
 [package]
 name = "expressa"
