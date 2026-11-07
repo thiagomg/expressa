@@ -7,6 +7,7 @@ use freya::{
 
 use crate::{
     atalhos::{Acao, ATALHOS},
+    console::Console,
     documentos::Abas,
     editor::new_editor,
     projeto::Projeto,
@@ -247,6 +248,107 @@ pub fn barra_ferramentas(
         .child(botao("Depurar", Acao::Depurar, on_acao))
         .child(botao("A−", Acao::ZoomMenos, on_acao))
         .child(botao("A+", Acao::ZoomMais, on_acao))
+}
+
+pub fn barra_argumentos(
+    paleta: Paleta,
+    args: State<String>,
+) -> impl IntoElement {
+    rect()
+        .direction(Direction::Horizontal)
+        .width(Size::fill())
+        .height(Size::px(32.0))
+        .background(paleta.botao)
+        .color(paleta.texto)
+        .padding((2.0, 8.0, 2.0, 8.0))
+        .spacing(8.0)
+        .cross_align(Alignment::Center)
+        .child(label().font_size(12.0).text("argumentos:"))
+        .child(
+            Input::new(args)
+                .placeholder("ex.: Ana --ajuda")
+                .width(Size::fill()),
+        )
+}
+
+pub fn painel_console(
+    console: Console,
+    paleta: Paleta,
+    entrada: State<String>,
+    on_leia: impl Fn() + Copy + 'static,
+    on_linha: impl Fn(String) + Copy + 'static,
+) -> impl IntoElement {
+    let mut lista = rect()
+        .direction(Direction::Vertical)
+        .width(Size::fill())
+        .padding(6.0);
+    for (i, linha) in console.linhas.iter().enumerate() {
+        let texto = console.texto_linha(i);
+        let mut row = rect()
+            .direction(Direction::Horizontal)
+            .width(Size::fill());
+        if linha.is_empty() {
+            row = row.child(label().font_size(13.0).font_family("DejaVu Sans Mono").text(" "));
+        } else {
+            for t in linha {
+                let cor = if t.stderr {
+                    (229, 57, 53)
+                } else {
+                    t.fg.unwrap_or(paleta.texto)
+                };
+                row = row.child(
+                    label()
+                        .font_size(13.0)
+                        .font_family("DejaVu Sans Mono")
+                        .color(cor)
+                        .font_weight(if t.negrito {
+                            FontWeight::BOLD
+                        } else {
+                            FontWeight::NORMAL
+                        })
+                        .text(t.texto.clone()),
+                );
+            }
+        }
+        row = row.on_press(move |_| on_linha(texto.clone()));
+        lista = lista.child(row);
+    }
+    let mut painel = rect()
+        .direction(Direction::Vertical)
+        .width(Size::fill())
+        .height(Size::px(160.0))
+        .background(paleta.status)
+        .color(paleta.texto)
+        .border(
+            Border::new()
+                .width(BorderWidth {
+                    top: 1.0,
+                    right: 0.0,
+                    bottom: 0.0,
+                    left: 0.0,
+                })
+                .fill(paleta.borda),
+        )
+        .child(ScrollView::new().height(Size::fill()).child(lista));
+    if console.leia_prompt.is_some() {
+        let prompt = console.leia_prompt.clone().unwrap_or_default();
+        painel = painel.child(
+            rect()
+                .direction(Direction::Horizontal)
+                .width(Size::fill())
+                .padding((4.0, 6.0, 4.0, 6.0))
+                .spacing(6.0)
+                .cross_align(Alignment::Center)
+                .child(label().font_size(13.0).text(prompt))
+                .child(
+                    Input::new(entrada)
+                        .placeholder("leia")
+                        .width(Size::fill())
+                        .on_submit(move |_| on_leia()),
+                ),
+        );
+    }
+    painel
 }
 
 pub fn barra_status(linha: usize, coluna: usize, projeto: &str, recado: &str, paleta: Paleta) -> impl IntoElement {

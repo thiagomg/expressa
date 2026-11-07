@@ -138,8 +138,7 @@ pub fn acao_de_tecla(key: &Key, modifiers: Modifiers) -> Option<Acao> {
 pub fn mensagem_reservada(acao: Acao) -> &'static str {
     match acao {
         Acao::Novo | Acao::Abrir | Acao::AbrirProjeto | Acao::Salvar | Acao::SalvarComo | Acao::FecharAba => "",
-        Acao::Executar => "Executar (F5) ainda não está nesta versão Freya.",
-        Acao::Parar => "Parar ainda não está nesta versão Freya.",
+        Acao::Executar | Acao::Parar => "",
         Acao::Depurar => "Depurar (F6) ainda não está nesta versão Freya.",
         Acao::Proximo => "Próximo (F10) ainda não está nesta versão Freya.",
         Acao::Entrar => "Entrar (F11) ainda não está nesta versão Freya.",

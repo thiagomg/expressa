@@ -8,7 +8,9 @@
 mod atalhos;
 mod busca;
 mod comandos;
+mod console;
 mod documentos;
+mod execucao;
 mod edicao;
 mod editor;
 mod indent;
@@ -26,19 +28,22 @@ use freya::{
 use crate::{
     atalhos::{Acao, acao_de_tecla},
     comandos::{
-        achar, aplicar, clicar_arvore, confirmar_apagar, confirmar_descarte, confirmar_nome,
-        escolher_projeto, fechar_aba, ir_para_linha, pasta_selecionada, pedir_apagar, pedir_nome,
-        restaurar_arquivo, selecionar_aba,
+        achar, aplicar, aplicar_eventos, clicar_arvore, confirmar_apagar, confirmar_descarte,
+        confirmar_nome, escolher_projeto, fechar_aba, ir_para_linha, ir_para_saida,
+        pasta_selecionada, pedir_apagar, pedir_nome, responder_leia, restaurar_arquivo,
+        selecionar_aba,
     },
+    console::Console,
+    execucao::Execucao,
     documentos::{Abas, Depois, DepoisNome, Dialogo, gravar_rascunhos, sincronizar},
     edicao::tratar_tecla,
     editor::{FONT_FAMILY, TEXTO_INICIAL, fonte_px, mensagem_sintaxe},
     prefs::Prefs,
     projeto::{Projeto, abrir_raiz, instalar_exemplos, restaurar_inicio},
     shell::{
-        MenuAberto, Paleta, barra_abas, barra_busca, barra_ferramentas, barra_menus, barra_status,
-        dialogo_apagar, dialogo_confirmar, dialogo_linha, dialogo_nome, editor_inicial,
-        painel_arvore, painel_atalhos, tema_freya,
+        MenuAberto, Paleta, barra_abas, barra_argumentos, barra_busca, barra_ferramentas,
+        barra_menus, barra_status, dialogo_apagar, dialogo_confirmar, dialogo_linha, dialogo_nome,
+        editor_inicial, painel_arvore, painel_atalhos, painel_console, tema_freya,
     },
 };
 
@@ -76,6 +81,10 @@ fn app() -> impl IntoElement {
     let mut sintaxe = use_state(String::new);
     let mut projeto = use_state(Projeto::default);
     let nome_campo = use_state(String::new);
+    let mut exec = use_state(Execucao::default);
+    let console = use_state(Console::default);
+    let args = use_state(String::new);
+    let leia_entrada = use_state(String::new);
 
     use_future(move || async move {
         loop {
@@ -90,6 +99,16 @@ fn app() -> impl IntoElement {
             tokio::time::sleep(std::time::Duration::from_millis(400)).await;
             let texto = editor.read().rope.to_string();
             sintaxe.set(mensagem_sintaxe(&texto));
+        }
+    });
+
+    use_future(move || async move {
+        loop {
+            tokio::time::sleep(std::time::Duration::from_millis(16)).await;
+            let eventos = exec.write().drenar();
+            if !eventos.is_empty() {
+                aplicar_eventos(eventos, console, status, exec);
+            }
         }
     });
 
@@ -137,6 +156,9 @@ fn app() -> impl IntoElement {
             busca_aberta,
             busca_termo,
             projeto,
+            exec,
+            console,
+            args,
         );
     };
 
@@ -153,6 +175,7 @@ fn app() -> impl IntoElement {
         })
         .child(barra_menus(menu, paleta, on_acao))
         .child(barra_ferramentas(paleta, on_acao))
+        .child(barra_argumentos(paleta, args))
         .child(barra_abas(
             &abas_agora,
             paleta,
@@ -212,6 +235,15 @@ fn app() -> impl IntoElement {
                         }),
                 ),
         )
+        .child(painel_console(
+            console.read().clone(),
+            paleta,
+            leia_entrada,
+            move || responder_leia(exec, console, leia_entrada),
+            move |linha| {
+                ir_para_saida(&linha, editor, prefs, abas, status, projeto, dialogo)
+            },
+        ))
         .maybe_child(busca_aberta().then(move || {
             barra_busca(
                 paleta,

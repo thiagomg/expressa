@@ -24,6 +24,10 @@ reindenta. Palavras Expressa (função, início, senão) ganham destaque via
 F7 mostra a árvore do projeto; **Arquivo → Abrir projeto…** escolhe a pasta.
 Na primeira abertura copia exemplos em `Documentos/Expressa Aula/exemplos`
 sem sobrescrever arquivos já editados.
+F5 roda o texto da aba (mesmo sem salvar) no interpretador do processo;
+a saída aparece no console. `leia` pede a resposta ali mesmo; **Parar**
+interrompe um laço infinito. A cópia de execução fica em
+`~/.local/share/expressa-aula/exec-freya` (ou o cache do sistema).
 Rascunhos sujos são gravados a cada 5 s em `~/.cache/expressa-aula/rascunho-freya`.
 
 Plano: `docs/tarefas/freya-tasks.md`.

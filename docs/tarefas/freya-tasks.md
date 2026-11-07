@@ -210,10 +210,10 @@ Work:
 
 Acceptance:
 
-- [ ] F5 on `escreva("olá")` prints in the console.
-- [ ] `leia("nome:")` accepts a line without freezing the window.
-- [ ] Infinite `enquanto verdadeiro` stops on Parar.
-- [ ] `conway_jogo_da_vida.lep` runs until Parar (no classroom timeout).
+- [x] F5 on `escreva("olá")` prints in the console.
+- [x] `leia("nome:")` accepts a line without freezing the window.
+- [x] Infinite `enquanto verdadeiro` stops on Parar.
+- [x] `conway_jogo_da_vida.lep` runs until Parar (no classroom timeout).
 
 Do not wait for the debugger to ship a teaching build. After Stage 5, Freya Aula is usable at home on Linux.
 

@@ -1,6 +1,6 @@
 //! Dispatch of menu and keyboard actions.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use freya::code_editor::CodeEditorData;
 use freya::prelude::*;
@@ -14,6 +14,10 @@ use crate::documentos::{
 use crate::edicao::{buscar, comentar, duplicar, mover, recuar_arquivo};
 use crate::editor::fonte_px;
 use crate::prefs::Prefs;
+use crate::console::{Console, parse_error_location};
+use crate::execucao::{
+    EventoExec, Execucao, argumentos, caminho_relativo, preparar_copia, pasta_exec,
+};
 use crate::projeto::{
     Projeto, apagar, abrir_raiz, criar_arquivo, criar_pasta, escolher_pasta, pasta_do_item, renomear,
 };
@@ -31,6 +35,9 @@ pub fn aplicar(
     mut busca_aberta: State<bool>,
     busca_termo: State<String>,
     mut projeto: State<Projeto>,
+    mut exec: State<Execucao>,
+    console: State<Console>,
+    args: State<String>,
 ) {
     match acao {
         Acao::Sair => sair(prefs, editor, status, abas, dialogo),
@@ -42,6 +49,11 @@ pub fn aplicar(
         Acao::Atalhos => {
             atalhos_visiveis.set(true);
             status.set("Atalhos do teclado".into());
+        }
+        Acao::Executar => executar(editor, prefs, abas, status, projeto, exec, console, args),
+        Acao::Parar => {
+            exec.write().parar();
+            status.set("Parando…".into());
         }
         Acao::Novo => novo(editor, prefs, abas, status),
         Acao::Abrir => abrir(editor, prefs, abas, status, dialogo),
@@ -507,6 +519,149 @@ pub fn confirmar_apagar(
 
 pub fn pasta_selecionada(projeto: State<Projeto>) -> String {
     pasta_do_item(&projeto.read())
+}
+
+pub fn executar(
+    editor: State<CodeEditorData>,
+    _prefs: State<Prefs>,
+    mut abas: State<Abas>,
+    mut status: State<String>,
+    projeto: State<Projeto>,
+    mut exec: State<Execucao>,
+    mut console: State<Console>,
+    args: State<String>,
+) {
+    if exec.read().rodando {
+        status.set("Já está rodando — use Parar".into());
+        return;
+    }
+    sincronizar(&mut abas.write(), &editor.read());
+    console.write().limpar();
+    let fonte = editor.read().rope.to_string();
+    let raiz = projeto.read().raiz.clone();
+    let rel = caminho_relativo(
+        raiz.as_deref().unwrap_or(Path::new(".")),
+        abas.read().atual().caminho.as_deref(),
+    );
+    let mut textos = Vec::new();
+    for aba in &abas.read().itens {
+        if let Some(p) = &aba.caminho {
+            textos.push((
+                caminho_relativo(raiz.as_deref().unwrap_or(Path::new(".")), Some(p)),
+                aba.texto.clone(),
+            ));
+        }
+    }
+    textos.push((rel.clone(), fonte.clone()));
+    let ws = match &raiz {
+        Some(raiz) => preparar_copia(raiz, &textos),
+        None => {
+            let dest = pasta_exec();
+            let _ = std::fs::remove_dir_all(&dest);
+            if let Err(e) = std::fs::create_dir_all(&dest) {
+                Err(e.to_string())
+            } else if let Err(e) = std::fs::write(dest.join(&rel), &fonte) {
+                Err(e.to_string())
+            } else {
+                Ok(dest)
+            }
+        }
+    };
+    let ws = match ws {
+        Ok(p) => p,
+        Err(e) => {
+            status.set(e);
+            return;
+        }
+    };
+    let arquivo = ws.join(&rel).display().to_string();
+    let argv = argumentos(&args.read());
+    exec.write()
+        .iniciar(fonte, arquivo, ws, argv);
+    status.set("Rodando…".into());
+}
+
+pub fn aplicar_eventos(
+    eventos: Vec<EventoExec>,
+    mut console: State<Console>,
+    mut status: State<String>,
+    mut exec: State<Execucao>,
+) {
+    for ev in eventos {
+        match ev {
+            EventoExec::Saida { texto, stderr } => console.write().escrever(&texto, stderr),
+            EventoExec::Leia(prompt) => {
+                console.write().leia_prompt = Some(prompt);
+                console.write().entrada.clear();
+            }
+            EventoExec::Fim {
+                ok,
+                erro,
+                arquivo,
+                linha,
+                pilha,
+            } => {
+                exec.write().rodando = false;
+                if ok {
+                    status.set("Terminou".into());
+                } else {
+                    if !erro.is_empty() {
+                        console.write().escrever(&format!("{erro}\n"), true);
+                    }
+                    for p in pilha {
+                        console.write().escrever(&format!("{p}\n"), true);
+                    }
+                    if linha > 0 {
+                        console
+                            .write()
+                            .escrever(&format!(" em {arquivo}:{linha}\n"), true);
+                    }
+                    status.set("Erro na execução".into());
+                }
+            }
+        }
+    }
+}
+
+pub fn responder_leia(
+    mut exec: State<Execucao>,
+    mut console: State<Console>,
+    entrada: State<String>,
+) {
+    let linha = entrada.read().clone();
+    exec.write().responder_leia(linha);
+    console.write().leia_prompt = None;
+    let mut entrada = entrada;
+    entrada.set(String::new());
+}
+
+pub fn ir_para_saida(
+    linha: &str,
+    editor: State<CodeEditorData>,
+    prefs: State<Prefs>,
+    abas: State<Abas>,
+    status: State<String>,
+    projeto: State<Projeto>,
+    dialogo: State<Dialogo>,
+) {
+    let Some((arquivo, n)) = parse_error_location(linha) else {
+        return;
+    };
+    let path = {
+        let raiz = projeto.read().raiz.clone();
+        let p = PathBuf::from(&arquivo);
+        if p.is_file() {
+            p
+        } else if let Some(raiz) = raiz {
+            raiz.join(&arquivo)
+        } else {
+            p
+        }
+    };
+    if path.is_file() {
+        abrir_caminho(path, editor, prefs, abas, status);
+        ir_para_linha(&n.to_string(), editor, status, dialogo);
+    }
 }
 
 pub fn achar(
