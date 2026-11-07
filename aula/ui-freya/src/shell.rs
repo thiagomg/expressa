@@ -611,20 +611,16 @@ pub fn barra_abas(
     on_selecionar: impl Fn(usize) + Copy + 'static,
     on_fechar: impl Fn(u64) + Copy + 'static,
 ) -> impl IntoElement {
-    let mut barra = rect()
+    let mut lista = ScrollView::new()
         .direction(Direction::Horizontal)
         .width(Size::fill())
-        .height(Size::px(32.0))
-        .background(paleta.barra)
-        .color(paleta.texto)
-        .spacing(4.0)
-        .padding((2.0, 6.0, 2.0, 6.0))
-        .cross_align(Alignment::Center);
+        .height(Size::fill())
+        .spacing(4.0);
     for (i, aba) in abas.itens.iter().enumerate() {
         let id = aba.id;
         let atual = i == abas.atual;
         let fundo = if atual { paleta.botao } else { paleta.barra };
-        barra = barra.child(
+        lista = lista.child(
             rect()
                 .key(DiffKey::U64(id))
                 .direction(Direction::Horizontal)
@@ -634,6 +630,12 @@ pub fn barra_abas(
                 .spacing(6.0)
                 .cross_align(Alignment::Center)
                 .on_press(move |_| on_selecionar(i))
+                .on_pointer_down(move |e: Event<PointerEventData>| {
+                    if e.data().button() == Some(MouseButton::Middle) {
+                        e.stop_propagation();
+                        on_fechar(id);
+                    }
+                })
                 .child(label().font_size(13.0).text(Abas::rotulo(aba)))
                 .child(
                     Button::new()
@@ -644,7 +646,13 @@ pub fn barra_abas(
                 ),
         );
     }
-    barra
+    rect()
+        .width(Size::fill())
+        .height(Size::px(36.0))
+        .background(paleta.barra)
+        .color(paleta.texto)
+        .padding((2.0, 6.0, 2.0, 6.0))
+        .child(lista)
 }
 
 pub fn dialogo_confirmar(

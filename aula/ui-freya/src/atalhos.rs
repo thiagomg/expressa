@@ -12,6 +12,8 @@ pub enum Acao {
     Salvar,
     SalvarComo,
     FecharAba,
+    AbaSeguinte,
+    AbaAnterior,
     Sair,
     Executar,
     Parar,
@@ -54,6 +56,8 @@ pub const ATALHOS: &[(&str, &[(&str, &str)])] = &[
             ("Ctrl+N", "arquivo novo"),
             ("Ctrl+S", "salvar"),
             ("Ctrl+W", "fechar a aba"),
+            ("Ctrl+Tab · Ctrl+PgDn", "próxima aba"),
+            ("Ctrl+Shift+Tab · Ctrl+PgUp", "aba anterior"),
             ("Ctrl+Q", "sair"),
         ],
     ),
@@ -116,6 +120,10 @@ pub fn acao_de_tecla(key: &Key, modifiers: Modifiers) -> Option<Acao> {
         Key::Named(NamedKey::F11) if !control && !alt => Some(Acao::Entrar),
         Key::Named(NamedKey::F1) if !control && !alt => Some(Acao::Ajuda),
         Key::Named(NamedKey::F12) if !control && !alt => Some(Acao::IrDefinicao),
+        Key::Named(NamedKey::Tab) if control && !alt && shift => Some(Acao::AbaAnterior),
+        Key::Named(NamedKey::Tab) if control && !alt => Some(Acao::AbaSeguinte),
+        Key::Named(NamedKey::PageDown) if control && !alt => Some(Acao::AbaSeguinte),
+        Key::Named(NamedKey::PageUp) if control && !alt => Some(Acao::AbaAnterior),
         Key::Named(NamedKey::Escape) => Some(Acao::Escapar),
         Key::Named(NamedKey::Enter) if control && !alt => Some(Acao::BuscarProxima),
         Key::Named(NamedKey::ArrowUp) if alt && !control => Some(Acao::MoverCima),
@@ -157,6 +165,8 @@ pub fn acao_vale_em_campo(acao: Acao) -> bool {
             | Acao::MostrarArquivos
             | Acao::MostrarPainel
             | Acao::Escapar
+            | Acao::AbaSeguinte
+            | Acao::AbaAnterior
     )
 }
 
@@ -200,6 +210,22 @@ mod tests {
         assert_eq!(tecla("h", ctrl), Some(Acao::Substituir));
         assert_eq!(tecla(" ", ctrl), Some(Acao::Completar));
         assert_eq!(tecla("d", ctrl), Some(Acao::Duplicar));
+        assert_eq!(
+            acao_de_tecla(&Key::Named(NamedKey::Tab), ctrl),
+            Some(Acao::AbaSeguinte)
+        );
+        assert_eq!(
+            acao_de_tecla(&Key::Named(NamedKey::Tab), ctrl | Modifiers::SHIFT),
+            Some(Acao::AbaAnterior)
+        );
+        assert_eq!(
+            acao_de_tecla(&Key::Named(NamedKey::PageDown), ctrl),
+            Some(Acao::AbaSeguinte)
+        );
+        assert_eq!(
+            acao_de_tecla(&Key::Named(NamedKey::PageUp), ctrl),
+            Some(Acao::AbaAnterior)
+        );
         assert_eq!(
             acao_de_tecla(&Key::Named(NamedKey::Escape), Modifiers::empty()),
             Some(Acao::Escapar)

@@ -140,6 +140,8 @@ pub fn aplicar(
             let _ = salvar(true, editor, prefs, abas, status, turma, dialogo, None, projeto);
         }
         Acao::FecharAba => fechar_aba(None, Depois::SoFechar, editor, prefs, abas, status, dialogo),
+        Acao::AbaSeguinte => ciclar_aba(1, editor, prefs, abas),
+        Acao::AbaAnterior => ciclar_aba(-1, editor, prefs, abas),
         Acao::IrParaLinha => dialogo.set(Dialogo::IrParaLinha),
         Acao::Buscar => {
             substituir_aberta.set(false);
@@ -1902,6 +1904,14 @@ pub fn selecionar_aba(
         return;
     }
     trocar_aba(&mut editor.write(), &mut abas.write(), idx, &prefs.read());
+}
+
+pub fn ciclar_aba(passo: i32, editor: State<CodeEditorData>, prefs: State<Prefs>, abas: State<Abas>) {
+    if abas.read().itens.len() < 2 {
+        return;
+    }
+    let idx = abas.read().vizinha(passo);
+    selecionar_aba(idx, editor, prefs, abas);
 }
 
 #[cfg(test)]

@@ -234,13 +234,16 @@ impl Abas {
         self.atual
     }
 
-    #[allow(dead_code)]
-    pub fn proxima(&mut self, passo: i32) {
+    pub fn vizinha(&self, passo: i32) -> usize {
         let n = self.itens.len() as i32;
         if n == 0 {
-            return;
+            return self.atual;
         }
-        self.atual = (self.atual as i32 + passo).rem_euclid(n) as usize;
+        (self.atual as i32 + passo).rem_euclid(n) as usize
+    }
+
+    pub fn proxima(&mut self, passo: i32) {
+        self.atual = self.vizinha(passo);
     }
 }
 
@@ -531,6 +534,22 @@ mod tests {
         abas.atual_mut().dirty = true;
         assert_eq!(abas.fechar_id(1), Fechar::Confirma);
         assert_eq!(abas.itens.len(), 1);
+    }
+
+    #[test]
+    fn proxima_cicla_as_abas() {
+        let mut abas = Abas::nova("a");
+        abas.nova_aba("b");
+        abas.nova_aba("c");
+        abas.atual = 0;
+        assert_eq!(abas.vizinha(1), 1);
+        abas.proxima(1);
+        assert_eq!(abas.atual, 1);
+        abas.proxima(1);
+        abas.proxima(1);
+        assert_eq!(abas.atual, 0);
+        abas.proxima(-1);
+        assert_eq!(abas.atual, 2);
     }
 
     #[test]
