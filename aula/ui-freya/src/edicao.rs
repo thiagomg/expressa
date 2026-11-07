@@ -4,7 +4,7 @@ use freya::code_editor::CodeEditorData;
 use freya::prelude::*;
 use freya::text_edit::TextEditor;
 
-use crate::busca::{anterior, proxima};
+use crate::busca::{anterior, proxima, substituir_todas};
 use crate::editor::{
     byte_do_cursor, linhas_selecionadas, posicao_utf16, substituir_texto,
 };
@@ -127,6 +127,60 @@ pub fn buscar(editor: &mut CodeEditorData, termo: &str, para_frente: bool) -> Op
     }
 }
 
+fn trecho_selecionado(editor: &CodeEditorData, texto: &str) -> Option<(usize, String)> {
+    let (a, b) = editor.get_selection()?;
+    let from = a.min(b);
+    let to = a.max(b);
+    let start_chars = editor.utf16_cu_to_char(from);
+    let end_chars = editor.utf16_cu_to_char(to);
+    let start: usize = texto.chars().take(start_chars).map(char::len_utf8).sum();
+    let trecho: String = texto.chars().skip(start_chars).take(end_chars.saturating_sub(start_chars)).collect();
+    Some((start, trecho))
+}
+
+/// Replace the current match (or the next one) of `termo` with `novo`.
+pub fn substituir(editor: &mut CodeEditorData, termo: &str, novo: &str) -> Option<String> {
+    if termo.is_empty() {
+        return Some("Digite o que buscar".into());
+    }
+    let texto = editor.rope.to_string();
+    let idx = match trecho_selecionado(editor, &texto) {
+        Some((start, trecho)) if trecho == termo => Some(start),
+        _ => {
+            let de = byte_do_cursor(editor);
+            proxima(&texto, termo, de.saturating_add(1)).or_else(|| proxima(&texto, termo, 0))
+        }
+    };
+    match idx {
+        Some(idx) => {
+            let mut saida = String::new();
+            saida.push_str(&texto[..idx]);
+            saida.push_str(novo);
+            saida.push_str(&texto[idx + termo.len()..]);
+            substituir_texto(editor, &saida);
+            let from = posicao_utf16(&saida, idx);
+            let to = posicao_utf16(&saida, idx + novo.len());
+            editor.set_selection((from, to));
+            None
+        }
+        None => Some(format!("Não achou “{termo}”")),
+    }
+}
+
+pub fn substituir_tudo(editor: &mut CodeEditorData, termo: &str, novo: &str) -> String {
+    if termo.is_empty() {
+        return "Digite o que buscar".into();
+    }
+    let texto = editor.rope.to_string();
+    let n = texto.matches(termo).count();
+    if n == 0 {
+        return format!("Não achou “{termo}”");
+    }
+    let saida = substituir_todas(&texto, termo, novo);
+    substituir_texto(editor, &saida);
+    format!("Substituiu {n}")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -189,6 +243,16 @@ mod tests {
         ed.move_cursor_to_row(1, 7);
         reindentar_depois(&mut ed);
         assert_eq!(ed.rope.to_string(), "se verdadeiro {\nfim\n");
+    }
+
+    #[test]
+    fn substituir_todas_desfaz() {
+        let mut ed = editor_de_teste("ola ola\n");
+        ed.mark_as_saved();
+        assert_eq!(substituir_tudo(&mut ed, "ola", "olá"), "Substituiu 2");
+        assert_eq!(ed.rope.to_string(), "olá olá\n");
+        assert!(ed.undo().is_some());
+        assert_eq!(ed.rope.to_string(), "ola ola\n");
     }
 
     #[test]

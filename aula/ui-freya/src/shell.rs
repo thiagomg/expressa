@@ -252,6 +252,7 @@ pub fn barra_menus(
                 ("Letra normal", "Ctrl+0", Acao::ZoomNormal),
                 ("Ir para linha…", "Ctrl+G", Acao::IrParaLinha),
                 ("Buscar…", "Ctrl+F", Acao::Buscar),
+                ("Substituir…", "Ctrl+H", Acao::Substituir),
                 ("REPL", "", Acao::Repl),
             ],
             move |acao| match acao {
@@ -685,43 +686,83 @@ pub fn barra_busca(
     on_proxima: impl Fn() + Copy + 'static,
     on_anterior: impl Fn() + Copy + 'static,
     on_fechar: impl Fn() + Copy + 'static,
+    substituir: Option<(
+        State<String>,
+        impl Fn() + Copy + 'static,
+        impl Fn() + Copy + 'static,
+    )>,
 ) -> impl IntoElement {
-    rect()
-        .direction(Direction::Horizontal)
+    let altura = if substituir.is_some() { 68.0 } else { 36.0 };
+    let mut barra = rect()
+        .direction(Direction::Vertical)
         .width(Size::fill())
-        .height(Size::px(36.0))
+        .height(Size::px(altura))
         .background(paleta.botao)
         .color(paleta.texto)
         .padding((4.0, 8.0, 4.0, 8.0))
-        .spacing(8.0)
-        .cross_align(Alignment::Center)
-        .child(label().font_size(13.0).text("Buscar"))
-        .child(
-            CampoTexto::new(termo)
-                .placeholder("texto")
-                .width(Size::px(240.0))
-                .auto_focus(true)
-                .on_submit(move |_| on_proxima()),
-        )
-        .child(
-            Button::new()
-                .compact()
-                .on_press(move |_| on_proxima())
-                .child("↓"),
-        )
-        .child(
-            Button::new()
-                .compact()
-                .on_press(move |_| on_anterior())
-                .child("↑"),
-        )
-        .child(
-            Button::new()
-                .flat()
-                .compact()
-                .on_press(move |_| on_fechar())
-                .child("×"),
-        )
+        .spacing(4.0);
+    barra = barra.child(
+        rect()
+            .direction(Direction::Horizontal)
+            .width(Size::fill())
+            .spacing(8.0)
+            .cross_align(Alignment::Center)
+            .child(label().font_size(13.0).text("Buscar"))
+            .child(
+                CampoTexto::new(termo)
+                    .placeholder("texto")
+                    .width(Size::px(240.0))
+                    .auto_focus(true)
+                    .on_submit(move |_| on_proxima()),
+            )
+            .child(
+                Button::new()
+                    .compact()
+                    .on_press(move |_| on_proxima())
+                    .child("↓"),
+            )
+            .child(
+                Button::new()
+                    .compact()
+                    .on_press(move |_| on_anterior())
+                    .child("↑"),
+            )
+            .child(
+                Button::new()
+                    .flat()
+                    .compact()
+                    .on_press(move |_| on_fechar())
+                    .child("×"),
+            ),
+    );
+    if let Some((novo, on_uma, on_todas)) = substituir {
+        barra = barra.child(
+            rect()
+                .direction(Direction::Horizontal)
+                .width(Size::fill())
+                .spacing(8.0)
+                .cross_align(Alignment::Center)
+                .child(label().font_size(13.0).text("Trocar"))
+                .child(
+                    CampoTexto::new(novo)
+                        .placeholder("substituição")
+                        .width(Size::px(240.0)),
+                )
+                .child(
+                    Button::new()
+                        .compact()
+                        .on_press(move |_| on_uma())
+                        .child("Substituir"),
+                )
+                .child(
+                    Button::new()
+                        .compact()
+                        .on_press(move |_| on_todas())
+                        .child("Todas"),
+                ),
+        );
+    }
+    barra
 }
 
 pub const LARGURA_ARVORE: f32 = 240.0;
@@ -753,6 +794,7 @@ pub fn linha_gutter(
     pausado: bool,
     pausa_arquivo: &str,
     pausa_linha: u32,
+    par: bool,
     font_size: f32,
     line_height: f32,
     paleta: Paleta,
@@ -762,6 +804,7 @@ pub fn linha_gutter(
     let marca = marca_gutter(pontos, arquivo, linha, pausado, pausa_arquivo, pausa_linha);
     let fundo = match marca {
         MarcaGutter::Atual | MarcaGutter::PontoAtual => (80, 70, 20, 255),
+        _ if par => (30, 70, 90, 255),
         _ => (0, 0, 0, 0),
     };
     let simbolo = match marca {

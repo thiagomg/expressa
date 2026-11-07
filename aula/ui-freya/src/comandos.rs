@@ -22,7 +22,7 @@ use crate::documentos::{
 };
 use crate::turma::Turma;
 use expressa_aula_storage::{Expected, SaveError};
-use crate::edicao::{buscar, comentar, duplicar, mover, recuar_arquivo};
+use crate::edicao::{buscar, comentar, duplicar, mover, recuar_arquivo, substituir, substituir_tudo};
 use crate::editor::fonte_px;
 use crate::prefs::{Prefs, Recente, expand_tilde};
 use crate::console::{Console, parse_error_location};
@@ -46,6 +46,8 @@ pub fn aplicar(
     mut dialogo: State<Dialogo>,
     mut busca_aberta: State<bool>,
     busca_termo: State<String>,
+    mut substituir_aberta: State<bool>,
+    substituir_por: State<String>,
     mut projeto: State<Projeto>,
     mut exec: State<Execucao>,
     console: State<Console>,
@@ -139,6 +141,7 @@ pub fn aplicar(
         Acao::FecharAba => fechar_aba(None, Depois::SoFechar, editor, prefs, abas, status, dialogo),
         Acao::IrParaLinha => dialogo.set(Dialogo::IrParaLinha),
         Acao::Buscar => {
+            substituir_aberta.set(false);
             if busca_aberta() {
                 achar(true, editor, status, busca_termo);
             } else {
@@ -147,8 +150,18 @@ pub fn aplicar(
             }
         }
         Acao::BuscarProxima => achar(true, editor, status, busca_termo),
+        Acao::Substituir => {
+            if busca_aberta() && substituir_aberta() {
+                substituir_uma(editor, status, busca_termo, substituir_por);
+            } else {
+                busca_aberta.set(true);
+                substituir_aberta.set(true);
+                status.set("Substituir".into());
+            }
+        }
         Acao::Escapar => {
             busca_aberta.set(false);
+            substituir_aberta.set(false);
             dialogo.set(Dialogo::Nenhum);
             atalhos_visiveis.set(false);
             ajuda.set(None);
@@ -1739,6 +1752,36 @@ fn ir_definicao(
         return;
     }
     status.set(format!("Não achou definição de {}", w.name));
+}
+
+pub fn substituir_uma(
+    mut editor: State<CodeEditorData>,
+    mut status: State<String>,
+    busca_termo: State<String>,
+    substituir_por: State<String>,
+) {
+    if let Some(msg) = substituir(
+        &mut editor.write(),
+        &busca_termo.read(),
+        &substituir_por.read(),
+    ) {
+        status.set(msg);
+    } else {
+        status.set(String::new());
+    }
+}
+
+pub fn substituir_todas_no_arquivo(
+    mut editor: State<CodeEditorData>,
+    mut status: State<String>,
+    busca_termo: State<String>,
+    substituir_por: State<String>,
+) {
+    status.set(substituir_tudo(
+        &mut editor.write(),
+        &busca_termo.read(),
+        &substituir_por.read(),
+    ));
 }
 
 pub fn achar(

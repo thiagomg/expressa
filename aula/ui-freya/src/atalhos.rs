@@ -30,6 +30,7 @@ pub enum Acao {
     IrParaLinha,
     Buscar,
     BuscarProxima,
+    Substituir,
     Escapar,
     Comentar,
     Duplicar,
@@ -69,6 +70,7 @@ pub const ATALHOS: &[(&str, &[(&str, &str)])] = &[
         "Buscar e navegar",
         &[
             ("Ctrl+F", "buscar no arquivo"),
+            ("Ctrl+H", "substituir no arquivo"),
             ("Ctrl+G", "ir para a linha"),
             ("F1", "ajuda sobre o nome sob o cursor"),
         ],
@@ -127,6 +129,7 @@ pub fn acao_de_tecla(key: &Key, modifiers: Modifiers) -> Option<Acao> {
             "q" if !shift => Some(Acao::Sair),
             " " if !shift => Some(Acao::Completar),
             "f" if !shift => Some(Acao::Buscar),
+            "h" if !shift => Some(Acao::Substituir),
             "g" if !shift => Some(Acao::IrParaLinha),
             "/" if !shift => Some(Acao::Comentar),
             "d" if !shift => Some(Acao::Duplicar),
@@ -194,6 +197,7 @@ mod tests {
         assert_eq!(tecla("s", Modifiers::empty()), None);
         assert_eq!(tecla("/", ctrl), Some(Acao::Comentar));
         assert_eq!(tecla("f", ctrl), Some(Acao::Buscar));
+        assert_eq!(tecla("h", ctrl), Some(Acao::Substituir));
         assert_eq!(tecla(" ", ctrl), Some(Acao::Completar));
         assert_eq!(tecla("d", ctrl), Some(Acao::Duplicar));
         assert_eq!(

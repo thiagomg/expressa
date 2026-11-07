@@ -208,6 +208,93 @@ pub fn indentar_todo(texto: &str) -> String {
     out.concat()
 }
 
+/// Block delimiters in `text` (comments and strings skipped): (opens, start, end).
+fn block_tokens(text: &str) -> Vec<(bool, usize, usize)> {
+    let code = blank_comments_and_strings(text);
+    let mut out = Vec::new();
+    let mut i = 0;
+    while i < code.len() {
+        let rest = &code[i..];
+        let word = |w: &str| rest.starts_with(w) && word_at(&code, i, w);
+        if word("inicio") || word("início") {
+            let len = if rest.starts_with("inicio") {
+                6
+            } else {
+                "início".len()
+            };
+            out.push((true, i, i + len));
+            i += len;
+        } else if word("fim") {
+            out.push((false, i, i + 3));
+            i += 3;
+        } else if rest.starts_with('{') {
+            out.push((true, i, i + 1));
+            i += 1;
+        } else if rest.starts_with('}') {
+            out.push((false, i, i + 1));
+            i += 1;
+        } else {
+            i += rest.chars().next().map_or(1, char::len_utf8);
+        }
+    }
+    out
+}
+
+/// Opener and closer byte ranges for the block at `cursor`.
+pub fn par_do_bloco(text: &str, cursor: usize) -> Option<((usize, usize), (usize, usize))> {
+    let tokens = block_tokens(text);
+    let mut pair = vec![None; tokens.len()];
+    let mut stack = Vec::new();
+    for (i, t) in tokens.iter().enumerate() {
+        if t.0 {
+            stack.push(i);
+        } else if let Some(o) = stack.pop() {
+            pair[o] = Some(i);
+            pair[i] = Some(o);
+        }
+    }
+    let line_start = text[..cursor.min(text.len())]
+        .rfind('\n')
+        .map_or(0, |i| i + 1);
+    let line_end = text[cursor.min(text.len())..]
+        .find('\n')
+        .map_or(text.len(), |i| cursor + i);
+    let on_line: Vec<usize> = (0..tokens.len())
+        .filter(|&i| tokens[i].1 >= line_start && tokens[i].2 <= line_end && pair[i].is_some())
+        .collect();
+    let chosen = on_line
+        .iter()
+        .copied()
+        .find(|&i| tokens[i].1 <= cursor && cursor <= tokens[i].2)
+        .or_else(|| {
+            on_line
+                .first()
+                .copied()
+                .filter(|&i| !tokens[i].0 && text[line_start..tokens[i].1].trim().is_empty())
+        })
+        .or_else(|| {
+            on_line
+                .iter()
+                .rev()
+                .copied()
+                .find(|&i| tokens[i].0 && tokens[pair[i].unwrap()].1 > line_end)
+        })?;
+    let other = pair[chosen]?;
+    let (o, c) = if tokens[chosen].0 {
+        (chosen, other)
+    } else {
+        (other, chosen)
+    };
+    Some(((tokens[o].1, tokens[o].2), (tokens[c].1, tokens[c].2)))
+}
+
+/// 0-based lines of the matching opener and closer, if any.
+pub fn linhas_do_par(text: &str, cursor: usize) -> Option<(usize, usize)> {
+    let ((a, _), (c, _)) = par_do_bloco(text, cursor)?;
+    let linha = |b: usize| text[..b.min(text.len())].bytes().filter(|&x| x == b'\n').count();
+    Some((linha(a), linha(c)))
+}
+
 pub fn mover_linha(texto: &str, linha: usize, delta: i32) -> (String, usize) {
     let mut ls = linhas(texto);
     if ls.is_empty() || linha >= ls.len() {
@@ -255,6 +342,31 @@ mod tests {
             want_indent(&["    se a == 1 {"], "x"),
             8,
             "opener already indented by 4"
+        );
+    }
+
+    #[test]
+    fn par_inicio_fim_ignora_string() {
+        let src = "se a {\n    x // {\n    s = \"}\"\n}\npara i de 1 ate 2\ninicio\n    y\nfim\n";
+        let at = |needle: &str, nth: usize| src.match_indices(needle).nth(nth).unwrap().0;
+        let brace_open = at("{", 0);
+        let brace_close = at("}\n", 0);
+        assert_eq!(
+            par_do_bloco(src, 0),
+            Some(((brace_open, brace_open + 1), (brace_close, brace_close + 1)))
+        );
+        assert_eq!(par_do_bloco(src, at("x //", 0)), None);
+        let inicio = at("inicio", 0);
+        let fim = at("fim", 0);
+        assert_eq!(
+            par_do_bloco(src, inicio + 2),
+            Some(((inicio, inicio + 6), (fim, fim + 3)))
+        );
+        let poema = "escreva(\"início: …\")\ninicio\n    x\nfim\n";
+        let ini = poema.find("\ninicio").unwrap() + 1;
+        assert_eq!(
+            par_do_bloco(poema, ini + 1).map(|((a, b), _)| &poema[a..b]),
+            Some("inicio")
         );
     }
 

@@ -35,6 +35,7 @@ use crate::{
     atalhos::{Acao, acao_de_tecla_com_foco},
     comandos::{
         achar, adicionar_observado, abrir_projeto_servidor, aplicar, aplicar_eventos, aplicar_fundo,
+        substituir_todas_no_arquivo, substituir_uma,
         aplicar_sugestao, abrir_recente, alternar_ponto_em, clicar_arvore, confirmar_apagar, confirmar_descarte, confirmar_nome,
         conectar_servidor, criar_projeto_servidor, descartar_rascunhos, escolher_projeto,
         fechar_dialogo_rascunhos,
@@ -102,6 +103,8 @@ fn app() -> impl IntoElement {
     let linha_campo = use_state(String::new);
     let busca_aberta = use_state(|| false);
     let busca_termo = use_state(String::new);
+    let substituir_aberta = use_state(|| false);
+    let substituir_por = use_state(String::new);
     let mut sintaxe = use_state(String::new);
     let mut projeto = use_state(Projeto::default);
     let nome_campo = use_state(String::new);
@@ -270,6 +273,11 @@ fn app() -> impl IntoElement {
     let pausado_gutter = depuracao_agora.pausado;
     let pausa_arq = depuracao_agora.arquivo.clone();
     let pausa_linha = depuracao_agora.linha;
+    let par_linhas = {
+        let texto = editor.read().rope.to_string();
+        let byte = crate::editor::byte_do_cursor(&editor.read());
+        crate::indent::linhas_do_par(&texto, byte)
+    };
 
     let on_acao = move |acao: Acao| {
         aplicar(
@@ -283,6 +291,8 @@ fn app() -> impl IntoElement {
             dialogo,
             busca_aberta,
             busca_termo,
+            substituir_aberta,
+            substituir_por,
             projeto,
             exec,
             console,
@@ -416,6 +426,7 @@ fn app() -> impl IntoElement {
                                     let pausa_arq = pausa_arq.clone();
                                     let mut col = rect().direction(Direction::Vertical).width(Size::fill());
                                     for i in 0..n_linhas {
+                                        let par = par_linhas.is_some_and(|(a, b)| i == a || i == b);
                                         col = col.child(linha_gutter(
                                             i,
                                             &arquivo,
@@ -423,6 +434,7 @@ fn app() -> impl IntoElement {
                                             pausado_gutter,
                                             &pausa_arq,
                                             pausa_linha,
+                                            par,
                                             font_size,
                                             line_height,
                                             paleta,
@@ -554,8 +566,17 @@ fn app() -> impl IntoElement {
                 move || achar(false, editor, status, busca_termo),
                 move || {
                     let mut busca_aberta = busca_aberta;
+                    let mut substituir_aberta = substituir_aberta;
                     busca_aberta.set(false);
+                    substituir_aberta.set(false);
                 },
+                substituir_aberta().then_some((
+                    substituir_por,
+                    move || substituir_uma(editor, status, busca_termo, substituir_por),
+                    move || {
+                        substituir_todas_no_arquivo(editor, status, busca_termo, substituir_por)
+                    },
+                )),
             )
         }))
         .child(barra_status(linha, coluna, &pasta, &recado, paleta))

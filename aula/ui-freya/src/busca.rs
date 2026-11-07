@@ -9,6 +9,13 @@ pub fn proxima(texto: &str, termo: &str, de: usize) -> Option<usize> {
     texto[de..].find(termo).map(|i| de + i)
 }
 
+pub fn substituir_todas(texto: &str, termo: &str, novo: &str) -> String {
+    if termo.is_empty() {
+        return texto.to_string();
+    }
+    texto.replace(termo, novo)
+}
+
 pub fn anterior(texto: &str, termo: &str, de: usize) -> Option<usize> {
     if termo.is_empty() {
         return None;
@@ -28,5 +35,11 @@ mod tests {
         assert_eq!(proxima(t, "função", 1), Some("função não\n".len()));
         assert_eq!(anterior(t, "não", t.len()), Some("função ".len()));
         assert_eq!(proxima(t, "xyz", 0), None);
+    }
+
+    #[test]
+    fn substitui_todas_as_ocorrencias() {
+        assert_eq!(substituir_todas("ola ola", "ola", "olá"), "olá olá");
+        assert_eq!(substituir_todas("ola", "", "x"), "ola");
     }
 }
