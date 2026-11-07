@@ -32,15 +32,21 @@ export CARGO_TARGET_DIR="$TARGET"
 export CARGO_HOME="${CARGO_HOME:-/usr/local/cargo}"
 
 cd "$SRC"
+LIBCLANG="$(find /usr/lib -name 'libclang.so' 2>/dev/null | head -n1 || true)"
+if [[ -n "$LIBCLANG" ]]; then
+    export LIBCLANG_PATH="$(dirname "$LIBCLANG")"
+    echo "LIBCLANG_PATH=${LIBCLANG_PATH}"
+fi
 echo "Compilando release…"
 cargo build --release --locked \
     -p expressa \
     -p expressa-aula \
+    -p expressa-aula-freya \
     -p expressa-aula-server \
     -p expressa-tutorial
 
 BIN="$TARGET/release"
-for name in expressa expressa-grafico expressa-aula expressa-aula-server expressa-tutorial; do
+for name in expressa expressa-grafico expressa-aula expressa-aula-freya expressa-aula-server expressa-tutorial; do
     if [[ ! -x "$BIN/$name" ]]; then
         echo "erro: faltou $BIN/$name" >&2
         exit 1
@@ -66,14 +72,18 @@ mkdir -p \
 install -m0755 "$BIN/expressa" "$ROOT/usr/bin/expressa"
 install -m0755 "$BIN/expressa-grafico" "$ROOT/usr/bin/expressa-grafico"
 install -m0755 "$BIN/expressa-aula" "$ROOT/usr/bin/expressa-aula"
+install -m0755 "$BIN/expressa-aula-freya" "$ROOT/usr/bin/expressa-aula-freya"
 install -m0755 "$BIN/expressa-aula-server" "$ROOT/usr/bin/expressa-aula-server"
 install -m0755 "$BIN/expressa-tutorial" "$ROOT/usr/bin/expressa-tutorial"
 strip --strip-unneeded \
     "$ROOT/usr/bin/expressa" \
     "$ROOT/usr/bin/expressa-grafico" \
     "$ROOT/usr/bin/expressa-aula" \
+    "$ROOT/usr/bin/expressa-aula-freya" \
     "$ROOT/usr/bin/expressa-aula-server" \
     "$ROOT/usr/bin/expressa-tutorial"
+echo "tamanhos após strip:"
+ls -lh "$ROOT/usr/bin/expressa-aula" "$ROOT/usr/bin/expressa-aula-freya"
 
 cp -a "$SRC/exemplos" "$ROOT/usr/share/expressa/exemplos"
 cp -a "$SRC/tutorial" "$ROOT/usr/share/expressa/tutorial"
@@ -95,6 +105,8 @@ install -m0644 "$SRC/aula/ui/res/styles/expressa-aula-dark.xml" \
 
 install -m0644 "$SRC/packaging/deb/expressa-aula.desktop" \
     "$ROOT/usr/share/applications/expressa-aula.desktop"
+install -m0644 "$SRC/packaging/deb/expressa-aula-freya.desktop" \
+    "$ROOT/usr/share/applications/expressa-aula-freya.desktop"
 install -m0644 "$SRC/packaging/deb/expressa.desktop" \
     "$ROOT/usr/share/applications/expressa.desktop"
 install -m0644 "$SRC/packaging/deb/expressa-tutorial.desktop" \
@@ -138,6 +150,7 @@ EOF
         "$ROOT/usr/bin/expressa" \
         "$ROOT/usr/bin/expressa-grafico" \
         "$ROOT/usr/bin/expressa-aula" \
+        "$ROOT/usr/bin/expressa-aula-freya" \
         "$ROOT/usr/bin/expressa-aula-server" \
         "$ROOT/usr/bin/expressa-tutorial"
 )
@@ -159,9 +172,9 @@ Depends: ${SHLIBS}
 Description: linguagem Expressa e editor Aula
  Expressa é uma linguagem de programação em português brasileiro.
  Este pacote instala o interpretador (expressa), o visualizador de
- gráficos (expressa-grafico), o editor GTK Expressa Aula, os tutoriais
- (expressa-tutorial) e o servidor
- de arquivos da sala.
+ gráficos (expressa-grafico), o editor GTK Expressa Aula, o editor
+ Freya (expressa-aula-freya, sem GtkSourceView no próprio binário),
+ os tutoriais (expressa-tutorial) e o servidor de arquivos da sala.
 EOF
 
 cat > "$ROOT/DEBIAN/postinst" <<'EOF'

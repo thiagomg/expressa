@@ -13,6 +13,7 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         build-essential \
         ca-certificates \
+        clang \
         cmake \
         curl \
         dpkg-dev \
@@ -20,8 +21,10 @@ RUN apt-get update \
         file \
         git \
         gzip \
+        libclang-dev \
         libgtk-4-dev \
         libgtksourceview-5-dev \
+        ninja-build \
         libx11-dev \
         libxcursor-dev \
         libxext-dev \
@@ -31,6 +34,7 @@ RUN apt-get update \
         libxrandr-dev \
         pkg-config \
         protobuf-compiler \
+        python3 \
     && rm -rf /var/lib/apt/lists/*
 
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \

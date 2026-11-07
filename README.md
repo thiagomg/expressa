@@ -39,7 +39,7 @@ No REPL: `2 + 3`, `escreva("oi")`, `ajuda escreva`. `sair` ou Ctrl+D encerra.
 
 Compilar: `cargo build --release` (Rust, edition 2024). Binários em `target/release/`.
 
-Pacote `.deb` (Ubuntu 24.04 e 26.04, via Docker): `./empacotar-deb.sh`. Os arquivos saem em `dist/`.
+Pacote `.deb` (Ubuntu 24.04 e 26.04, via Docker): `./empacotar-deb.sh`. Os arquivos saem em `dist/`. O pacote inclui `expressa-aula` (GTK) e `expressa-aula-freya`.
 
 ### Builds no GitHub
 

@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=Expressa Aula (Freya)
+Comment=Editor Freya da linguagem Expressa
+Comment[pt_BR]=Editor Freya da linguagem Expressa
+Exec=env FREYA_RENDERER=auto expressa-aula-freya
+Icon=expressa
+Terminal=false
+Categories=Development;Education;
+MimeType=text/x-expressa;
+StartupNotify=true
+StartupWMClass=expressa-aula

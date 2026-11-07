@@ -50,3 +50,18 @@ aluno `local`). Se o servidor não estiver no ar, o editor tenta subir
 `…/expressa-aula/remoto/{aluno}/{projeto}` para o F5 continuar local.
 
 Plano: `docs/tarefas/freya-tasks.md`.
+
+## Pacote
+
+O `.deb` (`./empacotar-deb.sh`) instala `/usr/bin/expressa-aula-freya` **ao
+lado** de `expressa-aula` (GTK). O binário Freya não liga GtkSourceView; o
+pacote ainda depende de GTK porque o editor da sala continua no mesmo `.deb`.
+O `build-inside.sh` imprime o tamanho dos dois após o `strip` para comparar.
+
+Windows: `empacotar-freya.ps1` gera `dist/expressa-aula-freya/` e o zip **sem**
+DLLs do GTK. Compile no Windows (MSVC, rust-skia); não há cross a partir do
+Linux. O instalador Inno do GTK (`criar-instalador.ps1`) não foi substituído.
+
+Tamanho neste computador (2026-11-07): `expressa-aula` release ≈ 12 MiB.
+O Freya leva Skia estático e fica maior; meça com
+`ls -lh target/release/expressa-aula-freya` depois do `cargo build --release`.

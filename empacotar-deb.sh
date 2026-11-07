@@ -1,5 +1,5 @@
 #!/bin/sh
-# Gera .deb da Expressa (interpretador, gráficos e Aula) com Docker.
+# Gera .deb da Expressa (interpretador, gráficos, Aula GTK e Aula Freya) com Docker.
 #
 # Na raiz do repositório:
 #   ./empacotar-deb.sh              Ubuntu 24.04 e 26.04

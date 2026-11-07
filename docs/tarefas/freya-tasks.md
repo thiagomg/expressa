@@ -328,10 +328,11 @@ Work:
 
 Acceptance:
 
-- [ ] Linux: install the Freya `.deb` on a clean-ish box (or this machine) and F5 an exemplo.
-- [ ] Windows: clean VM or native box installs and F5 an exemplo; IME types `função` / `não`.
-- [ ] Zip/deb size and first-launch time recorded on both.
-- [ ] `aula/README.md` documents the Freya binary and the GTK sunset.
+- [x] Linux packaging: `expressa-aula-freya` entra no `.deb` (`packaging/deb/build-inside.sh`) e no menu (`expressa-aula-freya.desktop`). GTK `expressa-aula` **continua** no mesmo pacote; não há cutover.
+- [ ] Linux: instalar o `.deb` numa máquina limpa e F5 um exemplo (precisa de `./empacotar-deb.sh` com Docker; Skia no container).
+- [ ] Windows: walkthrough nativo (IME `função`/`não`, F5, instalador). Script pronto: `empacotar-freya.ps1` (sem DLLs GTK). Sem cross a partir do Linux.
+- [x] `aula/README.md` e `aula/ui-freya/README.md` documentam o binário Freya em paralelo ao GTK.
+- [ ] Cutover (renomear para `expressa-aula` e arquivar GTK): **só quando o usuário pedir**.
 
 ---
 

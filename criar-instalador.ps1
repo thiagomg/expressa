@@ -9,6 +9,9 @@
 #
 # Exige deps\gtk, deps\protoc, o Inno Setup 7 e o redistribuivel do Visual
 # C++ (o Build Tools ou o Visual Studio trazem as DLLs).
+#
+# O editor Freya (sem GTK) usa empacotar-freya.ps1; este instalador Inno
+# continua sendo o da Aula GTK ate o cutover.
 
 $ErrorActionPreference = "Stop"
 $root = $PSScriptRoot

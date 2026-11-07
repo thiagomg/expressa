@@ -11,6 +11,14 @@ IDE integrada para ser usada por alunos
 | `expressa-aula` (`aula/ui`) | editor GTK: lista, Executar (F5) / Depurar (F6) no próprio processo |
 | `expressa-aula-freya` (`aula/ui-freya`) | o mesmo editor em Freya, em paralelo; o GTK continua |
 
+O binário GTK `expressa-aula` continua sendo o da sala de aula. O Freya
+(`expressa-aula-freya`) instala junto no `.deb` e no zip Windows sem as DLLs
+do GTK. Ainda não há cutover: não apague `aula/ui`. Detalhes e atalhos iguais
+estão em `aula/ui-freya/README.md`. GPU ruim: `FREYA_RENDERER=software`.
+Linux: `./empacotar-deb.sh`. Windows Freya (máquina nativa, MSVC):
+`empacotar-freya.ps1`. O walkthrough de IME/instalador no Windows fica para
+uma máquina Windows.
+
 ## Layout no disco
 
 ```text
@@ -53,8 +61,11 @@ Leituras de texto aceitam até 8 MiB em projetos locais; o servidor aceita até 
 # servidor (se já não estiver no ar, o editor tenta iniciá-lo)
 cargo run -p expressa-aula-server -- --root ./aula-data --bind 127.0.0.1:50051
 
-# editor
+# editor GTK (sala)
 cargo run -p expressa-aula
+
+# editor Freya (paralelo)
+LIBCLANG_PATH=/usr/lib/llvm-22/lib cargo run -p expressa-aula-freya
 ```
 
 O instalador (Windows e `.deb`) copia os exemplos para `Documentos/Expressa Aula/exemplos`. Arquivos novos do pacote entram na pasta; o que o aluno já tiver ali não é substituído. O editor não copia de novo ao abrir. No Linux, `expressa --instalar-exemplos` faz a mesma cópia (o `postinst` chama isso para o usuário que instalou).
