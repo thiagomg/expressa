@@ -146,9 +146,9 @@ Work:
 
 Acceptance:
 
-- [ ] Open `tutorial/exemplos/*.lep`, edit, save, reopen.
-- [ ] Two tabs, close with prompt.
-- [ ] Ctrl+Z / Ctrl+Shift+Z per tab.
+- [x] Open `tutorial/exemplos/*.lep`, edit, save, reopen.
+- [x] Two tabs, close with prompt.
+- [x] Ctrl+Z / Ctrl+Shift+Z per tab.
 
 ---
 

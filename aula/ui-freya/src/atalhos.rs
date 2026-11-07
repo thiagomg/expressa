@@ -122,11 +122,7 @@ pub fn acao_de_tecla(key: &Key, modifiers: Modifiers) -> Option<Acao> {
 
 pub fn mensagem_reservada(acao: Acao) -> &'static str {
     match acao {
-        Acao::Novo => "Novo arquivo (Ctrl+N) ainda não abre uma aba nesta versão Freya.",
-        Acao::Abrir => "Abrir arquivo ainda não está nesta versão Freya.",
-        Acao::Salvar => "Salvar (Ctrl+S) ainda não grava arquivos nesta versão Freya.",
-        Acao::SalvarComo => "Salvar como ainda não está nesta versão Freya.",
-        Acao::FecharAba => "Fechar aba (Ctrl+W) ainda não está nesta versão Freya.",
+        Acao::Novo | Acao::Abrir | Acao::Salvar | Acao::SalvarComo | Acao::FecharAba => "",
         Acao::Executar => "Executar (F5) ainda não está nesta versão Freya.",
         Acao::Parar => "Parar ainda não está nesta versão Freya.",
         Acao::Depurar => "Depurar (F6) ainda não está nesta versão Freya.",
@@ -136,7 +132,7 @@ pub fn mensagem_reservada(acao: Acao) -> &'static str {
         Acao::Ponto => "Ponto de parada (F9) ainda não está nesta versão Freya.",
         Acao::MostrarArquivos => "Mostrar arquivos (F7) ainda não está nesta versão Freya.",
         Acao::MostrarPainel => "Painel do depurador (F8) ainda não está nesta versão Freya.",
-        Acao::IrParaLinha => "Ir para linha (Ctrl+G) ainda não está nesta versão Freya.",
+        Acao::IrParaLinha => "",
         Acao::Buscar => "Buscar (Ctrl+F) ainda não está nesta versão Freya.",
         Acao::Ajuda => "Ajuda (F1) ainda não está nesta versão Freya.",
         Acao::Catalogo => "Catálogo de funções nativas ainda não está nesta versão Freya.",

@@ -6,6 +6,8 @@
 )]
 
 mod atalhos;
+mod comandos;
+mod documentos;
 mod editor;
 mod prefs;
 mod shell;
@@ -18,17 +20,24 @@ use freya::{
 
 use crate::{
     atalhos::{Acao, acao_de_tecla},
+    comandos::{aplicar, confirmar_descarte, fechar_aba, ir_para_linha, selecionar_aba},
+    documentos::{Abas, Depois, Dialogo, RECUE, gravar_rascunhos, sincronizar},
     editor::{FONT_FAMILY, TEXTO_INICIAL, fonte_px},
     prefs::Prefs,
     shell::{
-        MenuAberto, Paleta, aplicar_acao, barra_ferramentas, barra_menus, barra_status,
-        editor_inicial, painel_atalhos, tema_freya,
+        MenuAberto, Paleta, barra_abas, barra_ferramentas, barra_menus, barra_status,
+        dialogo_confirmar, dialogo_linha, editor_inicial, painel_atalhos, tema_freya,
     },
 };
 
 const TITULO: &str = "Expressa Aula";
 
 fn main() {
+    let rt = tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+        .expect("tokio");
+    let _rt = rt.enter();
     launch(LaunchConfig::new().with_window(
         WindowConfig::new(app)
             .with_title(TITULO)
@@ -43,10 +52,21 @@ fn app() -> impl IntoElement {
     let theme = use_init_theme(|| tema_freya(prefs_iniciais.dark));
     let a11y_id = use_a11y();
     let prefs = use_state(|| prefs_iniciais.clone());
-    let editor = use_state(|| editor_inicial(TEXTO_INICIAL, prefs_iniciais.dark));
+    let mut editor = use_state(|| editor_inicial(TEXTO_INICIAL, prefs_iniciais.dark));
     let status = use_state(String::new);
     let menu = use_state(MenuAberto::default);
     let mut atalhos_visiveis = use_state(|| false);
+    let mut abas = use_state(|| Abas::nova(TEXTO_INICIAL));
+    let dialogo = use_state(Dialogo::default);
+    let linha_campo = use_state(String::new);
+
+    use_future(move || async move {
+        loop {
+            tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+            sincronizar(&mut abas.write(), &editor.read());
+            gravar_rascunhos(&abas.read());
+        }
+    });
 
     let dark = prefs.read().dark;
     let paleta = Paleta::de(dark);
@@ -55,9 +75,21 @@ fn app() -> impl IntoElement {
     let recado = status.read().clone();
     let linha = editor.read().cursor_row();
     let coluna = editor.read().cursor_col();
+    let mut abas_agora = abas.read().clone();
+    abas_agora.atual_mut().dirty = editor.read().is_edited();
+    let dialogo_agora = dialogo.read().clone();
 
     let on_acao = move |acao: Acao| {
-        aplicar_acao(acao, prefs, editor, status, theme, atalhos_visiveis);
+        aplicar(
+            acao,
+            prefs,
+            editor,
+            status,
+            theme,
+            atalhos_visiveis,
+            abas,
+            dialogo,
+        );
     };
 
     rect()
@@ -73,6 +105,22 @@ fn app() -> impl IntoElement {
         })
         .child(barra_menus(menu, paleta, on_acao))
         .child(barra_ferramentas(paleta, on_acao))
+        .child(barra_abas(
+            &abas_agora,
+            paleta,
+            move |idx| selecionar_aba(idx, editor, prefs, abas),
+            move |id| {
+                fechar_aba(
+                    Some(id),
+                    Depois::SoFechar,
+                    editor,
+                    prefs,
+                    abas,
+                    status,
+                    dialogo,
+                )
+            },
+        ))
         .child(
             rect()
                 .width(Size::fill())
@@ -81,11 +129,47 @@ fn app() -> impl IntoElement {
                     CodeEditor::new(editor, a11y_id)
                         .font_size(font_size)
                         .font_family(FONT_FAMILY)
-                        .a11y_auto_focus(true),
+                        .a11y_auto_focus(true)
+                        .on_pre_key_down(move |e: Event<KeyboardEventData>| {
+                            if e.key == Key::Named(NamedKey::Tab)
+                                && !e.modifiers.contains(Modifiers::SHIFT)
+                            {
+                                e.stop_propagation();
+                                e.prevent_default();
+                                let pos = editor.read().cursor_pos();
+                                editor.write().insert(RECUE, pos);
+                                editor.write().parse();
+                                return false;
+                            }
+                            e.stop_propagation();
+                            true
+                        }),
                 ),
         )
         .child(barra_status(linha, coluna, &pasta, &recado, paleta))
         .maybe_child(atalhos_visiveis().then(move || {
             painel_atalhos(paleta, move || atalhos_visiveis.set(false))
+        }))
+        .maybe_child(matches!(dialogo_agora, Dialogo::Confirmar { .. }).then(move || {
+            dialogo_confirmar(
+                paleta,
+                move || confirmar_descarte(true, editor, prefs, abas, status, dialogo),
+                move || confirmar_descarte(false, editor, prefs, abas, status, dialogo),
+                move || {
+                    let mut dialogo = dialogo;
+                    dialogo.set(Dialogo::Nenhum);
+                },
+            )
+        }))
+        .maybe_child(matches!(dialogo_agora, Dialogo::IrParaLinha).then(move || {
+            dialogo_linha(
+                paleta,
+                linha_campo,
+                move || ir_para_linha(&linha_campo.read(), editor, status, dialogo),
+                move || {
+                    let mut dialogo = dialogo;
+                    dialogo.set(Dialogo::Nenhum);
+                },
+            )
         }))
 }

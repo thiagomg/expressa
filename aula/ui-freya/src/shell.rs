@@ -6,9 +6,9 @@ use freya::{
 };
 
 use crate::{
-    atalhos::{Acao, ATALHOS, mensagem_reservada},
-    editor::{FONT_FAMILY, fonte_px, new_editor},
-    prefs::Prefs,
+    atalhos::{Acao, ATALHOS},
+    documentos::Abas,
+    editor::new_editor,
 };
 
 #[derive(Clone, Copy, PartialEq, Eq, Default)]
@@ -71,70 +71,6 @@ pub fn aplicar_tema_editor(editor: &mut CodeEditorData, dark: bool) {
         EditorSyntaxTheme::light()
     });
     editor.parse();
-}
-
-pub fn aplicar_acao(
-    acao: Acao,
-    prefs: State<Prefs>,
-    editor: State<CodeEditorData>,
-    mut status: State<String>,
-    theme: State<Theme>,
-    mut atalhos_visiveis: State<bool>,
-) {
-    match acao {
-        Acao::Sair => {
-            Platform::get().close_window(Platform::window_id());
-        }
-        Acao::TemaClaro => definir_tema(false, prefs, editor, theme, status),
-        Acao::TemaEscuro => definir_tema(true, prefs, editor, theme, status),
-        Acao::ZoomMais => zoom(1, prefs, editor, status),
-        Acao::ZoomMenos => zoom(-1, prefs, editor, status),
-        Acao::ZoomNormal => zoom(0, prefs, editor, status),
-        Acao::Atalhos => {
-            atalhos_visiveis.set(true);
-            status.set("Atalhos do teclado".into());
-        }
-        other => {
-            let msg = mensagem_reservada(other);
-            if !msg.is_empty() {
-                status.set(msg.to_string());
-            }
-        }
-    }
-}
-
-fn definir_tema(
-    dark: bool,
-    mut prefs: State<Prefs>,
-    mut editor: State<CodeEditorData>,
-    mut theme: State<Theme>,
-    mut status: State<String>,
-) {
-    if prefs.peek().dark == dark {
-        return;
-    }
-    prefs.write().dark = dark;
-    prefs.read().save();
-    theme.set(tema_freya(dark));
-    aplicar_tema_editor(&mut editor.write(), dark);
-    status.set(if dark {
-        "Tema escuro".into()
-    } else {
-        "Tema claro".into()
-    });
-}
-
-fn zoom(
-    step: i32,
-    mut prefs: State<Prefs>,
-    mut editor: State<CodeEditorData>,
-    mut status: State<String>,
-) {
-    prefs.write().zoom(step);
-    prefs.read().save();
-    let pt = prefs.read().font_size;
-    editor.write().measure(fonte_px(pt), FONT_FAMILY);
-    status.set(format!("Letra {pt} pt"));
 }
 
 pub fn barra_menus(
@@ -377,3 +313,113 @@ pub fn editor_inicial(texto: &str, dark: bool) -> CodeEditorData {
     aplicar_tema_editor(&mut editor, dark);
     editor
 }
+
+pub fn barra_abas(
+    abas: &Abas,
+    paleta: Paleta,
+    on_selecionar: impl Fn(usize) + Copy + 'static,
+    on_fechar: impl Fn(u64) + Copy + 'static,
+) -> impl IntoElement {
+    let mut barra = rect()
+        .direction(Direction::Horizontal)
+        .width(Size::fill())
+        .height(Size::px(32.0))
+        .background(paleta.barra)
+        .color(paleta.texto)
+        .spacing(4.0)
+        .padding((2.0, 6.0, 2.0, 6.0))
+        .cross_align(Alignment::Center);
+    for (i, aba) in abas.itens.iter().enumerate() {
+        let id = aba.id;
+        let atual = i == abas.atual;
+        let fundo = if atual { paleta.botao } else { paleta.barra };
+        barra = barra.child(
+            rect()
+                .key(DiffKey::U64(id))
+                .direction(Direction::Horizontal)
+                .background(fundo)
+                .corner_radius(4.0)
+                .padding((4.0, 8.0, 4.0, 8.0))
+                .spacing(6.0)
+                .cross_align(Alignment::Center)
+                .on_press(move |_| on_selecionar(i))
+                .child(label().font_size(13.0).text(Abas::rotulo(aba)))
+                .child(
+                    Button::new()
+                        .flat()
+                        .compact()
+                        .on_press(move |_| on_fechar(id))
+                        .child("×"),
+                ),
+        );
+    }
+    barra
+}
+
+pub fn dialogo_confirmar(
+    _paleta: Paleta,
+    on_salvar: impl Fn() + Copy + 'static,
+    on_descartar: impl Fn() + Copy + 'static,
+    on_cancelar: impl Fn() + Copy + 'static,
+) -> impl IntoElement {
+    Popup::new()
+        .width(Size::px(420.0))
+        .on_close_request(move |_| on_cancelar())
+        .child(PopupTitle::new("Alterações não salvas".to_string()))
+        .child(PopupContent::new().child("Salvar as alterações desta aba?"))
+        .child(
+            PopupButtons::new()
+                .child(
+                    Button::new()
+                        .on_press(move |_| on_salvar())
+                        .filled()
+                        .child("Salvar"),
+                )
+                .child(
+                    Button::new()
+                        .on_press(move |_| on_descartar())
+                        .child("Descartar"),
+                )
+                .child(
+                    Button::new()
+                        .on_press(move |_| on_cancelar())
+                        .child("Cancelar"),
+                ),
+        )
+}
+
+pub fn dialogo_linha(
+    _paleta: Paleta,
+    valor: State<String>,
+    on_ir: impl Fn() + Copy + 'static,
+    on_cancelar: impl Fn() + Copy + 'static,
+) -> impl IntoElement {
+    Popup::new()
+        .width(Size::px(320.0))
+        .on_close_request(move |_| on_cancelar())
+        .child(PopupTitle::new("Ir para linha".to_string()))
+        .child(
+            PopupContent::new().child(
+                Input::new(valor)
+                    .placeholder("número da linha")
+                    .width(Size::fill())
+                    .on_submit(move |_| on_ir()),
+            ),
+        )
+        .child(
+            PopupButtons::new()
+                .child(
+                    Button::new()
+                        .on_press(move |_| on_ir())
+                        .filled()
+                        .child("Ir"),
+                )
+                .child(
+                    Button::new()
+                        .on_press(move |_| on_cancelar())
+                        .child("Cancelar"),
+                ),
+        )
+}
+
+

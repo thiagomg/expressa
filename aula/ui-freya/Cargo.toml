@@ -16,3 +16,5 @@ path = "src/main.rs"
 expressa = { workspace = true }
 freya = { version = "0.5", features = ["code-editor"] }
 dirs = "6"
+rfd = "0.17"
+tokio = { workspace = true, features = ["time"] }
