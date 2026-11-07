@@ -6,9 +6,13 @@
 )]
 
 mod atalhos;
+mod busca;
 mod comandos;
 mod documentos;
+mod edicao;
 mod editor;
+mod indent;
+mod lang;
 mod prefs;
 mod shell;
 
@@ -20,12 +24,15 @@ use freya::{
 
 use crate::{
     atalhos::{Acao, acao_de_tecla},
-    comandos::{aplicar, confirmar_descarte, fechar_aba, ir_para_linha, selecionar_aba},
-    documentos::{Abas, Depois, Dialogo, RECUE, gravar_rascunhos, sincronizar},
-    editor::{FONT_FAMILY, TEXTO_INICIAL, fonte_px},
+    comandos::{
+        achar, aplicar, confirmar_descarte, fechar_aba, ir_para_linha, selecionar_aba,
+    },
+    documentos::{Abas, Depois, Dialogo, gravar_rascunhos, sincronizar},
+    edicao::tratar_tecla,
+    editor::{FONT_FAMILY, TEXTO_INICIAL, fonte_px, mensagem_sintaxe},
     prefs::Prefs,
     shell::{
-        MenuAberto, Paleta, barra_abas, barra_ferramentas, barra_menus, barra_status,
+        MenuAberto, Paleta, barra_abas, barra_busca, barra_ferramentas, barra_menus, barra_status,
         dialogo_confirmar, dialogo_linha, editor_inicial, painel_atalhos, tema_freya,
     },
 };
@@ -59,6 +66,9 @@ fn app() -> impl IntoElement {
     let mut abas = use_state(|| Abas::nova(TEXTO_INICIAL));
     let dialogo = use_state(Dialogo::default);
     let linha_campo = use_state(String::new);
+    let busca_aberta = use_state(|| false);
+    let busca_termo = use_state(String::new);
+    let mut sintaxe = use_state(String::new);
 
     use_future(move || async move {
         loop {
@@ -68,11 +78,29 @@ fn app() -> impl IntoElement {
         }
     });
 
+    use_future(move || async move {
+        loop {
+            tokio::time::sleep(std::time::Duration::from_millis(400)).await;
+            let texto = editor.read().rope.to_string();
+            sintaxe.set(mensagem_sintaxe(&texto));
+        }
+    });
+
     let dark = prefs.read().dark;
     let paleta = Paleta::de(dark);
     let font_size = fonte_px(prefs.read().font_size);
     let pasta = prefs.read().pasta.clone();
-    let recado = status.read().clone();
+    let recado = {
+        let s = status.read().clone();
+        let e = sintaxe.read().clone();
+        if e.is_empty() {
+            s
+        } else if s.is_empty() {
+            e
+        } else {
+            format!("{e}  ·  {s}")
+        }
+    };
     let linha = editor.read().cursor_row();
     let coluna = editor.read().cursor_col();
     let mut abas_agora = abas.read().clone();
@@ -89,6 +117,8 @@ fn app() -> impl IntoElement {
             atalhos_visiveis,
             abas,
             dialogo,
+            busca_aberta,
+            busca_termo,
         );
     };
 
@@ -131,21 +161,22 @@ fn app() -> impl IntoElement {
                         .font_family(FONT_FAMILY)
                         .a11y_auto_focus(true)
                         .on_pre_key_down(move |e: Event<KeyboardEventData>| {
-                            if e.key == Key::Named(NamedKey::Tab)
-                                && !e.modifiers.contains(Modifiers::SHIFT)
-                            {
-                                e.stop_propagation();
-                                e.prevent_default();
-                                let pos = editor.read().cursor_pos();
-                                editor.write().insert(RECUE, pos);
-                                editor.write().parse();
-                                return false;
-                            }
-                            e.stop_propagation();
-                            true
+                            tratar_tecla(&e, &mut editor.write())
                         }),
                 ),
         )
+        .maybe_child(busca_aberta().then(move || {
+            barra_busca(
+                paleta,
+                busca_termo,
+                move || achar(true, editor, status, busca_termo),
+                move || achar(false, editor, status, busca_termo),
+                move || {
+                    let mut busca_aberta = busca_aberta;
+                    busca_aberta.set(false);
+                },
+            )
+        }))
         .child(barra_status(linha, coluna, &pasta, &recado, paleta))
         .maybe_child(atalhos_visiveis().then(move || {
             painel_atalhos(paleta, move || atalhos_visiveis.set(false))

@@ -18,6 +18,9 @@ barra de ferramentas e status `linha:coluna`. **Ver → Claro / Escuro** e
 Ctrl+= / Ctrl+- / Ctrl+0 gravam as mesmas chaves do GTK em
 `~/.config/expressa-aula/prefs` (`fonte`, `tema`, `pasta`, `arquivo`).
 Ctrl+N / Ctrl+W abrem e fecham abas; Ctrl+S salva; Ctrl+G vai para a linha.
+Ctrl+F busca no arquivo; Tab / Shift+Tab recuam; Ctrl+/ comenta; Ctrl+Alt+\\
+reindenta. Palavras Expressa (função, início, senão) ganham destaque via
+`aula/tree-sitter-expressa`. Erros de sintaxe aparecem na barra de status.
 Rascunhos sujos são gravados a cada 5 s em `~/.cache/expressa-aula/rascunho-freya`.
 
 Plano: `docs/tarefas/freya-tasks.md`.

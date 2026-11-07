@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = [".", "aula/proto", "aula/storage", "aula/server", "aula/ui", "aula/ui-freya", "aula/tutorial"]
+members = [".", "aula/proto", "aula/storage", "aula/server", "aula/ui", "aula/ui-freya", "aula/tutorial", "aula/tree-sitter-expressa"]
 # Built by cargo-fuzz with nightly; see fuzz/README.md.
 exclude = ["fuzz"]
 

@@ -1,0 +1,253 @@
+[
+  {
+    "type": "keyword",
+    "named": true,
+    "fields": {}
+  },
+  {
+    "type": "punctuation",
+    "named": true,
+    "fields": {}
+  },
+  {
+    "type": "source_file",
+    "named": true,
+    "root": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": false,
+      "types": [
+        {
+          "type": "identifier",
+          "named": true
+        },
+        {
+          "type": "keyword",
+          "named": true
+        },
+        {
+          "type": "number",
+          "named": true
+        },
+        {
+          "type": "punctuation",
+          "named": true
+        },
+        {
+          "type": "string",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "!",
+    "named": false
+  },
+  {
+    "type": "%",
+    "named": false
+  },
+  {
+    "type": "(",
+    "named": false
+  },
+  {
+    "type": ")",
+    "named": false
+  },
+  {
+    "type": "*",
+    "named": false
+  },
+  {
+    "type": "+",
+    "named": false
+  },
+  {
+    "type": ",",
+    "named": false
+  },
+  {
+    "type": "-",
+    "named": false
+  },
+  {
+    "type": ".",
+    "named": false
+  },
+  {
+    "type": "/",
+    "named": false
+  },
+  {
+    "type": ":",
+    "named": false
+  },
+  {
+    "type": "<",
+    "named": false
+  },
+  {
+    "type": "=",
+    "named": false
+  },
+  {
+    "type": ">",
+    "named": false
+  },
+  {
+    "type": "[",
+    "named": false
+  },
+  {
+    "type": "]",
+    "named": false
+  },
+  {
+    "type": "ate",
+    "named": false
+  },
+  {
+    "type": "até",
+    "named": false
+  },
+  {
+    "type": "comment",
+    "named": true,
+    "extra": true
+  },
+  {
+    "type": "contem",
+    "named": false
+  },
+  {
+    "type": "continua",
+    "named": false
+  },
+  {
+    "type": "continue",
+    "named": false
+  },
+  {
+    "type": "contém",
+    "named": false
+  },
+  {
+    "type": "de",
+    "named": false
+  },
+  {
+    "type": "e",
+    "named": false
+  },
+  {
+    "type": "em",
+    "named": false
+  },
+  {
+    "type": "enquanto",
+    "named": false
+  },
+  {
+    "type": "falso",
+    "named": false
+  },
+  {
+    "type": "fim",
+    "named": false
+  },
+  {
+    "type": "funcao",
+    "named": false
+  },
+  {
+    "type": "função",
+    "named": false
+  },
+  {
+    "type": "identifier",
+    "named": true
+  },
+  {
+    "type": "importe",
+    "named": false
+  },
+  {
+    "type": "inicio",
+    "named": false
+  },
+  {
+    "type": "início",
+    "named": false
+  },
+  {
+    "type": "nao",
+    "named": false
+  },
+  {
+    "type": "number",
+    "named": true
+  },
+  {
+    "type": "não",
+    "named": false
+  },
+  {
+    "type": "ou",
+    "named": false
+  },
+  {
+    "type": "para",
+    "named": false
+  },
+  {
+    "type": "pare",
+    "named": false
+  },
+  {
+    "type": "repita",
+    "named": false
+  },
+  {
+    "type": "retorne",
+    "named": false
+  },
+  {
+    "type": "se",
+    "named": false
+  },
+  {
+    "type": "se_falhar",
+    "named": false
+  },
+  {
+    "type": "senao",
+    "named": false
+  },
+  {
+    "type": "senão",
+    "named": false
+  },
+  {
+    "type": "string",
+    "named": true
+  },
+  {
+    "type": "verdadeiro",
+    "named": false
+  },
+  {
+    "type": "vezes",
+    "named": false
+  },
+  {
+    "type": "{",
+    "named": false
+  },
+  {
+    "type": "}",
+    "named": false
+  }
+]

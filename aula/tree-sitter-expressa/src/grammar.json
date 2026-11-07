@@ -1,0 +1,342 @@
+{
+  "$schema": "https://tree-sitter.github.io/tree-sitter/assets/schemas/grammar.schema.json",
+  "name": "expressa",
+  "word": "identifier",
+  "rules": {
+    "source_file": {
+      "type": "REPEAT",
+      "content": {
+        "type": "SYMBOL",
+        "name": "_item"
+      }
+    },
+    "_item": {
+      "type": "CHOICE",
+      "members": [
+        {
+          "type": "SYMBOL",
+          "name": "keyword"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "identifier"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "string"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "number"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "punctuation"
+        }
+      ]
+    },
+    "comment": {
+      "type": "TOKEN",
+      "content": {
+        "type": "CHOICE",
+        "members": [
+          {
+            "type": "SEQ",
+            "members": [
+              {
+                "type": "STRING",
+                "value": "//"
+              },
+              {
+                "type": "PATTERN",
+                "value": ".*"
+              }
+            ]
+          },
+          {
+            "type": "SEQ",
+            "members": [
+              {
+                "type": "STRING",
+                "value": "/*"
+              },
+              {
+                "type": "PATTERN",
+                "value": "[^*]*\\*+([^/*][^*]*\\*+)*"
+              },
+              {
+                "type": "STRING",
+                "value": "/"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "string": {
+      "type": "TOKEN",
+      "content": {
+        "type": "SEQ",
+        "members": [
+          {
+            "type": "STRING",
+            "value": "\""
+          },
+          {
+            "type": "REPEAT",
+            "content": {
+              "type": "CHOICE",
+              "members": [
+                {
+                  "type": "PATTERN",
+                  "value": "[^\"\\\\\\n]"
+                },
+                {
+                  "type": "PATTERN",
+                  "value": "\\\\."
+                }
+              ]
+            }
+          },
+          {
+            "type": "STRING",
+            "value": "\""
+          }
+        ]
+      }
+    },
+    "number": {
+      "type": "TOKEN",
+      "content": {
+        "type": "PATTERN",
+        "value": "\\d+(?:[.,]\\d+)?"
+      }
+    },
+    "keyword": {
+      "type": "CHOICE",
+      "members": [
+        {
+          "type": "STRING",
+          "value": "se"
+        },
+        {
+          "type": "STRING",
+          "value": "senao"
+        },
+        {
+          "type": "STRING",
+          "value": "senão"
+        },
+        {
+          "type": "STRING",
+          "value": "ou"
+        },
+        {
+          "type": "STRING",
+          "value": "e"
+        },
+        {
+          "type": "STRING",
+          "value": "nao"
+        },
+        {
+          "type": "STRING",
+          "value": "não"
+        },
+        {
+          "type": "STRING",
+          "value": "inicio"
+        },
+        {
+          "type": "STRING",
+          "value": "início"
+        },
+        {
+          "type": "STRING",
+          "value": "fim"
+        },
+        {
+          "type": "STRING",
+          "value": "funcao"
+        },
+        {
+          "type": "STRING",
+          "value": "função"
+        },
+        {
+          "type": "STRING",
+          "value": "para"
+        },
+        {
+          "type": "STRING",
+          "value": "de"
+        },
+        {
+          "type": "STRING",
+          "value": "ate"
+        },
+        {
+          "type": "STRING",
+          "value": "até"
+        },
+        {
+          "type": "STRING",
+          "value": "em"
+        },
+        {
+          "type": "STRING",
+          "value": "repita"
+        },
+        {
+          "type": "STRING",
+          "value": "enquanto"
+        },
+        {
+          "type": "STRING",
+          "value": "vezes"
+        },
+        {
+          "type": "STRING",
+          "value": "importe"
+        },
+        {
+          "type": "STRING",
+          "value": "contem"
+        },
+        {
+          "type": "STRING",
+          "value": "contém"
+        },
+        {
+          "type": "STRING",
+          "value": "verdadeiro"
+        },
+        {
+          "type": "STRING",
+          "value": "falso"
+        },
+        {
+          "type": "STRING",
+          "value": "se_falhar"
+        },
+        {
+          "type": "STRING",
+          "value": "retorne"
+        },
+        {
+          "type": "STRING",
+          "value": "pare"
+        },
+        {
+          "type": "STRING",
+          "value": "continue"
+        },
+        {
+          "type": "STRING",
+          "value": "continua"
+        }
+      ]
+    },
+    "identifier": {
+      "type": "TOKEN",
+      "content": {
+        "type": "PATTERN",
+        "value": ":?[\\p{L}_][\\p{L}\\p{N}_]*",
+        "flags": "u"
+      }
+    },
+    "punctuation": {
+      "type": "CHOICE",
+      "members": [
+        {
+          "type": "STRING",
+          "value": "{"
+        },
+        {
+          "type": "STRING",
+          "value": "}"
+        },
+        {
+          "type": "STRING",
+          "value": "("
+        },
+        {
+          "type": "STRING",
+          "value": ")"
+        },
+        {
+          "type": "STRING",
+          "value": "["
+        },
+        {
+          "type": "STRING",
+          "value": "]"
+        },
+        {
+          "type": "STRING",
+          "value": ","
+        },
+        {
+          "type": "STRING",
+          "value": "="
+        },
+        {
+          "type": "STRING",
+          "value": "."
+        },
+        {
+          "type": "STRING",
+          "value": ":"
+        },
+        {
+          "type": "STRING",
+          "value": "+"
+        },
+        {
+          "type": "STRING",
+          "value": "-"
+        },
+        {
+          "type": "STRING",
+          "value": "*"
+        },
+        {
+          "type": "STRING",
+          "value": "/"
+        },
+        {
+          "type": "STRING",
+          "value": "%"
+        },
+        {
+          "type": "STRING",
+          "value": "<"
+        },
+        {
+          "type": "STRING",
+          "value": ">"
+        },
+        {
+          "type": "STRING",
+          "value": "!"
+        }
+      ]
+    }
+  },
+  "extras": [
+    {
+      "type": "PATTERN",
+      "value": "\\s"
+    },
+    {
+      "type": "SYMBOL",
+      "name": "comment"
+    }
+  ],
+  "conflicts": [],
+  "precedences": [],
+  "externals": [],
+  "inline": [],
+  "supertypes": [],
+  "reserved": {}
+}

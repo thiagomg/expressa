@@ -166,10 +166,10 @@ Work:
 
 Acceptance:
 
-- [ ] `poema.lep` with `"início: …"` does not confuse indent.
-- [ ] Top-level `escreva(...)` does not indent the next line.
-- [ ] Keyword list matches `lang.rs` / `KEYWORDS` tests.
-- [ ] Search finds accented identifiers.
+- [x] `poema.lep` with `"início: …"` does not confuse indent.
+- [x] Top-level `escreva(...)` does not indent the next line.
+- [x] Keyword list matches `lang.rs` / `KEYWORDS` tests.
+- [x] Search finds accented identifiers.
 
 ---
 

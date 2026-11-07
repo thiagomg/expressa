@@ -27,6 +27,13 @@ pub enum Acao {
     ZoomNormal,
     IrParaLinha,
     Buscar,
+    BuscarProxima,
+    Escapar,
+    Comentar,
+    Duplicar,
+    Recuar,
+    MoverCima,
+    MoverBaixo,
     Ajuda,
     Catalogo,
     Atalhos,
@@ -102,6 +109,11 @@ pub fn acao_de_tecla(key: &Key, modifiers: Modifiers) -> Option<Acao> {
         Key::Named(NamedKey::F11) if !control && !alt && shift => Some(Acao::SairFuncao),
         Key::Named(NamedKey::F11) if !control && !alt => Some(Acao::Entrar),
         Key::Named(NamedKey::F1) if !control && !alt => Some(Acao::Ajuda),
+        Key::Named(NamedKey::Escape) => Some(Acao::Escapar),
+        Key::Named(NamedKey::Enter) if control && !alt => Some(Acao::BuscarProxima),
+        Key::Named(NamedKey::ArrowUp) if alt && !control => Some(Acao::MoverCima),
+        Key::Named(NamedKey::ArrowDown) if alt && !control => Some(Acao::MoverBaixo),
+        Key::Character(c) if control && alt && (c == "\\" || c == "|") => Some(Acao::Recuar),
         Key::Character(c) if control && !alt => match c.to_lowercase().as_str() {
             "n" if !shift => Some(Acao::Novo),
             "s" if !shift => Some(Acao::Salvar),
@@ -110,6 +122,8 @@ pub fn acao_de_tecla(key: &Key, modifiers: Modifiers) -> Option<Acao> {
             "q" if !shift => Some(Acao::Sair),
             "f" if !shift => Some(Acao::Buscar),
             "g" if !shift => Some(Acao::IrParaLinha),
+            "/" if !shift => Some(Acao::Comentar),
+            "d" if !shift => Some(Acao::Duplicar),
             "0" => Some(Acao::ZoomNormal),
             "-" | "_" => Some(Acao::ZoomMenos),
             "=" | "+" => Some(Acao::ZoomMais),
@@ -133,14 +147,23 @@ pub fn mensagem_reservada(acao: Acao) -> &'static str {
         Acao::MostrarArquivos => "Mostrar arquivos (F7) ainda não está nesta versão Freya.",
         Acao::MostrarPainel => "Painel do depurador (F8) ainda não está nesta versão Freya.",
         Acao::IrParaLinha => "",
-        Acao::Buscar => "Buscar (Ctrl+F) ainda não está nesta versão Freya.",
+        Acao::Buscar | Acao::BuscarProxima | Acao::Escapar => "",
         Acao::Ajuda => "Ajuda (F1) ainda não está nesta versão Freya.",
         Acao::Catalogo => "Catálogo de funções nativas ainda não está nesta versão Freya.",
         Acao::Tutoriais => "Tutoriais ainda não estão nesta versão Freya.",
         Acao::Repl => "REPL ainda não está nesta versão Freya.",
         Acao::Atalhos => "Atalhos do teclado",
-        Acao::Sair | Acao::TemaClaro | Acao::TemaEscuro | Acao::ZoomMais | Acao::ZoomMenos
-        | Acao::ZoomNormal => "",
+        Acao::Sair
+        | Acao::TemaClaro
+        | Acao::TemaEscuro
+        | Acao::ZoomMais
+        | Acao::ZoomMenos
+        | Acao::ZoomNormal
+        | Acao::Comentar
+        | Acao::Duplicar
+        | Acao::Recuar
+        | Acao::MoverCima
+        | Acao::MoverBaixo => "",
     }
 }
 
@@ -170,6 +193,13 @@ mod tests {
             Some(Acao::SairFuncao)
         );
         assert_eq!(tecla("s", Modifiers::empty()), None);
+        assert_eq!(tecla("/", ctrl), Some(Acao::Comentar));
+        assert_eq!(tecla("f", ctrl), Some(Acao::Buscar));
+        assert_eq!(tecla("d", ctrl), Some(Acao::Duplicar));
+        assert_eq!(
+            acao_de_tecla(&Key::Named(NamedKey::Escape), Modifiers::empty()),
+            Some(Acao::Escapar)
+        );
     }
 
     #[test]

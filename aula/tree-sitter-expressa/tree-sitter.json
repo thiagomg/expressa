@@ -1,0 +1,16 @@
+{
+  "grammars": [
+    {
+      "name": "expressa",
+      "camelcase": "Expressa",
+      "scope": "source.expressa",
+      "file-types": ["lep"],
+      "highlights": "queries/highlights.scm"
+    }
+  ],
+  "metadata": {
+    "version": "0.4.2",
+    "license": "MIT",
+    "description": "Tree-sitter grammar for Expressa"
+  }
+}

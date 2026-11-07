@@ -150,6 +150,7 @@ pub fn barra_menus(
                 ("Letra menor", "Ctrl+-", Acao::ZoomMenos),
                 ("Letra normal", "Ctrl+0", Acao::ZoomNormal),
                 ("Ir para linha…", "Ctrl+G", Acao::IrParaLinha),
+                ("Buscar…", "Ctrl+F", Acao::Buscar),
                 ("REPL", "", Acao::Repl),
             ],
         ))
@@ -385,6 +386,50 @@ pub fn dialogo_confirmar(
                         .on_press(move |_| on_cancelar())
                         .child("Cancelar"),
                 ),
+        )
+}
+
+pub fn barra_busca(
+    paleta: Paleta,
+    termo: State<String>,
+    on_proxima: impl Fn() + Copy + 'static,
+    on_anterior: impl Fn() + Copy + 'static,
+    on_fechar: impl Fn() + Copy + 'static,
+) -> impl IntoElement {
+    rect()
+        .direction(Direction::Horizontal)
+        .width(Size::fill())
+        .height(Size::px(36.0))
+        .background(paleta.botao)
+        .color(paleta.texto)
+        .padding((4.0, 8.0, 4.0, 8.0))
+        .spacing(8.0)
+        .cross_align(Alignment::Center)
+        .child(label().font_size(13.0).text("Buscar"))
+        .child(
+            Input::new(termo)
+                .placeholder("texto")
+                .width(Size::px(240.0))
+                .on_submit(move |_| on_proxima()),
+        )
+        .child(
+            Button::new()
+                .compact()
+                .on_press(move |_| on_proxima())
+                .child("↓"),
+        )
+        .child(
+            Button::new()
+                .compact()
+                .on_press(move |_| on_anterior())
+                .child("↑"),
+        )
+        .child(
+            Button::new()
+                .flat()
+                .compact()
+                .on_press(move |_| on_fechar())
+                .child("×"),
         )
 }
 

@@ -11,19 +11,22 @@ use crate::documentos::{
     Abas, Depois, Dialogo, Fechar, carregar_editor, escolher_abrir, escolher_salvar, gravar_arquivo,
     gravar_rascunhos, ler_arquivo, nome_de_caminho, posicao_linha, sincronizar,
 };
-use crate::prefs::Prefs;
+use crate::edicao::{buscar, comentar, duplicar, mover, recuar_arquivo};
 use crate::editor::fonte_px;
+use crate::prefs::Prefs;
 use crate::shell::{aplicar_tema_editor, tema_freya};
 
 pub fn aplicar(
     acao: Acao,
     prefs: State<Prefs>,
-    editor: State<CodeEditorData>,
+    mut editor: State<CodeEditorData>,
     mut status: State<String>,
     theme: State<Theme>,
     mut atalhos_visiveis: State<bool>,
     abas: State<Abas>,
     mut dialogo: State<Dialogo>,
+    mut busca_aberta: State<bool>,
+    busca_termo: State<String>,
 ) {
     match acao {
         Acao::Sair => sair(prefs, editor, status, abas, dialogo),
@@ -46,6 +49,40 @@ pub fn aplicar(
         }
         Acao::FecharAba => fechar_aba(None, Depois::SoFechar, editor, prefs, abas, status, dialogo),
         Acao::IrParaLinha => dialogo.set(Dialogo::IrParaLinha),
+        Acao::Buscar => {
+            if busca_aberta() {
+                achar(true, editor, status, busca_termo);
+            } else {
+                busca_aberta.set(true);
+                status.set("Buscar".into());
+            }
+        }
+        Acao::BuscarProxima => achar(true, editor, status, busca_termo),
+        Acao::Escapar => {
+            busca_aberta.set(false);
+            dialogo.set(Dialogo::Nenhum);
+            atalhos_visiveis.set(false);
+        }
+        Acao::Comentar => {
+            comentar(&mut editor.write());
+            status.set("Comentário".into());
+        }
+        Acao::Duplicar => {
+            duplicar(&mut editor.write());
+            status.set("Linha duplicada".into());
+        }
+        Acao::Recuar => {
+            recuar_arquivo(&mut editor.write());
+            status.set("Recuo ajustado".into());
+        }
+        Acao::MoverCima => {
+            mover(&mut editor.write(), -1);
+            status.set("Linha movida".into());
+        }
+        Acao::MoverBaixo => {
+            mover(&mut editor.write(), 1);
+            status.set("Linha movida".into());
+        }
         other => {
             let msg = mensagem_reservada(other);
             if !msg.is_empty() {
@@ -292,6 +329,19 @@ pub fn ir_para_linha(
             status.set(format!("Linha {n}"));
         }
         None => status.set(format!("Não há linha {n}")),
+    }
+}
+
+pub fn achar(
+    para_frente: bool,
+    mut editor: State<CodeEditorData>,
+    mut status: State<String>,
+    busca_termo: State<String>,
+) {
+    if let Some(msg) = buscar(&mut editor.write(), &busca_termo.read(), para_frente) {
+        status.set(msg);
+    } else {
+        status.set(String::new());
     }
 }
 

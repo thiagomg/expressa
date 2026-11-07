@@ -8,7 +8,6 @@ use crate::shell::aplicar_tema_editor;
 use freya::code_editor::CodeEditorData;
 
 const LIMITE_TEXTO: u64 = 8 * 1024 * 1024;
-pub const RECUE: &str = "    ";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Aba {
