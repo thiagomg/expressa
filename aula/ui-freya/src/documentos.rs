@@ -1,11 +1,15 @@
 //! Open tabs, dirty flag, save, and go-to-line. No GTK.
 
+use std::cell::RefCell;
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::rc::Rc;
 
 use crate::editor::{FONT_FAMILY, fonte_px, new_editor};
 use crate::prefs::Prefs;
 use crate::shell::aplicar_tema_editor;
 use freya::code_editor::CodeEditorData;
+use freya::text_edit::{Rope, TextEditor};
 
 const LIMITE_TEXTO: u64 = 8 * 1024 * 1024;
 
@@ -18,6 +22,8 @@ pub struct Aba {
     pub dirty: bool,
     pub revisao: Option<String>,
     pub rel_remoto: Option<String>,
+    pub cursor: usize,
+    pub selecao: Option<(usize, usize)>,
 }
 
 impl Aba {
@@ -30,7 +36,24 @@ impl Aba {
             dirty: false,
             revisao: None,
             rel_remoto: None,
+            cursor: 0,
+            selecao: None,
         }
+    }
+}
+
+#[derive(Clone, Default)]
+struct Editores(Rc<RefCell<HashMap<u64, CodeEditorData>>>);
+
+impl PartialEq for Editores {
+    fn eq(&self, _: &Self) -> bool {
+        true
+    }
+}
+impl Eq for Editores {}
+impl std::fmt::Debug for Editores {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("Editores")
     }
 }
 
@@ -39,6 +62,7 @@ pub struct Abas {
     pub itens: Vec<Aba>,
     pub atual: usize,
     proximo_id: u64,
+    editores: Editores,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -103,6 +127,7 @@ impl Abas {
             itens: vec![Aba::vazia(1, texto)],
             atual: 0,
             proximo_id: 2,
+            editores: Editores::default(),
         }
     }
 
@@ -150,6 +175,10 @@ impl Abas {
     }
 
     pub fn remover(&mut self, idx: usize) {
+        let id = self.itens.get(idx).map(|a| a.id);
+        if let Some(id) = id {
+            self.editores.0.borrow_mut().remove(&id);
+        }
         if self.itens.len() == 1 {
             self.itens[0] = Aba::vazia(self.proximo_id, "");
             self.proximo_id += 1;
@@ -344,14 +373,60 @@ pub fn sincronizar(abas: &mut Abas, editor: &CodeEditorData) {
     let aba = abas.atual_mut();
     aba.texto = editor.rope.to_string();
     aba.dirty = editor.is_edited();
+    aba.cursor = editor.cursor_pos();
+    aba.selecao = editor.get_selection();
 }
 
+/// Load from disk / new file: new buffer, no undo from a previous tab.
 pub fn carregar_editor(editor: &mut CodeEditorData, aba: &Aba, prefs: &Prefs) {
     *editor = new_editor(&aba.texto);
     aplicar_tema_editor(editor, prefs.dark);
     editor.measure(fonte_px(prefs.font_size), FONT_FAMILY);
+    let max = editor.len_utf16_cu();
+    editor.move_cursor_to(aba.cursor.min(max));
+    if let Some(sel) = aba.selecao {
+        editor.set_selection(sel);
+    }
     if !aba.dirty {
         editor.mark_as_saved();
+    }
+}
+
+pub fn guardar_editor(abas: &Abas, id: u64, editor: CodeEditorData) {
+    abas.editores.0.borrow_mut().insert(id, editor);
+}
+
+pub fn guardar_live(abas: &Abas, editor: &mut CodeEditorData) {
+    let id = abas.atual().id;
+    let live = std::mem::replace(editor, dummy_editor());
+    guardar_editor(abas, id, live);
+}
+
+fn dummy_editor() -> CodeEditorData {
+    CodeEditorData::new(Rope::from_str(""), None)
+}
+
+/// Switch tab without rebuilding the live buffer when we already have one.
+pub fn trocar_aba(editor: &mut CodeEditorData, abas: &mut Abas, idx: usize, prefs: &Prefs) {
+    if idx == abas.atual || idx >= abas.itens.len() {
+        return;
+    }
+    let de = abas.atual().id;
+    sincronizar(abas, editor);
+    let live = std::mem::replace(editor, dummy_editor());
+    guardar_editor(abas, de, live);
+    abas.ir_para(idx);
+    let aba = abas.atual().clone();
+    instalar_editor(editor, abas, &aba, prefs);
+}
+
+pub fn instalar_editor(editor: &mut CodeEditorData, abas: &Abas, aba: &Aba, prefs: &Prefs) {
+    if let Some(guardado) = abas.editores.0.borrow_mut().remove(&aba.id) {
+        *editor = guardado;
+        aplicar_tema_editor(editor, prefs.dark);
+        editor.measure(fonte_px(prefs.font_size), FONT_FAMILY);
+    } else {
+        carregar_editor(editor, aba, prefs);
     }
 }
 
@@ -375,6 +450,8 @@ mod tests {
             dirty: false,
             revisao: None,
             rel_remoto: None,
+            cursor: 0,
+            selecao: None,
         };
         assert_eq!(Abas::rotulo(&a), "a.lep");
         a.dirty = true;
@@ -479,5 +556,29 @@ mod tests {
         abas.atual_mut().dirty = false;
         gravar_rascunhos(&abas);
         assert!(ler_rascunho(&dir.join("4242.rascunho"), "4242.rascunho").is_none());
+    }
+
+    #[test]
+    fn trocar_aba_restaura_cursor_e_desfazer() {
+        let mut abas = Abas::nova("aaa");
+        let mut ed = CodeEditorData::new(Rope::from_str("aaa"), None);
+        ed.move_cursor_to(2);
+        let n = ed.insert("X", 2);
+        ed.move_cursor_to(2 + n);
+        sincronizar(&mut abas, &ed);
+        guardar_live(&abas, &mut ed);
+        abas.nova_aba("bbb");
+        ed = CodeEditorData::new(Rope::from_str("bbb"), None);
+        ed.move_cursor_to(1);
+        sincronizar(&mut abas, &ed);
+        guardar_live(&abas, &mut ed);
+        abas.ir_para(0);
+        let aba = abas.atual().clone();
+        let guardado = abas.editores.0.borrow_mut().remove(&aba.id).unwrap();
+        ed = guardado;
+        assert_eq!(ed.rope.to_string(), "aaXa");
+        assert_eq!(ed.cursor_pos(), 3);
+        assert!(ed.undo().is_some());
+        assert_eq!(ed.rope.to_string(), "aaa");
     }
 }

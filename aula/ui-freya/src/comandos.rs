@@ -15,8 +15,8 @@ use crate::grafico::Graficos;
 use crate::repl::Repl;
 use crate::documentos::{
     Abas, Depois, DepoisNome, Dialogo, Fechar, carregar_editor, escolher_abrir, escolher_salvar,
-    expected_da_aba, gravar_rascunhos, ler_arquivo, nome_de_caminho, posicao_linha,
-    revisao_de_arquivo, sincronizar,
+    expected_da_aba, gravar_rascunhos, guardar_live, instalar_editor, ler_arquivo, nome_de_caminho,
+    posicao_linha, revisao_de_arquivo, sincronizar, trocar_aba,
 };
 use crate::turma::Turma;
 use expressa_aula_storage::{Expected, SaveError};
@@ -230,6 +230,7 @@ fn novo(
     mut status: State<String>,
 ) {
     sincronizar(&mut abas.write(), &editor.read());
+    guardar_live(&abas.read(), &mut editor.write());
     abas.write().nova_aba("");
     carregar_editor(&mut editor.write(), abas.read().atual(), &prefs.read());
     status.set("Nova aba".into());
@@ -258,8 +259,7 @@ pub fn abrir_caminho(
     sincronizar(&mut abas.write(), &editor.read());
     let ja = abas.read().achar_caminho(&path);
     if let Some(idx) = ja {
-        abas.write().ir_para(idx);
-        carregar_editor(&mut editor.write(), abas.read().atual(), &prefs.read());
+        trocar_aba(&mut editor.write(), &mut abas.write(), idx, &prefs.read());
         status.set(format!("Já aberto: {}", nome_de_caminho(&path)));
         return;
     }
@@ -269,6 +269,9 @@ pub fn abrir_caminho(
                 let a = abas.read();
                 a.itens.len() == 1 && !a.atual().dirty && a.atual().caminho.is_none()
             };
+            if !so_vazia {
+                guardar_live(&abas.read(), &mut editor.write());
+            }
             {
                 let mut abas = abas.write();
                 if so_vazia {
@@ -407,11 +410,19 @@ pub fn fechar_aba(
 ) {
     sincronizar(&mut abas.write(), &editor.read());
     let id = id.unwrap_or_else(|| abas.read().atual().id);
+    let fechando_atual = abas.read().atual().id == id;
     let resultado = abas.write().fechar_id(id);
     match resultado {
         Fechar::Confirma => dialogo.set(Dialogo::Confirmar { id, depois }),
         Fechar::Fecha => {
-            carregar_editor(&mut editor.write(), abas.read().atual(), &prefs.read());
+            if fechando_atual {
+                instalar_editor(
+                    &mut editor.write(),
+                    &abas.read(),
+                    abas.read().atual(),
+                    &prefs.read(),
+                );
+            }
             status.set("Aba fechada".into());
             if depois == Depois::Sair {
                 sair(prefs, editor, status, abas, dialogo);
@@ -465,8 +476,7 @@ fn sair(
     };
     let idx = abas.read().itens.iter().position(|a| a.id == id);
     if let Some(idx) = idx {
-        abas.write().ir_para(idx);
-        carregar_editor(&mut editor.write(), abas.read().atual(), &prefs.read());
+        trocar_aba(&mut editor.write(), &mut abas.write(), idx, &prefs.read());
         status.set(format!("Salvar {}?", abas.read().atual().nome));
     }
     dialogo.set(Dialogo::Confirmar {
@@ -586,16 +596,7 @@ pub fn abrir_remoto(
             let _ = turma.read().gravar_cache(&rel, &texto);
             let ja = abas.read().achar_caminho(&path);
             if let Some(idx) = ja {
-                abas.write().ir_para(idx);
-                {
-                    let mut abas = abas.write();
-                    let aba = abas.atual_mut();
-                    aba.texto = texto.clone();
-                    aba.revisao = revisao.clone();
-                    aba.rel_remoto = Some(rel.clone());
-                    aba.dirty = false;
-                }
-                carregar_editor(&mut editor.write(), abas.read().atual(), &prefs.read());
+                trocar_aba(&mut editor.write(), &mut abas.write(), idx, &prefs.read());
                 status.set(format!("Já aberto: {rel}"));
                 return;
             }
@@ -603,6 +604,9 @@ pub fn abrir_remoto(
                 let a = abas.read();
                 a.itens.len() == 1 && !a.atual().dirty && a.atual().caminho.is_none()
             };
+            if !so_vazia {
+                guardar_live(&abas.read(), &mut editor.write());
+            }
             {
                 let mut abas = abas.write();
                 if so_vazia {
@@ -897,6 +901,7 @@ pub fn recuperar_rascunhos(
         return;
     };
     dialogo.set(Dialogo::Nenhum);
+    guardar_live(&abas.read(), &mut editor.write());
     for r in itens {
         abas.write().nova_aba(&r.texto);
         {
@@ -1436,7 +1441,5 @@ pub fn selecionar_aba(
     if idx == abas.read().atual {
         return;
     }
-    sincronizar(&mut abas.write(), &editor.read());
-    abas.write().ir_para(idx);
-    carregar_editor(&mut editor.write(), abas.read().atual(), &prefs.read());
+    trocar_aba(&mut editor.write(), &mut abas.write(), idx, &prefs.read());
 }
