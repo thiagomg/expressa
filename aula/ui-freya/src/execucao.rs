@@ -4,7 +4,7 @@ use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::Mutex;
-use std::sync::mpsc::{self, Receiver, Sender, SyncSender, TryRecvError};
+use std::sync::mpsc::{self, Receiver, Sender, TryRecvError};
 use std::time::Duration;
 
 use expressa::runtime::{
@@ -16,7 +16,7 @@ use crate::debug::{Quadro, Variavel};
 
 use crate::projeto::skip_name;
 
-const EVENT_BACKLOG: usize = 256;
+
 
 #[derive(Debug, Clone)]
 pub enum EventoExec {
@@ -83,7 +83,7 @@ impl Execucao {
         pontos: Vec<(String, u32)>,
     ) {
         self.parar();
-        let (event_tx, events) = mpsc::sync_channel(EVENT_BACKLOG);
+        let (event_tx, events) = mpsc::channel();
         let (leia_tx, leia_rx) = mpsc::channel::<String>();
         let (parar_ui, parar_mid) = mpsc::channel::<String>();
         let (parar_tx, parar_rx) = mpsc::channel::<String>();
@@ -146,7 +146,7 @@ impl Execucao {
                     if matches!(ev, EventoExec::Fim { .. }) {
                         self.rodando = false;
                     }
-                    out.push(ev);
+                    empilhar_evento(&mut out, ev);
                 }
                 Err(TryRecvError::Empty) => break,
                 Err(TryRecvError::Disconnected) => {
@@ -182,8 +182,22 @@ impl Execucao {
     }
 }
 
+fn empilhar_evento(out: &mut Vec<EventoExec>, ev: EventoExec) {
+    if let EventoExec::Saida { texto, stderr } = &ev
+        && let Some(EventoExec::Saida {
+            texto: acc,
+            stderr: acc_err,
+        }) = out.last_mut()
+        && acc_err == stderr
+    {
+        acc.push_str(texto);
+        return;
+    }
+    out.push(ev);
+}
+
 struct ChannelOut {
-    tx: SyncSender<EventoExec>,
+    tx: Sender<EventoExec>,
     stderr: bool,
 }
 
@@ -202,7 +216,7 @@ impl Write for ChannelOut {
 }
 
 struct ChannelCartesiano {
-    tx: SyncSender<EventoExec>,
+    tx: Sender<EventoExec>,
 }
 
 impl CartesianoHost for ChannelCartesiano {
@@ -214,7 +228,7 @@ impl CartesianoHost for ChannelCartesiano {
 }
 
 struct ChannelGraf {
-    tx: SyncSender<EventoExec>,
+    tx: Sender<EventoExec>,
     eventos: Receiver<EventoGraf>,
 }
 
@@ -246,7 +260,7 @@ impl GrafHost for ChannelGraf {
 }
 
 struct ChannelLeia {
-    tx: SyncSender<EventoExec>,
+    tx: Sender<EventoExec>,
     linhas: Receiver<String>,
 }
 
@@ -282,7 +296,7 @@ fn correr(
     args: Vec<String>,
     debug: bool,
     pontos: Vec<(String, u32)>,
-    tx: SyncSender<EventoExec>,
+    tx: Sender<EventoExec>,
     leia_rx: Receiver<String>,
     parar_rx: Receiver<String>,
     graf_rx: Receiver<EventoGraf>,
@@ -552,6 +566,78 @@ mod tests {
         }
         assert!(fim, "não terminou: {saida}");
         assert!(saida.contains("olá"), "{saida}");
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn funde_saidas_seguidas() {
+        let mut out = Vec::new();
+        empilhar_evento(
+            &mut out,
+            EventoExec::Saida {
+                texto: "a".into(),
+                stderr: false,
+            },
+        );
+        empilhar_evento(
+            &mut out,
+            EventoExec::Saida {
+                texto: "b".into(),
+                stderr: false,
+            },
+        );
+        empilhar_evento(
+            &mut out,
+            EventoExec::Saida {
+                texto: "e".into(),
+                stderr: true,
+            },
+        );
+        assert_eq!(out.len(), 2);
+        match &out[0] {
+            EventoExec::Saida { texto, stderr: false } => assert_eq!(texto, "ab"),
+            _ => panic!("{out:?}"),
+        }
+    }
+
+    #[test]
+    fn parar_nao_espera_fila_de_saida() {
+        let dir = std::env::temp_dir().join(format!(
+            "aula-stop-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let src = "enquanto verdadeiro { escreva(\"vivo\") }";
+        std::fs::write(dir.join("t.lep"), src).unwrap();
+        let mut e = Execucao::default();
+        e.iniciar(
+            src.into(),
+            dir.join("t.lep").display().to_string(),
+            dir.clone(),
+            vec![],
+            false,
+            vec![],
+        );
+        std::thread::sleep(std::time::Duration::from_millis(40));
+        e.parar();
+        let inicio = std::time::Instant::now();
+        let mut fim = false;
+        while inicio.elapsed() < std::time::Duration::from_secs(1) {
+            for ev in e.drenar() {
+                if matches!(ev, EventoExec::Fim { .. }) {
+                    fim = true;
+                }
+            }
+            if fim {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        assert!(fim, "Parar não encerrou em 1s");
         let _ = std::fs::remove_dir_all(dir);
     }
 
