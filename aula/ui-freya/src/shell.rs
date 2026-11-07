@@ -13,6 +13,7 @@ use freya::{
 use crate::{
     ajuda::Sugestao,
     atalhos::{Acao, ATALHOS},
+    prefs::Recente,
     console::Console,
     debug::{Depuracao, MarcaGutter, marca_gutter, valor_observado},
     documentos::Abas,
@@ -179,6 +180,8 @@ pub fn barra_menus(
     aberto: State<MenuAberto>,
     paleta: Paleta,
     on_acao: impl Fn(Acao) + Copy + 'static,
+    on_recente: impl Fn(Recente) + Copy + 'static,
+    recentes: Vec<Recente>,
     marcas: MarcasVer,
 ) -> impl IntoElement {
     rect()
@@ -199,22 +202,12 @@ pub fn barra_menus(
         )
         .padding((0.0, 6.0, 0.0, 6.0))
         .cross_align(Alignment::Center)
-        .child(botao_menu(
-            "Arquivo",
-            MenuAberto::Arquivo,
+        .child(menu_arquivo(
             aberto,
             paleta,
             on_acao,
-            &[
-                ("Novo", "Ctrl+N", Acao::Novo),
-                ("Abrir…", "", Acao::Abrir),
-                ("Abrir projeto…", "", Acao::AbrirProjeto),
-                ("Servidor…", "", Acao::Servidor),
-                ("Salvar", "Ctrl+S", Acao::Salvar),
-                ("Salvar como…", "Ctrl+Shift+S", Acao::SalvarComo),
-                ("Sair", "Ctrl+Q", Acao::Sair),
-            ],
-            |_| false,
+            on_recente,
+            recentes,
         ))
         .child(botao_menu(
             "Executar",
@@ -283,6 +276,84 @@ pub fn barra_menus(
             ],
             |_| false,
         ))
+}
+
+fn menu_arquivo(
+    mut aberto: State<MenuAberto>,
+    _paleta: Paleta,
+    on_acao: impl Fn(Acao) + Copy + 'static,
+    on_recente: impl Fn(Recente) + Copy + 'static,
+    recentes: Vec<Recente>,
+) -> impl IntoElement {
+    let id = MenuAberto::Arquivo;
+    let esta = aberto() == id;
+    rect()
+        .content(Content::fit())
+        .child(
+            Button::new()
+                .flat()
+                .compact()
+                .on_press(move |_| {
+                    if aberto() == id {
+                        aberto.set(MenuAberto::Nenhum);
+                    } else {
+                        aberto.set(id);
+                    }
+                })
+                .child("Arquivo"),
+        )
+        .maybe_child(esta.then(move || {
+            let itens = [
+                ("Novo", "Ctrl+N", Acao::Novo),
+                ("Abrir…", "", Acao::Abrir),
+                ("Abrir projeto…", "", Acao::AbrirProjeto),
+            ];
+            let depois = [
+                ("Servidor…", "", Acao::Servidor),
+                ("Salvar", "Ctrl+S", Acao::Salvar),
+                ("Salvar como…", "Ctrl+Shift+S", Acao::SalvarComo),
+                ("Sair", "Ctrl+Q", Acao::Sair),
+            ];
+            let mut menu = Menu::new().on_close(move |_| aberto.set(MenuAberto::Nenhum));
+            for (nome, atalho, acao) in itens {
+                menu = menu.child(
+                    MenuButton::new()
+                        .on_press(move |_| {
+                            aberto.set(MenuAberto::Nenhum);
+                            on_acao(acao);
+                        })
+                        .child(rotulo_menu(nome, atalho, false)),
+                );
+            }
+            let mut sub = SubMenu::new().label("Recentes");
+            if recentes.is_empty() {
+                sub = sub.child(MenuButton::new().child("Nenhum recente"));
+            } else {
+                for r in recentes {
+                    let escolhido = r.clone();
+                    sub = sub.child(
+                        MenuButton::new()
+                            .on_press(move |_| {
+                                aberto.set(MenuAberto::Nenhum);
+                                on_recente(escolhido.clone());
+                            })
+                            .child(r.rotulo()),
+                    );
+                }
+            }
+            menu = menu.child(sub);
+            for (nome, atalho, acao) in depois {
+                menu = menu.child(
+                    MenuButton::new()
+                        .on_press(move |_| {
+                            aberto.set(MenuAberto::Nenhum);
+                            on_acao(acao);
+                        })
+                        .child(rotulo_menu(nome, atalho, false)),
+                );
+            }
+            menu
+        }))
 }
 
 fn botao_menu(

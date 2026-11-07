@@ -20,6 +20,17 @@ pub enum Recente {
 }
 
 impl Recente {
+    pub fn rotulo(&self) -> String {
+        match self {
+            Recente::Local(p) => path_for_display(Path::new(p)),
+            Recente::Servidor {
+                url,
+                aluno,
+                projeto,
+            } => format!("{url} — {aluno}/{projeto}"),
+        }
+    }
+
     fn texto(&self) -> String {
         match self {
             Recente::Local(p) => format!("local\t{p}"),
@@ -118,6 +129,10 @@ impl Prefs {
     pub fn lembrar_recente(&mut self, r: Recente) {
         self.recentes.insert(0, r);
         self.organizar_recentes();
+    }
+
+    pub fn esquecer_recente(&mut self, r: &Recente) {
+        self.recentes.retain(|x| x != r);
     }
 
     fn organizar_recentes(&mut self) {
@@ -320,6 +335,21 @@ mod tests {
                 .count(),
             10
         );
+    }
+
+    #[test]
+    fn rotulo_recente_turma_e_esquecer() {
+        let r = Recente::Servidor {
+            url: "http://127.0.0.1:50051".into(),
+            aluno: "ana".into(),
+            projeto: "aula".into(),
+        };
+        assert_eq!(r.rotulo(), "http://127.0.0.1:50051 — ana/aula");
+        let mut p = Prefs::default();
+        p.lembrar_recente(r.clone());
+        p.lembrar_recente(Recente::Local("/tmp/proj".into()));
+        p.esquecer_recente(&r);
+        assert_eq!(p.recentes, vec![Recente::Local("/tmp/proj".into())]);
     }
 
     #[test]

@@ -35,7 +35,7 @@ use crate::{
     atalhos::{Acao, acao_de_tecla_com_foco},
     comandos::{
         achar, adicionar_observado, abrir_projeto_servidor, aplicar, aplicar_eventos, aplicar_fundo,
-        aplicar_sugestao, alternar_ponto_em, clicar_arvore, confirmar_apagar, confirmar_descarte, confirmar_nome,
+        aplicar_sugestao, abrir_recente, alternar_ponto_em, clicar_arvore, confirmar_apagar, confirmar_descarte, confirmar_nome,
         conectar_servidor, criar_projeto_servidor, descartar_rascunhos, escolher_projeto,
         fechar_dialogo_rascunhos,
         fechar_aba, clique_tela_graf, destacar_graficos, enviar_repl, fechar_repl, fechar_tela_graf,
@@ -333,6 +333,10 @@ fn app() -> impl IntoElement {
             menu,
             paleta,
             on_acao,
+            move |r| {
+                abrir_recente(r, editor, prefs, abas, status, projeto, turma, dialogo)
+            },
+            prefs.read().recentes.clone(),
             MarcasVer {
                 arquivos: projeto_agora.visivel,
                 painel: depuracao_agora.visivel,
@@ -687,9 +691,9 @@ fn app() -> impl IntoElement {
                 turma.read().projetos.clone(),
                 nome_campo,
                 move |nome| {
-                    abrir_projeto_servidor(
+                    let _ = abrir_projeto_servidor(
                         nome, editor, prefs, abas, status, projeto, turma, dialogo,
-                    )
+                    );
                 },
                 move || {
                     criar_projeto_servidor(

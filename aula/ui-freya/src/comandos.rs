@@ -24,7 +24,7 @@ use crate::turma::Turma;
 use expressa_aula_storage::{Expected, SaveError};
 use crate::edicao::{buscar, comentar, duplicar, mover, recuar_arquivo};
 use crate::editor::fonte_px;
-use crate::prefs::Prefs;
+use crate::prefs::{Prefs, Recente, expand_tilde};
 use crate::console::{Console, parse_error_location};
 use expressa::runtime::EventoGraf;
 use crate::execucao::{
@@ -756,6 +756,18 @@ pub fn pasta_selecionada(projeto: State<Projeto>) -> String {
 pub fn conectar_servidor(
     url: &str,
     aluno: &str,
+    turma: State<Turma>,
+    prefs: State<Prefs>,
+    status: State<String>,
+    dialogo: State<Dialogo>,
+) {
+    conectar_servidor_em(url, aluno, None, turma, prefs, status, dialogo);
+}
+
+pub fn conectar_servidor_em(
+    url: &str,
+    aluno: &str,
+    projeto_nome: Option<String>,
     mut turma: State<Turma>,
     mut prefs: State<Prefs>,
     mut status: State<String>,
@@ -777,7 +789,10 @@ pub fn conectar_servidor(
     spawn_bloqueante(move || {
         let r = t.conectar().map(|_| t);
         if let Some(fundo) = fundo {
-            fundo.enviar(ResultadoFundo::Conectou(r));
+            fundo.enviar(ResultadoFundo::Conectou {
+                resultado: r,
+                projeto: projeto_nome,
+            });
         }
     });
 }
@@ -791,7 +806,7 @@ pub fn abrir_projeto_servidor(
     mut projeto: State<Projeto>,
     mut turma: State<Turma>,
     mut dialogo: State<Dialogo>,
-) {
+) -> bool {
     dialogo.set(Dialogo::Nenhum);
     let resultado = {
         let mut t = turma.write();
@@ -803,8 +818,57 @@ pub fn abrir_projeto_servidor(
         Ok(()) => {
             status.set(format!("Projeto {nome}"));
             restaurar_arquivo(editor, prefs, abas, status);
+            true
         }
-        Err(e) => status.set(e),
+        Err(e) => {
+            status.set(e);
+            false
+        }
+    }
+}
+
+pub fn abrir_recente(
+    r: Recente,
+    editor: State<CodeEditorData>,
+    mut prefs: State<Prefs>,
+    abas: State<Abas>,
+    mut status: State<String>,
+    mut projeto: State<Projeto>,
+    mut turma: State<Turma>,
+    dialogo: State<Dialogo>,
+) {
+    match r {
+        Recente::Local(p) => {
+            let path = expand_tilde(&p);
+            let marca = Recente::Local(p.clone());
+            if !path.is_dir() {
+                prefs.write().esquecer_recente(&marca);
+                prefs.read().save();
+                status.set("Esse projeto não existe mais".into());
+                return;
+            }
+            let aberto = abrir_raiz(&mut projeto.write(), &mut prefs.write(), path);
+            match aberto {
+                Ok(()) => {
+                    turma.write().conectado = false;
+                    turma.write().projeto.clear();
+                    status.set("Projeto aberto".into());
+                    restaurar_arquivo(editor, prefs, abas, status);
+                }
+                Err(e) => {
+                    prefs.write().esquecer_recente(&marca);
+                    prefs.read().save();
+                    status.set(e);
+                }
+            }
+        }
+        Recente::Servidor {
+            url,
+            aluno,
+            projeto: nome,
+        } => {
+            conectar_servidor_em(&url, &aluno, Some(nome), turma, prefs, status, dialogo);
+        }
     }
 }
 
@@ -1347,12 +1411,26 @@ pub fn aplicar_fundo(
                     None,
                 );
             }
-            ResultadoFundo::Conectou(resultado) => match resultado {
+            ResultadoFundo::Conectou { resultado, projeto: nome } => match resultado {
                 Ok(t) => {
                     let recado = t.recado.clone();
                     turma.write().aplicar_de(t);
-                    dialogo.set(Dialogo::Projetos);
-                    status.set(recado);
+                    if let Some(nome) = nome {
+                        let recente = Recente::Servidor {
+                            url: turma.read().url.clone(),
+                            aluno: turma.read().aluno.clone(),
+                            projeto: nome.clone(),
+                        };
+                        if !abrir_projeto_servidor(
+                            nome, editor, prefs, abas, status, projeto, turma, dialogo,
+                        ) {
+                            prefs.write().esquecer_recente(&recente);
+                            prefs.read().save();
+                        }
+                    } else {
+                        dialogo.set(Dialogo::Projetos);
+                        status.set(recado);
+                    }
                 }
                 Err(e) => status.set(format!("Não conectou: {e}")),
             },

@@ -12,7 +12,10 @@ pub enum ResultadoFundo {
         path: Option<PathBuf>,
         forcar_nome: bool,
     },
-    Conectou(Result<Turma, String>),
+    Conectou {
+        resultado: Result<Turma, String>,
+        projeto: Option<String>,
+    },
 }
 
 #[derive(Clone)]
