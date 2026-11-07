@@ -6,7 +6,9 @@ use std::sync::Arc;
 use std::sync::Mutex;
 use std::sync::mpsc::{self, Receiver, Sender, SyncSender, TryRecvError};
 
-use expressa::runtime::{LeiaHost, StopHook, run_with_hosts};
+use expressa::runtime::{ChannelDebugger, DebugHook, LeiaHost, StopHook, run_with_hosts};
+
+use crate::debug::{Quadro, Variavel};
 
 use crate::projeto::skip_name;
 
@@ -16,6 +18,14 @@ const EVENT_BACKLOG: usize = 256;
 pub enum EventoExec {
     Saida { texto: String, stderr: bool },
     Leia(String),
+    Pausado {
+        arquivo: String,
+        linha: u32,
+        trecho: String,
+        vars: Vec<Variavel>,
+        pilha: Vec<Quadro>,
+        erro: Option<String>,
+    },
     Fim { ok: bool, erro: String, arquivo: String, linha: u32, pilha: Vec<String> },
 }
 
@@ -61,6 +71,8 @@ impl Execucao {
         arquivo: String,
         workspace: PathBuf,
         args: Vec<String>,
+        debug: bool,
+        pontos: Vec<(String, u32)>,
     ) {
         self.parar();
         let (event_tx, events) = mpsc::sync_channel(EVENT_BACKLOG);
@@ -87,10 +99,24 @@ impl Execucao {
             g.parar = Some(parar_ui);
         }
         self.rodando = true;
+        let pontos = pontos
+            .into_iter()
+            .map(|(f, l)| (abs_no_workspace(&workspace, &f), l))
+            .collect();
         std::thread::Builder::new()
             .name("expressa-aula-exec".into())
             .spawn(move || {
-                correr(fonte, arquivo, workspace, args, event_tx, leia_rx, parar_rx);
+                correr(
+                    fonte,
+                    arquivo,
+                    workspace,
+                    args,
+                    debug,
+                    pontos,
+                    event_tx,
+                    leia_rx,
+                    parar_rx,
+                );
             })
             .expect("thread de execução");
     }
@@ -127,8 +153,12 @@ impl Execucao {
     }
 
     pub fn parar(&mut self) {
+        self.comando("terminar");
+    }
+
+    pub fn comando(&self, cmd: &str) {
         if let Some(tx) = self.inner.lock().unwrap().parar.as_ref() {
-            let _ = tx.send("terminar".into());
+            let _ = tx.send(cmd.to_string());
         }
     }
 }
@@ -166,11 +196,29 @@ impl LeiaHost for ChannelLeia {
     }
 }
 
+fn rel_de(root: &Path, file: &str) -> String {
+    Path::new(file)
+        .strip_prefix(root)
+        .map(|p| p.to_string_lossy().replace('\\', "/"))
+        .unwrap_or_else(|_| file.replace('\\', "/"))
+}
+
+fn abs_no_workspace(ws: &Path, rel: &str) -> String {
+    let p = Path::new(rel);
+    if p.is_absolute() {
+        rel.to_string()
+    } else {
+        ws.join(p).display().to_string()
+    }
+}
+
 fn correr(
     fonte: String,
     arquivo: String,
     workspace: PathBuf,
     args: Vec<String>,
+    debug: bool,
+    pontos: Vec<(String, u32)>,
     tx: SyncSender<EventoExec>,
     leia_rx: Receiver<String>,
     parar_rx: Receiver<String>,
@@ -187,7 +235,51 @@ fn correr(
         tx: tx.clone(),
         linhas: leia_rx,
     };
-    let hook = Box::new(StopHook::new(parar_rx));
+    let hook: Box<dyn DebugHook> = if debug {
+        let (pause_tx, pause_rx) = mpsc::channel::<expressa::runtime::DebugPaused>();
+        {
+            let tx = tx.clone();
+            let root = workspace.clone();
+            std::thread::spawn(move || {
+                while let Ok(p) = pause_rx.recv() {
+                    let ev = EventoExec::Pausado {
+                        arquivo: rel_de(&root, &p.file),
+                        linha: p.line,
+                        trecho: p.source_line,
+                        vars: p
+                            .vars
+                            .into_iter()
+                            .map(|v| Variavel {
+                                escopo: v.scope,
+                                nome: v.name,
+                                valor: v.value,
+                            })
+                            .collect(),
+                        pilha: p
+                            .stack
+                            .into_iter()
+                            .map(|f| Quadro {
+                                nome: f.name,
+                                arquivo: rel_de(&root, &f.file),
+                                linha: f.line,
+                            })
+                            .collect(),
+                        erro: p.error,
+                    };
+                    if tx.send(ev).is_err() {
+                        break;
+                    }
+                }
+            });
+        }
+        let mut dbg = ChannelDebugger::new(pause_tx, parar_rx);
+        for bp in pontos {
+            dbg.session.breakpoints.insert(bp);
+        }
+        Box::new(dbg)
+    } else {
+        Box::new(StopHook::new(parar_rx))
+    };
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         run_with_hosts(
             &fonte,
@@ -368,6 +460,8 @@ mod tests {
             dir.join("t.lep").display().to_string(),
             dir.clone(),
             vec![],
+            false,
+            vec![],
         );
         let mut saida = String::new();
         let mut fim = false;
@@ -411,6 +505,8 @@ escreva(n)"#;
             src.into(),
             dir.join("t.lep").display().to_string(),
             dir.clone(),
+            vec![],
+            false,
             vec![],
         );
         let mut saida = String::new();
@@ -457,5 +553,104 @@ escreva(n)"#;
         assert_eq!(std::fs::read_to_string(dest.join("a.lep")).unwrap(), "aba");
         let _ = std::fs::remove_dir_all(root);
         let _ = std::fs::remove_dir_all(dest);
+    }
+
+    fn espera_evento(e: &mut Execucao, n: usize) -> Vec<EventoExec> {
+        let mut todos = Vec::new();
+        for _ in 0..n {
+            std::thread::sleep(std::time::Duration::from_millis(10));
+            let novos = e.drenar();
+            let parou = novos.iter().any(|ev| {
+                matches!(ev, EventoExec::Fim { .. } | EventoExec::Pausado { .. })
+            });
+            todos.extend(novos);
+            if parou {
+                break;
+            }
+        }
+        todos
+    }
+
+    #[test]
+    fn depura_pausa_na_primeira_linha_e_continua() {
+        let dir = std::env::temp_dir().join(format!(
+            "aula-dbg-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let src = "x = 1\nescreva(x)\n";
+        std::fs::write(dir.join("t.lep"), src).unwrap();
+        let mut e = Execucao::default();
+        e.iniciar(
+            src.into(),
+            dir.join("t.lep").display().to_string(),
+            dir.clone(),
+            vec![],
+            true,
+            vec![],
+        );
+        let evs = espera_evento(&mut e, 200);
+        let pausa = evs.iter().find_map(|ev| match ev {
+            EventoExec::Pausado { linha, .. } => Some(*linha),
+            _ => None,
+        });
+        assert_eq!(pausa, Some(1), "{evs:?}");
+        e.comando("continuar");
+        e.comando("continuar");
+        e.comando("continuar");
+        let evs = espera_evento(&mut e, 200);
+        let ok = evs.iter().any(|ev| matches!(ev, EventoExec::Fim { ok: true, .. }));
+        assert!(ok, "{evs:?}");
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn depura_para_no_ponto() {
+        let dir = std::env::temp_dir().join(format!(
+            "aula-bp-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let src = "x = 1\ny = 2\nescreva(y)\n";
+        let arquivo = dir.join("t.lep");
+        std::fs::write(&arquivo, src).unwrap();
+        let mut e = Execucao::default();
+        e.iniciar(
+            src.into(),
+            arquivo.display().to_string(),
+            dir.clone(),
+            vec![],
+            true,
+            vec![("t.lep".into(), 2)],
+        );
+        let evs = espera_evento(&mut e, 200);
+        assert!(
+            evs.iter()
+                .any(|ev| matches!(ev, EventoExec::Pausado { linha: 1, .. })),
+            "{evs:?}"
+        );
+        e.comando("continuar");
+        let evs = espera_evento(&mut e, 200);
+        assert!(
+            evs.iter()
+                .any(|ev| matches!(ev, EventoExec::Pausado { linha: 2, .. })),
+            "{evs:?}"
+        );
+        e.comando("continuar");
+        let evs = espera_evento(&mut e, 200);
+        assert!(
+            evs.iter()
+                .any(|ev| matches!(ev, EventoExec::Fim { ok: true, .. })),
+            "{evs:?}"
+        );
+        let _ = std::fs::remove_dir_all(dir);
     }
 }

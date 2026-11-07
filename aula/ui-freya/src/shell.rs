@@ -9,6 +9,7 @@ use crate::{
     ajuda::Sugestao,
     atalhos::{Acao, ATALHOS},
     console::Console,
+    debug::{Depuracao, valor_observado},
     documentos::Abas,
     editor::new_editor,
     projeto::Projeto,
@@ -852,6 +853,163 @@ pub fn dialogo_apagar(
                         .child("Cancelar"),
                 ),
         )
+}
+
+pub fn painel_debug(
+    dep: Depuracao,
+    paleta: Paleta,
+    campo: State<String>,
+    on_observar: impl Fn() + Copy + 'static,
+    on_tirar: impl Fn(String) + Copy + 'static,
+    on_quadro: impl Fn(String, u32) + Copy + 'static,
+) -> impl IntoElement {
+    let mut observados = rect()
+        .direction(Direction::Vertical)
+        .width(Size::fill())
+        .spacing(2.0);
+    for nome in &dep.observados {
+        let n = nome.clone();
+        let valor = valor_observado(nome, &dep.vars);
+        observados = observados.child(
+            rect()
+                .direction(Direction::Horizontal)
+                .width(Size::fill())
+                .main_align(Alignment::SpaceBetween)
+                .child(label().font_size(12.0).text(format!("{nome} = {valor}")))
+                .child(
+                    Button::new()
+                        .flat()
+                        .compact()
+                        .on_press(move |_| on_tirar(n.clone()))
+                        .child("×"),
+                ),
+        );
+    }
+    let mut vars = rect()
+        .direction(Direction::Vertical)
+        .width(Size::fill())
+        .spacing(1.0);
+    for v in &dep.vars {
+        vars = vars.child(
+            label()
+                .font_size(12.0)
+                .font_family("DejaVu Sans Mono")
+                .text(format!("[{}] {} = {}", v.escopo, v.nome, v.valor)),
+        );
+    }
+    let mut pilha = rect()
+        .direction(Direction::Vertical)
+        .width(Size::fill())
+        .spacing(1.0);
+    for q in &dep.pilha {
+        let arq = q.arquivo.clone();
+        let linha = q.linha;
+        pilha = pilha.child(
+            rect()
+                .width(Size::fill())
+                .on_press(move |_| on_quadro(arq.clone(), linha))
+                .child(
+                    label()
+                        .font_size(12.0)
+                        .font_family("DejaVu Sans Mono")
+                        .text(format!("{}  {}:{}", q.nome, q.arquivo, q.linha)),
+                ),
+        );
+    }
+    let mut pontos = rect()
+        .direction(Direction::Vertical)
+        .width(Size::fill())
+        .spacing(1.0);
+    for (arq, linha) in &dep.pontos {
+        pontos = pontos.child(
+            label()
+                .font_size(12.0)
+                .text(format!("{arq}:{linha}")),
+        );
+    }
+    let titulo = if dep.pausado && dep.linha > 0 {
+        format!("pausado {}:{}", dep.arquivo, dep.linha)
+    } else if dep.pausado {
+        "pausado".into()
+    } else {
+        "Depurador".into()
+    };
+    rect()
+        .direction(Direction::Vertical)
+        .width(Size::px(280.0))
+        .height(Size::fill())
+        .background(paleta.barra)
+        .color(paleta.texto)
+        .border(
+            Border::new()
+                .width(BorderWidth {
+                    top: 0.0,
+                    right: 0.0,
+                    bottom: 0.0,
+                    left: 1.0,
+                })
+                .fill(paleta.borda),
+        )
+        .padding(6.0)
+        .spacing(6.0)
+        .child(
+            label()
+                .font_size(12.0)
+                .font_weight(FontWeight::BOLD)
+                .text(titulo),
+        )
+        .maybe_child((!dep.trecho.is_empty()).then(|| {
+            label()
+                .font_size(12.0)
+                .font_family("DejaVu Sans Mono")
+                .text(dep.trecho.clone())
+        }))
+        .child(
+            label()
+                .font_size(11.0)
+                .font_weight(FontWeight::BOLD)
+                .text("Pontos"),
+        )
+        .child(pontos)
+        .child(
+            label()
+                .font_size(11.0)
+                .font_weight(FontWeight::BOLD)
+                .text("Observados"),
+        )
+        .child(
+            rect()
+                .direction(Direction::Horizontal)
+                .width(Size::fill())
+                .spacing(4.0)
+                .child(
+                    Input::new(campo)
+                        .placeholder("nome")
+                        .width(Size::fill())
+                        .on_submit(move |_| on_observar()),
+                )
+                .child(
+                    Button::new()
+                        .compact()
+                        .on_press(move |_| on_observar())
+                        .child("+"),
+                ),
+        )
+        .child(observados)
+        .child(
+            label()
+                .font_size(11.0)
+                .font_weight(FontWeight::BOLD)
+                .text("Variáveis"),
+        )
+        .child(ScrollView::new().height(Size::fill()).child(vars))
+        .child(
+            label()
+                .font_size(11.0)
+                .font_weight(FontWeight::BOLD)
+                .text("Pilha"),
+        )
+        .child(ScrollView::new().height(Size::px(120.0)).child(pilha))
 }
 
 

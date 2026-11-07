@@ -1,6 +1,6 @@
 # Port Expressa Aula GUI to Freya
 
-Status: planned. **Linux and Windows are both product targets.** GTK `expressa-aula` keeps shipping until Freya reaches local-editor + run parity.
+Status: Stages 0–7 on `aula/ui-freya`. **Linux and Windows are both product targets.** GTK `expressa-aula` keeps shipping until Freya reaches local-editor + run parity.
 
 ## Platforms
 
@@ -253,9 +253,9 @@ Work:
 
 Acceptance:
 
-- [ ] Break on first line, step, see locals.
-- [ ] Click stack frame opens the file and line.
-- [ ] Editing during a run does not change the running snapshot.
+- [x] Break on first line, step, see locals.
+- [x] Click stack frame opens the file and line.
+- [x] Editing during a run does not change the running snapshot.
 
 ---
 

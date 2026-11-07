@@ -30,6 +30,10 @@ interrompe um laço infinito. A cópia de execução fica em
 `~/.local/share/expressa-aula/exec-freya` (ou o cache do sistema).
 F1 mostra a ficha da nativa sob o cursor; fora de um nome abre o catálogo.
 Ctrl+Espaço sugere nomes; Ajuda → Tutoriais abre `expressa-tutorial`.
+F6 inicia o depurador (pausa na primeira linha); F9 marca ponto; F10 / F11 /
+Shift+F11 avançam. F5 com o programa pausado continua. F8 mostra ou esconde
+o painel (Observados, Variáveis, Pilha). A fonte que roda é a cópia em
+`exec-freya`: editar a aba no meio da execução não muda o que já está rodando.
 Rascunhos sujos são gravados a cada 5 s em `~/.cache/expressa-aula/rascunho-freya`.
 
 Plano: `docs/tarefas/freya-tasks.md`.

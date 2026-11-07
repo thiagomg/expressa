@@ -10,6 +10,7 @@ mod atalhos;
 mod busca;
 mod comandos;
 mod console;
+mod debug;
 mod documentos;
 mod execucao;
 mod edicao;
@@ -29,13 +30,14 @@ use freya::{
 use crate::{
     atalhos::{Acao, acao_de_tecla},
     comandos::{
-        achar, aplicar, aplicar_eventos, aplicar_sugestao, clicar_arvore, confirmar_apagar,
-        confirmar_descarte, confirmar_nome, escolher_projeto, fechar_aba, ir_para_linha,
-        ir_para_saida, pasta_selecionada, pedir_apagar, pedir_nome, responder_leia,
-        restaurar_arquivo, selecionar_aba,
+        achar, adicionar_observado, aplicar, aplicar_eventos, aplicar_sugestao, clicar_arvore,
+        confirmar_apagar, confirmar_descarte, confirmar_nome, escolher_projeto, fechar_aba,
+        ir_para_linha, ir_para_pausa, ir_para_saida, pasta_selecionada, pedir_apagar, pedir_nome,
+        remover_observado, responder_leia, restaurar_arquivo, selecionar_aba,
     },
     ajuda::{Sugestao, catalogo, ficha},
     console::Console,
+    debug::Depuracao,
     execucao::Execucao,
     documentos::{Abas, Depois, DepoisNome, Dialogo, gravar_rascunhos, sincronizar},
     edicao::tratar_tecla,
@@ -46,7 +48,7 @@ use crate::{
         MenuAberto, Paleta, barra_abas, barra_argumentos, barra_busca, barra_ferramentas,
         barra_menus, barra_status, dialogo_apagar, dialogo_confirmar, dialogo_linha, dialogo_nome,
         editor_inicial, painel_arvore, painel_atalhos, painel_catalogo, painel_console,
-        painel_ficha, painel_sugestoes, tema_freya,
+        painel_debug, painel_ficha, painel_sugestoes, tema_freya,
     },
 };
 
@@ -91,6 +93,8 @@ fn app() -> impl IntoElement {
     let ajuda = use_state(|| None::<String>);
     let catalogo_aberto = use_state(|| false);
     let sugestoes = use_state(Vec::<Sugestao>::new);
+    let depuracao = use_state(Depuracao::default);
+    let observado_campo = use_state(String::new);
 
     use_future(move || async move {
         loop {
@@ -113,7 +117,18 @@ fn app() -> impl IntoElement {
             tokio::time::sleep(std::time::Duration::from_millis(16)).await;
             let eventos = exec.write().drenar();
             if !eventos.is_empty() {
-                aplicar_eventos(eventos, console, status, exec);
+                aplicar_eventos(
+                    eventos,
+                    console,
+                    status,
+                    exec,
+                    depuracao,
+                    editor,
+                    prefs,
+                    abas,
+                    projeto,
+                    dialogo,
+                );
             }
         }
     });
@@ -148,6 +163,7 @@ fn app() -> impl IntoElement {
     abas_agora.atual_mut().dirty = editor.read().is_edited();
     let dialogo_agora = dialogo.read().clone();
     let projeto_agora = projeto.read().clone();
+    let depuracao_agora = depuracao.read().clone();
 
     let on_acao = move |acao: Acao| {
         aplicar(
@@ -168,6 +184,7 @@ fn app() -> impl IntoElement {
             ajuda,
             catalogo_aberto,
             sugestoes,
+            depuracao,
         );
     };
 
@@ -235,24 +252,54 @@ fn app() -> impl IntoElement {
                     )
                 }))
                 .child(
-                    CodeEditor::new(editor, a11y_id)
-                        .font_size(font_size)
-                        .font_family(FONT_FAMILY)
-                        .a11y_auto_focus(true)
-                        .on_pre_key_down(move |e: Event<KeyboardEventData>| {
-                            tratar_tecla(&e, &mut editor.write())
-                        }),
-                ),
+                    rect()
+                        .direction(Direction::Vertical)
+                        .width(Size::fill())
+                        .height(Size::fill())
+                        .child(
+                            CodeEditor::new(editor, a11y_id)
+                                .font_size(font_size)
+                                .font_family(FONT_FAMILY)
+                                .a11y_auto_focus(true)
+                                .on_pre_key_down(move |e: Event<KeyboardEventData>| {
+                                    tratar_tecla(&e, &mut editor.write())
+                                }),
+                        )
+                        .child(painel_console(
+                            console.read().clone(),
+                            paleta,
+                            leia_entrada,
+                            move || responder_leia(exec, console, leia_entrada),
+                            move |linha| {
+                                ir_para_saida(
+                                    &linha,
+                                    editor,
+                                    prefs,
+                                    abas,
+                                    status,
+                                    projeto,
+                                    dialogo,
+                                )
+                            },
+                        )),
+                )
+                .maybe_child(depuracao_agora.visivel.then(move || {
+                    painel_debug(
+                        depuracao_agora.clone(),
+                        paleta,
+                        observado_campo,
+                        move || {
+                            adicionar_observado(&observado_campo.read(), depuracao, observado_campo)
+                        },
+                        move |n| remover_observado(n, depuracao),
+                        move |arq, linha| {
+                            ir_para_pausa(
+                                &arq, linha, editor, prefs, abas, status, projeto, dialogo,
+                            )
+                        },
+                    )
+                })),
         )
-        .child(painel_console(
-            console.read().clone(),
-            paleta,
-            leia_entrada,
-            move || responder_leia(exec, console, leia_entrada),
-            move |linha| {
-                ir_para_saida(&linha, editor, prefs, abas, status, projeto, dialogo)
-            },
-        ))
         .maybe_child(busca_aberta().then(move || {
             barra_busca(
                 paleta,

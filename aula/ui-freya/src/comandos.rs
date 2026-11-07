@@ -10,6 +10,7 @@ use crate::ajuda::{
     Sugestao, completar, ficha, garantir_importe, palavra_em, prefixo_em, spawn_tutorial,
 };
 use crate::atalhos::{Acao, mensagem_reservada};
+use crate::debug::Depuracao;
 use crate::documentos::{
     Abas, Depois, DepoisNome, Dialogo, Fechar, carregar_editor, escolher_abrir, escolher_salvar,
     gravar_arquivo, gravar_rascunhos, ler_arquivo, nome_de_caminho, posicao_linha, sincronizar,
@@ -44,6 +45,7 @@ pub fn aplicar(
     mut ajuda: State<Option<String>>,
     mut catalogo: State<bool>,
     mut sugestoes: State<Vec<Sugestao>>,
+    mut depuracao: State<Depuracao>,
 ) {
     match acao {
         Acao::Sair => sair(prefs, editor, status, abas, dialogo),
@@ -56,10 +58,36 @@ pub fn aplicar(
             atalhos_visiveis.set(true);
             status.set("Atalhos do teclado".into());
         }
-        Acao::Executar => executar(editor, prefs, abas, status, projeto, exec, console, args),
+        Acao::Executar => {
+            if exec.read().rodando && depuracao.read().pausado {
+                exec.write().comando("continuar");
+                depuracao.write().pausado = false;
+                status.set("Continuando…".into());
+            } else {
+                executar(
+                    editor, prefs, abas, status, projeto, exec, console, args, false, depuracao,
+                );
+            }
+        }
         Acao::Parar => {
             exec.write().parar();
             status.set("Parando…".into());
+        }
+        Acao::Depurar => executar(
+            editor, prefs, abas, status, projeto, exec, console, args, true, depuracao,
+        ),
+        Acao::Ponto => alternar_ponto(editor, prefs, abas, status, projeto, exec, depuracao),
+        Acao::Proximo => comando_debug("proximo", exec, status, depuracao),
+        Acao::Entrar => comando_debug("entrar", exec, status, depuracao),
+        Acao::SairFuncao => comando_debug("sair", exec, status, depuracao),
+        Acao::MostrarPainel => {
+            let visivel = !depuracao.read().visivel;
+            depuracao.write().visivel = visivel;
+            status.set(if visivel {
+                "Painel visível".into()
+            } else {
+                "Painel oculto".into()
+            });
         }
         Acao::Novo => novo(editor, prefs, abas, status),
         Acao::Abrir => abrir(editor, prefs, abas, status, dialogo),
@@ -554,6 +582,8 @@ pub fn executar(
     mut exec: State<Execucao>,
     mut console: State<Console>,
     args: State<String>,
+    debug: bool,
+    mut depuracao: State<Depuracao>,
 ) {
     if exec.read().rodando {
         status.set("Já está rodando — use Parar".into());
@@ -561,6 +591,7 @@ pub fn executar(
     }
     sincronizar(&mut abas.write(), &editor.read());
     console.write().limpar();
+    depuracao.write().fim();
     let fonte = editor.read().rope.to_string();
     let raiz = projeto.read().raiz.clone();
     let rel = caminho_relativo(
@@ -600,9 +631,76 @@ pub fn executar(
     };
     let arquivo = ws.join(&rel).display().to_string();
     let argv = argumentos(&args.read());
+    let pontos = depuracao.read().pontos.clone();
+    if debug {
+        depuracao.write().visivel = true;
+    }
     exec.write()
-        .iniciar(fonte, arquivo, ws, argv);
-    status.set("Rodando…".into());
+        .iniciar(fonte, arquivo, ws, argv, debug, pontos);
+    status.set(if debug {
+        "Depurando…".into()
+    } else {
+        "Rodando…".into()
+    });
+}
+
+fn comando_debug(
+    cmd: &str,
+    mut exec: State<Execucao>,
+    mut status: State<String>,
+    mut depuracao: State<Depuracao>,
+) {
+    if !exec.read().rodando {
+        status.set("Nada em execução".into());
+        return;
+    }
+    exec.write().comando(cmd);
+    depuracao.write().pausado = false;
+    status.set(match cmd {
+        "proximo" => "Próxima linha…".into(),
+        "entrar" => "Entrando…".into(),
+        "sair" => "Saindo da função…".into(),
+        _ => "Continuando…".into(),
+    });
+}
+
+fn alternar_ponto(
+    editor: State<CodeEditorData>,
+    _prefs: State<Prefs>,
+    abas: State<Abas>,
+    mut status: State<String>,
+    projeto: State<Projeto>,
+    mut exec: State<Execucao>,
+    mut depuracao: State<Depuracao>,
+) {
+    let linha = (editor.read().cursor_row() + 1) as u32;
+    let rel = caminho_relativo(
+        projeto.read().raiz.as_deref().unwrap_or(Path::new(".")),
+        abas.read().atual().caminho.as_deref(),
+    );
+    let ligado = depuracao.write().alternar_ponto(rel.clone(), linha);
+    if exec.read().rodando {
+        let cmd = if ligado {
+            format!("ponto {rel}:{linha}")
+        } else {
+            format!("remover {rel}:{linha}")
+        };
+        exec.write().comando(&cmd);
+    }
+    status.set(if ligado {
+        format!("Ponto em {rel}:{linha}")
+    } else {
+        format!("Removeu ponto {rel}:{linha}")
+    });
+}
+
+pub fn adicionar_observado(nome: &str, mut depuracao: State<Depuracao>, mut campo: State<String>) {
+    depuracao.write().adicionar_observado(nome);
+    campo.set(String::new());
+}
+
+pub fn remover_observado(nome: String, mut depuracao: State<Depuracao>) {
+    depuracao.write().remover_observado(&nome);
 }
 
 pub fn aplicar_eventos(
@@ -610,6 +708,12 @@ pub fn aplicar_eventos(
     mut console: State<Console>,
     mut status: State<String>,
     mut exec: State<Execucao>,
+    mut depuracao: State<Depuracao>,
+    editor: State<CodeEditorData>,
+    prefs: State<Prefs>,
+    abas: State<Abas>,
+    projeto: State<Projeto>,
+    dialogo: State<Dialogo>,
 ) {
     for ev in eventos {
         match ev {
@@ -617,6 +721,39 @@ pub fn aplicar_eventos(
             EventoExec::Leia(prompt) => {
                 console.write().leia_prompt = Some(prompt);
                 console.write().entrada.clear();
+            }
+            EventoExec::Pausado {
+                arquivo,
+                linha,
+                trecho,
+                vars,
+                pilha,
+                erro,
+            } => {
+                depuracao.write().aplicar_pausa(
+                    arquivo.clone(),
+                    linha,
+                    trecho.clone(),
+                    vars,
+                    pilha,
+                    erro.clone(),
+                );
+                status.set(match &erro {
+                    Some(e) => format!("erro em {arquivo}:{linha}: {e}"),
+                    None => format!("pausado {arquivo}:{linha}  {}", trecho.trim()),
+                });
+                if linha > 0 {
+                    ir_para_pausa(
+                        &arquivo,
+                        linha,
+                        editor,
+                        prefs,
+                        abas,
+                        status,
+                        projeto,
+                        dialogo,
+                    );
+                }
             }
             EventoExec::Fim {
                 ok,
@@ -626,6 +763,7 @@ pub fn aplicar_eventos(
                 pilha,
             } => {
                 exec.write().rodando = false;
+                depuracao.write().fim();
                 if ok {
                     status.set("Terminou".into());
                 } else {
@@ -657,6 +795,33 @@ pub fn responder_leia(
     console.write().leia_prompt = None;
     let mut entrada = entrada;
     entrada.set(String::new());
+}
+
+pub fn ir_para_pausa(
+    arquivo: &str,
+    linha: u32,
+    editor: State<CodeEditorData>,
+    prefs: State<Prefs>,
+    abas: State<Abas>,
+    status: State<String>,
+    projeto: State<Projeto>,
+    dialogo: State<Dialogo>,
+) {
+    let path = {
+        let raiz = projeto.read().raiz.clone();
+        let p = PathBuf::from(arquivo);
+        if p.is_file() {
+            p
+        } else if let Some(raiz) = raiz {
+            raiz.join(arquivo)
+        } else {
+            p
+        }
+    };
+    if path.is_file() {
+        abrir_caminho(path, editor, prefs, abas, status);
+    }
+    ir_para_linha(&linha.to_string(), editor, status, dialogo);
 }
 
 pub fn ir_para_saida(
