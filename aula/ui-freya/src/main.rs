@@ -56,11 +56,11 @@ use crate::{
     projeto::{Projeto, abrir_raiz, instalar_exemplos, restaurar_inicio},
     shell::{
         MenuAberto, Paleta, barra_abas, barra_argumentos, barra_busca, barra_ferramentas,
-        barra_menus, barra_status, dialogo_apagar, dialogo_comparar, dialogo_confirmar,
-        dialogo_conflito, dialogo_linha, dialogo_nome, dialogo_projetos, dialogo_recuperar,
-        dialogo_servidor, editor_inicial, painel_arvore, painel_atalhos, painel_catalogo,
-        painel_console, painel_debug, painel_ficha, painel_graficos, painel_repl, painel_sugestoes,
-        tema_freya,
+        LARGURA_ARVORE, LARGURA_DEBUG, alca_vertical, aplicar_arrasto, barra_menus, barra_status,
+        dialogo_apagar, dialogo_comparar, dialogo_confirmar, dialogo_conflito, dialogo_linha,
+        dialogo_nome, dialogo_projetos, dialogo_recuperar, dialogo_servidor, editor_inicial,
+        painel_arvore, painel_atalhos, painel_catalogo, painel_console, painel_debug, painel_ficha,
+        painel_graficos, painel_repl, painel_sugestoes, tema_freya,
     },
 };
 
@@ -116,6 +116,10 @@ fn app() -> impl IntoElement {
         t
     });
     let mut indentar_pendente = use_state(|| false);
+    let mut largura_arvore = use_state(|| LARGURA_ARVORE);
+    let mut largura_debug = use_state(|| LARGURA_DEBUG);
+    let mut arrasto_arvore = use_state(|| None::<f32>);
+    let mut arrasto_debug = use_state(|| None::<f32>);
     let servidor_campo = use_state(|| prefs_iniciais.servidor.clone());
     let aluno_campo = use_state(|| "local".to_string());
 
@@ -255,6 +259,19 @@ fn app() -> impl IntoElement {
                 on_acao(acao);
             }
         })
+        .on_global_pointer_move(move |e: Event<PointerEventData>| {
+            let x = e.data().global_location().x as f32;
+            if let Some(w) = aplicar_arrasto(*arrasto_arvore.read(), x, false) {
+                largura_arvore.set(w);
+            }
+            if let Some(w) = aplicar_arrasto(*arrasto_debug.read(), x, true) {
+                largura_debug.set(w);
+            }
+        })
+        .on_global_pointer_up(move |_| {
+            arrasto_arvore.set(None);
+            arrasto_debug.set(None);
+        })
         .child(barra_menus(menu, paleta, on_acao))
         .child(barra_ferramentas(paleta, on_acao))
         .child(barra_argumentos(paleta, args))
@@ -280,32 +297,37 @@ fn app() -> impl IntoElement {
                 .width(Size::fill())
                 .height(Size::fill())
                 .maybe_child(projeto_agora.visivel.then(move || {
-                    painel_arvore(
-                        projeto_agora,
-                        paleta,
-                        move |rel| clicar_arvore(rel, editor, prefs, abas, status, projeto, turma),
-                        move || {
-                            pedir_nome(
-                                DepoisNome::NovoArquivo(pasta_selecionada(projeto)),
-                                dialogo,
-                                nome_campo,
-                            )
-                        },
-                        move || {
-                            pedir_nome(
-                                DepoisNome::NovaPasta(pasta_selecionada(projeto)),
-                                dialogo,
-                                nome_campo,
-                            )
-                        },
-                        move || {
-                            if let Some(rel) = projeto.read().selecionado.clone() {
-                                pedir_nome(DepoisNome::Renomear(rel), dialogo, nome_campo);
-                            }
-                        },
-                        move || pedir_apagar(dialogo, projeto),
-                        move || escolher_projeto(editor, prefs, abas, status, projeto, turma),
-                    )
+                    rect()
+                        .direction(Direction::Horizontal)
+                        .height(Size::fill())
+                        .child(painel_arvore(
+                            projeto_agora,
+                            paleta,
+                            *largura_arvore.read(),
+                            move |rel| clicar_arvore(rel, editor, prefs, abas, status, projeto, turma),
+                            move || {
+                                pedir_nome(
+                                    DepoisNome::NovoArquivo(pasta_selecionada(projeto)),
+                                    dialogo,
+                                    nome_campo,
+                                )
+                            },
+                            move || {
+                                pedir_nome(
+                                    DepoisNome::NovaPasta(pasta_selecionada(projeto)),
+                                    dialogo,
+                                    nome_campo,
+                                )
+                            },
+                            move || {
+                                if let Some(rel) = projeto.read().selecionado.clone() {
+                                    pedir_nome(DepoisNome::Renomear(rel), dialogo, nome_campo);
+                                }
+                            },
+                            move || pedir_apagar(dialogo, projeto),
+                            move || escolher_projeto(editor, prefs, abas, status, projeto, turma),
+                        ))
+                        .child(alca_vertical(paleta, largura_arvore, false, arrasto_arvore))
                 }))
                 .child(
                     rect()
@@ -313,17 +335,22 @@ fn app() -> impl IntoElement {
                         .width(Size::fill())
                         .height(Size::fill())
                         .child(
-                            CodeEditor::new(editor, a11y_id)
-                                .font_size(font_size)
-                                .font_family(FONT_FAMILY)
-                                .a11y_auto_focus(true)
-                                .on_pre_key_down(move |e: Event<KeyboardEventData>| {
-                                    let seguir = tratar_tecla(&e, &mut editor.write());
-                                    if seguir && tecla_pede_indent(&e.key, e.modifiers) {
-                                        indentar_pendente.set(true);
-                                    }
-                                    seguir
-                                }),
+                            rect()
+                                .width(Size::fill())
+                                .height(Size::fill())
+                                .child(
+                                    CodeEditor::new(editor, a11y_id)
+                                        .font_size(font_size)
+                                        .font_family(FONT_FAMILY)
+                                        .a11y_auto_focus(true)
+                                        .on_pre_key_down(move |e: Event<KeyboardEventData>| {
+                                            let seguir = tratar_tecla(&e, &mut editor.write());
+                                            if seguir && tecla_pede_indent(&e.key, e.modifiers) {
+                                                indentar_pendente.set(true);
+                                            }
+                                            seguir
+                                        }),
+                                ),
                         )
                         .maybe_child(
                             (graficos_dock.visivel() && !graficos_dock.destacado).then(move || {
@@ -339,6 +366,18 @@ fn app() -> impl IntoElement {
                                 )
                             }),
                         )
+                        .maybe_child(repl_agora.visivel.then(move || {
+                            painel_repl(
+                                repl_agora.clone(),
+                                paleta,
+                                repl_entrada,
+                                move || enviar_repl(repl, repl_entrada, status),
+                                move || parar_repl(repl, status),
+                                move || limpar_repl(repl),
+                                move || reiniciar_repl(repl, status),
+                                move || fechar_repl(repl),
+                            )
+                        }))
                         .child(painel_console(
                             console.read().clone(),
                             paleta,
@@ -358,20 +397,29 @@ fn app() -> impl IntoElement {
                         )),
                 )
                 .maybe_child(depuracao_agora.visivel.then(move || {
-                    painel_debug(
-                        depuracao_agora.clone(),
-                        paleta,
-                        observado_campo,
-                        move || {
-                            adicionar_observado(&observado_campo.read(), depuracao, observado_campo)
-                        },
-                        move |n| remover_observado(n, depuracao),
-                        move |arq, linha| {
-                            ir_para_pausa(
-                                &arq, linha, editor, prefs, abas, status, projeto, dialogo,
-                            )
-                        },
-                    )
+                    rect()
+                        .direction(Direction::Horizontal)
+                        .height(Size::fill())
+                        .child(alca_vertical(paleta, largura_debug, true, arrasto_debug))
+                        .child(painel_debug(
+                            depuracao_agora.clone(),
+                            paleta,
+                            *largura_debug.read(),
+                            observado_campo,
+                            move || {
+                                adicionar_observado(
+                                    &observado_campo.read(),
+                                    depuracao,
+                                    observado_campo,
+                                )
+                            },
+                            move |n| remover_observado(n, depuracao),
+                            move |arq, linha| {
+                                ir_para_pausa(
+                                    &arq, linha, editor, prefs, abas, status, projeto, dialogo,
+                                )
+                            },
+                        ))
                 })),
         )
         .maybe_child(
@@ -386,18 +434,6 @@ fn app() -> impl IntoElement {
                 )
             }),
         )
-        .maybe_child(repl_agora.visivel.then(move || {
-            painel_repl(
-                repl_agora.clone(),
-                paleta,
-                repl_entrada,
-                move || enviar_repl(repl, repl_entrada, status),
-                move || parar_repl(repl, status),
-                move || limpar_repl(repl),
-                move || reiniciar_repl(repl, status),
-                move || fechar_repl(repl),
-            )
-        }))
         .maybe_child(busca_aberta().then(move || {
             barra_busca(
                 paleta,

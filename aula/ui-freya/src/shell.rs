@@ -545,9 +545,39 @@ pub fn barra_busca(
         )
 }
 
+pub const LARGURA_ARVORE: f32 = 240.0;
+pub const LARGURA_DEBUG: f32 = 280.0;
+pub const LARGURA_PAINEL_MIN: f32 = 140.0;
+pub const LARGURA_PAINEL_MAX: f32 = 480.0;
+
+pub fn alca_vertical(
+    paleta: Paleta,
+    largura: State<f32>,
+    inverter: bool,
+    mut arrasto: State<Option<f32>>,
+) -> impl IntoElement {
+    rect()
+        .width(Size::px(6.0))
+        .height(Size::fill())
+        .background(paleta.borda)
+        .on_pointer_down(move |e: Event<PointerEventData>| {
+            let x = e.data().global_location().x as f32;
+            let atual = *largura.read();
+            arrasto.set(Some(if inverter { x + atual } else { x - atual }));
+        })
+}
+
+pub fn aplicar_arrasto(arrasto: Option<f32>, x: f32, inverter: bool) -> Option<f32> {
+    arrasto.map(|origem| {
+        let bruto = if inverter { origem - x } else { x - origem };
+        bruto.clamp(LARGURA_PAINEL_MIN, LARGURA_PAINEL_MAX)
+    })
+}
+
 pub fn painel_arvore(
     projeto: Projeto,
     paleta: Paleta,
+    largura: f32,
     on_abrir: impl Fn(String) + Copy + 'static,
     on_novo: impl Fn() + Copy + 'static,
     on_pasta: impl Fn() + Copy + 'static,
@@ -585,7 +615,7 @@ pub fn painel_arvore(
     }
     rect()
         .direction(Direction::Vertical)
-        .width(Size::px(240.0))
+        .width(Size::px(largura))
         .height(Size::fill())
         .background(paleta.barra)
         .color(paleta.texto)
@@ -1115,6 +1145,7 @@ pub fn dialogo_apagar(
 pub fn painel_debug(
     dep: Depuracao,
     paleta: Paleta,
+    largura: f32,
     campo: State<String>,
     on_observar: impl Fn() + Copy + 'static,
     on_tirar: impl Fn(String) + Copy + 'static,
@@ -1193,7 +1224,7 @@ pub fn painel_debug(
     };
     rect()
         .direction(Direction::Vertical)
-        .width(Size::px(280.0))
+        .width(Size::px(largura))
         .height(Size::fill())
         .background(paleta.barra)
         .color(paleta.texto)
@@ -1470,6 +1501,25 @@ pub fn painel_graficos(
         caixa = caixa.position(Position::new_global().top(80.).right(20.));
     }
     caixa
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn arrasto_respeita_minimo_e_maximo() {
+        assert_eq!(aplicar_arrasto(Some(0.0), 200.0, false), Some(200.0));
+        assert_eq!(
+            aplicar_arrasto(Some(0.0), 10.0, false),
+            Some(LARGURA_PAINEL_MIN)
+        );
+        assert_eq!(
+            aplicar_arrasto(Some(0.0), 900.0, false),
+            Some(LARGURA_PAINEL_MAX)
+        );
+        assert_eq!(aplicar_arrasto(Some(500.0), 220.0, true), Some(280.0));
+    }
 }
 
 
