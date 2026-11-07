@@ -2,6 +2,7 @@
 
 use freya::{
     code_editor::{CodeEditorData, CodeEditorThemeExt, EditorSyntaxTheme},
+    engine::prelude::AlphaType,
     prelude::*,
 };
 
@@ -12,7 +13,7 @@ use crate::{
     debug::{Depuracao, MarcaGutter, marca_gutter, valor_observado},
     documentos::Abas,
     editor::new_editor,
-    grafico::{Graficos, png_folha, png_tela},
+    grafico::{Graficos, rgba_folha, rgba_tela, tecla_de_freya},
     projeto::Projeto,
     repl::{Repl, TipoLinha},
 };
@@ -1446,6 +1447,25 @@ pub fn painel_repl(
         )
 }
 
+fn canvas_pixels(w: u32, h: u32, rgba: Vec<u8>) -> Element {
+    let w = w.max(1);
+    let h = h.max(1);
+    if let Some(handle) =
+        freya::elements::image::ImageHandle::from_rgba(w, h, Bytes::from(rgba), AlphaType::Unpremul)
+    {
+        image(handle)
+            .width(Size::px(w as f32))
+            .height(Size::px(h as f32))
+            .sampling_mode(SamplingMode::Nearest)
+            .into()
+    } else {
+        rect()
+            .width(Size::px(w as f32))
+            .height(Size::px(h as f32))
+            .into()
+    }
+}
+
 pub fn painel_graficos(
     g: Graficos,
     paleta: Paleta,
@@ -1453,6 +1473,7 @@ pub fn painel_graficos(
     on_destacar: impl Fn() + Copy + 'static,
     on_fechar_tela: impl Fn(u64) + Copy + 'static,
     on_clique: impl Fn(u64, f64, f64, f64, f64) + Copy + 'static,
+    on_tecla: impl Fn(String) + Copy + 'static,
 ) -> impl IntoElement {
     let mut corpo = rect()
         .direction(Direction::Vertical)
@@ -1460,18 +1481,14 @@ pub fn painel_graficos(
         .spacing(6.0)
         .padding(6.0);
     for folha in &g.folhas {
-        let (w, h, png) = png_folha(folha);
-        corpo = corpo.child(
-            ImageViewer::new((format!("folha-{}", folha.id), Bytes::from(png)))
-                .width(Size::px(w as f32))
-                .height(Size::px(h as f32)),
-        );
+        let (w, h, rgba) = rgba_folha(folha);
+        corpo = corpo.child(canvas_pixels(w, h, rgba));
     }
     for tela in &g.telas {
         let id = tela.id;
-        let (w, h, png) = png_tela(tela);
-        let wf = w as f32;
-        let hf = h as f32;
+        let (w, h, rgba) = rgba_tela(tela);
+        let wf = w as f64;
+        let hf = h as f64;
         corpo = corpo.child(
             rect()
                 .direction(Direction::Vertical)
@@ -1491,17 +1508,22 @@ pub fn painel_graficos(
                 )
                 .child(
                     rect()
+                        .a11y_focusable(true)
                         .on_press(move |e: Event<PressEventData>| {
                             if let PressEventData::Mouse(m) = &*e {
                                 let p = m.element_location;
-                                on_clique(id, p.x, p.y, wf as f64, hf as f64);
+                                on_clique(id, p.x, p.y, wf, hf);
                             }
                         })
-                        .child(
-                            ImageViewer::new((format!("tela-{id}"), Bytes::from(png)))
-                                .width(Size::px(wf))
-                                .height(Size::px(hf)),
-                        ),
+                        .on_key_down(move |e: Event<KeyboardEventData>| {
+                            let nome = tecla_de_freya(&e.key);
+                            if nome.is_empty() {
+                                return;
+                            }
+                            e.stop_propagation();
+                            on_tecla(nome);
+                        })
+                        .child(canvas_pixels(w, h, rgba)),
                 ),
         );
     }

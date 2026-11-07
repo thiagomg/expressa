@@ -18,9 +18,8 @@ expressa-aula-proto = { workspace = true }
 expressa-aula-storage = { workspace = true }
 tonic = { workspace = true }
 tree-sitter-expressa = { path = "../tree-sitter-expressa" }
-freya = { version = "0.5", features = ["code-editor"] }
+freya = { version = "0.5", features = ["code-editor", "engine"] }
 dirs = "6"
 rfd = "0.17"
 tokio = { workspace = true, features = ["time"] }
 bytes = "1"
-png = "0.17"

@@ -24,6 +24,7 @@ use crate::edicao::{buscar, comentar, duplicar, mover, recuar_arquivo};
 use crate::editor::fonte_px;
 use crate::prefs::Prefs;
 use crate::console::{Console, parse_error_location};
+use expressa::runtime::EventoGraf;
 use crate::execucao::{
     EventoExec, Execucao, argumentos, caminho_relativo, preparar_copia, pasta_exec,
 };
@@ -1229,6 +1230,13 @@ pub fn clique_tela_graf(
     if let Some(ev) = ev {
         exec.read().evento_graf(ev);
     }
+}
+
+pub fn tecla_tela_graf(nome: String, exec: State<Execucao>) {
+    if nome.is_empty() {
+        return;
+    }
+    exec.read().evento_graf(EventoGraf::tecla(nome));
 }
 
 pub fn aplicar_eventos(

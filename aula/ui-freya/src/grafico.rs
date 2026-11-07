@@ -22,7 +22,6 @@ impl Graficos {
         self.folhas.clear();
         self.telas.clear();
         self.fechadas.clear();
-        self.destacado = false;
     }
 
     pub fn aplicar_folha(&mut self, folha: FolhaPronta) {
@@ -67,38 +66,40 @@ pub fn rgba_de_rgb32(pix: &[u32]) -> Vec<u8> {
     out
 }
 
-pub fn png_de_rgba(largura: u32, altura: u32, rgba: &[u8]) -> Vec<u8> {
-    let mut out = Vec::new();
-    {
-        let mut enc = png::Encoder::new(&mut out, largura.max(1), altura.max(1));
-        enc.set_color(png::ColorType::Rgba);
-        enc.set_depth(png::BitDepth::Eight);
-        let mut w = enc.write_header().expect("png header");
-        w.write_image_data(rgba).expect("png data");
-        w.finish().expect("png finish");
-    }
-    out
-}
-
-pub fn png_folha(folha: &FolhaPronta) -> (u32, u32, Vec<u8>) {
+pub fn rgba_folha(folha: &FolhaPronta) -> (u32, u32, Vec<u8>) {
     let n = folha.graficos.len().max(1) as u32;
     let h = CART_ALTURA_GRAFICO * n;
     let pix = pintar(folha, CART_LARGURA, h);
-    let png = png_de_rgba(CART_LARGURA, h, &rgba_de_rgb32(&pix));
-    (CART_LARGURA, h, png)
+    (CART_LARGURA, h, rgba_de_rgb32(&pix))
 }
 
-pub fn png_tela(tela: &TelaGrafica) -> (u32, u32, Vec<u8>) {
+pub fn rgba_tela(tela: &TelaGrafica) -> (u32, u32, Vec<u8>) {
     let w = tela.largura.max(1);
     let h = tela.altura.max(1);
-    let png = png_de_rgba(w, h, &rgba_de_rgb32(&tela.rgb32()));
-    (w, h, png)
+    (w, h, rgba_de_rgb32(&tela.rgb32()))
 }
 
 pub fn clique_na_tela(tela: &TelaGrafica, x: f64, y: f64, w: f64, h: f64) -> EventoGraf {
     let sx = if w <= 0.0 { 1.0 } else { tela.largura as f64 / w };
     let sy = if h <= 0.0 { 1.0 } else { tela.altura as f64 / h };
     EventoGraf::clique((x * sx) as i32, (y * sy) as i32, "esquerdo")
+}
+
+/// Nomes iguais aos do GTK (`janela_graf::tecla_gdk`) e do visor minifb.
+pub fn tecla_de_freya(key: &freya::prelude::Key) -> String {
+    use freya::prelude::{Key, NamedKey};
+    match key {
+        Key::Named(NamedKey::Enter) => "Enter".into(),
+        Key::Named(NamedKey::Escape) => "Esc".into(),
+        Key::Named(NamedKey::Tab) => "Tab".into(),
+        Key::Named(NamedKey::Backspace) => "Backspace".into(),
+        Key::Named(NamedKey::ArrowUp) => "Cima".into(),
+        Key::Named(NamedKey::ArrowDown) => "Baixo".into(),
+        Key::Named(NamedKey::ArrowLeft) => "Esquerda".into(),
+        Key::Named(NamedKey::ArrowRight) => "Direita".into(),
+        Key::Character(c) if !c.chars().any(char::is_control) => c.to_lowercase(),
+        _ => String::new(),
+    }
 }
 
 #[cfg(test)]
@@ -163,7 +164,45 @@ mod tests {
     #[test]
     fn rgb32_vira_rgba() {
         assert_eq!(rgba_de_rgb32(&[0x00FF0000]), [255, 0, 0, 255]);
-        let png = png_de_rgba(1, 1, &[255, 0, 0, 255]);
-        assert!(png.starts_with(&[137, 80, 78, 71]));
+        let tela = TelaGrafica {
+            id: 1,
+            largura: 1,
+            altura: 1,
+            fundo: "vermelho".into(),
+            ops: vec![],
+        };
+        let (w, h, rgba) = rgba_tela(&tela);
+        assert_eq!((w, h), (1, 1));
+        assert_eq!(rgba.len(), 4);
+    }
+
+    #[test]
+    fn limpar_mantem_destacado() {
+        let mut g = Graficos {
+            destacado: true,
+            ..Graficos::default()
+        };
+        g.aplicar_tela(TelaGrafica {
+            id: 1,
+            largura: 8,
+            altura: 8,
+            fundo: "branco".into(),
+            ops: vec![],
+        });
+        g.limpar();
+        assert!(g.telas.is_empty());
+        assert!(g.fechadas.is_empty());
+        assert!(g.destacado);
+    }
+
+    #[test]
+    fn tecla_de_freya_bate_com_gtk() {
+        use freya::prelude::{Key, NamedKey};
+        assert_eq!(tecla_de_freya(&Key::Named(NamedKey::ArrowUp)), "Cima");
+        assert_eq!(tecla_de_freya(&Key::Named(NamedKey::Escape)), "Esc");
+        assert_eq!(tecla_de_freya(&Key::Named(NamedKey::Enter)), "Enter");
+        assert_eq!(tecla_de_freya(&Key::Character(" ".into())), " ");
+        assert_eq!(tecla_de_freya(&Key::Character("Q".into())), "q");
+        assert_eq!(tecla_de_freya(&Key::Named(NamedKey::F5)), "");
     }
 }

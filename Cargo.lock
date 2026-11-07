@@ -1350,7 +1350,6 @@ dependencies = [
  "expressa-aula-proto",
  "expressa-aula-storage",
  "freya",
- "png 0.17.16",
  "rfd",
  "tokio",
  "tonic",

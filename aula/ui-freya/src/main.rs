@@ -38,6 +38,7 @@ use crate::{
         conectar_servidor, criar_projeto_servidor, descartar_rascunhos, escolher_projeto,
         fechar_dialogo_rascunhos,
         fechar_aba, clique_tela_graf, destacar_graficos, enviar_repl, fechar_repl, fechar_tela_graf,
+        tecla_tela_graf,
         ir_para_linha, ir_para_pausa, ir_para_saida, limpar_repl, parar_repl, pasta_selecionada,
         pedir_apagar, pedir_nome, recuperar_rascunhos, reiniciar_repl, remover_observado,
         resolver_conflito, responder_leia, restaurar_arquivo, selecionar_aba,
@@ -416,6 +417,7 @@ fn app() -> impl IntoElement {
                                     move |id, x, y, w, h| {
                                         clique_tela_graf(id, x, y, w, h, graficos, exec)
                                     },
+                                    move |nome| tecla_tela_graf(nome, exec),
                                 )
                             }),
                         )
@@ -484,6 +486,7 @@ fn app() -> impl IntoElement {
                     move || destacar_graficos(graficos),
                     move |id| fechar_tela_graf(id, graficos, exec),
                     move |id, x, y, w, h| clique_tela_graf(id, x, y, w, h, graficos, exec),
+                    move |nome| tecla_tela_graf(nome, exec),
                 )
             }),
         )
