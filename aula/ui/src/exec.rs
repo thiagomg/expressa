@@ -39,6 +39,7 @@ pub enum ExecEvent {
     Stdout(String),
     Stderr(String),
     Leia(String),
+    CursorPosition(std::sync::mpsc::Sender<(i64, i64)>),
     Folha(FolhaPronta),
     TelaGraf(TelaGrafica),
     Source(std::sync::Arc<crate::debug_sources::Source>),
@@ -276,6 +277,15 @@ struct ChannelLeia {
 }
 
 impl LeiaHost for ChannelLeia {
+    fn cursor_position(&mut self) -> Result<(i64, i64), String> {
+        let (tx, rx) = std::sync::mpsc::channel();
+        self.prompts
+            .send(ExecEvent::CursorPosition(tx))
+            .map_err(|_| "IDE fechada".to_string())?;
+        rx.recv()
+            .map_err(|_| "consulta da posição do cursor cancelada".to_string())
+    }
+
     fn ask(&mut self, prompt: &str) -> Result<String, String> {
         self.prompts
             .send(ExecEvent::Leia(prompt.to_string()))
@@ -618,6 +628,68 @@ mod tests {
             let _ = std::fs::remove_dir_all(&self.cache);
             let _ = std::fs::remove_dir_all(&self.root);
         }
+    }
+
+    #[test]
+    fn cursor_query_and_retry_input_follow_output_order() {
+        crate::gtk_test::run(|| {
+            use gtk::prelude::*;
+            let project = RunProject::new("cursor-retry");
+            let ws = project.workspace();
+            let source = r#"importe "tela"
+escreva("1 - Continuar | 2 - Sair")
+pos = posicao_cursor()
+enquanto verdadeiro {
+    posicao_cursor(pos)
+    apague_linha()
+    opcao = leia("Opção: ")
+    se opcao == "1" ou opcao == "2" {
+        apague_linha()
+        pare
+    }
+    apague_linha()
+    escreva("Opção inválida. Escolha 1 ou 2.")
+}
+"#;
+            let run = spawn(&ws, "a.lep", source.into(), false, vec![], vec![]);
+            let console = crate::console::Console::new();
+            let mut queries = 0;
+            let mut inputs = 0;
+            loop {
+                match run.events.recv_timeout(Duration::from_secs(5)).unwrap() {
+                    ExecEvent::Stdout(text) => console.stdout(&text),
+                    ExecEvent::Stderr(text) => panic!("{text}"),
+                    ExecEvent::CursorPosition(reply) => {
+                        assert_eq!(console.cursor_position(), (1, 0));
+                        queries += 1;
+                        reply.send(console.cursor_position()).unwrap();
+                    }
+                    ExecEvent::Leia(prompt) => {
+                        inputs += 1;
+                        console.begin_input(&prompt, run.lines.clone());
+                        let buf = console.view.buffer();
+                        if inputs == 2 {
+                            let (s, e) = buf.bounds();
+                            assert!(buf.text(&s, &e, false).contains("Opção inválida."));
+                        }
+                        buf.insert_interactive_at_cursor(if inputs == 1 { "x" } else { "1" }, true);
+                        assert!(console.commit_input());
+                    }
+                    ExecEvent::Finished(finished) => {
+                        assert!(finished.ok, "{}", finished.error_message);
+                        break;
+                    }
+                    _ => {}
+                }
+            }
+            assert_eq!((queries, inputs), (1, 2));
+            let buf = console.view.buffer();
+            let (s, e) = buf.bounds();
+            assert_eq!(
+                buf.text(&s, &e, false),
+                "1 - Continuar | 2 - Sair\nOpção: 1\n\n"
+            );
+        });
     }
 
     #[test]

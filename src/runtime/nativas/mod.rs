@@ -170,6 +170,14 @@ pub const NATIVAS: &[Nativa] = &[
         module: Some("tela"),
     },
     Nativa {
+        names: &["posicao_cursor", "posição_cursor"],
+        module: Some("tela"),
+    },
+    Nativa {
+        names: &["apague_linha"],
+        module: Some("tela"),
+    },
+    Nativa {
         names: &["casa"],
         module: Some("tela"),
     },
@@ -563,6 +571,8 @@ impl Vm<'_, '_> {
             "saia" => self.bi_saia(args, span),
             "cls" | "limpe_tela" => self.bi_cls(args, span),
             "casa" => self.bi_casa(args, span),
+            "posicao_cursor" | "posição_cursor" => self.bi_posicao_cursor(args, span),
+            "apague_linha" => self.bi_apague_linha(args, span),
             "durma" => self.bi_durma(args, span),
             "leia" => self.bi_leia(args, span),
             "leia_linhas" => self.bi_leia_linhas(args, span),
@@ -1213,6 +1223,21 @@ escreva("b")
         );
         assert!(run_err("cls(1)").contains("não espera argumentos"));
         assert!(run_err("limpe_tela(\"x\")").contains("não espera argumentos"));
+    }
+
+    #[test]
+    fn cursor_movement_and_line_erasure() {
+        assert_eq!(
+            run("posicao_cursor(bloco(2, 4))\napague_linha()"),
+            "\x1b[3;5H\r\x1b[2K"
+        );
+        assert_eq!(run("posição_cursor(bloco(0, 0))"), "\x1b[1;1H");
+        assert!(run_err("posicao_cursor()").contains("exige um terminal"));
+        assert!(run_err("posicao_cursor(1)").contains("mapa"));
+        assert!(run_err("posicao_cursor(mapa([:linha -> 1]))").contains(":coluna"));
+        assert!(run_err("posicao_cursor(bloco(1, 2), 3)").contains("0 ou 1"));
+        assert!(run_err("posicao_cursor(mapa([:linha -> -1, :coluna -> 0]))").contains(">= 0"));
+        assert!(run_err("apague_linha(1)").contains("0 argumento"));
     }
 
     #[test]

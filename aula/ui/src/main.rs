@@ -3151,6 +3151,9 @@ fn iniciar_execucao(
                 Ok(ExecEvent::Paused(p)) => {
                     handle_debug_pause(&ui_ev, &p);
                 }
+                Ok(ExecEvent::CursorPosition(reply)) => {
+                    let _ = reply.send(console.cursor_position());
+                }
                 Ok(ExecEvent::Leia(prompt)) => {
                     if ui_ev.borrow().run.as_ref().is_some_and(|run| run.stopping) {
                         continue;

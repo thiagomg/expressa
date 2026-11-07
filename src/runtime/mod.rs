@@ -17,6 +17,7 @@ mod pilha;
 mod processo;
 mod repl;
 mod rng;
+mod terminal;
 mod value;
 mod viewer;
 

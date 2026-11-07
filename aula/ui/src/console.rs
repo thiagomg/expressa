@@ -3,10 +3,17 @@
 //! in the pane, like a terminal.
 
 use std::cell::RefCell;
+use std::rc::Rc;
 use std::sync::mpsc::Sender;
 
 use gtk::prelude::*;
 use gtk::{TextTag, TextView};
+
+struct Input {
+    start: gtk::TextMark,
+    end: gtk::TextMark,
+    reply: Sender<String>,
+}
 
 pub struct Console {
     pub view: TextView,
@@ -17,7 +24,7 @@ pub struct Console {
     input_tag: TextTag,
     screen: RefCell<Screen>,
     /// While a `leia` waits: where the answer starts and where it goes.
-    input: RefCell<Option<(gtk::TextMark, Sender<String>)>>,
+    input: Rc<RefCell<Option<Input>>>,
 }
 
 impl Console {
@@ -45,6 +52,30 @@ impl Console {
         input_tag.set_weight(700);
         table.add(&input_tag);
 
+        let input = Rc::new(RefCell::new(None::<Input>));
+        // The editable newline supplies an insertion point even for an empty
+        // field in the middle of the output. Do not let edits cross its bounds.
+        let state = input.clone();
+        view.buffer().connect_insert_text(move |buf, at, text| {
+            if let Some(input) = state.borrow().as_ref() {
+                let start = buf.iter_at_mark(&input.start).offset();
+                let end = buf.iter_at_mark(&input.end).offset();
+                if at.offset() < start || at.offset() > end || text.contains(['\n', '\r']) {
+                    buf.stop_signal_emission_by_name("insert-text");
+                }
+            }
+        });
+        let state = input.clone();
+        view.buffer().connect_delete_range(move |buf, a, b| {
+            if let Some(input) = state.borrow().as_ref() {
+                let start = buf.iter_at_mark(&input.start).offset();
+                let end = buf.iter_at_mark(&input.end).offset();
+                if a.offset() < start || b.offset() > end {
+                    buf.stop_signal_emission_by_name("delete-range");
+                }
+            }
+        });
+
         Self {
             view,
             err_tag,
@@ -52,7 +83,7 @@ impl Console {
             readonly_tag,
             input_tag,
             screen: RefCell::new(Screen::default()),
-            input: RefCell::new(None),
+            input,
         }
     }
 
@@ -105,8 +136,19 @@ impl Console {
         buf.apply_tag(&self.error_link_tag, &a, &b);
     }
 
-    /// `leia`: show the prompt and let the student type the answer in the
-    /// pane. Enter sends it to `reply`.
+    /// Current logical output position; soft wrapping does not add lines.
+    pub fn cursor_position(&self) -> (i64, i64) {
+        let screen = self.screen.borrow();
+        match screen.row {
+            Some(row) => (i64::from(row), i64::from(screen.col)),
+            None => {
+                let end = self.buffer().end_iter();
+                (i64::from(end.line()), i64::from(end.line_offset()))
+            }
+        }
+    }
+
+    /// `leia` edits only the remainder of the selected output line.
     pub fn begin_input(&self, prompt: &str, reply: Sender<String>) {
         self.cancel_input();
         if !prompt.is_empty() {
@@ -116,13 +158,38 @@ impl Console {
             }
         }
         let buf = self.buffer();
-        let (start, end) = buf.bounds();
-        buf.apply_tag(&self.readonly_tag, &start, &end);
-        let mark = buf.create_mark(None, &end, true);
-        *self.input.borrow_mut() = Some((mark, reply));
+        let (row, col) = self.cursor_position();
+        ensure_line(&buf, row as i32);
+        let (start, end) = line_range(&buf, row as i32).expect("line exists");
+        if col as i32 > end - start {
+            buf.insert(
+                &mut buf.iter_at_offset(end),
+                &" ".repeat((col as i32 - (end - start)) as usize),
+            );
+        }
+        let (_, end) = line_range(&buf, row as i32).unwrap();
+        let offset = start + col as i32;
+        buf.delete(
+            &mut buf.iter_at_offset(offset),
+            &mut buf.iter_at_offset(end),
+        );
+        // A newline bounds the field, even when this was the last output line.
+        let mut at = buf.iter_at_offset(offset);
+        if at.is_end() {
+            buf.insert(&mut at, "\n");
+        }
+        let (s, e) = buf.bounds();
+        buf.apply_tag(&self.readonly_tag, &s, &e);
+        let at = buf.iter_at_offset(offset);
+        let mut after = at;
+        after.forward_char();
+        buf.remove_tag(&self.readonly_tag, &at, &after);
+        let start = buf.create_mark(None, &at, true);
+        let end = buf.create_mark(None, &at, false);
+        *self.input.borrow_mut() = Some(Input { start, end, reply });
         self.view.set_editable(true);
         self.view.set_cursor_visible(true);
-        buf.place_cursor(&buf.end_iter());
+        buf.place_cursor(&at);
         self.view.grab_focus();
         self.view
             .scroll_to_mark(&buf.get_insert(), 0.0, false, 0.0, 0.0);
@@ -134,45 +201,48 @@ impl Console {
 
     /// Enter while reading: the typed text becomes part of the output.
     pub fn commit_input(&self) -> bool {
-        let Some((mark, reply)) = self.input.borrow_mut().take() else {
+        let Some(input) = self.input.borrow_mut().take() else {
             return false;
         };
         let buf = self.buffer();
-        let start = buf.iter_at_mark(&mark);
-        let end = buf.end_iter();
+        let start = buf.iter_at_mark(&input.start);
+        let end = buf.iter_at_mark(&input.end);
         let line = buf.text(&start, &end, false).to_string();
+        let row = end.line();
         buf.apply_tag(&self.input_tag, &start, &end);
-        let mut end = buf.end_iter();
-        buf.insert(&mut end, "\n");
-        buf.delete_mark(&mark);
+        buf.delete_mark(&input.start);
+        buf.delete_mark(&input.end);
         self.view.set_editable(false);
         self.view.set_cursor_visible(false);
-        // After cls/casa the terminal row continues below the answer.
         let mut screen = self.screen.borrow_mut();
         if screen.row.is_some() {
-            screen.row = Some(buf.line_count() - 1);
+            screen.row = Some(row + 1);
+            screen.col = 0;
+            screen.start_col = 0;
             screen.partial.clear();
         }
-        let _ = reply.send(line);
+        let _ = input.reply.send(line);
         true
     }
 
-    /// The program ended (or Parar) while waiting for input.
     pub fn cancel_input(&self) {
-        if let Some((mark, _)) = self.input.borrow_mut().take() {
-            self.buffer().delete_mark(&mark);
+        if let Some(input) = self.input.borrow_mut().take() {
+            let buf = self.buffer();
+            buf.delete_mark(&input.start);
+            buf.delete_mark(&input.end);
         }
         self.view.set_editable(false);
         self.view.set_cursor_visible(false);
     }
 
-    /// Keep typing at the end: a click elsewhere while reading moves back.
     pub fn keep_cursor_in_input(&self) {
-        if let Some((mark, _)) = self.input.borrow().as_ref() {
+        if let Some(input) = self.input.borrow().as_ref() {
             let buf = self.buffer();
-            let at = buf.iter_at_mark(&buf.get_insert());
-            if at.offset() < buf.iter_at_mark(mark).offset() {
-                buf.place_cursor(&buf.end_iter());
+            let at = buf.iter_at_mark(&buf.get_insert()).offset();
+            let start = buf.iter_at_mark(&input.start).offset();
+            let end = buf.iter_at_mark(&input.end);
+            if at < start || at > end.offset() {
+                buf.place_cursor(&end);
             }
         }
     }
@@ -294,7 +364,11 @@ fn write_screen_now(buf: &gtk::TextBuffer, screen: &mut Screen, text: &str) {
                 }
                 b'K' => {
                     flush_partial(buf, &mut row, &mut col, &mut start_col, screen);
-                    erase_line_from(buf, row, col);
+                    if params == "2" {
+                        erase_line_from(buf, row, 0);
+                    } else {
+                        erase_line_from(buf, row, col);
+                    }
                 }
                 b'H' | b'f' => {
                     flush_partial(buf, &mut row, &mut col, &mut start_col, screen);
@@ -316,6 +390,9 @@ fn write_screen_now(buf: &gtk::TextBuffer, screen: &mut Screen, text: &str) {
             break;
         }
         if c == '\r' {
+            flush_partial(buf, &mut row, &mut col, &mut start_col, screen);
+            col = 0;
+            start_col = 0;
             rest = &rest[1..];
         } else if c == '\n' {
             flush_partial(buf, &mut row, &mut col, &mut start_col, screen);
@@ -807,6 +884,47 @@ mod tests {
                 bold: false
             }
         );
+    }
+
+    #[test]
+    fn input_at_saved_position_preserves_the_message_below() {
+        crate::gtk_test::run(|| {
+            let c = Console::new();
+            c.stdout("Menu\nOpção: inválida\nOpção inválida\nRodapé");
+            assert_eq!(c.cursor_position(), (3, 6));
+            c.stdout("\x1b[2;4H");
+            assert_eq!(c.cursor_position(), (1, 3));
+            c.stdout("\r\x1b[2K");
+            assert_eq!(c.cursor_position(), (1, 0));
+            let (tx, rx) = std::sync::mpsc::channel();
+            c.begin_input("Opção: ", tx);
+            let buf = c.view.buffer();
+            buf.insert_interactive_at_cursor("2", true);
+            // Neither Delete nor a selection can remove the protected newline
+            // or the message below the field.
+            let mut end = buf.iter_at_mark(&buf.get_insert());
+            let mut next = end;
+            next.forward_char();
+            buf.delete_interactive(&mut end, &mut next, true);
+            c.keep_cursor_in_input();
+            assert!(c.commit_input());
+            assert_eq!(rx.recv().unwrap(), "2");
+            assert_eq!(c.cursor_position(), (2, 0));
+            let (s, e) = buf.bounds();
+            assert_eq!(
+                buf.text(&s, &e, false),
+                "Menu\nOpção: 2\nOpção inválida\nRodapé"
+            );
+            c.stdout("\r\x1b[2K");
+            let (s, e) = buf.bounds();
+            assert_eq!(buf.text(&s, &e, false), "Menu\nOpção: 2\n\nRodapé");
+            c.stdout("\x1b[2;1H");
+            let (tx, rx) = std::sync::mpsc::channel();
+            c.begin_input("", tx);
+            buf.insert_interactive_at_cursor("1", true);
+            assert!(c.commit_input());
+            assert_eq!(rx.recv().unwrap(), "1");
+        });
     }
 
     #[test]

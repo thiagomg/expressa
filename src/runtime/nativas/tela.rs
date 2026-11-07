@@ -85,6 +85,60 @@ impl Vm<'_, '_> {
         write!(self.out, "{CURSOR_HOME}").map_err(|e| self.io_err(e, span))?;
         Ok(Value::Nada)
     }
+    pub(crate) fn bi_posicao_cursor(
+        &mut self,
+        args: &[Value],
+        span: Span,
+    ) -> Result<Value, EvalError> {
+        match args {
+            [] => {
+                self.out.flush().map_err(|e| self.io_err(e, span))?;
+                let result = if let Some(host) = self.leia_host.as_mut() {
+                    host.cursor_position()
+                } else if self.input.is_terminal() {
+                    super::super::terminal::cursor_position().map_err(|e| e.to_string())
+                } else {
+                    Err("consulta da posição do cursor exige um terminal ou a Aula".into())
+                };
+                let (linha, coluna) = result.map_err(|e| self.err(e, span))?;
+                Ok(Value::mapa(vec![
+                    (MapKey::Texto("linha".into()), Value::Numero(linha.into())),
+                    (MapKey::Texto("coluna".into()), Value::Numero(coluna.into())),
+                ]))
+            }
+            [Value::Mapa(pos)] => {
+                let linha = map_int(pos, "linha", span, self)?;
+                let coluna = map_int(pos, "coluna", span, self)?;
+                if linha < 0 || coluna < 0 {
+                    return Err(self.err("posicao_cursor espera linha e coluna >= 0", span));
+                }
+                let linha = linha
+                    .checked_add(1)
+                    .ok_or_else(|| self.err("linha fora do intervalo", span))?;
+                let coluna = coluna
+                    .checked_add(1)
+                    .ok_or_else(|| self.err("coluna fora do intervalo", span))?;
+                write!(self.out, "\x1b[{linha};{coluna}H").map_err(|e| self.io_err(e, span))?;
+                self.out.flush().map_err(|e| self.io_err(e, span))?;
+                Ok(Value::Nada)
+            }
+            [_] => Err(self.err("posicao_cursor espera um mapa com linha e coluna", span)),
+            _ => Err(self.err("posicao_cursor espera 0 ou 1 argumento(s)", span)),
+        }
+    }
+
+    pub(crate) fn bi_apague_linha(
+        &mut self,
+        args: &[Value],
+        span: Span,
+    ) -> Result<Value, EvalError> {
+        self.expect_arity(args, 0, span)?;
+        // Erase the entire current line and leave the cursor at its start.
+        write!(self.out, "\r\x1b[2K").map_err(|e| self.io_err(e, span))?;
+        self.out.flush().map_err(|e| self.io_err(e, span))?;
+        Ok(Value::Nada)
+    }
+
     pub(crate) fn bi_eh_terminal(
         &mut self,
         args: &[Value],

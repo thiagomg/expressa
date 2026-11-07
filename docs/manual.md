@@ -451,6 +451,37 @@ Limpa e põe o cursor no canto. No REPL, a linha `cls` também limpa. Em animaç
 
 Cursor no canto, sem apagar. Na Aula, o painel trata como novo quadro.
 
+
+### Consultar o cursor e repetir uma entrada
+
+Com `importe "tela"`, `posicao_cursor()` devolve um mapa com `:linha` e
+`:coluna`, começando em zero. `posicao_cursor(pos)` volta à posição guardada.
+`apague_linha()` limpa a linha atual inteira e coloca o cursor no início dela.
+
+```lep
+importe "tela"
+
+escreva("1 - Continuar | 2 - Sair")
+pos = posicao_cursor()
+enquanto verdadeiro {
+    posicao_cursor(pos)
+    apague_linha()
+    opcao = leia("Opção: ")
+    se opcao == "1" ou opcao == "2" {
+        apague_linha()
+        pare
+    }
+    apague_linha()
+    escreva("Opção inválida. Escolha 1 ou 2.")
+}
+```
+
+O aviso permanece na linha de baixo enquanto a entrada é refeita na linha de
+cima. A Aula permite digitar nessa posição sem apagar o aviso. No terminal,
+a consulta exige suporte à posição do cursor; em pipes/arquivos ela falha.
+Na Aula, a numeração conta quebras explícitas, não as quebras visuais de linhas
+longas. Rolagem pode invalidar uma posição guardada.
+
 ### `eh_terminal()` / `é_terminal()`
 
 Verdadeiro se a entrada é o teclado. Falso em pipe, arquivo e Aula.

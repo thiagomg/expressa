@@ -11,6 +11,11 @@ pub const CLEAR_SCREEN: &str = "\x1b[2J\x1b[H";
 pub const CURSOR_HOME: &str = "\x1b[H";
 
 pub trait LeiaHost {
+    /// Zero-based output cursor, after all preceding output has been rendered.
+    fn cursor_position(&mut self) -> Result<(i64, i64), String> {
+        Err("consulta da posição do cursor indisponível neste ambiente".into())
+    }
+
     fn ask(&mut self, prompt: &str) -> Result<String, String>;
 
     /// Drain remaining stdin as lines (no prompt). Default: not available

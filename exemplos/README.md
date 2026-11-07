@@ -55,6 +55,7 @@ Pasta = para que o arquivo existe. Depois do tutorial: `linguagem/` → `texto/`
 | Arquivo | O que mostra |
 |---------|----------------|
 | `caixa.lep` | recibo de padaria, desconto |
+| `menu_cursor.lep` | guarda o cursor e repete `leia` na mesma linha, com aviso abaixo |
 | `receita.lep` | mapa + lista de chaves, escala uma receita |
 | `turma.lep` | boletim com `media`, `maximo`, `situacao` |
 | `diario.lep` | `salve_arquivo`, `adicione_arquivo`, `leia_arquivo` |

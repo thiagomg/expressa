@@ -89,3 +89,25 @@ bloco = funcao(linha, coluna) { 0 }
 ///
 /// Exemplo: b.escreva_em("Q W E R T")
 escreva_em = funcao(bloco, texto) { 0 }
+
+/// Consulta ou altera a posição do cursor de saída. Também posição_cursor().
+///
+/// Sem argumentos, devolve um mapa {:linha, :coluna}, com posições a partir de zero.
+/// Com um mapa, move o cursor sem apagar nem alterar o mapa recebido.
+/// Funciona na Aula e em terminais compatíveis. A consulta falha em pipes/arquivos
+/// ou quando o terminal não responde. Na Aula, as linhas são as quebras explícitas:
+/// o ajuste visual de uma linha longa não muda a numeração. Rolagem pode invalidar
+/// posições guardadas. Na Aula, leia() começa na posição escolhida e substitui
+/// o restante daquela linha, preservando as linhas de baixo.
+///
+/// Exemplo: pos = posicao_cursor()
+posicao_cursor = funcao() { 0 }
+posicao_cursor = funcao(pos) { 0 }
+
+/// Apaga a linha atual inteira e deixa o cursor no início dela.
+///
+/// Não remove a linha nem desloca as linhas de baixo. Sem argumentos.
+/// Funciona no terminal e no painel de saída da Aula.
+///
+/// Exemplo: apague_linha()
+apague_linha = funcao() { 0 }
