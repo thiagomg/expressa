@@ -393,6 +393,7 @@ fn app() -> impl IntoElement {
                                         .font_size(font_size)
                                         .font_family(FONT_FAMILY)
                                         .gutter(false)
+                                        .read_only(abas_agora.atual().snapshot)
                                         .scroll_controller(scroll_editor)
                                         .a11y_auto_focus(true)
                                         .on_pre_key_down(move |e: Event<KeyboardEventData>| {

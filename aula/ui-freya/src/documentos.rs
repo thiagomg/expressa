@@ -24,6 +24,7 @@ pub struct Aba {
     pub rel_remoto: Option<String>,
     pub cursor: usize,
     pub selecao: Option<(usize, usize)>,
+    pub snapshot: bool,
 }
 
 impl Aba {
@@ -38,6 +39,7 @@ impl Aba {
             rel_remoto: None,
             cursor: 0,
             selecao: None,
+            snapshot: false,
         }
     }
 }
@@ -141,7 +143,8 @@ impl Abas {
 
     pub fn rotulo(aba: &Aba) -> String {
         let marca = if aba.dirty { "● " } else { "" };
-        format!("{marca}{}", aba.nome)
+        let extra = if aba.snapshot { " 🔒" } else { "" };
+        format!("{marca}{}{extra}", aba.nome)
     }
 
     pub fn nova_aba(&mut self, texto: &str) {
@@ -198,7 +201,37 @@ impl Abas {
     }
 
     pub fn proxima_suja(&self) -> Option<u64> {
-        self.itens.iter().find(|a| a.dirty).map(|a| a.id)
+        self.itens.iter().find(|a| a.dirty && !a.snapshot).map(|a| a.id)
+    }
+
+    pub fn idx_snapshot(&self) -> Option<usize> {
+        self.itens.iter().position(|a| a.snapshot)
+    }
+
+    pub fn fechar_snapshots(&mut self) {
+        let ids: Vec<u64> = self.itens.iter().filter(|a| a.snapshot).map(|a| a.id).collect();
+        for id in ids {
+            let _ = self.fechar_id(id);
+        }
+    }
+
+    pub fn garantir_snapshot(&mut self, nome: &str, texto: &str, caminho: Option<PathBuf>) -> usize {
+        if let Some(idx) = self.idx_snapshot() {
+            self.itens[idx].nome = format!("{nome} (execução)");
+            self.itens[idx].texto = texto.to_string();
+            self.itens[idx].caminho = caminho;
+            self.itens[idx].dirty = false;
+            self.itens[idx].cursor = 0;
+            self.atual = idx;
+            return idx;
+        }
+        self.nova_aba(texto);
+        let aba = self.atual_mut();
+        aba.nome = format!("{nome} (execução)");
+        aba.caminho = caminho;
+        aba.dirty = false;
+        aba.snapshot = true;
+        self.atual
     }
 
     #[allow(dead_code)]
@@ -266,7 +299,7 @@ pub fn gravar_rascunhos(abas: &Abas) {
         return;
     }
     for aba in &abas.itens {
-        if !aba.dirty {
+        if !aba.dirty || aba.snapshot {
             apagar_rascunho(aba.id);
             continue;
         }
@@ -452,10 +485,14 @@ mod tests {
             rel_remoto: None,
             cursor: 0,
             selecao: None,
+            snapshot: false,
         };
         assert_eq!(Abas::rotulo(&a), "a.lep");
         a.dirty = true;
         assert_eq!(Abas::rotulo(&a), "● a.lep");
+        a.snapshot = true;
+        a.dirty = false;
+        assert_eq!(Abas::rotulo(&a), "a.lep 🔒");
     }
 
     #[test]
@@ -488,6 +525,20 @@ mod tests {
         abas.itens[1].dirty = false;
         assert!(!abas.alguma_suja());
         assert_eq!(abas.proxima_suja(), None);
+    }
+
+    #[test]
+    fn snapshot_nao_marca_sujo_e_reusa() {
+        let mut abas = Abas::nova("x = 1\n");
+        let idx = abas.garantir_snapshot("a.lep", "x = 1\n", None);
+        assert!(abas.itens[idx].snapshot);
+        assert!(!abas.itens[idx].dirty);
+        assert!(Abas::rotulo(abas.atual()).contains("execução"));
+        let idx2 = abas.garantir_snapshot("a.lep", "x = 2\n", None);
+        assert_eq!(idx, idx2);
+        assert_eq!(abas.atual().texto, "x = 2\n");
+        abas.fechar_snapshots();
+        assert!(abas.itens.iter().all(|a| !a.snapshot));
     }
 
     #[test]

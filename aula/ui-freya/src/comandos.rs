@@ -994,8 +994,8 @@ pub fn resolver_conflito(
 }
 
 pub fn executar(
-    editor: State<CodeEditorData>,
-    _prefs: State<Prefs>,
+    mut editor: State<CodeEditorData>,
+    prefs: State<Prefs>,
     mut abas: State<Abas>,
     mut status: State<String>,
     projeto: State<Projeto>,
@@ -1010,6 +1010,14 @@ pub fn executar(
         status.set("Já está rodando — use Parar".into());
         return;
     }
+    let idx_aluno = if abas.read().atual().snapshot {
+        abas.read().itens.iter().position(|a| !a.snapshot)
+    } else {
+        None
+    };
+    if let Some(idx) = idx_aluno {
+        trocar_aba(&mut editor.write(), &mut abas.write(), idx, &prefs.read());
+    }
     sincronizar(&mut abas.write(), &editor.read());
     console.write().limpar();
     depuracao.write().fim();
@@ -1022,6 +1030,9 @@ pub fn executar(
     );
     let mut textos = Vec::new();
     for aba in &abas.read().itens {
+        if aba.snapshot {
+            continue;
+        }
         if let Some(p) = &aba.caminho {
             textos.push((
                 caminho_relativo(raiz.as_deref().unwrap_or(Path::new(".")), Some(p)),
@@ -1058,12 +1069,29 @@ pub fn executar(
         depuracao.write().visivel = true;
     }
     exec.write()
-        .iniciar(fonte, arquivo, ws, argv, debug, pontos);
-    status.set(if debug {
-        "Depurando…".into()
+        .iniciar(fonte.clone(), arquivo, ws, argv, debug, pontos);
+    if debug {
+        let nome = abas.read().atual().nome.clone();
+        let caminho = abas.read().atual().caminho.clone();
+        if !abas.read().atual().snapshot {
+            guardar_live(&abas.read(), &mut editor.write());
+        }
+        abas.write().garantir_snapshot(&nome.replace(" (execução)", ""), &fonte, caminho);
+        carregar_editor(&mut editor.write(), abas.read().atual(), &prefs.read());
+        status.set("Depurando…".into());
     } else {
-        "Rodando…".into()
-    });
+        let tinha = abas.read().idx_snapshot().is_some();
+        abas.write().fechar_snapshots();
+        if tinha {
+            instalar_editor(
+                &mut editor.write(),
+                &abas.read(),
+                abas.read().atual(),
+                &prefs.read(),
+            );
+        }
+        status.set("Rodando…".into());
+    }
 }
 
 fn comando_debug(
@@ -1090,10 +1118,10 @@ fn alternar_ponto(
     editor: State<CodeEditorData>,
     prefs: State<Prefs>,
     abas: State<Abas>,
-    mut status: State<String>,
+    status: State<String>,
     projeto: State<Projeto>,
     exec: State<Execucao>,
-    mut depuracao: State<Depuracao>,
+    depuracao: State<Depuracao>,
 ) {
     let linha = (editor.read().cursor_row() + 1) as u32;
     alternar_ponto_em(linha, editor, prefs, abas, status, projeto, exec, depuracao);
@@ -1209,9 +1237,9 @@ pub fn aplicar_eventos(
     mut status: State<String>,
     mut exec: State<Execucao>,
     mut depuracao: State<Depuracao>,
-    editor: State<CodeEditorData>,
+    mut editor: State<CodeEditorData>,
     prefs: State<Prefs>,
-    abas: State<Abas>,
+    mut abas: State<Abas>,
     projeto: State<Projeto>,
     dialogo: State<Dialogo>,
     mut graficos: State<Graficos>,
@@ -1271,6 +1299,16 @@ pub fn aplicar_eventos(
             } => {
                 exec.write().rodando = false;
                 depuracao.write().fim();
+                let tinha = abas.read().idx_snapshot().is_some();
+                abas.write().fechar_snapshots();
+                if tinha {
+                    instalar_editor(
+                        &mut editor.write(),
+                        &abas.read(),
+                        abas.read().atual(),
+                        &prefs.read(),
+                    );
+                }
                 if ok {
                     status.set("Terminou".into());
                 } else {
@@ -1307,13 +1345,19 @@ pub fn responder_leia(
 pub fn ir_para_pausa(
     arquivo: &str,
     linha: u32,
-    editor: State<CodeEditorData>,
+    mut editor: State<CodeEditorData>,
     prefs: State<Prefs>,
-    abas: State<Abas>,
+    mut abas: State<Abas>,
     status: State<String>,
     projeto: State<Projeto>,
     dialogo: State<Dialogo>,
 ) {
+    let idx_snap = abas.read().idx_snapshot();
+    if let Some(idx) = idx_snap {
+        trocar_aba(&mut editor.write(), &mut abas.write(), idx, &prefs.read());
+        ir_para_linha(&linha.to_string(), editor, status, dialogo);
+        return;
+    }
     let path = {
         let raiz = projeto.read().raiz.clone();
         let p = PathBuf::from(arquivo);
