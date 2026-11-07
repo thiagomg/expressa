@@ -58,7 +58,7 @@ use crate::{
     execucao::caminho_relativo,
     turma::Turma,
     edicao::{reindentar_depois, tecla_pede_indent, tratar_tecla},
-    editor::{FONT_FAMILY, TEXTO_INICIAL, fonte_px, mensagem_sintaxe},
+    editor::{TEXTO_INICIAL, fonte_familia, fonte_px, instalar_fonte, mensagem_sintaxe},
     prefs::Prefs,
     projeto::{Projeto, abrir_raiz, instalar_exemplos, restaurar_inicio},
     shell::{
@@ -92,7 +92,15 @@ fn main() {
 }
 
 fn app() -> impl IntoElement {
-    let prefs_iniciais = Prefs::load();
+    let prefs_iniciais = {
+        let mut p = Prefs::load();
+        let familia = instalar_fonte((!p.familia.is_empty()).then_some(p.familia.as_str()));
+        if p.familia != familia {
+            p.familia = familia.to_string();
+            p.save();
+        }
+        p
+    };
     let theme = use_init_theme(|| tema_freya(prefs_iniciais.dark));
     let a11y_id = use_a11y();
     let mut prefs = use_state(|| prefs_iniciais.clone());
@@ -465,7 +473,7 @@ fn app() -> impl IntoElement {
                                 .child(
                                     CodeEditor::new(editor, a11y_id)
                                         .font_size(font_size)
-                                        .font_family(FONT_FAMILY)
+                                        .font_family(fonte_familia())
                                         .gutter(false)
                                         .read_only(abas_agora.atual().snapshot)
                                         .scroll_controller(scroll_editor)

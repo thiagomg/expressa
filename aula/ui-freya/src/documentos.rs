@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
-use crate::editor::{FONT_FAMILY, fonte_px, new_editor};
+use crate::editor::{fonte_familia, fonte_px, new_editor};
 use crate::prefs::Prefs;
 use crate::shell::aplicar_tema_editor;
 use freya::code_editor::CodeEditorData;
@@ -429,7 +429,7 @@ pub fn sincronizar(abas: &mut Abas, editor: &CodeEditorData) {
 pub fn carregar_editor(editor: &mut CodeEditorData, aba: &Aba, prefs: &Prefs) {
     *editor = new_editor(&aba.texto);
     aplicar_tema_editor(editor, prefs.dark);
-    editor.measure(fonte_px(prefs.font_size), FONT_FAMILY);
+    editor.measure(fonte_px(prefs.font_size), fonte_familia());
     let max = editor.len_utf16_cu();
     editor.move_cursor_to(aba.cursor.min(max));
     if let Some(sel) = aba.selecao {
@@ -472,7 +472,7 @@ pub fn instalar_editor(editor: &mut CodeEditorData, abas: &Abas, aba: &Aba, pref
     if let Some(guardado) = abas.editores.0.borrow_mut().remove(&aba.id) {
         *editor = guardado;
         aplicar_tema_editor(editor, prefs.dark);
-        editor.measure(fonte_px(prefs.font_size), FONT_FAMILY);
+        editor.measure(fonte_px(prefs.font_size), fonte_familia());
     } else {
         carregar_editor(editor, aba, prefs);
     }

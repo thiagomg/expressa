@@ -17,7 +17,7 @@ use crate::{
     console::Console,
     debug::{Depuracao, MarcaGutter, marca_gutter, valor_observado},
     documentos::Abas,
-    editor::new_editor,
+    editor::{fonte_familia, new_editor},
     grafico::{Graficos, rgba_folha, rgba_tela, tecla_de_freya},
     projeto::Projeto,
     repl::{Repl, TipoLinha},
@@ -471,7 +471,7 @@ pub fn painel_console(
             .direction(Direction::Horizontal)
             .width(Size::fill());
         if linha.is_empty() {
-            row = row.child(label().font_size(13.0).font_family("DejaVu Sans Mono").text(" "));
+            row = row.child(label().font_size(13.0).font_family(fonte_familia()).text(" "));
         } else {
             for t in linha {
                 let cor = if t.stderr {
@@ -481,7 +481,7 @@ pub fn painel_console(
                 };
                 let lab = label()
                     .font_size(13.0)
-                    .font_family("DejaVu Sans Mono")
+                    .font_family(fonte_familia())
                     .color(cor)
                     .font_weight(if t.negrito {
                         FontWeight::BOLD
@@ -1502,7 +1502,7 @@ pub fn painel_debug(
         vars = vars.child(
             label()
                 .font_size(12.0)
-                .font_family("DejaVu Sans Mono")
+                .font_family(fonte_familia())
                 .text(format!("[{}] {} = {}", v.escopo, v.nome, v.valor)),
         );
     }
@@ -1520,7 +1520,7 @@ pub fn painel_debug(
                 .child(
                     label()
                         .font_size(12.0)
-                        .font_family("DejaVu Sans Mono")
+                        .font_family(fonte_familia())
                         .text(format!("{}  {}:{}", q.nome, q.arquivo, q.linha)),
                 ),
         );
@@ -1570,7 +1570,7 @@ pub fn painel_debug(
         .maybe_child((!dep.trecho.is_empty()).then(|| {
             label()
                 .font_size(12.0)
-                .font_family("DejaVu Sans Mono")
+                .font_family(fonte_familia())
                 .text(dep.trecho.clone())
         }))
         .child(
@@ -1644,7 +1644,7 @@ pub fn painel_repl(
         lista = lista.child(
             label()
                 .font_size(13.0)
-                .font_family("DejaVu Sans Mono")
+                .font_family(fonte_familia())
                 .color(cor)
                 .text(l.texto.clone()),
         );
@@ -1694,7 +1694,7 @@ pub fn painel_repl(
                 .padding((4.0, 6.0, 4.0, 6.0))
                 .spacing(6.0)
                 .cross_align(Alignment::Center)
-                .child(label().font_size(13.0).font_family("DejaVu Sans Mono").text(repl.prompt.clone()))
+                .child(label().font_size(13.0).font_family(fonte_familia()).text(repl.prompt.clone()))
                 .child(
                     CampoTexto::new(entrada)
                         .placeholder("2 + 3")

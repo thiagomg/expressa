@@ -248,7 +248,7 @@ fn zoom(
     prefs.write().zoom(step);
     prefs.read().save();
     let pt = prefs.read().font_size;
-    editor.write().measure(fonte_px(pt), crate::editor::FONT_FAMILY);
+    editor.write().measure(fonte_px(pt), crate::editor::fonte_familia());
     status.set(format!("Letra {pt} pt"));
 }
 

@@ -1,18 +1,78 @@
 //! Code-editor buffer helpers.
 
+use std::sync::OnceLock;
+
 use freya::{
     code_editor::{CodeEditorData, EditorLanguage, EditorSyntaxTheme},
+    engine::prelude::{FontMgr, FontStyle, Typeface},
     text_edit::{Rope, TextEditor},
 };
 
-/// Monospace family that covers Portuguese on typical Linux desktops.
+/// First candidate; the runtime family is [`fonte_familia`].
 pub const FONT_FAMILY: &str = "DejaVu Sans Mono";
+/// Families tried in order until one has `ãéçõ`.
+pub const FONTES_CANDIDATAS: &[&str] = &[
+    "DejaVu Sans Mono",
+    "Cascadia Mono",
+    "Consolas",
+    "Liberation Mono",
+    "Noto Sans Mono",
+    "monospace",
+];
+const AMOSTRA_FONTE: &str = "ãéçõ";
+static FAMILIA: OnceLock<String> = OnceLock::new();
+
 /// Default pixel size matching GTK Aula's 11 pt.
 pub const FONT_SIZE: f32 = 16.0;
 
 /// Map the prefs `fonte` (points, same as GTK) to pixels for Freya.
 pub fn fonte_px(pt: u32) -> f32 {
     (pt as f32) * FONT_SIZE / 11.0
+}
+
+/// Family used by the editor, console, REPL and debug pane.
+pub fn fonte_familia() -> &'static str {
+    FAMILIA.get_or_init(escolher_fonte).as_str()
+}
+
+/// Pin the family from prefs when it still covers Portuguese, else pick one.
+pub fn instalar_fonte(preferida: Option<&str>) -> &'static str {
+    FAMILIA
+        .get_or_init(|| {
+            if let Some(nome) = preferida
+                && !nome.is_empty()
+                && familia_serve(nome)
+            {
+                return nome.to_string();
+            }
+            escolher_fonte()
+        })
+        .as_str()
+}
+
+pub fn escolher_fonte() -> String {
+    FONTES_CANDIDATAS
+        .iter()
+        .copied()
+        .find(|n| familia_serve(n))
+        .unwrap_or("monospace")
+        .to_string()
+}
+
+fn familia_serve(nome: &str) -> bool {
+    let mgr = FontMgr::new();
+    let mut set = mgr.match_family(nome);
+    let face = if set.count() > 0 {
+        set.match_style(FontStyle::normal())
+            .or_else(|| set.new_typeface(0))
+    } else {
+        mgr.match_family_style(nome, FontStyle::normal())
+    };
+    face.as_ref().is_some_and(amostra_cabe)
+}
+
+fn amostra_cabe(face: &Typeface) -> bool {
+    AMOSTRA_FONTE.chars().all(|c| face.unichar_to_glyph(c as i32) != 0)
 }
 
 pub const TEXTO_INICIAL: &str = "\
@@ -34,7 +94,7 @@ pub fn new_editor(texto: &str) -> CodeEditorData {
     let mut editor = CodeEditorData::new(rope, Some(linguagem()));
     editor.set_theme(EditorSyntaxTheme::dark());
     editor.parse();
-    editor.measure(FONT_SIZE, FONT_FAMILY);
+    editor.measure(FONT_SIZE, fonte_familia());
     editor
 }
 
@@ -135,6 +195,16 @@ mod tests {
     #[test]
     fn fonte_padrao_casa_com_gtk() {
         assert!((fonte_px(11) - FONT_SIZE).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn escolhe_familia_com_acentos() {
+        assert_eq!(FONTES_CANDIDATAS[0], FONT_FAMILY);
+        assert_eq!(*FONTES_CANDIDATAS.last().unwrap(), "monospace");
+        assert!(familia_serve(FONT_FAMILY) || familia_serve("monospace"));
+        let escolhida = escolher_fonte();
+        assert!(familia_serve(&escolhida), "{escolhida}");
+        assert!(!familia_serve("FonteQueNaoExiste123"));
     }
 
     #[test]

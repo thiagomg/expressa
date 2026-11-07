@@ -66,6 +66,7 @@ pub struct Prefs {
     pub projeto: String,
     pub recentes: Vec<Recente>,
     pub arquivo: String,
+    pub familia: String,
 }
 
 impl Default for Prefs {
@@ -79,6 +80,7 @@ impl Default for Prefs {
             projeto: String::new(),
             recentes: Vec::new(),
             arquivo: String::new(),
+            familia: String::new(),
         }
     }
 }
@@ -103,6 +105,7 @@ impl Prefs {
                 "projeto" => p.projeto = v.trim().to_string(),
                 "recente" => p.recentes.extend(Recente::de_texto(v.trim())),
                 "arquivo" => p.arquivo = v.trim().to_string(),
+                "familia" => p.familia = v.trim().to_string(),
                 _ => {}
             }
         }
@@ -122,6 +125,9 @@ impl Prefs {
         );
         for r in &self.recentes {
             t.push_str(&format!("recente={}\n", r.texto()));
+        }
+        if !self.familia.is_empty() {
+            t.push_str(&format!("familia={}\n", self.familia));
         }
         t
     }
@@ -295,6 +301,9 @@ mod tests {
         assert_eq!(Prefs::parse(&p.to_text()), p);
         assert_eq!(Prefs::parse("fonte=999\nlixo\n").font_size, MAX_FONT);
         assert_eq!(Prefs::parse(""), Prefs::default());
+        let com_familia = Prefs::parse("familia=Cascadia Mono\n");
+        assert_eq!(com_familia.familia, "Cascadia Mono");
+        assert!(com_familia.to_text().contains("familia=Cascadia Mono"));
     }
 
     #[test]
