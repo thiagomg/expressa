@@ -9,7 +9,7 @@ use crate::{
     ajuda::Sugestao,
     atalhos::{Acao, ATALHOS},
     console::Console,
-    debug::{Depuracao, valor_observado},
+    debug::{Depuracao, MarcaGutter, marca_gutter, valor_observado},
     documentos::Abas,
     editor::new_editor,
     grafico::{Graficos, png_folha, png_tela},
@@ -565,6 +565,51 @@ pub fn alca_vertical(
             let atual = *largura.read();
             arrasto.set(Some(if inverter { x + atual } else { x - atual }));
         })
+}
+
+pub fn linha_gutter(
+    indice: usize,
+    arquivo: &str,
+    pontos: &[(String, u32)],
+    pausado: bool,
+    pausa_arquivo: &str,
+    pausa_linha: u32,
+    font_size: f32,
+    line_height: f32,
+    paleta: Paleta,
+    on_linha: impl Fn(u32) + Copy + 'static,
+) -> impl IntoElement {
+    let linha = (indice + 1) as u32;
+    let marca = marca_gutter(pontos, arquivo, linha, pausado, pausa_arquivo, pausa_linha);
+    let fundo = match marca {
+        MarcaGutter::Atual | MarcaGutter::PontoAtual => (80, 70, 20, 255),
+        _ => (0, 0, 0, 0),
+    };
+    let simbolo = match marca {
+        MarcaGutter::Ponto | MarcaGutter::PontoAtual => "●",
+        _ => " ",
+    };
+    let cor_ponto = (198, 40, 40);
+    rect()
+        .height(Size::px(line_height))
+        .width(Size::fill())
+        .background(fundo)
+        .direction(Direction::Horizontal)
+        .cross_align(Alignment::Center)
+        .padding((0., 4.0, 0., 4.0))
+        .on_press(move |_| on_linha(linha))
+        .child(
+            label()
+                .font_size(font_size * 0.7)
+                .color(cor_ponto)
+                .text(simbolo),
+        )
+        .child(
+            label()
+                .font_size(font_size * 0.75)
+                .color(paleta.texto)
+                .text(format!("{linha}")),
+        )
 }
 
 pub fn aplicar_arrasto(arrasto: Option<f32>, x: f32, inverter: bool) -> Option<f32> {

@@ -104,6 +104,32 @@ impl Depuracao {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MarcaGutter {
+    Nada,
+    Ponto,
+    Atual,
+    PontoAtual,
+}
+
+pub fn marca_gutter(
+    pontos: &[(String, u32)],
+    arquivo: &str,
+    linha: u32,
+    pausado: bool,
+    pausa_arquivo: &str,
+    pausa_linha: u32,
+) -> MarcaGutter {
+    let ponto = pontos.iter().any(|(f, l)| f == arquivo && *l == linha);
+    let atual = pausado && pausa_linha == linha && (pausa_arquivo.is_empty() || pausa_arquivo == arquivo);
+    match (ponto, atual) {
+        (true, true) => MarcaGutter::PontoAtual,
+        (true, false) => MarcaGutter::Ponto,
+        (false, true) => MarcaGutter::Atual,
+        (false, false) => MarcaGutter::Nada,
+    }
+}
+
 pub fn valor_observado(nome: &str, vars: &[Variavel]) -> String {
     vars.iter()
         .find(|v| v.nome == nome)
@@ -122,6 +148,27 @@ mod tests {
         assert_eq!(d.pontos, [("a.lep".into(), 3)]);
         assert!(!d.alternar_ponto("a.lep".into(), 3));
         assert!(d.pontos.is_empty());
+    }
+
+    #[test]
+    fn marca_gutter_ponto_e_pausa() {
+        let pts = vec![("a.lep".into(), 2)];
+        assert_eq!(
+            marca_gutter(&pts, "a.lep", 2, true, "a.lep", 2),
+            MarcaGutter::PontoAtual
+        );
+        assert_eq!(
+            marca_gutter(&pts, "a.lep", 2, false, "a.lep", 2),
+            MarcaGutter::Ponto
+        );
+        assert_eq!(
+            marca_gutter(&pts, "a.lep", 1, true, "a.lep", 1),
+            MarcaGutter::Atual
+        );
+        assert_eq!(
+            marca_gutter(&pts, "b.lep", 2, true, "a.lep", 2),
+            MarcaGutter::Nada
+        );
     }
 
     #[test]

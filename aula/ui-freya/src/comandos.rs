@@ -1088,7 +1088,7 @@ fn comando_debug(
 
 fn alternar_ponto(
     editor: State<CodeEditorData>,
-    _prefs: State<Prefs>,
+    prefs: State<Prefs>,
     abas: State<Abas>,
     mut status: State<String>,
     projeto: State<Projeto>,
@@ -1096,6 +1096,19 @@ fn alternar_ponto(
     mut depuracao: State<Depuracao>,
 ) {
     let linha = (editor.read().cursor_row() + 1) as u32;
+    alternar_ponto_em(linha, editor, prefs, abas, status, projeto, exec, depuracao);
+}
+
+pub fn alternar_ponto_em(
+    linha: u32,
+    _editor: State<CodeEditorData>,
+    _prefs: State<Prefs>,
+    abas: State<Abas>,
+    mut status: State<String>,
+    projeto: State<Projeto>,
+    exec: State<Execucao>,
+    mut depuracao: State<Depuracao>,
+) {
     let rel = caminho_relativo(
         projeto.read().raiz.as_deref().unwrap_or(Path::new(".")),
         abas.read().atual().caminho.as_deref(),

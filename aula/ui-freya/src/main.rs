@@ -34,7 +34,7 @@ use crate::{
     atalhos::{Acao, acao_de_tecla},
     comandos::{
         achar, adicionar_observado, abrir_projeto_servidor, aplicar, aplicar_eventos,
-        aplicar_sugestao, clicar_arvore, confirmar_apagar, confirmar_descarte, confirmar_nome,
+        aplicar_sugestao, alternar_ponto_em, clicar_arvore, confirmar_apagar, confirmar_descarte, confirmar_nome,
         conectar_servidor, criar_projeto_servidor, descartar_rascunhos, escolher_projeto,
         fechar_dialogo_rascunhos,
         fechar_aba, clique_tela_graf, destacar_graficos, enviar_repl, fechar_repl, fechar_tela_graf,
@@ -49,6 +49,7 @@ use crate::{
     grafico::Graficos,
     repl::Repl,
     documentos::{Abas, Depois, DepoisNome, Dialogo, gravar_rascunhos, sincronizar},
+    execucao::caminho_relativo,
     turma::Turma,
     edicao::{reindentar_depois, tecla_pede_indent, tratar_tecla},
     editor::{FONT_FAMILY, TEXTO_INICIAL, fonte_px, mensagem_sintaxe},
@@ -57,6 +58,7 @@ use crate::{
     shell::{
         MenuAberto, Paleta, barra_abas, barra_argumentos, barra_busca, barra_ferramentas,
         LARGURA_ARVORE, LARGURA_DEBUG, alca_vertical, aplicar_arrasto, barra_menus, barra_status,
+        linha_gutter,
         dialogo_apagar, dialogo_comparar, dialogo_confirmar, dialogo_conflito, dialogo_linha,
         dialogo_nome, dialogo_projetos, dialogo_recuperar, dialogo_servidor, editor_inicial,
         painel_arvore, painel_atalhos, painel_catalogo, painel_console, painel_debug, painel_ficha,
@@ -120,6 +122,7 @@ fn app() -> impl IntoElement {
     let mut largura_debug = use_state(|| LARGURA_DEBUG);
     let mut arrasto_arvore = use_state(|| None::<f32>);
     let mut arrasto_debug = use_state(|| None::<f32>);
+    let scroll_editor = use_scroll_controller(ScrollConfig::default);
     let servidor_campo = use_state(|| prefs_iniciais.servidor.clone());
     let aluno_campo = use_state(|| "local".to_string());
 
@@ -221,6 +224,17 @@ fn app() -> impl IntoElement {
     let graficos_agora = graficos.read().clone();
     let graficos_dock = graficos_agora.clone();
     let graficos_float = graficos_agora.clone();
+    let n_linhas = editor.read().rope.len_lines().max(1);
+    let line_height = (font_size * 1.4).floor();
+    let gutter_w = font_size * 5.0;
+    let arquivo_gutter = caminho_relativo(
+        projeto_agora.raiz.as_deref().unwrap_or(std::path::Path::new(".")),
+        abas_agora.atual().caminho.as_deref(),
+    );
+    let pontos_gutter = depuracao_agora.pontos.clone();
+    let pausado_gutter = depuracao_agora.pausado;
+    let pausa_arq = depuracao_agora.arquivo.clone();
+    let pausa_linha = depuracao_agora.linha;
 
     let on_acao = move |acao: Acao| {
         aplicar(
@@ -336,12 +350,50 @@ fn app() -> impl IntoElement {
                         .height(Size::fill())
                         .child(
                             rect()
+                                .direction(Direction::Horizontal)
                                 .width(Size::fill())
                                 .height(Size::fill())
+                                .child({
+                                    let arquivo = arquivo_gutter.clone();
+                                    let pontos = pontos_gutter.clone();
+                                    let pausa_arq = pausa_arq.clone();
+                                    let mut col = rect().direction(Direction::Vertical).width(Size::fill());
+                                    for i in 0..n_linhas {
+                                        col = col.child(linha_gutter(
+                                            i,
+                                            &arquivo,
+                                            &pontos,
+                                            pausado_gutter,
+                                            &pausa_arq,
+                                            pausa_linha,
+                                            font_size,
+                                            line_height,
+                                            paleta,
+                                            move |linha| {
+                                                alternar_ponto_em(
+                                                    linha,
+                                                    editor,
+                                                    prefs,
+                                                    abas,
+                                                    status,
+                                                    projeto,
+                                                    exec,
+                                                    depuracao,
+                                                )
+                                            },
+                                        ));
+                                    }
+                                    ScrollView::new_controlled(scroll_editor)
+                                        .width(Size::px(gutter_w))
+                                        .show_scrollbar(false)
+                                        .child(col)
+                                })
                                 .child(
                                     CodeEditor::new(editor, a11y_id)
                                         .font_size(font_size)
                                         .font_family(FONT_FAMILY)
+                                        .gutter(false)
+                                        .scroll_controller(scroll_editor)
                                         .a11y_auto_focus(true)
                                         .on_pre_key_down(move |e: Event<KeyboardEventData>| {
                                             let seguir = tratar_tecla(&e, &mut editor.write());
