@@ -51,6 +51,7 @@ foreach ($name in @("expressa.exe", "expressa-grafico.exe")) {
 
 Copy-Tree (Join-Path $root "exemplos") (Join-Path $dest "exemplos")
 Copy-Tree (Join-Path $root "tutorial") (Join-Path $dest "tutorial")
+Copy-Item (Join-Path $root "packaging\freya\LEIA-ME.txt") (Join-Path $dest "LEIA-ME.txt")
 
 $bytes = (Get-ChildItem $dest -Recurse -File | Measure-Object Length -Sum).Sum
 Write-Output ("Pasta pronta: {0} ({1:N0} MB) — sem GTK" -f $dest, ($bytes / 1MB))

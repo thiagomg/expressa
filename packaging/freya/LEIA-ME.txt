@@ -1,0 +1,30 @@
+Expressa Aula (Freya)
+=====================
+
+Este zip é o editor Freya. Não inclui as DLLs do GTK. O instalador
+Windows da Aula GTK (ExpressaAula-*-Setup.exe / criar-instalador.ps1)
+continua a existir à parte.
+
+Como abrir
+----------
+Dê duplo clique em expressa-aula-freya.exe.
+
+Se a janela não aparecer ou a GPU falhar, no PowerShell:
+
+  $env:FREYA_RENDERER="software"
+  .\expressa-aula-freya.exe
+
+Vulkan não é obrigatório.
+
+O que conferir (Windows)
+------------------------
+- Teclado ABNT: função, não, início, ç ã é.
+- Arquivo → Abrir projeto… e os exemplos em Documentos\Expressa Aula\exemplos.
+- F5 num .lep; leia no console; Parar num laço.
+- Ver → Escuro / Claro.
+- F1 no nome de uma função.
+
+Os dois editores
+----------------
+expressa-aula (GTK) e expressa-aula-freya (este) são o mesmo produto.
+Nenhum substitui o outro.

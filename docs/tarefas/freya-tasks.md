@@ -332,7 +332,8 @@ Acceptance:
 
 - [x] Linux packaging: `expressa-aula-freya` entra no `.deb` (`packaging/deb/build-inside.sh`) e no menu (`expressa-aula-freya.desktop`). GTK `expressa-aula` **continua** no mesmo pacote; não há cutover.
 - [ ] Linux: instalar o `.deb` numa máquina limpa e F5 um exemplo (precisa de `./empacotar-deb.sh` com Docker; Skia no container).
-- [ ] Windows: walkthrough nativo (IME `função`/`não`, F5, instalador). Script pronto: `empacotar-freya.ps1` (sem DLLs GTK). Sem cross a partir do Linux.
+- [ ] Windows: walkthrough nativo (IME `função`/`não`, F5, zip Freya). Script: `empacotar-freya.ps1` (sem DLLs GTK) + `packaging/freya/LEIA-ME.txt`. Sem cross a partir do Linux. O Inno GTK (`criar-instalador.ps1`) permanece.
+- [x] Tamanhos após strip (Linux x86_64, 2026-11-07): GTK 8,4 MiB · Freya 37 MiB. `FREYA_RENDERER=software` no README.
 - [x] `aula/README.md` e `aula/ui-freya/README.md` documentam o binário Freya em paralelo ao GTK.
 - [x] Cutover (renomear para `expressa-aula` e arquivar GTK): **fora de âmbito**. O GTK permanece.
 

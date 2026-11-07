@@ -39,7 +39,7 @@ No REPL: `2 + 3`, `escreva("oi")`, `ajuda escreva`. `sair` ou Ctrl+D encerra.
 
 Compilar: `cargo build --release` (Rust, edition 2024). Binários em `target/release/`.
 
-Pacote `.deb` (Ubuntu 24.04 e 26.04, via Docker): `./empacotar-deb.sh`. Os arquivos saem em `dist/`. O pacote inclui `expressa-aula` (GTK) e `expressa-aula-freya`.
+Pacote `.deb` (Ubuntu 24.04 e 26.04, via Docker): `./empacotar-deb.sh`. Os arquivos saem em `dist/`. O pacote instala os dois editores, `expressa-aula` (GTK) e `expressa-aula-freya` (Freya), cada um com atalho no menu. Se a GPU falhar no Freya: `FREYA_RENDERER=software`. Vulkan não é obrigatório.
 
 ### Builds no GitHub
 
@@ -53,12 +53,14 @@ No GitHub, abra **Actions → Build packages → execução → Artifacts** para
 | --- | --- |
 | `expressa_*-1~ubuntu24.04_amd64.deb` | Pacote para Ubuntu 24.04 |
 | `expressa_*-1~ubuntu26.04_amd64.deb` | Pacote para Ubuntu 26.04 |
-| `ExpressaAula-*-Setup.exe` | Instalador Windows com executáveis, GTK e runtime do Visual C++ |
+| `ExpressaAula-*-Setup.exe` | Instalador Windows da Aula **GTK** (gvsbuild), runtime do Visual C++ |
 
-Os três pacotes incluem o interpretador, visualizador de gráficos, IDE Aula,
-servidor e tutoriais. Os artefatos ficam disponíveis por **30 dias**. No Windows,
-execute `ExpressaAula-*-Setup.exe`; no Ubuntu,
-instale o `.deb` correspondente com `sudo apt install ./expressa_*.deb`.
+Os três pacotes incluem o interpretador, visualizador de gráficos, IDE Aula GTK,
+servidor e tutoriais. O editor Freya entra no `.deb` Linux; no Windows o zip
+sem GTK sai de `empacotar-freya.ps1` na máquina nativa (`dist/expressa-aula-freya-windows.zip`).
+O instalador GTK **não** é substituído. Os artefatos do GitHub ficam 30 dias.
+No Windows, execute `ExpressaAula-*-Setup.exe` (GTK) ou o zip Freya; no Ubuntu,
+`sudo apt install ./expressa_*.deb` (os dois atalhos no menu).
 
 Os arquivos são produzidos em `dist/` nos runners e enviados diretamente, sem
 um ZIP adicional, como artefatos da execução. Esse workflow não publica uma GitHub Release. O workflow separado

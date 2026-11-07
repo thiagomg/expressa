@@ -15,9 +15,9 @@ O binário GTK `expressa-aula` continua sendo o da sala de aula. O Freya
 (`expressa-aula-freya`) instala junto no `.deb` e no zip Windows sem as DLLs
 do GTK. Os dois editores ficam: não apague `aula/ui`. Correções do Freya:
 `freya-tasks/`. Detalhes e atalhos iguais estão em `aula/ui-freya/README.md`. GPU ruim: `FREYA_RENDERER=software`.
-Linux: `./empacotar-deb.sh`. Windows Freya (máquina nativa, MSVC):
-`empacotar-freya.ps1`. O walkthrough de IME/instalador no Windows fica para
-uma máquina Windows.
+Linux: `./empacotar-deb.sh` (os dois atalhos no menu). Windows Freya (máquina
+nativa, MSVC): `empacotar-freya.ps1` e o `LEIA-ME.txt` do zip. O Inno GTK
+(`criar-instalador.ps1`) permanece. Walkthrough IME/F5: `aula/ui-freya/README.md`.
 
 ## Layout no disco
 
