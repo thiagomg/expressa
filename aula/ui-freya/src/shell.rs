@@ -1,5 +1,9 @@
 //! Menubar, toolbar and status bar.
 
+use std::cell::RefCell;
+use std::collections::HashSet;
+use std::rc::Rc;
+
 use freya::{
     code_editor::{CodeEditorData, CodeEditorThemeExt, EditorSyntaxTheme},
     engine::prelude::AlphaType,
@@ -78,6 +82,80 @@ pub fn aplicar_tema_editor(editor: &mut CodeEditorData, dark: bool) {
         EditorSyntaxTheme::light()
     });
     editor.parse();
+}
+
+/// Accessibility ids of text fields, so IDE shortcuts skip Ctrl+S/W/F while typing.
+#[derive(Clone, Default)]
+pub struct FocoCampos {
+    ids: Rc<RefCell<HashSet<AccessibilityId>>>,
+}
+
+impl FocoCampos {
+    pub fn tem_foco(&self) -> bool {
+        self.ids.borrow().iter().any(|id| id.is_focused())
+    }
+}
+
+#[derive(Clone, PartialEq)]
+struct CampoTexto {
+    valor: State<String>,
+    placeholder: &'static str,
+    width: Size,
+    auto_focus: bool,
+    on_submit: Option<EventHandler<String>>,
+}
+
+impl CampoTexto {
+    fn new(valor: State<String>) -> Self {
+        Self {
+            valor,
+            placeholder: "",
+            width: Size::px(150.0),
+            auto_focus: false,
+            on_submit: None,
+        }
+    }
+
+    fn placeholder(mut self, placeholder: &'static str) -> Self {
+        self.placeholder = placeholder;
+        self
+    }
+
+    fn width(mut self, width: Size) -> Self {
+        self.width = width;
+        self
+    }
+
+    fn auto_focus(mut self, auto_focus: bool) -> Self {
+        self.auto_focus = auto_focus;
+        self
+    }
+
+    fn on_submit(mut self, on_submit: impl Into<EventHandler<String>>) -> Self {
+        self.on_submit = Some(on_submit.into());
+        self
+    }
+}
+
+impl Component for CampoTexto {
+    fn render(&self) -> impl IntoElement {
+        let a11y = use_a11y();
+        let foco = try_consume_root_context::<FocoCampos>();
+        use_hook(move || {
+            if let Some(foco) = &foco {
+                foco.ids.borrow_mut().insert(a11y);
+            }
+        });
+        let mut campo = Input::new(self.valor)
+            .placeholder(self.placeholder)
+            .width(self.width.clone())
+            .a11y_id(a11y)
+            .auto_focus(self.auto_focus);
+        if let Some(on_submit) = &self.on_submit {
+            campo = campo.on_submit(on_submit.clone());
+        }
+        campo
+    }
 }
 
 pub fn barra_menus(
@@ -271,7 +349,7 @@ pub fn barra_argumentos(
         .cross_align(Alignment::Center)
         .child(label().font_size(12.0).text("argumentos:"))
         .child(
-            Input::new(args)
+            CampoTexto::new(args)
                 .placeholder("ex.: Ana --ajuda")
                 .width(Size::fill()),
         )
@@ -349,9 +427,10 @@ pub fn painel_console(
                 .cross_align(Alignment::Center)
                 .child(label().font_size(13.0).text(prompt))
                 .child(
-                    Input::new(entrada)
+                    CampoTexto::new(entrada)
                         .placeholder("leia")
                         .width(Size::fill())
+                        .auto_focus(true)
                         .on_submit(move |_| on_leia()),
                 ),
         );
@@ -520,9 +599,10 @@ pub fn barra_busca(
         .cross_align(Alignment::Center)
         .child(label().font_size(13.0).text("Buscar"))
         .child(
-            Input::new(termo)
+            CampoTexto::new(termo)
                 .placeholder("texto")
                 .width(Size::px(240.0))
+                .auto_focus(true)
                 .on_submit(move |_| on_proxima()),
         )
         .child(
@@ -746,9 +826,10 @@ pub fn dialogo_linha(
         .child(PopupTitle::new("Ir para linha".to_string()))
         .child(
             PopupContent::new().child(
-                Input::new(valor)
+                CampoTexto::new(valor)
                     .placeholder("número da linha")
                     .width(Size::fill())
+                    .auto_focus(true)
                     .on_submit(move |_| on_ir()),
             ),
         )
@@ -780,9 +861,10 @@ pub fn dialogo_nome(
         .child(PopupTitle::new(titulo))
         .child(
             PopupContent::new().child(
-                Input::new(valor)
+                CampoTexto::new(valor)
                     .placeholder("nome")
                     .width(Size::fill())
+                    .auto_focus(true)
                     .on_submit(move |_| on_ok()),
             ),
         )
@@ -939,13 +1021,14 @@ pub fn dialogo_servidor(
                         .width(Size::fill())
                         .child(label().font_size(13.0).text("URL (em casa: 127.0.0.1:50051)"))
                         .child(
-                            Input::new(url)
+                            CampoTexto::new(url)
                                 .placeholder("http://127.0.0.1:50051")
-                                .width(Size::fill()),
+                                .width(Size::fill())
+                                .auto_focus(true),
                         )
                         .child(label().font_size(13.0).text("Aluno"))
                         .child(
-                            Input::new(aluno)
+                            CampoTexto::new(aluno)
                                 .placeholder("local")
                                 .width(Size::fill())
                                 .on_submit(move |_| on_ok()),
@@ -1003,9 +1086,10 @@ pub fn dialogo_projetos(
                     .child(ScrollView::new().height(Size::px(180.0)).child(lista))
                     .child(label().font_size(13.0).text("Novo projeto"))
                     .child(
-                        Input::new(novo)
+                        CampoTexto::new(novo)
                             .placeholder("nome")
                             .width(Size::fill())
+                            .auto_focus(true)
                             .on_submit(move |_| on_criar()),
                     ),
             ),
@@ -1317,7 +1401,7 @@ pub fn painel_debug(
                 .width(Size::fill())
                 .spacing(4.0)
                 .child(
-                    Input::new(campo)
+                    CampoTexto::new(campo)
                         .placeholder("nome")
                         .width(Size::fill())
                         .on_submit(move |_| on_observar()),
@@ -1421,9 +1505,10 @@ pub fn painel_repl(
                 .cross_align(Alignment::Center)
                 .child(label().font_size(13.0).font_family("DejaVu Sans Mono").text(repl.prompt.clone()))
                 .child(
-                    Input::new(entrada)
+                    CampoTexto::new(entrada)
                         .placeholder("2 + 3")
                         .width(Size::fill())
+                        .auto_focus(true)
                         .on_submit(move |_| on_enviar()),
                 )
                 .child(

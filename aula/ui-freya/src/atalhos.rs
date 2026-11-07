@@ -140,6 +140,32 @@ pub fn acao_de_tecla(key: &Key, modifiers: Modifiers) -> Option<Acao> {
     }
 }
 
+/// F5–F11 and Esc still work while a text field or dialog has focus.
+pub fn acao_vale_em_campo(acao: Acao) -> bool {
+    matches!(
+        acao,
+        Acao::Executar
+            | Acao::Parar
+            | Acao::Depurar
+            | Acao::Proximo
+            | Acao::Entrar
+            | Acao::SairFuncao
+            | Acao::Ponto
+            | Acao::MostrarArquivos
+            | Acao::MostrarPainel
+            | Acao::Escapar
+    )
+}
+
+pub fn acao_de_tecla_com_foco(key: &Key, modifiers: Modifiers, em_campo: bool) -> Option<Acao> {
+    let acao = acao_de_tecla(key, modifiers)?;
+    if em_campo && !acao_vale_em_campo(acao) {
+        None
+    } else {
+        Some(acao)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -173,6 +199,30 @@ mod tests {
         assert_eq!(
             acao_de_tecla(&Key::Named(NamedKey::Escape), Modifiers::empty()),
             Some(Acao::Escapar)
+        );
+        assert_eq!(
+            acao_de_tecla_com_foco(&Key::Character("s".into()), ctrl, true),
+            None
+        );
+        assert_eq!(
+            acao_de_tecla_com_foco(&Key::Character("w".into()), ctrl, true),
+            None
+        );
+        assert_eq!(
+            acao_de_tecla_com_foco(&Key::Character("d".into()), ctrl, true),
+            None
+        );
+        assert_eq!(
+            acao_de_tecla_com_foco(&Key::Named(NamedKey::F5), Modifiers::empty(), true),
+            Some(Acao::Executar)
+        );
+        assert_eq!(
+            acao_de_tecla_com_foco(&Key::Named(NamedKey::Escape), Modifiers::empty(), true),
+            Some(Acao::Escapar)
+        );
+        assert_eq!(
+            acao_de_tecla_com_foco(&Key::Character("s".into()), ctrl, false),
+            Some(Acao::Salvar)
         );
     }
 

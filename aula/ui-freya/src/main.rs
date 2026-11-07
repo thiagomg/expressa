@@ -31,7 +31,7 @@ use freya::{
 };
 
 use crate::{
-    atalhos::{Acao, acao_de_tecla},
+    atalhos::{Acao, acao_de_tecla_com_foco},
     comandos::{
         achar, adicionar_observado, abrir_projeto_servidor, aplicar, aplicar_eventos,
         aplicar_sugestao, alternar_ponto_em, clicar_arvore, confirmar_apagar, confirmar_descarte, confirmar_nome,
@@ -60,6 +60,7 @@ use crate::{
         MenuAberto, Paleta, barra_abas, barra_argumentos, barra_busca, barra_ferramentas,
         LARGURA_ARVORE, LARGURA_DEBUG, alca_vertical, aplicar_arrasto, barra_menus, barra_status,
         linha_gutter,
+        FocoCampos,
         dialogo_apagar, dialogo_comparar, dialogo_confirmar, dialogo_conflito, dialogo_linha,
         dialogo_nome, dialogo_projetos, dialogo_recuperar, dialogo_servidor, editor_inicial,
         painel_arvore, painel_atalhos, painel_catalogo, painel_console, painel_debug, painel_ficha,
@@ -123,6 +124,7 @@ fn app() -> impl IntoElement {
     let mut largura_debug = use_state(|| LARGURA_DEBUG);
     let mut arrasto_arvore = use_state(|| None::<f32>);
     let mut arrasto_debug = use_state(|| None::<f32>);
+    let foco_campos = use_provide_root_context(FocoCampos::default);
     let scroll_editor = use_scroll_controller(ScrollConfig::default);
     let servidor_campo = use_state(|| prefs_iniciais.servidor.clone());
     let aluno_campo = use_state(|| "local".to_string());
@@ -268,10 +270,17 @@ fn app() -> impl IntoElement {
         .height(Size::fill())
         .background(paleta.fundo)
         .color(paleta.texto)
-        .on_global_key_down(move |e: Event<KeyboardEventData>| {
-            if let Some(acao) = acao_de_tecla(&e.key, e.modifiers) {
-                e.stop_propagation();
-                on_acao(acao);
+        .on_global_key_down({
+            let dialogo_atalho = dialogo_agora.clone();
+            let foco_campos = foco_campos.clone();
+            move |e: Event<KeyboardEventData>| {
+                let em_campo = foco_campos.tem_foco()
+                    || dialogo_atalho != Dialogo::Nenhum
+                    || console.read().leia_prompt.is_some();
+                if let Some(acao) = acao_de_tecla_com_foco(&e.key, e.modifiers, em_campo) {
+                    e.stop_propagation();
+                    on_acao(acao);
+                }
             }
         })
         .on_global_pointer_move(move |e: Event<PointerEventData>| {
