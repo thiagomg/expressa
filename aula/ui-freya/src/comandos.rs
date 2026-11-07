@@ -1371,7 +1371,13 @@ pub fn aplicar_sugestao(
     {
         novo = com;
     }
-    crate::editor::aplicar_texto(&mut editor.write(), &novo, start + s.inserir.encode_utf16().count());
+    {
+        let mut ed = editor.write();
+        crate::editor::substituir_texto(&mut ed, &novo);
+        let cursor = start + s.inserir.encode_utf16().count();
+        let max = ed.len_utf16_cu();
+        ed.move_cursor_to(cursor.min(max));
+    }
     sugestoes.set(Vec::new());
 }
 

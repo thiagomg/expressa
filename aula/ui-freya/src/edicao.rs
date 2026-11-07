@@ -6,7 +6,7 @@ use freya::text_edit::TextEditor;
 
 use crate::busca::{anterior, proxima};
 use crate::editor::{
-    aplicar_texto, byte_do_cursor, linhas_selecionadas, posicao_utf16,
+    byte_do_cursor, linhas_selecionadas, posicao_utf16, substituir_texto,
 };
 use crate::indent::{
     comentar_linhas, duplicar_linha, indentar_linha, indentar_todo, mover_linha, recuar_bloco,
@@ -18,7 +18,7 @@ pub fn recuar(editor: &mut CodeEditorData, delta: i32) {
     let row = editor.cursor_row();
     let col = editor.cursor_col();
     let novo = recuar_bloco(&editor.rope.to_string(), a, b, delta);
-    aplicar_texto(editor, &novo, 0);
+    substituir_texto(editor, &novo);
     editor.move_cursor_to_row(row, col.saturating_add_signed(delta as isize));
 }
 
@@ -27,7 +27,7 @@ pub fn comentar(editor: &mut CodeEditorData) {
     let row = editor.cursor_row();
     let col = editor.cursor_col();
     let novo = comentar_linhas(&editor.rope.to_string(), a, b);
-    aplicar_texto(editor, &novo, 0);
+    substituir_texto(editor, &novo);
     editor.move_cursor_to_row(row, col);
 }
 
@@ -35,7 +35,7 @@ pub fn duplicar(editor: &mut CodeEditorData) {
     let row = editor.cursor_row();
     let col = editor.cursor_col();
     let novo = duplicar_linha(&editor.rope.to_string(), row);
-    aplicar_texto(editor, &novo, 0);
+    substituir_texto(editor, &novo);
     editor.move_cursor_to_row(row + 1, col);
 }
 
@@ -43,7 +43,7 @@ pub fn mover(editor: &mut CodeEditorData, delta: i32) {
     let row = editor.cursor_row();
     let col = editor.cursor_col();
     let (novo, dest) = mover_linha(&editor.rope.to_string(), row, delta);
-    aplicar_texto(editor, &novo, 0);
+    substituir_texto(editor, &novo);
     editor.move_cursor_to_row(dest, col);
 }
 
@@ -51,7 +51,7 @@ pub fn recuar_arquivo(editor: &mut CodeEditorData) {
     let row = editor.cursor_row();
     let col = editor.cursor_col();
     let novo = indentar_todo(&editor.rope.to_string());
-    aplicar_texto(editor, &novo, 0);
+    substituir_texto(editor, &novo);
     editor.move_cursor_to_row(row, col);
 }
 
@@ -60,7 +60,7 @@ pub fn indentar_atual(editor: &mut CodeEditorData) {
     let Some(novo) = indentar_linha(&editor.rope.to_string(), row) else {
         return;
     };
-    aplicar_texto(editor, &novo, 0);
+    substituir_texto(editor, &novo);
     let linha = novo.split('\n').nth(row).unwrap_or("");
     let col = linha.chars().take_while(|c| *c == ' ' || *c == '\t').count();
     editor.move_cursor_to_row(row, col);
@@ -129,5 +129,38 @@ pub fn buscar(editor: &mut CodeEditorData, termo: &str, para_frente: bool) -> Op
             None
         }
         None => Some(format!("Não achou “{termo}”")),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use freya::text_edit::Rope;
+
+    fn editor_de_teste(texto: &str) -> CodeEditorData {
+        CodeEditorData::new(Rope::from_str(texto), None)
+    }
+
+    #[test]
+    fn comentar_marca_sujo_e_desfaz() {
+        let mut ed = editor_de_teste("x = 1\n");
+        ed.mark_as_saved();
+        comentar(&mut ed);
+        assert_eq!(ed.rope.to_string(), "// x = 1\n");
+        assert!(ed.is_edited());
+        assert!(ed.undo().is_some());
+        assert_eq!(ed.rope.to_string(), "x = 1\n");
+    }
+
+    #[test]
+    fn indentar_linha_empilha_historico() {
+        let mut ed = editor_de_teste("se verdadeiro {\nx = 1\n}\n");
+        ed.mark_as_saved();
+        ed.move_cursor_to_row(1, 0);
+        indentar_atual(&mut ed);
+        assert_eq!(ed.rope.to_string(), "se verdadeiro {\n    x = 1\n}\n");
+        assert!(ed.is_edited());
+        assert!(ed.undo().is_some());
+        assert_eq!(ed.rope.to_string(), "se verdadeiro {\nx = 1\n}\n");
     }
 }

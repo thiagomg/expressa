@@ -38,12 +38,49 @@ pub fn new_editor(texto: &str) -> CodeEditorData {
     editor
 }
 
-/// Replace the buffer and put the caret at `cursor` (UTF-16 units).
+/// Replace the buffer without pushing undo history (open file, recover draft).
+#[allow(dead_code)]
 pub fn aplicar_texto(editor: &mut CodeEditorData, texto: &str, cursor: usize) {
     editor.set(texto);
     editor.parse();
     let max = editor.len_utf16_cu();
     editor.move_cursor_to(cursor.min(max));
+}
+
+/// Apply a student edit with insert/remove so undo and `is_edited` stay correct.
+pub fn substituir_texto(editor: &mut CodeEditorData, novo: &str) {
+    let velho = editor.rope.to_string();
+    if velho == novo {
+        return;
+    }
+    let (start, old_end, inserted) = faixa_diferente(&velho, novo);
+    if start < old_end {
+        editor.remove(start..old_end);
+    }
+    if !inserted.is_empty() {
+        editor.insert(&inserted, start);
+    }
+    editor.parse();
+}
+
+/// UTF-16 range in `velho` that must change, plus the replacement slice of `novo`.
+fn faixa_diferente(velho: &str, novo: &str) -> (usize, usize, String) {
+    let a: Vec<char> = velho.chars().collect();
+    let b: Vec<char> = novo.chars().collect();
+    let mut i = 0;
+    while i < a.len() && i < b.len() && a[i] == b[i] {
+        i += 1;
+    }
+    let mut ja = a.len();
+    let mut jb = b.len();
+    while ja > i && jb > i && a[ja - 1] == b[jb - 1] {
+        ja -= 1;
+        jb -= 1;
+    }
+    let start: usize = a[..i].iter().map(|c| c.len_utf16()).sum();
+    let old_end = start + a[i..ja].iter().map(|c| c.len_utf16()).sum::<usize>();
+    let inserted: String = b[i..jb].iter().collect();
+    (start, old_end, inserted)
 }
 
 pub fn posicao_utf16(texto: &str, byte: usize) -> usize {
@@ -105,5 +142,31 @@ mod tests {
         let msg = mensagem_sintaxe("se");
         assert!(msg.contains("em "), "{msg}");
         assert_eq!(mensagem_sintaxe("escreva(1)\n"), "");
+    }
+
+    #[test]
+    fn faixa_so_o_trecho_que_mudou() {
+        let (s, e, ins) = faixa_diferente("abc", "aXc");
+        assert_eq!((s, e, ins.as_str()), (1, 2, "X"));
+        let (s, e, ins) = faixa_diferente("x = 1\n", "// x = 1\n");
+        assert_eq!(ins, "// ");
+        assert_eq!(s, 0);
+        assert_eq!(e, 0);
+    }
+
+    fn editor_de_teste(texto: &str) -> CodeEditorData {
+        CodeEditorData::new(Rope::from_str(texto), None)
+    }
+
+    #[test]
+    fn substituir_marca_editado_e_desfaz() {
+        let mut ed = editor_de_teste("x = 1\n");
+        ed.mark_as_saved();
+        assert!(!ed.is_edited());
+        substituir_texto(&mut ed, "// x = 1\n");
+        assert_eq!(ed.rope.to_string(), "// x = 1\n");
+        assert!(ed.is_edited());
+        assert!(ed.undo().is_some());
+        assert_eq!(ed.rope.to_string(), "x = 1\n");
     }
 }
