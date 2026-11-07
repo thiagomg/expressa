@@ -357,6 +357,7 @@ pub fn salvar(
                 }
             }
             editor.write().mark_as_saved();
+            crate::documentos::apagar_rascunho(abas.read().atual().id);
             prefs.write().arquivo = caminho.display().to_string();
             prefs.read().save();
             status.set(format!("Salvo {}", nome_de_caminho(&caminho)));
@@ -443,6 +444,7 @@ pub fn confirmar_descarte(
         if let Some(idx) = idx {
             abas.write().itens[idx].dirty = false;
         }
+        crate::documentos::apagar_rascunho(id);
     }
     dialogo.set(Dialogo::Nenhum);
     fechar_aba(Some(id), depois, editor, prefs, abas, status, dialogo);
@@ -890,18 +892,23 @@ pub fn recuperar_rascunhos(
         return;
     };
     dialogo.set(Dialogo::Nenhum);
-    for (nome, texto) in itens {
-        abas.write().nova_aba(&texto);
+    for r in itens {
+        abas.write().nova_aba(&r.texto);
         {
             let mut abas = abas.write();
             let aba = abas.atual_mut();
-            aba.nome = nome;
+            aba.nome = r.nome;
+            aba.caminho = r.caminho;
             aba.dirty = true;
         }
     }
     carregar_editor(&mut editor.write(), abas.read().atual(), &prefs.read());
-    crate::turma::apagar_rascunhos();
+    gravar_rascunhos(&abas.read());
     status.set("Rascunhos recuperados".into());
+}
+
+pub fn fechar_dialogo_rascunhos(mut dialogo: State<Dialogo>) {
+    dialogo.set(Dialogo::Nenhum);
 }
 
 pub fn descartar_rascunhos(mut dialogo: State<Dialogo>, mut status: State<String>) {

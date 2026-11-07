@@ -953,6 +953,7 @@ pub fn dialogo_recuperar(
     nomes: Vec<String>,
     on_ok: impl Fn() + Copy + 'static,
     on_descartar: impl Fn() + Copy + 'static,
+    on_fechar: impl Fn() + Copy + 'static,
 ) -> impl IntoElement {
     let lista = if nomes.is_empty() {
         "Nenhum rascunho.".to_string()
@@ -968,7 +969,7 @@ pub fn dialogo_recuperar(
     };
     Popup::new()
         .width(Size::px(440.0))
-        .on_close_request(move |_| on_descartar())
+        .on_close_request(move |_| on_fechar())
         .child(PopupTitle::new("Recuperar rascunhos".to_string()))
         .child(PopupContent::new().child(lista))
         .child(
@@ -983,6 +984,11 @@ pub fn dialogo_recuperar(
                     Button::new()
                         .on_press(move |_| on_descartar())
                         .child("Descartar"),
+                )
+                .child(
+                    Button::new()
+                        .on_press(move |_| on_fechar())
+                        .child("Cancelar"),
                 ),
         )
 }

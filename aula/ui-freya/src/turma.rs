@@ -416,7 +416,7 @@ impl Turma {
     }
 }
 
-pub fn listar_rascunhos() -> Vec<(String, String)> {
+pub fn listar_rascunhos() -> Vec<crate::documentos::Rascunho> {
     let dir = crate::documentos::pasta_rascunho();
     let Ok(rd) = std::fs::read_dir(&dir) else {
         return Vec::new();
@@ -424,20 +424,19 @@ pub fn listar_rascunhos() -> Vec<(String, String)> {
     let mut out = Vec::new();
     for e in rd.flatten() {
         let path = e.path();
-        if path.extension().and_then(|s| s.to_str()) != Some("lep") {
+        let ext = path.extension().and_then(|s| s.to_str());
+        if ext != Some("rascunho") && ext != Some("lep") {
             continue;
         }
-        if let Ok(texto) = std::fs::read_to_string(&path)
-            && !texto.trim().is_empty()
-        {
-            let nome = path
-                .file_name()
-                .map(|n| n.to_string_lossy().into_owned())
-                .unwrap_or_else(|| "rascunho.lep".into());
-            out.push((nome, texto));
+        let nome_ficheiro = path
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_else(|| "rascunho.lep".into());
+        if let Some(r) = crate::documentos::ler_rascunho(&path, &nome_ficheiro) {
+            out.push(r);
         }
     }
-    out.sort_by(|a, b| a.0.cmp(&b.0));
+    out.sort_by(|a, b| a.nome.cmp(&b.nome));
     out
 }
 
@@ -468,7 +467,7 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::write(dir.join("1.lep"), "escreva(1)").unwrap();
         let itens = listar_rascunhos();
-        assert!(itens.iter().any(|(n, t)| n == "1.lep" && t.contains("escreva")));
+        assert!(itens.iter().any(|r| r.nome == "1.lep" && r.texto.contains("escreva")));
         apagar_rascunhos();
         assert!(listar_rascunhos().is_empty());
     }

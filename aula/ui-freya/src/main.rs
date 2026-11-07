@@ -36,6 +36,7 @@ use crate::{
         achar, adicionar_observado, abrir_projeto_servidor, aplicar, aplicar_eventos,
         aplicar_sugestao, clicar_arvore, confirmar_apagar, confirmar_descarte, confirmar_nome,
         conectar_servidor, criar_projeto_servidor, descartar_rascunhos, escolher_projeto,
+        fechar_dialogo_rascunhos,
         fechar_aba, clique_tela_graf, destacar_graficos, enviar_repl, fechar_repl, fechar_tela_graf,
         ir_para_linha, ir_para_pausa, ir_para_saida, limpar_repl, parar_repl, pasta_selecionada,
         pedir_apagar, pedir_nome, recuperar_rascunhos, reiniciar_repl, remover_observado,
@@ -544,7 +545,7 @@ fn app() -> impl IntoElement {
         }))
         .maybe_child(
             if let Dialogo::Recuperar { itens } = &dialogo_agora {
-                Some(itens.iter().map(|(n, _)| n.clone()).collect::<Vec<_>>())
+                Some(itens.iter().map(|r| r.nome.clone()).collect::<Vec<_>>())
             } else {
                 None
             }
@@ -553,6 +554,7 @@ fn app() -> impl IntoElement {
                     nomes,
                     move || recuperar_rascunhos(editor, prefs, abas, status, dialogo),
                     move || descartar_rascunhos(dialogo, status),
+                    move || fechar_dialogo_rascunhos(dialogo),
                 )
             }),
         )

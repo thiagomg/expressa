@@ -81,7 +81,7 @@ pub enum Dialogo {
     Servidor,
     Projetos,
     Recuperar {
-        itens: Vec<(String, String)>,
+        itens: Vec<Rascunho>,
     },
     Conflito {
         nome: String,
@@ -201,12 +201,29 @@ pub fn garantir_lep(path: PathBuf) -> PathBuf {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Rascunho {
+    pub nome: String,
+    pub caminho: Option<PathBuf>,
+    pub texto: String,
+}
+
 pub fn pasta_rascunho() -> PathBuf {
     dirs::cache_dir()
         .or_else(dirs::data_local_dir)
         .unwrap_or_else(std::env::temp_dir)
         .join("expressa-aula")
         .join("rascunho-freya")
+}
+
+fn ficheiro_rascunho(dir: &Path, id: u64) -> PathBuf {
+    dir.join(format!("{id}.rascunho"))
+}
+
+pub fn apagar_rascunho(id: u64) {
+    let dir = pasta_rascunho();
+    let _ = std::fs::remove_file(ficheiro_rascunho(&dir, id));
+    let _ = std::fs::remove_file(dir.join(format!("{id}.lep")));
 }
 
 pub fn gravar_rascunhos(abas: &Abas) {
@@ -217,11 +234,64 @@ pub fn gravar_rascunhos(abas: &Abas) {
     }
     for aba in &abas.itens {
         if !aba.dirty {
+            apagar_rascunho(aba.id);
             continue;
         }
-        let dest = dir.join(format!("{}.lep", aba.id));
-        if let Err(e) = std::fs::write(&dest, &aba.texto) {
+        let caminho = aba
+            .caminho
+            .as_ref()
+            .map(|p| p.display().to_string())
+            .unwrap_or_default();
+        let corpo = format!(
+            "#expressa-rascunho\nnome: {}\ncaminho: {}\n\n{}",
+            aba.nome.replace('\n', " "),
+            caminho,
+            aba.texto
+        );
+        let dest = ficheiro_rascunho(&dir, aba.id);
+        if let Err(e) = std::fs::write(&dest, corpo) {
             eprintln!("rascunho {}: {e}", aba.id);
+        }
+    }
+}
+
+pub fn ler_rascunho(path: &Path, nome_ficheiro: &str) -> Option<Rascunho> {
+    let bruto = std::fs::read_to_string(path).ok()?;
+    if bruto.trim().is_empty() {
+        return None;
+    }
+    Some(parse_rascunho(&bruto, nome_ficheiro))
+}
+
+pub fn parse_rascunho(bruto: &str, nome_ficheiro: &str) -> Rascunho {
+    if let Some(rest) = bruto.strip_prefix("#expressa-rascunho\n") {
+        let mut nome = nome_ficheiro.to_string();
+        let mut caminho = None;
+        let mut corpo = rest;
+        while let Some((linha, resto)) = corpo.split_once('\n') {
+            if linha.is_empty() {
+                corpo = resto;
+                break;
+            }
+            if let Some(v) = linha.strip_prefix("nome: ") {
+                nome = v.to_string();
+            } else if let Some(v) = linha.strip_prefix("caminho: ")
+                && !v.is_empty()
+            {
+                caminho = Some(PathBuf::from(v));
+            }
+            corpo = resto;
+        }
+        Rascunho {
+            nome,
+            caminho,
+            texto: corpo.to_string(),
+        }
+    } else {
+        Rascunho {
+            nome: nome_ficheiro.to_string(),
+            caminho: None,
+            texto: bruto.to_string(),
         }
     }
 }
@@ -361,5 +431,34 @@ mod tests {
             expected_da_aba(&vazia, Path::new("/nao/existe.lep")),
             expressa_aula_storage::Expected::Missing
         ));
+    }
+
+    #[test]
+    fn rascunho_guarda_nome_e_caminho() {
+        let r = parse_rascunho(
+            "#expressa-rascunho\nnome: poema.lep\ncaminho: /tmp/poema.lep\n\nescreva(1)\n",
+            "9.rascunho",
+        );
+        assert_eq!(r.nome, "poema.lep");
+        assert_eq!(r.caminho.as_deref(), Some(Path::new("/tmp/poema.lep")));
+        assert_eq!(r.texto, "escreva(1)\n");
+    }
+
+    #[test]
+    fn gravar_rascunho_some_depois_de_salvar() {
+        let dir = pasta_rascunho();
+        let _ = std::fs::create_dir_all(&dir);
+        let mut abas = Abas::nova("escreva(1)\n");
+        abas.atual_mut().id = 4242;
+        abas.atual_mut().nome = "poema.lep".into();
+        abas.atual_mut().caminho = Some(PathBuf::from("/tmp/poema.lep"));
+        abas.atual_mut().dirty = true;
+        gravar_rascunhos(&abas);
+        let lido = ler_rascunho(&dir.join("4242.rascunho"), "4242.rascunho").unwrap();
+        assert_eq!(lido.nome, "poema.lep");
+        assert_eq!(lido.texto, "escreva(1)\n");
+        abas.atual_mut().dirty = false;
+        gravar_rascunhos(&abas);
+        assert!(ler_rascunho(&dir.join("4242.rascunho"), "4242.rascunho").is_none());
     }
 }
