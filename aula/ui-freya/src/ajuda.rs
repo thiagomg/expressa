@@ -126,11 +126,6 @@ pub fn spawn_tutorial() -> Result<(), String> {
     cmd.stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null());
-    #[cfg(unix)]
-    {
-        use std::os::unix::process::CommandExt;
-        cmd.process_group(0);
-    }
     cmd.spawn()
         .map(|_| ())
         .map_err(|e| format!("não abriu os tutoriais: {e}"))

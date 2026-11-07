@@ -15,10 +15,62 @@ use crate::projeto::{Projeto, nos_de_entradas};
 use expressa_aula_storage::{Expected, SaveError, Saved};
 use tonic::transport::{Channel, Endpoint};
 
+/// Process this UI started. Drop kills it; a server we only connected to is left alone.
+struct ServidorFilho {
+    child: Mutex<Option<Child>>,
+}
+
+impl Default for ServidorFilho {
+    fn default() -> Self {
+        Self {
+            child: Mutex::new(None),
+        }
+    }
+}
+
+impl Drop for ServidorFilho {
+    fn drop(&mut self) {
+        if let Ok(mut g) = self.child.lock() {
+            parar_servidor(&mut g);
+        }
+    }
+}
+
+fn parar_servidor(slot: &mut Option<Child>) {
+    let Some(mut child) = slot.take() else {
+        return;
+    };
+    let pid = child.id();
+    #[cfg(unix)]
+    {
+        let _ = Command::new("kill")
+            .args(["-TERM", &pid.to_string()])
+            .status();
+        std::thread::sleep(Duration::from_millis(80));
+        let ainda = Command::new("kill")
+            .args(["-0", &pid.to_string()])
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .map(|s| s.success())
+            .unwrap_or(false);
+        if ainda {
+            let _ = child.kill();
+            let _ = child.wait();
+        }
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = child.kill();
+        let _ = child.wait();
+    }
+}
+
 #[derive(Clone)]
 pub struct Turma {
     canal: Arc<Mutex<Option<Channel>>>,
-    spawned: Arc<Mutex<Option<Child>>>,
+    spawned: Arc<ServidorFilho>,
     pub url: String,
     pub aluno: String,
     pub projeto: String,
@@ -31,7 +83,7 @@ impl Default for Turma {
     fn default() -> Self {
         Self {
             canal: Arc::new(Mutex::new(None)),
-            spawned: Arc::new(Mutex::new(None)),
+            spawned: Arc::new(ServidorFilho::default()),
             url: crate::prefs::DEFAULT_URL.to_string(),
             aluno: "local".into(),
             projeto: String::new(),
@@ -127,7 +179,7 @@ impl Turma {
             .stderr(Stdio::null())
             .spawn()
             .map_err(|e| format!("não subiu o servidor: {e}"))?;
-        *self.spawned.lock().unwrap() = Some(child);
+        *self.spawned.child.lock().unwrap() = Some(child);
         for _ in 0..40 {
             std::thread::sleep(Duration::from_millis(50));
             if self.tentar_conectar().is_ok() {
@@ -470,6 +522,25 @@ mod tests {
         assert!(itens.iter().any(|r| r.nome == "1.lep" && r.texto.contains("escreva")));
         apagar_rascunhos();
         assert!(listar_rascunhos().is_empty());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn parar_servidor_mata_o_filho() {
+        let child = Command::new("sleep").arg("30").spawn().unwrap();
+        let pid = child.id();
+        let mut slot = Some(child);
+        parar_servidor(&mut slot);
+        assert!(slot.is_none());
+        let vivo = Command::new("kill")
+            .args(["-0", &pid.to_string()])
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .map(|s| s.success())
+            .unwrap_or(true);
+        assert!(!vivo);
     }
 
     #[test]
