@@ -115,7 +115,6 @@ impl Prefs {
         t
     }
 
-    #[allow(dead_code)]
     pub fn lembrar_recente(&mut self, r: Recente) {
         self.recentes.insert(0, r);
         self.organizar_recentes();
@@ -212,7 +211,6 @@ fn strip_default_port(url: &str) -> String {
 }
 
 /// `~` and `~/…` become the user home directory. `~nome` is left as-is.
-#[allow(dead_code)]
 pub fn expand_tilde(path: &str) -> PathBuf {
     expand_tilde_with_home(path, home_dir())
 }

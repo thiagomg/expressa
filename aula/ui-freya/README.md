@@ -21,6 +21,9 @@ Ctrl+N / Ctrl+W abrem e fecham abas; Ctrl+S salva; Ctrl+G vai para a linha.
 Ctrl+F busca no arquivo; Tab / Shift+Tab recuam; Ctrl+/ comenta; Ctrl+Alt+\\
 reindenta. Palavras Expressa (função, início, senão) ganham destaque via
 `aula/tree-sitter-expressa`. Erros de sintaxe aparecem na barra de status.
+F7 mostra a árvore do projeto; **Arquivo → Abrir projeto…** escolhe a pasta.
+Na primeira abertura copia exemplos em `Documentos/Expressa Aula/exemplos`
+sem sobrescrever arquivos já editados.
 Rascunhos sujos são gravados a cada 5 s em `~/.cache/expressa-aula/rascunho-freya`.
 
 Plano: `docs/tarefas/freya-tasks.md`.

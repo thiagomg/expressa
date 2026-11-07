@@ -9,6 +9,7 @@ use crate::{
     atalhos::{Acao, ATALHOS},
     documentos::Abas,
     editor::new_editor,
+    projeto::Projeto,
 };
 
 #[derive(Clone, Copy, PartialEq, Eq, Default)]
@@ -105,6 +106,7 @@ pub fn barra_menus(
             &[
                 ("Novo", "Ctrl+N", Acao::Novo),
                 ("Abrir…", "", Acao::Abrir),
+                ("Abrir projeto…", "", Acao::AbrirProjeto),
                 ("Salvar", "Ctrl+S", Acao::Salvar),
                 ("Salvar como…", "Ctrl+Shift+S", Acao::SalvarComo),
                 ("Sair", "Ctrl+Q", Acao::Sair),
@@ -433,6 +435,110 @@ pub fn barra_busca(
         )
 }
 
+pub fn painel_arvore(
+    projeto: Projeto,
+    paleta: Paleta,
+    on_abrir: impl Fn(String) + Copy + 'static,
+    on_novo: impl Fn() + Copy + 'static,
+    on_pasta: impl Fn() + Copy + 'static,
+    on_renomear: impl Fn() + Copy + 'static,
+    on_apagar: impl Fn() + Copy + 'static,
+    on_projeto: impl Fn() + Copy + 'static,
+) -> impl IntoElement {
+    let mut lista = rect()
+        .direction(Direction::Vertical)
+        .width(Size::fill())
+        .spacing(1.0);
+    for no in projeto.visiveis() {
+        let rel = no.rel.clone();
+        let atual = projeto.selecionado.as_deref() == Some(rel.as_str());
+        let fundo = if atual { paleta.botao } else { paleta.barra };
+        let marca = if no.is_dir {
+            if projeto.abertos.contains(&rel) {
+                "▾ "
+            } else {
+                "▸ "
+            }
+        } else {
+            "  "
+        };
+        let pad = 8.0 + (no.profundidade as f32) * 12.0;
+        lista = lista.child(
+            rect()
+                .key(DiffKey::from(&rel))
+                .width(Size::fill())
+                .background(fundo)
+                .padding((2.0, 6.0, 2.0, pad))
+                .on_press(move |_| on_abrir(rel.clone()))
+                .child(label().font_size(13.0).text(format!("{marca}{}", no.nome))),
+        );
+    }
+    rect()
+        .direction(Direction::Vertical)
+        .width(Size::px(240.0))
+        .height(Size::fill())
+        .background(paleta.barra)
+        .color(paleta.texto)
+        .border(
+            Border::new()
+                .width(BorderWidth {
+                    top: 0.0,
+                    right: 1.0,
+                    bottom: 0.0,
+                    left: 0.0,
+                })
+                .fill(paleta.borda),
+        )
+        .child(
+            rect()
+                .direction(Direction::Horizontal)
+                .width(Size::fill())
+                .padding((4.0, 6.0, 4.0, 6.0))
+                .main_align(Alignment::SpaceBetween)
+                .cross_align(Alignment::Center)
+                .child(label().font_size(12.0).font_weight(FontWeight::BOLD).text("Arquivos"))
+                .child(
+                    Button::new()
+                        .flat()
+                        .compact()
+                        .on_press(move |_| on_projeto())
+                        .child("…"),
+                ),
+        )
+        .child(ScrollView::new().height(Size::fill()).child(lista))
+        .child(
+            rect()
+                .direction(Direction::Horizontal)
+                .width(Size::fill())
+                .padding((4.0, 4.0, 4.0, 4.0))
+                .spacing(4.0)
+                .child(
+                    Button::new()
+                        .compact()
+                        .on_press(move |_| on_novo())
+                        .child("Novo"),
+                )
+                .child(
+                    Button::new()
+                        .compact()
+                        .on_press(move |_| on_pasta())
+                        .child("Pasta"),
+                )
+                .child(
+                    Button::new()
+                        .compact()
+                        .on_press(move |_| on_renomear())
+                        .child("Nome"),
+                )
+                .child(
+                    Button::new()
+                        .compact()
+                        .on_press(move |_| on_apagar())
+                        .child("Apagar"),
+                ),
+        )
+}
+
 pub fn dialogo_linha(
     _paleta: Paleta,
     valor: State<String>,
@@ -458,6 +564,66 @@ pub fn dialogo_linha(
                         .on_press(move |_| on_ir())
                         .filled()
                         .child("Ir"),
+                )
+                .child(
+                    Button::new()
+                        .on_press(move |_| on_cancelar())
+                        .child("Cancelar"),
+                ),
+        )
+}
+
+pub fn dialogo_nome(
+    titulo: String,
+    valor: State<String>,
+    on_ok: impl Fn() + Copy + 'static,
+    on_cancelar: impl Fn() + Copy + 'static,
+) -> impl IntoElement {
+    Popup::new()
+        .width(Size::px(360.0))
+        .on_close_request(move |_| on_cancelar())
+        .child(PopupTitle::new(titulo))
+        .child(
+            PopupContent::new().child(
+                Input::new(valor)
+                    .placeholder("nome")
+                    .width(Size::fill())
+                    .on_submit(move |_| on_ok()),
+            ),
+        )
+        .child(
+            PopupButtons::new()
+                .child(
+                    Button::new()
+                        .on_press(move |_| on_ok())
+                        .filled()
+                        .child("OK"),
+                )
+                .child(
+                    Button::new()
+                        .on_press(move |_| on_cancelar())
+                        .child("Cancelar"),
+                ),
+        )
+}
+
+pub fn dialogo_apagar(
+    rel: String,
+    on_ok: impl Fn() + Copy + 'static,
+    on_cancelar: impl Fn() + Copy + 'static,
+) -> impl IntoElement {
+    Popup::new()
+        .width(Size::px(400.0))
+        .on_close_request(move |_| on_cancelar())
+        .child(PopupTitle::new("Apagar".to_string()))
+        .child(PopupContent::new().child(format!("Apagar {rel}?")))
+        .child(
+            PopupButtons::new()
+                .child(
+                    Button::new()
+                        .on_press(move |_| on_ok())
+                        .filled()
+                        .child("Apagar"),
                 )
                 .child(
                     Button::new()

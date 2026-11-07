@@ -14,6 +14,7 @@ mod editor;
 mod indent;
 mod lang;
 mod prefs;
+mod projeto;
 mod shell;
 
 use freya::{
@@ -25,15 +26,19 @@ use freya::{
 use crate::{
     atalhos::{Acao, acao_de_tecla},
     comandos::{
-        achar, aplicar, confirmar_descarte, fechar_aba, ir_para_linha, selecionar_aba,
+        achar, aplicar, clicar_arvore, confirmar_apagar, confirmar_descarte, confirmar_nome,
+        escolher_projeto, fechar_aba, ir_para_linha, pasta_selecionada, pedir_apagar, pedir_nome,
+        restaurar_arquivo, selecionar_aba,
     },
-    documentos::{Abas, Depois, Dialogo, gravar_rascunhos, sincronizar},
+    documentos::{Abas, Depois, DepoisNome, Dialogo, gravar_rascunhos, sincronizar},
     edicao::tratar_tecla,
     editor::{FONT_FAMILY, TEXTO_INICIAL, fonte_px, mensagem_sintaxe},
     prefs::Prefs,
+    projeto::{Projeto, abrir_raiz, instalar_exemplos, restaurar_inicio},
     shell::{
         MenuAberto, Paleta, barra_abas, barra_busca, barra_ferramentas, barra_menus, barra_status,
-        dialogo_confirmar, dialogo_linha, editor_inicial, painel_atalhos, tema_freya,
+        dialogo_apagar, dialogo_confirmar, dialogo_linha, dialogo_nome, editor_inicial,
+        painel_arvore, painel_atalhos, tema_freya,
     },
 };
 
@@ -58,7 +63,7 @@ fn app() -> impl IntoElement {
     let prefs_iniciais = Prefs::load();
     let theme = use_init_theme(|| tema_freya(prefs_iniciais.dark));
     let a11y_id = use_a11y();
-    let prefs = use_state(|| prefs_iniciais.clone());
+    let mut prefs = use_state(|| prefs_iniciais.clone());
     let mut editor = use_state(|| editor_inicial(TEXTO_INICIAL, prefs_iniciais.dark));
     let status = use_state(String::new);
     let menu = use_state(MenuAberto::default);
@@ -69,6 +74,8 @@ fn app() -> impl IntoElement {
     let busca_aberta = use_state(|| false);
     let busca_termo = use_state(String::new);
     let mut sintaxe = use_state(String::new);
+    let mut projeto = use_state(Projeto::default);
+    let nome_campo = use_state(String::new);
 
     use_future(move || async move {
         loop {
@@ -83,6 +90,15 @@ fn app() -> impl IntoElement {
             tokio::time::sleep(std::time::Duration::from_millis(400)).await;
             let texto = editor.read().rope.to_string();
             sintaxe.set(mensagem_sintaxe(&texto));
+        }
+    });
+
+    use_future(move || async move {
+        let _ = instalar_exemplos();
+        let pasta = restaurar_inicio(&prefs.read());
+        if let Some(pasta) = pasta {
+            let _ = abrir_raiz(&mut projeto.write(), &mut prefs.write(), pasta);
+            restaurar_arquivo(editor, prefs, abas, status);
         }
     });
 
@@ -106,6 +122,7 @@ fn app() -> impl IntoElement {
     let mut abas_agora = abas.read().clone();
     abas_agora.atual_mut().dirty = editor.read().is_edited();
     let dialogo_agora = dialogo.read().clone();
+    let projeto_agora = projeto.read().clone();
 
     let on_acao = move |acao: Acao| {
         aplicar(
@@ -119,6 +136,7 @@ fn app() -> impl IntoElement {
             dialogo,
             busca_aberta,
             busca_termo,
+            projeto,
         );
     };
 
@@ -153,8 +171,37 @@ fn app() -> impl IntoElement {
         ))
         .child(
             rect()
+                .direction(Direction::Horizontal)
                 .width(Size::fill())
                 .height(Size::fill())
+                .maybe_child(projeto_agora.visivel.then(move || {
+                    painel_arvore(
+                        projeto_agora,
+                        paleta,
+                        move |rel| clicar_arvore(rel, editor, prefs, abas, status, projeto),
+                        move || {
+                            pedir_nome(
+                                DepoisNome::NovoArquivo(pasta_selecionada(projeto)),
+                                dialogo,
+                                nome_campo,
+                            )
+                        },
+                        move || {
+                            pedir_nome(
+                                DepoisNome::NovaPasta(pasta_selecionada(projeto)),
+                                dialogo,
+                                nome_campo,
+                            )
+                        },
+                        move || {
+                            if let Some(rel) = projeto.read().selecionado.clone() {
+                                pedir_nome(DepoisNome::Renomear(rel), dialogo, nome_campo);
+                            }
+                        },
+                        move || pedir_apagar(dialogo, projeto),
+                        move || escolher_projeto(editor, prefs, abas, status, projeto),
+                    )
+                }))
                 .child(
                     CodeEditor::new(editor, a11y_id)
                         .font_size(font_size)
@@ -203,4 +250,39 @@ fn app() -> impl IntoElement {
                 },
             )
         }))
+        .maybe_child(
+            if let Dialogo::Nome { titulo, .. } = &dialogo_agora {
+                Some(titulo.clone())
+            } else {
+                None
+            }
+            .map(|titulo| {
+                dialogo_nome(
+                    titulo,
+                    nome_campo,
+                    move || confirmar_nome(&nome_campo.read(), editor, prefs, abas, status, dialogo, projeto),
+                    move || {
+                        let mut dialogo = dialogo;
+                        dialogo.set(Dialogo::Nenhum);
+                    },
+                )
+            }),
+        )
+        .maybe_child(
+            if let Dialogo::Apagar { rel } = &dialogo_agora {
+                Some(rel.clone())
+            } else {
+                None
+            }
+            .map(|rel| {
+                dialogo_apagar(
+                    rel,
+                    move || confirmar_apagar(status, dialogo, projeto),
+                    move || {
+                        let mut dialogo = dialogo;
+                        dialogo.set(Dialogo::Nenhum);
+                    },
+                )
+            }),
+        )
 }

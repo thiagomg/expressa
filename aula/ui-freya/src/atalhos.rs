@@ -7,6 +7,7 @@ use freya::prelude::{Key, Modifiers, NamedKey};
 pub enum Acao {
     Novo,
     Abrir,
+    AbrirProjeto,
     Salvar,
     SalvarComo,
     FecharAba,
@@ -136,7 +137,7 @@ pub fn acao_de_tecla(key: &Key, modifiers: Modifiers) -> Option<Acao> {
 
 pub fn mensagem_reservada(acao: Acao) -> &'static str {
     match acao {
-        Acao::Novo | Acao::Abrir | Acao::Salvar | Acao::SalvarComo | Acao::FecharAba => "",
+        Acao::Novo | Acao::Abrir | Acao::AbrirProjeto | Acao::Salvar | Acao::SalvarComo | Acao::FecharAba => "",
         Acao::Executar => "Executar (F5) ainda não está nesta versão Freya.",
         Acao::Parar => "Parar ainda não está nesta versão Freya.",
         Acao::Depurar => "Depurar (F6) ainda não está nesta versão Freya.",
@@ -144,7 +145,7 @@ pub fn mensagem_reservada(acao: Acao) -> &'static str {
         Acao::Entrar => "Entrar (F11) ainda não está nesta versão Freya.",
         Acao::SairFuncao => "Sair da função (Shift+F11) ainda não está nesta versão Freya.",
         Acao::Ponto => "Ponto de parada (F9) ainda não está nesta versão Freya.",
-        Acao::MostrarArquivos => "Mostrar arquivos (F7) ainda não está nesta versão Freya.",
+        Acao::MostrarArquivos => "",
         Acao::MostrarPainel => "Painel do depurador (F8) ainda não está nesta versão Freya.",
         Acao::IrParaLinha => "",
         Acao::Buscar | Acao::BuscarProxima | Acao::Escapar => "",

@@ -8,12 +8,15 @@ use freya::text_edit::TextEditor;
 
 use crate::atalhos::{Acao, mensagem_reservada};
 use crate::documentos::{
-    Abas, Depois, Dialogo, Fechar, carregar_editor, escolher_abrir, escolher_salvar, gravar_arquivo,
-    gravar_rascunhos, ler_arquivo, nome_de_caminho, posicao_linha, sincronizar,
+    Abas, Depois, DepoisNome, Dialogo, Fechar, carregar_editor, escolher_abrir, escolher_salvar,
+    gravar_arquivo, gravar_rascunhos, ler_arquivo, nome_de_caminho, posicao_linha, sincronizar,
 };
 use crate::edicao::{buscar, comentar, duplicar, mover, recuar_arquivo};
 use crate::editor::fonte_px;
 use crate::prefs::Prefs;
+use crate::projeto::{
+    Projeto, apagar, abrir_raiz, criar_arquivo, criar_pasta, escolher_pasta, pasta_do_item, renomear,
+};
 use crate::shell::{aplicar_tema_editor, tema_freya};
 
 pub fn aplicar(
@@ -27,6 +30,7 @@ pub fn aplicar(
     mut dialogo: State<Dialogo>,
     mut busca_aberta: State<bool>,
     busca_termo: State<String>,
+    mut projeto: State<Projeto>,
 ) {
     match acao {
         Acao::Sair => sair(prefs, editor, status, abas, dialogo),
@@ -41,6 +45,16 @@ pub fn aplicar(
         }
         Acao::Novo => novo(editor, prefs, abas, status),
         Acao::Abrir => abrir(editor, prefs, abas, status, dialogo),
+        Acao::AbrirProjeto => escolher_projeto(editor, prefs, abas, status, projeto),
+        Acao::MostrarArquivos => {
+            let visivel = !projeto.read().visivel;
+            projeto.write().visivel = visivel;
+            status.set(if visivel {
+                "Arquivos visíveis".into()
+            } else {
+                "Arquivos ocultos".into()
+            });
+        }
         Acao::Salvar => {
             let _ = salvar(false, editor, prefs, abas, status);
         }
@@ -330,6 +344,169 @@ pub fn ir_para_linha(
         }
         None => status.set(format!("Não há linha {n}")),
     }
+}
+
+pub fn escolher_projeto(
+    editor: State<CodeEditorData>,
+    mut prefs: State<Prefs>,
+    abas: State<Abas>,
+    mut status: State<String>,
+    mut projeto: State<Projeto>,
+) {
+    let Some(pasta) = escolher_pasta() else {
+        return;
+    };
+    let aberto = abrir_raiz(&mut projeto.write(), &mut prefs.write(), pasta);
+    match aberto {
+        Ok(()) => {
+            status.set("Projeto aberto".into());
+            restaurar_arquivo(editor, prefs, abas, status);
+        }
+        Err(e) => status.set(e),
+    }
+}
+
+pub fn restaurar_arquivo(
+    editor: State<CodeEditorData>,
+    prefs: State<Prefs>,
+    abas: State<Abas>,
+    status: State<String>,
+) {
+    let arquivo = prefs.read().arquivo.clone();
+    if arquivo.is_empty() {
+        return;
+    }
+    let path = crate::prefs::expand_tilde(&arquivo);
+    if path.is_file() {
+        abrir_caminho(path, editor, prefs, abas, status);
+    }
+}
+
+pub fn clicar_arvore(
+    rel: String,
+    editor: State<CodeEditorData>,
+    mut prefs: State<Prefs>,
+    abas: State<Abas>,
+    mut status: State<String>,
+    mut projeto: State<Projeto>,
+) {
+    let is_dir = projeto.read().todos.iter().any(|n| n.rel == rel && n.is_dir);
+    if is_dir {
+        let mut p = projeto.write();
+        if !p.abertos.remove(&rel) {
+            p.abertos.insert(rel.clone());
+        }
+        p.selecionado = Some(rel);
+        return;
+    }
+    projeto.write().selecionado = Some(rel.clone());
+    let Some(raiz) = projeto.read().raiz.clone() else {
+        return;
+    };
+    let path = raiz.join(&rel);
+    if path.is_file() {
+        prefs.write().arquivo = path.display().to_string();
+        prefs.read().save();
+        abrir_caminho(path, editor, prefs, abas, status);
+    } else {
+        status.set(format!("Não achou {rel}"));
+    }
+}
+
+pub fn pedir_nome(
+    depois: DepoisNome,
+    mut dialogo: State<Dialogo>,
+    mut nome_campo: State<String>,
+) {
+    let titulo = match &depois {
+        DepoisNome::NovoArquivo(_) => "Novo arquivo".to_string(),
+        DepoisNome::NovaPasta(_) => "Nova pasta".to_string(),
+        DepoisNome::Renomear(rel) => {
+            nome_campo.set(
+                std::path::Path::new(rel)
+                    .file_name()
+                    .map(|n| n.to_string_lossy().into_owned())
+                    .unwrap_or_default(),
+            );
+            "Renomear".to_string()
+        }
+    };
+    if matches!(depois, DepoisNome::NovoArquivo(_) | DepoisNome::NovaPasta(_)) {
+        nome_campo.set(String::new());
+    }
+    dialogo.set(Dialogo::Nome { titulo, depois });
+}
+
+pub fn confirmar_nome(
+    nome: &str,
+    editor: State<CodeEditorData>,
+    prefs: State<Prefs>,
+    abas: State<Abas>,
+    mut status: State<String>,
+    mut dialogo: State<Dialogo>,
+    mut projeto: State<Projeto>,
+) {
+    let Dialogo::Nome { depois, .. } = dialogo.read().clone() else {
+        return;
+    };
+    dialogo.set(Dialogo::Nenhum);
+    let Some(raiz) = projeto.read().raiz.clone() else {
+        status.set("Abra um projeto".into());
+        return;
+    };
+    let r = match depois {
+        DepoisNome::NovoArquivo(pasta) => criar_arquivo(&raiz, &pasta, nome).map(|p| {
+            let _ = projeto.write().recarregar();
+            abrir_caminho(p, editor, prefs, abas, status);
+        }),
+        DepoisNome::NovaPasta(pasta) => criar_pasta(&raiz, &pasta, nome).map(|_| {
+            let _ = projeto.write().recarregar();
+            status.set("Pasta criada".into());
+        }),
+        DepoisNome::Renomear(rel) => renomear(&raiz, &rel, nome).map(|p| {
+            let _ = projeto.write().recarregar();
+            if p.is_file() {
+                abrir_caminho(p, editor, prefs, abas, status);
+            } else {
+                status.set("Renomeado".into());
+            }
+        }),
+    };
+    if let Err(e) = r {
+        status.set(e);
+    }
+}
+
+pub fn pedir_apagar(mut dialogo: State<Dialogo>, projeto: State<Projeto>) {
+    if let Some(rel) = projeto.read().selecionado.clone() {
+        dialogo.set(Dialogo::Apagar { rel });
+    }
+}
+
+pub fn confirmar_apagar(
+    mut status: State<String>,
+    mut dialogo: State<Dialogo>,
+    mut projeto: State<Projeto>,
+) {
+    let Dialogo::Apagar { rel } = dialogo.read().clone() else {
+        return;
+    };
+    dialogo.set(Dialogo::Nenhum);
+    let Some(raiz) = projeto.read().raiz.clone() else {
+        return;
+    };
+    match apagar(&raiz, &rel) {
+        Ok(()) => {
+            projeto.write().selecionado = None;
+            let _ = projeto.write().recarregar();
+            status.set(format!("Apagou {rel}"));
+        }
+        Err(e) => status.set(e),
+    }
+}
+
+pub fn pasta_selecionada(projeto: State<Projeto>) -> String {
+    pasta_do_item(&projeto.read())
 }
 
 pub fn achar(

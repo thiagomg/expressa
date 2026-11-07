@@ -39,6 +39,13 @@ pub enum Depois {
     Novo,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DepoisNome {
+    NovoArquivo(String),
+    NovaPasta(String),
+    Renomear(String),
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub enum Dialogo {
     #[default]
@@ -48,6 +55,13 @@ pub enum Dialogo {
         depois: Depois,
     },
     IrParaLinha,
+    Nome {
+        titulo: String,
+        depois: DepoisNome,
+    },
+    Apagar {
+        rel: String,
+    },
 }
 
 impl Abas {

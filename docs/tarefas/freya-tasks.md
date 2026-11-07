@@ -188,9 +188,9 @@ Work:
 
 Acceptance:
 
-- [ ] Open Documents/Expressa Aula/exemplos, click a file, it opens in a tab.
-- [ ] New file appears in the tree and on disk.
-- [ ] Restart restores folder and file.
+- [x] Open Documents/Expressa Aula/exemplos, click a file, it opens in a tab.
+- [x] New file appears in the tree and on disk.
+- [x] Restart restores folder and file.
 
 ---
 
