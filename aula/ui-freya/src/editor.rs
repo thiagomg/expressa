@@ -7,7 +7,13 @@ use freya::{
 
 /// Monospace family that covers Portuguese on typical Linux desktops.
 pub const FONT_FAMILY: &str = "DejaVu Sans Mono";
+/// Default pixel size matching GTK Aula's 11 pt.
 pub const FONT_SIZE: f32 = 16.0;
+
+/// Map the prefs `fonte` (points, same as GTK) to pixels for Freya.
+pub fn fonte_px(pt: u32) -> f32 {
+    (pt as f32) * FONT_SIZE / 11.0
+}
 
 pub const TEXTO_INICIAL: &str = "\
 // Expressa Aula (Freya)
@@ -41,5 +47,10 @@ mod tests {
         let rope = Rope::from_str("função não\n");
         assert_eq!(rope.to_string(), "função não\n");
         assert_eq!(rope.len_lines(), 2);
+    }
+
+    #[test]
+    fn fonte_padrao_casa_com_gtk() {
+        assert!((fonte_px(11) - FONT_SIZE).abs() < f32::EPSILON);
     }
 }

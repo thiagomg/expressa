@@ -125,9 +125,9 @@ Work:
 
 Acceptance:
 
-- [ ] Window looks like an IDE, not a demo counter.
-- [ ] Theme switch repaints chrome + editor.
-- [ ] Prefs round-trip on Linux (`~/.config/expressa-aula/prefs` via `dirs`). Same keys as GTK Aula.
+- [x] Window looks like an IDE, not a demo counter.
+- [x] Theme switch repaints chrome + editor.
+- [x] Prefs round-trip on Linux (`~/.config/expressa-aula/prefs` via `dirs`). Same keys as GTK Aula.
 
 ---
 
