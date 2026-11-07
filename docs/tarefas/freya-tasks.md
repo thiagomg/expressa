@@ -307,9 +307,9 @@ Work:
 
 Acceptance:
 
-- [ ] Home: loopback server, aluno `local`, same as GTK.
-- [ ] Unsaved recovery after kill.
-- [ ] Conflict: Comparar / Recarregar / Salvar como / Substituir.
+- [x] Home: loopback server, aluno `local`, same as GTK.
+- [x] Unsaved recovery after kill.
+- [x] Conflict: Comparar / Recarregar / Salvar como / Substituir.
 
 ---
 

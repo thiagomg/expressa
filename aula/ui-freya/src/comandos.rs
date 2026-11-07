@@ -15,8 +15,11 @@ use crate::grafico::Graficos;
 use crate::repl::Repl;
 use crate::documentos::{
     Abas, Depois, DepoisNome, Dialogo, Fechar, carregar_editor, escolher_abrir, escolher_salvar,
-    gravar_arquivo, gravar_rascunhos, ler_arquivo, nome_de_caminho, posicao_linha, sincronizar,
+    expected_da_aba, gravar_rascunhos, ler_arquivo, nome_de_caminho, posicao_linha,
+    revisao_de_arquivo, sincronizar,
 };
+use crate::turma::Turma;
+use expressa_aula_storage::{Expected, SaveError};
 use crate::edicao::{buscar, comentar, duplicar, mover, recuar_arquivo};
 use crate::editor::fonte_px;
 use crate::prefs::Prefs;
@@ -50,9 +53,14 @@ pub fn aplicar(
     mut depuracao: State<Depuracao>,
     mut repl: State<Repl>,
     graficos: State<Graficos>,
+    turma: State<Turma>,
 ) {
     match acao {
         Acao::Sair => sair(prefs, editor, status, abas, dialogo),
+        Acao::Servidor => {
+            dialogo.set(Dialogo::Servidor);
+            status.set("Servidor".into());
+        }
         Acao::TemaClaro => definir_tema(false, prefs, editor, theme, status),
         Acao::TemaEscuro => definir_tema(true, prefs, editor, theme, status),
         Acao::ZoomMais => zoom(1, prefs, editor, status),
@@ -108,7 +116,7 @@ pub fn aplicar(
         }
         Acao::Novo => novo(editor, prefs, abas, status),
         Acao::Abrir => abrir(editor, prefs, abas, status, dialogo),
-        Acao::AbrirProjeto => escolher_projeto(editor, prefs, abas, status, projeto),
+        Acao::AbrirProjeto => escolher_projeto(editor, prefs, abas, status, projeto, turma),
         Acao::MostrarArquivos => {
             let visivel = !projeto.read().visivel;
             projeto.write().visivel = visivel;
@@ -119,10 +127,10 @@ pub fn aplicar(
             });
         }
         Acao::Salvar => {
-            let _ = salvar(false, editor, prefs, abas, status);
+            let _ = salvar(false, editor, prefs, abas, status, turma, dialogo, None);
         }
         Acao::SalvarComo => {
-            let _ = salvar(true, editor, prefs, abas, status);
+            let _ = salvar(true, editor, prefs, abas, status, turma, dialogo, None);
         }
         Acao::FecharAba => fechar_aba(None, Depois::SoFechar, editor, prefs, abas, status, dialogo),
         Acao::IrParaLinha => dialogo.set(Dialogo::IrParaLinha),
@@ -269,12 +277,16 @@ pub fn abrir_caminho(
                     aba.caminho = Some(path.clone());
                     aba.nome = nome_de_caminho(&path);
                     aba.dirty = false;
+                    aba.revisao = revisao_de_arquivo(&path);
+                    aba.rel_remoto = None;
                 } else {
                     abas.nova_aba(&texto);
                     let aba = abas.atual_mut();
                     aba.caminho = Some(path.clone());
                     aba.nome = nome_de_caminho(&path);
                     aba.dirty = false;
+                    aba.revisao = revisao_de_arquivo(&path);
+                    aba.rel_remoto = None;
                 }
             }
             carregar_editor(&mut editor.write(), abas.read().atual(), &prefs.read());
@@ -293,20 +305,45 @@ pub fn salvar(
     mut prefs: State<Prefs>,
     mut abas: State<Abas>,
     mut status: State<String>,
+    turma: State<Turma>,
+    mut dialogo: State<Dialogo>,
+    expected_override: Option<Expected>,
 ) -> bool {
     sincronizar(&mut abas.write(), &editor.read());
-    let caminho = if forcar_nome || abas.read().atual().caminho.is_none() {
+    let rel_remoto = abas.read().atual().rel_remoto.clone();
+    let caminho = if forcar_nome || (abas.read().atual().caminho.is_none() && rel_remoto.is_none()) {
         let sugerido = abas.read().atual().nome.clone();
         let Some(p) = escolher_salvar(&sugerido) else {
             return false;
         };
         p
+    } else if let Some(p) = abas.read().atual().caminho.clone() {
+        p
+    } else if let Some(rel) = &rel_remoto {
+        turma.read().caminho_cache(rel)
     } else {
-        abas.read().atual().caminho.clone().unwrap()
+        return false;
     };
     let texto = editor.read().rope.to_string();
-    match gravar_arquivo(&caminho, &texto) {
-        Ok(()) => {
+    let expected = expected_override.unwrap_or_else(|| expected_da_aba(abas.read().atual(), &caminho));
+    let remoto = rel_remoto.is_some() && turma.read().conectado && !forcar_nome;
+    let resultado = if remoto {
+        let rel = rel_remoto.clone().unwrap();
+        match turma.read().gravar(&rel, &texto, &expected) {
+            Ok(saved) => {
+                let _ = turma.read().gravar_cache(&rel, &texto);
+                Ok(saved.revision)
+            }
+            Err(e) => Err(e),
+        }
+    } else {
+        match crate::turma::gravar_local_protegido(&caminho, &texto, &expected) {
+            Ok(saved) => Ok(saved.revision),
+            Err(e) => Err(e),
+        }
+    };
+    match resultado {
+        Ok(revisao) => {
             {
                 let mut abas = abas.write();
                 let aba = abas.atual_mut();
@@ -314,12 +351,42 @@ pub fn salvar(
                 aba.nome = nome_de_caminho(&caminho);
                 aba.texto = texto;
                 aba.dirty = false;
+                aba.revisao = Some(revisao);
+                if forcar_nome {
+                    aba.rel_remoto = None;
+                }
             }
             editor.write().mark_as_saved();
             prefs.write().arquivo = caminho.display().to_string();
             prefs.read().save();
             status.set(format!("Salvo {}", nome_de_caminho(&caminho)));
             true
+        }
+        Err(SaveError::Conflict) => {
+            let disco = if remoto {
+                rel_remoto
+                    .as_deref()
+                    .and_then(|rel| turma.read().ler(rel).ok().map(|(t, _)| t))
+                    .unwrap_or_default()
+            } else {
+                ler_arquivo(&caminho).unwrap_or_default()
+            };
+            let revisao_disco = if remoto {
+                rel_remoto
+                    .as_deref()
+                    .and_then(|rel| turma.read().ler(rel).ok().and_then(|(_, r)| r))
+            } else {
+                revisao_de_arquivo(&caminho)
+            };
+            dialogo.set(Dialogo::Conflito {
+                nome: nome_de_caminho(&caminho),
+                aba: texto,
+                disco,
+                revisao_disco,
+                remoto,
+            });
+            status.set("Conflito ao salvar".into());
+            false
         }
         Err(e) => {
             status.set(format!("Não salvou: {e}"));
@@ -363,11 +430,12 @@ pub fn confirmar_descarte(
     mut abas: State<Abas>,
     status: State<String>,
     mut dialogo: State<Dialogo>,
+    turma: State<Turma>,
 ) {
     let Dialogo::Confirmar { id, depois } = dialogo.read().clone() else {
         return;
     };
-    if salvar_antes && !salvar(false, editor, prefs, abas, status) {
+    if salvar_antes && !salvar(false, editor, prefs, abas, status, turma, dialogo, None) {
         return;
     }
     if !salvar_antes {
@@ -427,6 +495,7 @@ pub fn escolher_projeto(
     abas: State<Abas>,
     mut status: State<String>,
     mut projeto: State<Projeto>,
+    mut turma: State<Turma>,
 ) {
     let Some(pasta) = escolher_pasta() else {
         return;
@@ -434,6 +503,8 @@ pub fn escolher_projeto(
     let aberto = abrir_raiz(&mut projeto.write(), &mut prefs.write(), pasta);
     match aberto {
         Ok(()) => {
+            turma.write().conectado = false;
+            turma.write().projeto.clear();
             status.set("Projeto aberto".into());
             restaurar_arquivo(editor, prefs, abas, status);
         }
@@ -464,6 +535,7 @@ pub fn clicar_arvore(
     abas: State<Abas>,
     mut status: State<String>,
     mut projeto: State<Projeto>,
+    turma: State<Turma>,
 ) {
     let is_dir = projeto.read().todos.iter().any(|n| n.rel == rel && n.is_dir);
     if is_dir {
@@ -475,6 +547,10 @@ pub fn clicar_arvore(
         return;
     }
     projeto.write().selecionado = Some(rel.clone());
+    if projeto.read().remoto && turma.read().conectado {
+        abrir_remoto(rel, editor, prefs, abas, status, turma);
+        return;
+    }
     let Some(raiz) = projeto.read().raiz.clone() else {
         return;
     };
@@ -485,6 +561,67 @@ pub fn clicar_arvore(
         abrir_caminho(path, editor, prefs, abas, status);
     } else {
         status.set(format!("Não achou {rel}"));
+    }
+}
+
+pub fn abrir_remoto(
+    rel: String,
+    mut editor: State<CodeEditorData>,
+    mut prefs: State<Prefs>,
+    mut abas: State<Abas>,
+    mut status: State<String>,
+    turma: State<Turma>,
+) {
+    sincronizar(&mut abas.write(), &editor.read());
+    match turma.read().ler(&rel) {
+        Ok((texto, revisao)) => {
+            let path = turma.read().caminho_cache(&rel);
+            let _ = turma.read().gravar_cache(&rel, &texto);
+            let ja = abas.read().achar_caminho(&path);
+            if let Some(idx) = ja {
+                abas.write().ir_para(idx);
+                {
+                    let mut abas = abas.write();
+                    let aba = abas.atual_mut();
+                    aba.texto = texto.clone();
+                    aba.revisao = revisao.clone();
+                    aba.rel_remoto = Some(rel.clone());
+                    aba.dirty = false;
+                }
+                carregar_editor(&mut editor.write(), abas.read().atual(), &prefs.read());
+                status.set(format!("Já aberto: {rel}"));
+                return;
+            }
+            let so_vazia = {
+                let a = abas.read();
+                a.itens.len() == 1 && !a.atual().dirty && a.atual().caminho.is_none()
+            };
+            {
+                let mut abas = abas.write();
+                if so_vazia {
+                    let aba = abas.atual_mut();
+                    aba.texto = texto;
+                    aba.caminho = Some(path.clone());
+                    aba.nome = nome_de_caminho(&path);
+                    aba.dirty = false;
+                    aba.revisao = revisao;
+                    aba.rel_remoto = Some(rel.clone());
+                } else {
+                    abas.nova_aba(&texto);
+                    let aba = abas.atual_mut();
+                    aba.caminho = Some(path.clone());
+                    aba.nome = nome_de_caminho(&path);
+                    aba.dirty = false;
+                    aba.revisao = revisao;
+                    aba.rel_remoto = Some(rel.clone());
+                }
+            }
+            carregar_editor(&mut editor.write(), abas.read().atual(), &prefs.read());
+            prefs.write().arquivo = path.display().to_string();
+            prefs.read().save();
+            status.set(format!("Aberto {rel}"));
+        }
+        Err(e) => status.set(format!("Não abriu: {e}")),
     }
 }
 
@@ -520,11 +657,59 @@ pub fn confirmar_nome(
     mut status: State<String>,
     mut dialogo: State<Dialogo>,
     mut projeto: State<Projeto>,
+    turma: State<Turma>,
 ) {
     let Dialogo::Nome { depois, .. } = dialogo.read().clone() else {
         return;
     };
     dialogo.set(Dialogo::Nenhum);
+    if projeto.read().remoto && turma.read().conectado {
+        let r = match depois {
+            DepoisNome::NovoArquivo(pasta) => {
+                let nome = crate::projeto::garantir_lep_nome(nome.trim());
+                let rel = if pasta.is_empty() {
+                    nome
+                } else {
+                    format!("{pasta}/{nome}")
+                };
+                match turma.read().gravar(&rel, "escreva(\"olá\")\n", &Expected::Missing) {
+                    Ok(_) => {
+                        let _ = turma.read().gravar_cache(&rel, "escreva(\"olá\")\n");
+                        let _ = turma.read().recarregar_arvore(&mut projeto.write());
+                        abrir_remoto(rel, editor, prefs, abas, status, turma);
+                        Ok(())
+                    }
+                    Err(e) => Err(e.to_string()),
+                }
+            }
+            DepoisNome::NovaPasta(pasta) => {
+                let rel = if pasta.is_empty() {
+                    nome.trim().to_string()
+                } else {
+                    format!("{pasta}/{}", nome.trim())
+                };
+                turma.read().mkdir(&rel).map(|_| {
+                    let _ = turma.read().recarregar_arvore(&mut projeto.write());
+                    status.set("Pasta criada".into());
+                })
+            }
+            DepoisNome::Renomear(rel) => {
+                let dest = match std::path::Path::new(&rel).parent() {
+                    Some(p) if p.as_os_str().is_empty() => nome.trim().to_string(),
+                    Some(p) => format!("{}/{nome}", p.to_string_lossy().replace('\\', "/")),
+                    None => nome.trim().to_string(),
+                };
+                turma.read().renomear(&rel, &dest).map(|_| {
+                    let _ = turma.read().recarregar_arvore(&mut projeto.write());
+                    status.set("Renomeado".into());
+                })
+            }
+        };
+        if let Err(e) = r {
+            status.set(e);
+        }
+        return;
+    }
     let Some(raiz) = projeto.read().raiz.clone() else {
         status.set("Abra um projeto".into());
         return;
@@ -562,11 +747,23 @@ pub fn confirmar_apagar(
     mut status: State<String>,
     mut dialogo: State<Dialogo>,
     mut projeto: State<Projeto>,
+    turma: State<Turma>,
 ) {
     let Dialogo::Apagar { rel } = dialogo.read().clone() else {
         return;
     };
     dialogo.set(Dialogo::Nenhum);
+    if projeto.read().remoto && turma.read().conectado {
+        match turma.read().apagar(&rel) {
+            Ok(()) => {
+                projeto.write().selecionado = None;
+                let _ = turma.read().recarregar_arvore(&mut projeto.write());
+                status.set(format!("Apagou {rel}"));
+            }
+            Err(e) => status.set(e),
+        }
+        return;
+    }
     let Some(raiz) = projeto.read().raiz.clone() else {
         return;
     };
@@ -582,6 +779,201 @@ pub fn confirmar_apagar(
 
 pub fn pasta_selecionada(projeto: State<Projeto>) -> String {
     pasta_do_item(&projeto.read())
+}
+
+pub fn conectar_servidor(
+    url: &str,
+    aluno: &str,
+    mut turma: State<Turma>,
+    mut prefs: State<Prefs>,
+    mut status: State<String>,
+    mut dialogo: State<Dialogo>,
+) {
+    let url = crate::prefs::normalize_url(url);
+    let aluno = if aluno.trim().is_empty() {
+        "local".to_string()
+    } else {
+        aluno.trim().to_string()
+    };
+    turma.write().url = url.clone();
+    turma.write().aluno = aluno;
+    prefs.write().servidor = url;
+    prefs.read().save();
+    status.set("Conectando…".into());
+    let resultado = turma.write().conectar();
+    match resultado {
+        Ok(()) => {
+            let recado = turma.read().recado.clone();
+            dialogo.set(Dialogo::Projetos);
+            status.set(recado);
+        }
+        Err(e) => {
+            status.set(format!("Não conectou: {e}"));
+        }
+    }
+}
+
+pub fn abrir_projeto_servidor(
+    nome: String,
+    editor: State<CodeEditorData>,
+    mut prefs: State<Prefs>,
+    abas: State<Abas>,
+    mut status: State<String>,
+    mut projeto: State<Projeto>,
+    mut turma: State<Turma>,
+    mut dialogo: State<Dialogo>,
+) {
+    dialogo.set(Dialogo::Nenhum);
+    let resultado = {
+        let mut t = turma.write();
+        let mut p = projeto.write();
+        let mut pr = prefs.write();
+        t.abrir_projeto(&nome, &mut p, &mut pr)
+    };
+    match resultado {
+        Ok(()) => {
+            status.set(format!("Projeto {nome}"));
+            restaurar_arquivo(editor, prefs, abas, status);
+        }
+        Err(e) => status.set(e),
+    }
+}
+
+pub fn criar_projeto_servidor(
+    nome: &str,
+    editor: State<CodeEditorData>,
+    prefs: State<Prefs>,
+    abas: State<Abas>,
+    mut status: State<String>,
+    projeto: State<Projeto>,
+    mut turma: State<Turma>,
+    dialogo: State<Dialogo>,
+) {
+    let nome = nome.trim();
+    if nome.is_empty() {
+        status.set("Nome vazio".into());
+        return;
+    }
+    let criado = turma.read().criar_projeto(nome);
+    match criado {
+        Ok(()) => {
+            let lista = turma.read().listar_projetos();
+            match lista {
+                Ok(lista) => {
+                    turma.write().projetos = lista;
+                    abrir_projeto_servidor(
+                        nome.to_string(),
+                        editor,
+                        prefs,
+                        abas,
+                        status,
+                        projeto,
+                        turma,
+                        dialogo,
+                    );
+                }
+                Err(e) => status.set(e),
+            }
+        }
+        Err(e) => status.set(e),
+    }
+}
+
+pub fn recuperar_rascunhos(
+    mut editor: State<CodeEditorData>,
+    prefs: State<Prefs>,
+    mut abas: State<Abas>,
+    mut status: State<String>,
+    mut dialogo: State<Dialogo>,
+) {
+    let Dialogo::Recuperar { itens } = dialogo.read().clone() else {
+        return;
+    };
+    dialogo.set(Dialogo::Nenhum);
+    for (nome, texto) in itens {
+        abas.write().nova_aba(&texto);
+        {
+            let mut abas = abas.write();
+            let aba = abas.atual_mut();
+            aba.nome = nome;
+            aba.dirty = true;
+        }
+    }
+    carregar_editor(&mut editor.write(), abas.read().atual(), &prefs.read());
+    crate::turma::apagar_rascunhos();
+    status.set("Rascunhos recuperados".into());
+}
+
+pub fn descartar_rascunhos(mut dialogo: State<Dialogo>, mut status: State<String>) {
+    crate::turma::apagar_rascunhos();
+    dialogo.set(Dialogo::Nenhum);
+    status.set("Rascunhos descartados".into());
+}
+
+pub fn resolver_conflito(
+    escolha: &str,
+    mut editor: State<CodeEditorData>,
+    prefs: State<Prefs>,
+    mut abas: State<Abas>,
+    mut status: State<String>,
+    mut dialogo: State<Dialogo>,
+    turma: State<Turma>,
+) {
+    let Dialogo::Conflito {
+        nome,
+        aba: texto_aba,
+        disco,
+        revisao_disco,
+        remoto: _,
+    } = dialogo.read().clone()
+    else {
+        return;
+    };
+    match escolha {
+        "comparar" => {
+            dialogo.set(Dialogo::Comparar {
+                nome,
+                aba: texto_aba,
+                disco,
+            });
+        }
+        "recarregar" => {
+            dialogo.set(Dialogo::Nenhum);
+            {
+                let mut abas = abas.write();
+                let atual = abas.atual_mut();
+                atual.texto = disco.clone();
+                atual.dirty = false;
+                atual.revisao = revisao_disco;
+            }
+            carregar_editor(&mut editor.write(), abas.read().atual(), &prefs.read());
+            status.set("Recarregado do disco".into());
+        }
+        "salvar_como" => {
+            dialogo.set(Dialogo::Nenhum);
+            let _ = salvar(true, editor, prefs, abas, status, turma, dialogo, None);
+        }
+        "substituir" => {
+            let expected = match revisao_disco {
+                Some(r) => Expected::Revision(r),
+                None => Expected::Missing,
+            };
+            dialogo.set(Dialogo::Nenhum);
+            let _ = salvar(
+                false,
+                editor,
+                prefs,
+                abas,
+                status,
+                turma,
+                dialogo,
+                Some(expected),
+            );
+        }
+        _ => {
+            dialogo.set(Dialogo::Nenhum);
+        }
+    }
 }
 
 pub fn executar(

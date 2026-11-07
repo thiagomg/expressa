@@ -8,6 +8,7 @@ pub enum Acao {
     Novo,
     Abrir,
     AbrirProjeto,
+    Servidor,
     Salvar,
     SalvarComo,
     FecharAba,

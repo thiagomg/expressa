@@ -112,6 +112,7 @@ pub fn barra_menus(
                 ("Novo", "Ctrl+N", Acao::Novo),
                 ("Abrir…", "", Acao::Abrir),
                 ("Abrir projeto…", "", Acao::AbrirProjeto),
+                ("Servidor…", "", Acao::Servidor),
                 ("Salvar", "Ctrl+S", Acao::Salvar),
                 ("Salvar como…", "Ctrl+Shift+S", Acao::SalvarComo),
                 ("Sair", "Ctrl+Q", Acao::Sair),
@@ -602,7 +603,16 @@ pub fn painel_arvore(
                 .padding((4.0, 6.0, 4.0, 6.0))
                 .main_align(Alignment::SpaceBetween)
                 .cross_align(Alignment::Center)
-                .child(label().font_size(12.0).font_weight(FontWeight::BOLD).text("Arquivos"))
+                .child(
+                    label()
+                        .font_size(12.0)
+                        .font_weight(FontWeight::BOLD)
+                        .text(if projeto.remoto {
+                            "Arquivos (servidor)"
+                        } else {
+                            "Arquivos"
+                        }),
+                )
                 .child(
                     Button::new()
                         .flat()
@@ -829,6 +839,242 @@ pub fn painel_sugestoes(
         .color(paleta.texto)
         .corner_radius(6.0)
         .child(lista)
+}
+
+pub fn dialogo_servidor(
+    url: State<String>,
+    aluno: State<String>,
+    on_ok: impl Fn() + Copy + 'static,
+    on_cancelar: impl Fn() + Copy + 'static,
+) -> impl IntoElement {
+    Popup::new()
+        .width(Size::px(440.0))
+        .on_close_request(move |_| on_cancelar())
+        .child(PopupTitle::new("Servidor da turma".to_string()))
+        .child(
+            PopupContent::new()
+                .child(
+                    rect()
+                        .direction(Direction::Vertical)
+                        .spacing(8.0)
+                        .width(Size::fill())
+                        .child(label().font_size(13.0).text("URL (em casa: 127.0.0.1:50051)"))
+                        .child(
+                            Input::new(url)
+                                .placeholder("http://127.0.0.1:50051")
+                                .width(Size::fill()),
+                        )
+                        .child(label().font_size(13.0).text("Aluno"))
+                        .child(
+                            Input::new(aluno)
+                                .placeholder("local")
+                                .width(Size::fill())
+                                .on_submit(move |_| on_ok()),
+                        ),
+                ),
+        )
+        .child(
+            PopupButtons::new()
+                .child(
+                    Button::new()
+                        .on_press(move |_| on_ok())
+                        .filled()
+                        .child("Conectar"),
+                )
+                .child(
+                    Button::new()
+                        .on_press(move |_| on_cancelar())
+                        .child("Cancelar"),
+                ),
+        )
+}
+
+pub fn dialogo_projetos(
+    nomes: Vec<String>,
+    novo: State<String>,
+    on_abrir: impl Fn(String) + Copy + 'static,
+    on_criar: impl Fn() + Copy + 'static,
+    on_cancelar: impl Fn() + Copy + 'static,
+) -> impl IntoElement {
+    let mut lista = rect()
+        .direction(Direction::Vertical)
+        .spacing(4.0)
+        .width(Size::fill());
+    if nomes.is_empty() {
+        lista = lista.child(label().font_size(13.0).text("Nenhum projeto ainda."));
+    }
+    for nome in nomes {
+        let n = nome.clone();
+        lista = lista.child(
+            Button::new()
+                .on_press(move |_| on_abrir(n.clone()))
+                .child(nome),
+        );
+    }
+    Popup::new()
+        .width(Size::px(420.0))
+        .on_close_request(move |_| on_cancelar())
+        .child(PopupTitle::new("Projetos no servidor".to_string()))
+        .child(
+            PopupContent::new().child(
+                rect()
+                    .direction(Direction::Vertical)
+                    .spacing(8.0)
+                    .width(Size::fill())
+                    .child(ScrollView::new().height(Size::px(180.0)).child(lista))
+                    .child(label().font_size(13.0).text("Novo projeto"))
+                    .child(
+                        Input::new(novo)
+                            .placeholder("nome")
+                            .width(Size::fill())
+                            .on_submit(move |_| on_criar()),
+                    ),
+            ),
+        )
+        .child(
+            PopupButtons::new()
+                .child(
+                    Button::new()
+                        .on_press(move |_| on_criar())
+                        .filled()
+                        .child("Criar"),
+                )
+                .child(
+                    Button::new()
+                        .on_press(move |_| on_cancelar())
+                        .child("Cancelar"),
+                ),
+        )
+}
+
+pub fn dialogo_recuperar(
+    nomes: Vec<String>,
+    on_ok: impl Fn() + Copy + 'static,
+    on_descartar: impl Fn() + Copy + 'static,
+) -> impl IntoElement {
+    let lista = if nomes.is_empty() {
+        "Nenhum rascunho.".to_string()
+    } else {
+        format!(
+            "Há rascunhos não salvos:\n{}",
+            nomes
+                .into_iter()
+                .take(8)
+                .collect::<Vec<_>>()
+                .join("\n")
+        )
+    };
+    Popup::new()
+        .width(Size::px(440.0))
+        .on_close_request(move |_| on_descartar())
+        .child(PopupTitle::new("Recuperar rascunhos".to_string()))
+        .child(PopupContent::new().child(lista))
+        .child(
+            PopupButtons::new()
+                .child(
+                    Button::new()
+                        .on_press(move |_| on_ok())
+                        .filled()
+                        .child("Recuperar"),
+                )
+                .child(
+                    Button::new()
+                        .on_press(move |_| on_descartar())
+                        .child("Descartar"),
+                ),
+        )
+}
+
+pub fn dialogo_conflito(
+    nome: String,
+    on_comparar: impl Fn() + Copy + 'static,
+    on_recarregar: impl Fn() + Copy + 'static,
+    on_salvar_como: impl Fn() + Copy + 'static,
+    on_substituir: impl Fn() + Copy + 'static,
+    on_cancelar: impl Fn() + Copy + 'static,
+) -> impl IntoElement {
+    Popup::new()
+        .width(Size::px(520.0))
+        .on_close_request(move |_| on_cancelar())
+        .child(PopupTitle::new(format!("Conflito ao salvar {nome}")))
+        .child(PopupContent::new().child(
+            "O arquivo mudou desde que esta aba foi aberta. Suas alterações continuam na aba. Substituir grava o texto da aba sobre a versão deste aviso.",
+        ))
+        .child(
+            PopupButtons::new()
+                .child(
+                    Button::new()
+                        .on_press(move |_| on_comparar())
+                        .filled()
+                        .child("Comparar"),
+                )
+                .child(
+                    Button::new()
+                        .on_press(move |_| on_recarregar())
+                        .child("Recarregar"),
+                )
+                .child(
+                    Button::new()
+                        .on_press(move |_| on_salvar_como())
+                        .child("Salvar como"),
+                )
+                .child(
+                    Button::new()
+                        .on_press(move |_| on_substituir())
+                        .child("Substituir"),
+                )
+                .child(
+                    Button::new()
+                        .on_press(move |_| on_cancelar())
+                        .child("Cancelar"),
+                ),
+        )
+}
+
+pub fn dialogo_comparar(
+    nome: String,
+    aba: String,
+    disco: String,
+    on_fechar: impl Fn() + Copy + 'static,
+) -> impl IntoElement {
+    Popup::new()
+        .width(Size::px(640.0))
+        .on_close_request(move |_| on_fechar())
+        .child(PopupTitle::new(format!("Comparar — {nome}")))
+        .child(
+            PopupContent::new().child(
+                rect()
+                    .direction(Direction::Horizontal)
+                    .spacing(12.0)
+                    .width(Size::fill())
+                    .height(Size::px(280.0))
+                    .child(
+                        ScrollView::new().width(Size::fill()).child(
+                            rect()
+                                .direction(Direction::Vertical)
+                                .spacing(4.0)
+                                .child(label().font_weight(FontWeight::BOLD).text("Sua aba"))
+                                .child(label().font_size(12.0).text(aba)),
+                        ),
+                    )
+                    .child(
+                        ScrollView::new().width(Size::fill()).child(
+                            rect()
+                                .direction(Direction::Vertical)
+                                .spacing(4.0)
+                                .child(label().font_weight(FontWeight::BOLD).text("Arquivo salvo"))
+                                .child(label().font_size(12.0).text(disco)),
+                        ),
+                    ),
+            ),
+        )
+        .child(
+            PopupButtons::new().child(
+                Button::new()
+                    .on_press(move |_| on_fechar())
+                    .child("Fechar"),
+            ),
+        )
 }
 
 pub fn dialogo_apagar(

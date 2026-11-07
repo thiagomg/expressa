@@ -14,6 +14,9 @@ path = "src/main.rs"
 
 [dependencies]
 expressa = { workspace = true }
+expressa-aula-proto = { workspace = true }
+expressa-aula-storage = { workspace = true }
+tonic = { workspace = true }
 tree-sitter-expressa = { path = "../tree-sitter-expressa" }
 freya = { version = "0.5", features = ["code-editor"] }
 dirs = "6"

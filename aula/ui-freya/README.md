@@ -40,5 +40,13 @@ um laço; Reiniciar esquece a sessão. `saia()` encerra até o próximo Reinicia
 console. Destacar solta a janela; clicar na tela envia `evento()`. Fechar X
 não recria a tela até o próximo F5.
 Rascunhos sujos são gravados a cada 5 s em `~/.cache/expressa-aula/rascunho-freya`.
+Na próxima abertura, **Recuperar** devolve esses rascunhos; **Descartar** apaga.
+Ctrl+S grava com proteção contra conflito (CAS). Se o arquivo mudou no disco
+ou no servidor, o diálogo oferece Comparar, Recarregar, Salvar como e Substituir.
+**Arquivo → Servidor…** conecta na Turma (em casa: `http://127.0.0.1:50051`,
+aluno `local`). Se o servidor não estiver no ar, o editor tenta subir
+`expressa-aula-server` no loopback com raiz em
+`~/.local/share/expressa-aula/aula-data`. A árvore remota usa um cache em
+`…/expressa-aula/remoto/{aluno}/{projeto}` para o F5 continuar local.
 
 Plano: `docs/tarefas/freya-tasks.md`.

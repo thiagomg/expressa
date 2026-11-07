@@ -22,6 +22,7 @@ mod prefs;
 mod projeto;
 mod repl;
 mod shell;
+mod turma;
 
 use freya::{
     code_editor::CodeEditor,
@@ -32,12 +33,13 @@ use freya::{
 use crate::{
     atalhos::{Acao, acao_de_tecla},
     comandos::{
-        achar, adicionar_observado, aplicar, aplicar_eventos, aplicar_sugestao, clicar_arvore,
-        confirmar_apagar, confirmar_descarte, confirmar_nome, escolher_projeto, fechar_aba,
-        clique_tela_graf, destacar_graficos, enviar_repl, fechar_repl, fechar_tela_graf,
+        achar, adicionar_observado, abrir_projeto_servidor, aplicar, aplicar_eventos,
+        aplicar_sugestao, clicar_arvore, confirmar_apagar, confirmar_descarte, confirmar_nome,
+        conectar_servidor, criar_projeto_servidor, descartar_rascunhos, escolher_projeto,
+        fechar_aba, clique_tela_graf, destacar_graficos, enviar_repl, fechar_repl, fechar_tela_graf,
         ir_para_linha, ir_para_pausa, ir_para_saida, limpar_repl, parar_repl, pasta_selecionada,
-        pedir_apagar, pedir_nome, reiniciar_repl, remover_observado, responder_leia,
-        restaurar_arquivo, selecionar_aba,
+        pedir_apagar, pedir_nome, recuperar_rascunhos, reiniciar_repl, remover_observado,
+        resolver_conflito, responder_leia, restaurar_arquivo, selecionar_aba,
     },
     ajuda::{Sugestao, catalogo, ficha},
     console::Console,
@@ -46,15 +48,18 @@ use crate::{
     grafico::Graficos,
     repl::Repl,
     documentos::{Abas, Depois, DepoisNome, Dialogo, gravar_rascunhos, sincronizar},
+    turma::Turma,
     edicao::tratar_tecla,
     editor::{FONT_FAMILY, TEXTO_INICIAL, fonte_px, mensagem_sintaxe},
     prefs::Prefs,
     projeto::{Projeto, abrir_raiz, instalar_exemplos, restaurar_inicio},
     shell::{
         MenuAberto, Paleta, barra_abas, barra_argumentos, barra_busca, barra_ferramentas,
-        barra_menus, barra_status, dialogo_apagar, dialogo_confirmar, dialogo_linha, dialogo_nome,
-        editor_inicial, painel_arvore, painel_atalhos, painel_catalogo, painel_console,
-        painel_debug, painel_ficha, painel_graficos, painel_repl, painel_sugestoes, tema_freya,
+        barra_menus, barra_status, dialogo_apagar, dialogo_comparar, dialogo_confirmar,
+        dialogo_conflito, dialogo_linha, dialogo_nome, dialogo_projetos, dialogo_recuperar,
+        dialogo_servidor, editor_inicial, painel_arvore, painel_atalhos, painel_catalogo,
+        painel_console, painel_debug, painel_ficha, painel_graficos, painel_repl, painel_sugestoes,
+        tema_freya,
     },
 };
 
@@ -85,7 +90,7 @@ fn app() -> impl IntoElement {
     let menu = use_state(MenuAberto::default);
     let mut atalhos_visiveis = use_state(|| false);
     let mut abas = use_state(|| Abas::nova(TEXTO_INICIAL));
-    let dialogo = use_state(Dialogo::default);
+    let mut dialogo = use_state(Dialogo::default);
     let linha_campo = use_state(String::new);
     let busca_aberta = use_state(|| false);
     let busca_termo = use_state(String::new);
@@ -104,6 +109,13 @@ fn app() -> impl IntoElement {
     let mut repl = use_state(Repl::default);
     let repl_entrada = use_state(String::new);
     let graficos = use_state(Graficos::default);
+    let turma = use_state(|| {
+        let mut t = Turma::default();
+        t.url = prefs_iniciais.servidor.clone();
+        t
+    });
+    let servidor_campo = use_state(|| prefs_iniciais.servidor.clone());
+    let aluno_campo = use_state(|| "local".to_string());
 
     use_future(move || async move {
         loop {
@@ -159,12 +171,23 @@ fn app() -> impl IntoElement {
             let _ = abrir_raiz(&mut projeto.write(), &mut prefs.write(), pasta);
             restaurar_arquivo(editor, prefs, abas, status);
         }
+        let rascunhos = crate::turma::listar_rascunhos();
+        if !rascunhos.is_empty() {
+            dialogo.set(Dialogo::Recuperar { itens: rascunhos });
+        }
     });
 
     let dark = prefs.read().dark;
     let paleta = Paleta::de(dark);
     let font_size = fonte_px(prefs.read().font_size);
-    let pasta = prefs.read().pasta.clone();
+    let pasta = {
+        let t = turma.read();
+        if t.conectado && !t.projeto.is_empty() {
+            format!("{} — {}/{}", t.url, t.aluno, t.projeto)
+        } else {
+            prefs.read().pasta.clone()
+        }
+    };
     let recado = {
         let s = status.read().clone();
         let e = sintaxe.read().clone();
@@ -210,6 +233,7 @@ fn app() -> impl IntoElement {
             depuracao,
             repl,
             graficos,
+            turma,
         );
     };
 
@@ -252,7 +276,7 @@ fn app() -> impl IntoElement {
                     painel_arvore(
                         projeto_agora,
                         paleta,
-                        move |rel| clicar_arvore(rel, editor, prefs, abas, status, projeto),
+                        move |rel| clicar_arvore(rel, editor, prefs, abas, status, projeto, turma),
                         move || {
                             pedir_nome(
                                 DepoisNome::NovoArquivo(pasta_selecionada(projeto)),
@@ -273,7 +297,7 @@ fn app() -> impl IntoElement {
                             }
                         },
                         move || pedir_apagar(dialogo, projeto),
-                        move || escolher_projeto(editor, prefs, abas, status, projeto),
+                        move || escolher_projeto(editor, prefs, abas, status, projeto, turma),
                     )
                 }))
                 .child(
@@ -407,8 +431,8 @@ fn app() -> impl IntoElement {
         .maybe_child(matches!(dialogo_agora, Dialogo::Confirmar { .. }).then(move || {
             dialogo_confirmar(
                 paleta,
-                move || confirmar_descarte(true, editor, prefs, abas, status, dialogo),
-                move || confirmar_descarte(false, editor, prefs, abas, status, dialogo),
+                move || confirmar_descarte(true, editor, prefs, abas, status, dialogo, turma),
+                move || confirmar_descarte(false, editor, prefs, abas, status, dialogo, turma),
                 move || {
                     let mut dialogo = dialogo;
                     dialogo.set(Dialogo::Nenhum);
@@ -436,7 +460,7 @@ fn app() -> impl IntoElement {
                 dialogo_nome(
                     titulo,
                     nome_campo,
-                    move || confirmar_nome(&nome_campo.read(), editor, prefs, abas, status, dialogo, projeto),
+                    move || confirmar_nome(&nome_campo.read(), editor, prefs, abas, status, dialogo, projeto, turma),
                     move || {
                         let mut dialogo = dialogo;
                         dialogo.set(Dialogo::Nenhum);
@@ -453,12 +477,103 @@ fn app() -> impl IntoElement {
             .map(|rel| {
                 dialogo_apagar(
                     rel,
-                    move || confirmar_apagar(status, dialogo, projeto),
+                    move || confirmar_apagar(status, dialogo, projeto, turma),
                     move || {
                         let mut dialogo = dialogo;
                         dialogo.set(Dialogo::Nenhum);
                     },
                 )
+            }),
+        )
+        .maybe_child(matches!(dialogo_agora, Dialogo::Servidor).then(move || {
+            dialogo_servidor(
+                servidor_campo,
+                aluno_campo,
+                move || {
+                    conectar_servidor(
+                        &servidor_campo.read(),
+                        &aluno_campo.read(),
+                        turma,
+                        prefs,
+                        status,
+                        dialogo,
+                    )
+                },
+                move || {
+                    let mut dialogo = dialogo;
+                    dialogo.set(Dialogo::Nenhum);
+                },
+            )
+        }))
+        .maybe_child(matches!(dialogo_agora, Dialogo::Projetos).then(move || {
+            dialogo_projetos(
+                turma.read().projetos.clone(),
+                nome_campo,
+                move |nome| {
+                    abrir_projeto_servidor(
+                        nome, editor, prefs, abas, status, projeto, turma, dialogo,
+                    )
+                },
+                move || {
+                    criar_projeto_servidor(
+                        &nome_campo.read(),
+                        editor,
+                        prefs,
+                        abas,
+                        status,
+                        projeto,
+                        turma,
+                        dialogo,
+                    )
+                },
+                move || {
+                    let mut dialogo = dialogo;
+                    dialogo.set(Dialogo::Nenhum);
+                },
+            )
+        }))
+        .maybe_child(
+            if let Dialogo::Recuperar { itens } = &dialogo_agora {
+                Some(itens.iter().map(|(n, _)| n.clone()).collect::<Vec<_>>())
+            } else {
+                None
+            }
+            .map(|nomes| {
+                dialogo_recuperar(
+                    nomes,
+                    move || recuperar_rascunhos(editor, prefs, abas, status, dialogo),
+                    move || descartar_rascunhos(dialogo, status),
+                )
+            }),
+        )
+        .maybe_child(
+            if let Dialogo::Conflito { nome, .. } = &dialogo_agora {
+                Some(nome.clone())
+            } else {
+                None
+            }
+            .map(|nome| {
+                dialogo_conflito(
+                    nome,
+                    move || resolver_conflito("comparar", editor, prefs, abas, status, dialogo, turma),
+                    move || resolver_conflito("recarregar", editor, prefs, abas, status, dialogo, turma),
+                    move || resolver_conflito("salvar_como", editor, prefs, abas, status, dialogo, turma),
+                    move || resolver_conflito("substituir", editor, prefs, abas, status, dialogo, turma),
+                    move || resolver_conflito("cancelar", editor, prefs, abas, status, dialogo, turma),
+                )
+            }),
+        )
+        .maybe_child(
+            if let Dialogo::Comparar { nome, aba, disco } = &dialogo_agora {
+                Some((nome.clone(), aba.clone(), disco.clone()))
+            } else {
+                None
+            }
+            .map(|(nome, aba, disco)| {
+                dialogo_comparar(nome, aba, disco, move || {
+                    let mut dialogo = dialogo;
+                    dialogo.set(Dialogo::Nenhum);
+                })
             }),
         )
 }

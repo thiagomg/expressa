@@ -1344,11 +1344,16 @@ dependencies = [
 name = "expressa-aula-freya"
 version = "0.4.2"
 dependencies = [
+ "bytes",
  "dirs",
  "expressa",
+ "expressa-aula-proto",
+ "expressa-aula-storage",
  "freya",
+ "png 0.17.16",
  "rfd",
  "tokio",
+ "tonic",
  "tree-sitter-expressa",
 ]
 

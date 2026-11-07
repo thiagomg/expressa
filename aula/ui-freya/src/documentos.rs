@@ -16,6 +16,22 @@ pub struct Aba {
     pub caminho: Option<PathBuf>,
     pub texto: String,
     pub dirty: bool,
+    pub revisao: Option<String>,
+    pub rel_remoto: Option<String>,
+}
+
+impl Aba {
+    pub fn vazia(id: u64, texto: &str) -> Self {
+        Self {
+            id,
+            nome: "sem título".into(),
+            caminho: None,
+            texto: texto.to_string(),
+            dirty: false,
+            revisao: None,
+            rel_remoto: None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -62,18 +78,29 @@ pub enum Dialogo {
     Apagar {
         rel: String,
     },
+    Servidor,
+    Projetos,
+    Recuperar {
+        itens: Vec<(String, String)>,
+    },
+    Conflito {
+        nome: String,
+        aba: String,
+        disco: String,
+        revisao_disco: Option<String>,
+        remoto: bool,
+    },
+    Comparar {
+        nome: String,
+        aba: String,
+        disco: String,
+    },
 }
 
 impl Abas {
     pub fn nova(texto: &str) -> Self {
         Self {
-            itens: vec![Aba {
-                id: 1,
-                nome: "sem título".into(),
-                caminho: None,
-                texto: texto.to_string(),
-                dirty: false,
-            }],
+            itens: vec![Aba::vazia(1, texto)],
             atual: 0,
             proximo_id: 2,
         }
@@ -95,13 +122,7 @@ impl Abas {
     pub fn nova_aba(&mut self, texto: &str) {
         let id = self.proximo_id;
         self.proximo_id += 1;
-        self.itens.push(Aba {
-            id,
-            nome: "sem título".into(),
-            caminho: None,
-            texto: texto.to_string(),
-            dirty: false,
-        });
+        self.itens.push(Aba::vazia(id, texto));
         self.atual = self.itens.len() - 1;
     }
 
@@ -130,13 +151,7 @@ impl Abas {
 
     pub fn remover(&mut self, idx: usize) {
         if self.itens.len() == 1 {
-            self.itens[0] = Aba {
-                id: self.proximo_id,
-                nome: "sem título".into(),
-                caminho: None,
-                texto: String::new(),
-                dirty: false,
-            };
+            self.itens[0] = Aba::vazia(self.proximo_id, "");
             self.proximo_id += 1;
             self.atual = 0;
             return;
@@ -219,11 +234,21 @@ pub fn ler_arquivo(path: &Path) -> Result<String, String> {
     std::fs::read_to_string(path).map_err(|e| e.to_string())
 }
 
-pub fn gravar_arquivo(path: &Path, texto: &str) -> Result<(), String> {
-    if let Some(dir) = path.parent() {
-        std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+pub fn revisao_de_arquivo(path: &Path) -> Option<String> {
+    expressa_aula_storage::read(path)
+        .ok()
+        .map(|s| s.revision)
+}
+
+pub fn expected_da_aba(aba: &Aba, path: &Path) -> expressa_aula_storage::Expected {
+    match &aba.revisao {
+        Some(r) => expressa_aula_storage::Expected::Revision(r.clone()),
+        None if !path.exists() => expressa_aula_storage::Expected::Missing,
+        None => match revisao_de_arquivo(path) {
+            Some(r) => expressa_aula_storage::Expected::Revision(r),
+            None => expressa_aula_storage::Expected::Missing,
+        },
     }
-    std::fs::write(path, texto).map_err(|e| e.to_string())
 }
 
 pub fn escolher_abrir() -> Option<PathBuf> {
@@ -274,6 +299,8 @@ mod tests {
             caminho: None,
             texto: String::new(),
             dirty: false,
+            revisao: None,
+            rel_remoto: None,
         };
         assert_eq!(Abas::rotulo(&a), "a.lep");
         a.dirty = true;
@@ -319,5 +346,20 @@ mod tests {
         abas.nova_aba("");
         assert_eq!(abas.achar_caminho(Path::new("/tmp/a.lep")), Some(0));
         assert_eq!(abas.achar_caminho(Path::new("/tmp/b.lep")), None);
+    }
+
+    #[test]
+    fn expected_usa_revisao_da_aba() {
+        let mut a = Aba::vazia(1, "x");
+        a.revisao = Some("sha256:abc".into());
+        match expected_da_aba(&a, Path::new("/nao/existe.lep")) {
+            expressa_aula_storage::Expected::Revision(r) => assert_eq!(r, "sha256:abc"),
+            other => panic!("{other:?}"),
+        }
+        let vazia = Aba::vazia(2, "");
+        assert!(matches!(
+            expected_da_aba(&vazia, Path::new("/nao/existe.lep")),
+            expressa_aula_storage::Expected::Missing
+        ));
     }
 }

@@ -23,6 +23,7 @@ pub struct Projeto {
     pub abertos: HashSet<String>,
     pub selecionado: Option<String>,
     pub visivel: bool,
+    pub remoto: bool,
 }
 
 impl Default for Projeto {
@@ -33,6 +34,7 @@ impl Default for Projeto {
             abertos: HashSet::new(),
             selecionado: None,
             visivel: true,
+            remoto: false,
         }
     }
 }
@@ -216,12 +218,41 @@ pub fn abrir_raiz(projeto: &mut Projeto, prefs: &mut Prefs, raiz: PathBuf) -> Re
         return Err("escolha uma pasta do projeto, não a pasta pessoal".into());
     }
     projeto.raiz = Some(raiz.clone());
+    projeto.remoto = false;
     projeto.abertos.insert(String::new());
     projeto.recarregar()?;
     prefs.pasta = raiz.display().to_string();
     prefs.lembrar_recente(Recente::Local(prefs.pasta.clone()));
     prefs.save();
     Ok(())
+}
+
+pub fn nos_de_entradas(entradas: Vec<(String, bool)>) -> Vec<No> {
+    let mut nos: Vec<No> = entradas
+        .into_iter()
+        .filter(|(rel, _)| {
+            !rel.split('/').any(skip_name) && !rel.is_empty()
+        })
+        .map(|(rel, is_dir)| {
+            let profundidade = rel.matches('/').count();
+            let nome = Path::new(&rel)
+                .file_name()
+                .map(|n| n.to_string_lossy().into_owned())
+                .unwrap_or_else(|| rel.clone());
+            No {
+                rel,
+                nome,
+                is_dir,
+                profundidade,
+            }
+        })
+        .collect();
+    nos.sort_by(|a, b| match (a.is_dir, b.is_dir) {
+        (true, false) => std::cmp::Ordering::Less,
+        (false, true) => std::cmp::Ordering::Greater,
+        _ => a.rel.cmp(&b.rel),
+    });
+    nos
 }
 
 pub fn pasta_do_item(projeto: &Projeto) -> String {
@@ -355,6 +386,20 @@ mod tests {
         assert!(caminho_no_projeto(root, "../x").is_err());
         assert!(caminho_no_projeto(root, "/etc/passwd").is_err());
         assert!(caminho_no_projeto(root, "ok/a.lep").is_ok());
+    }
+
+    #[test]
+    fn entradas_viram_nos() {
+        let nos = nos_de_entradas(vec![
+            ("lib/b.lep".into(), false),
+            ("lib".into(), true),
+            ("a.lep".into(), false),
+            (".git".into(), true),
+        ]);
+        let rels: Vec<_> = nos.iter().map(|n| n.rel.as_str()).collect();
+        assert_eq!(rels, vec!["lib", "a.lep", "lib/b.lep"]);
+        assert_eq!(nos[0].profundidade, 0);
+        assert_eq!(nos[2].profundidade, 1);
     }
 
     #[test]
