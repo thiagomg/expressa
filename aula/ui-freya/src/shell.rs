@@ -13,6 +13,7 @@ use crate::{
     documentos::Abas,
     editor::new_editor,
     projeto::Projeto,
+    repl::{Repl, TipoLinha},
 };
 
 #[derive(Clone, Copy, PartialEq, Eq, Default)]
@@ -1010,6 +1011,107 @@ pub fn painel_debug(
                 .text("Pilha"),
         )
         .child(ScrollView::new().height(Size::px(120.0)).child(pilha))
+}
+
+pub fn painel_repl(
+    repl: Repl,
+    paleta: Paleta,
+    entrada: State<String>,
+    on_enviar: impl Fn() + Copy + 'static,
+    on_parar: impl Fn() + Copy + 'static,
+    on_limpar: impl Fn() + Copy + 'static,
+    on_reiniciar: impl Fn() + Copy + 'static,
+    on_fechar: impl Fn() + Copy + 'static,
+) -> impl IntoElement {
+    let mut lista = rect()
+        .direction(Direction::Vertical)
+        .width(Size::fill())
+        .padding(6.0);
+    for l in &repl.linhas {
+        let cor = match l.tipo {
+            TipoLinha::Eco => (140, 140, 148),
+            TipoLinha::Erro => (229, 57, 53),
+            TipoLinha::Saida => paleta.texto,
+        };
+        lista = lista.child(
+            label()
+                .font_size(13.0)
+                .font_family("DejaVu Sans Mono")
+                .color(cor)
+                .text(l.texto.clone()),
+        );
+    }
+    rect()
+        .direction(Direction::Vertical)
+        .width(Size::fill())
+        .height(Size::px(220.0))
+        .background(paleta.status)
+        .color(paleta.texto)
+        .border(
+            Border::new()
+                .width(BorderWidth {
+                    top: 1.0,
+                    right: 0.0,
+                    bottom: 0.0,
+                    left: 0.0,
+                })
+                .fill(paleta.borda),
+        )
+        .child(
+            rect()
+                .direction(Direction::Horizontal)
+                .width(Size::fill())
+                .padding((4.0, 6.0, 4.0, 6.0))
+                .main_align(Alignment::SpaceBetween)
+                .cross_align(Alignment::Center)
+                .child(
+                    label()
+                        .font_size(12.0)
+                        .font_weight(FontWeight::BOLD)
+                        .text("REPL"),
+                )
+                .child(
+                    Button::new()
+                        .flat()
+                        .compact()
+                        .on_press(move |_| on_fechar())
+                        .child("×"),
+                ),
+        )
+        .child(ScrollView::new().height(Size::fill()).child(lista))
+        .child(
+            rect()
+                .direction(Direction::Horizontal)
+                .width(Size::fill())
+                .padding((4.0, 6.0, 4.0, 6.0))
+                .spacing(6.0)
+                .cross_align(Alignment::Center)
+                .child(label().font_size(13.0).font_family("DejaVu Sans Mono").text(repl.prompt.clone()))
+                .child(
+                    Input::new(entrada)
+                        .placeholder("2 + 3")
+                        .width(Size::fill())
+                        .on_submit(move |_| on_enviar()),
+                )
+                .child(
+                    Button::new()
+                        .compact()
+                        .on_press(move |_| on_parar())
+                        .child("Parar"),
+                )
+                .child(
+                    Button::new()
+                        .compact()
+                        .on_press(move |_| on_limpar())
+                        .child("Limpar"),
+                )
+                .child(
+                    Button::new()
+                        .compact()
+                        .on_press(move |_| on_reiniciar())
+                        .child("Reiniciar"),
+                ),
+        )
 }
 
 

@@ -34,6 +34,8 @@ F6 inicia o depurador (pausa na primeira linha); F9 marca ponto; F10 / F11 /
 Shift+F11 avançam. F5 com o programa pausado continua. F8 mostra ou esconde
 o painel (Observados, Variáveis, Pilha). A fonte que roda é a cópia em
 `exec-freya`: editar a aba no meio da execução não muda o que já está rodando.
+**Ver → REPL** abre um painel: as variáveis ficam entre linhas; Parar interrompe
+um laço; Reiniciar esquece a sessão. `saia()` encerra até o próximo Reiniciar.
 Rascunhos sujos são gravados a cada 5 s em `~/.cache/expressa-aula/rascunho-freya`.
 
 Plano: `docs/tarefas/freya-tasks.md`.

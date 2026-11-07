@@ -19,6 +19,7 @@ mod indent;
 mod lang;
 mod prefs;
 mod projeto;
+mod repl;
 mod shell;
 
 use freya::{
@@ -32,13 +33,15 @@ use crate::{
     comandos::{
         achar, adicionar_observado, aplicar, aplicar_eventos, aplicar_sugestao, clicar_arvore,
         confirmar_apagar, confirmar_descarte, confirmar_nome, escolher_projeto, fechar_aba,
-        ir_para_linha, ir_para_pausa, ir_para_saida, pasta_selecionada, pedir_apagar, pedir_nome,
-        remover_observado, responder_leia, restaurar_arquivo, selecionar_aba,
+        enviar_repl, fechar_repl, ir_para_linha, ir_para_pausa, ir_para_saida, limpar_repl,
+        parar_repl, pasta_selecionada, pedir_apagar, pedir_nome, reiniciar_repl, remover_observado,
+        responder_leia, restaurar_arquivo, selecionar_aba,
     },
     ajuda::{Sugestao, catalogo, ficha},
     console::Console,
     debug::Depuracao,
     execucao::Execucao,
+    repl::Repl,
     documentos::{Abas, Depois, DepoisNome, Dialogo, gravar_rascunhos, sincronizar},
     edicao::tratar_tecla,
     editor::{FONT_FAMILY, TEXTO_INICIAL, fonte_px, mensagem_sintaxe},
@@ -48,7 +51,7 @@ use crate::{
         MenuAberto, Paleta, barra_abas, barra_argumentos, barra_busca, barra_ferramentas,
         barra_menus, barra_status, dialogo_apagar, dialogo_confirmar, dialogo_linha, dialogo_nome,
         editor_inicial, painel_arvore, painel_atalhos, painel_catalogo, painel_console,
-        painel_debug, painel_ficha, painel_sugestoes, tema_freya,
+        painel_debug, painel_ficha, painel_repl, painel_sugestoes, tema_freya,
     },
 };
 
@@ -95,6 +98,8 @@ fn app() -> impl IntoElement {
     let sugestoes = use_state(Vec::<Sugestao>::new);
     let depuracao = use_state(Depuracao::default);
     let observado_campo = use_state(String::new);
+    let mut repl = use_state(Repl::default);
+    let repl_entrada = use_state(String::new);
 
     use_future(move || async move {
         loop {
@@ -134,6 +139,15 @@ fn app() -> impl IntoElement {
     });
 
     use_future(move || async move {
+        loop {
+            tokio::time::sleep(std::time::Duration::from_millis(30)).await;
+            if repl.read().visivel || repl.read().ocupado {
+                repl.write().drenar();
+            }
+        }
+    });
+
+    use_future(move || async move {
         let _ = instalar_exemplos();
         let pasta = restaurar_inicio(&prefs.read());
         if let Some(pasta) = pasta {
@@ -164,6 +178,7 @@ fn app() -> impl IntoElement {
     let dialogo_agora = dialogo.read().clone();
     let projeto_agora = projeto.read().clone();
     let depuracao_agora = depuracao.read().clone();
+    let repl_agora = repl.read().clone();
 
     let on_acao = move |acao: Acao| {
         aplicar(
@@ -185,6 +200,7 @@ fn app() -> impl IntoElement {
             catalogo_aberto,
             sugestoes,
             depuracao,
+            repl,
         );
     };
 
@@ -300,6 +316,18 @@ fn app() -> impl IntoElement {
                     )
                 })),
         )
+        .maybe_child(repl_agora.visivel.then(move || {
+            painel_repl(
+                repl_agora.clone(),
+                paleta,
+                repl_entrada,
+                move || enviar_repl(repl, repl_entrada, status),
+                move || parar_repl(repl, status),
+                move || limpar_repl(repl),
+                move || reiniciar_repl(repl, status),
+                move || fechar_repl(repl),
+            )
+        }))
         .maybe_child(busca_aberta().then(move || {
             barra_busca(
                 paleta,

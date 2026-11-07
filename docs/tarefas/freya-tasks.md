@@ -1,6 +1,6 @@
 # Port Expressa Aula GUI to Freya
 
-Status: Stages 0–7 on `aula/ui-freya`. **Linux and Windows are both product targets.** GTK `expressa-aula` keeps shipping until Freya reaches local-editor + run parity.
+Status: Stages 0–8 on `aula/ui-freya`. **Linux and Windows are both product targets.** GTK `expressa-aula` keeps shipping until Freya reaches local-editor + run parity.
 
 ## Platforms
 
@@ -270,8 +270,8 @@ Work:
 
 Acceptance:
 
-- [ ] `2+2` then `x = 1` then `x` works.
-- [ ] A tight `escreva` loop yields to the UI; Parar recovers the prompt.
+- [x] `2+2` then `x = 1` then `x` works.
+- [x] A tight `escreva` loop yields to the UI; Parar recovers the prompt.
 
 ---
 

@@ -9,8 +9,9 @@ use freya::text_edit::TextEditor;
 use crate::ajuda::{
     Sugestao, completar, ficha, garantir_importe, palavra_em, prefixo_em, spawn_tutorial,
 };
-use crate::atalhos::{Acao, mensagem_reservada};
+use crate::atalhos::Acao;
 use crate::debug::Depuracao;
+use crate::repl::Repl;
 use crate::documentos::{
     Abas, Depois, DepoisNome, Dialogo, Fechar, carregar_editor, escolher_abrir, escolher_salvar,
     gravar_arquivo, gravar_rascunhos, ler_arquivo, nome_de_caminho, posicao_linha, sincronizar,
@@ -46,6 +47,7 @@ pub fn aplicar(
     mut catalogo: State<bool>,
     mut sugestoes: State<Vec<Sugestao>>,
     mut depuracao: State<Depuracao>,
+    mut repl: State<Repl>,
 ) {
     match acao {
         Acao::Sair => sair(prefs, editor, status, abas, dialogo),
@@ -87,6 +89,18 @@ pub fn aplicar(
                 "Painel visível".into()
             } else {
                 "Painel oculto".into()
+            });
+        }
+        Acao::Repl => {
+            let visivel = !repl.read().visivel;
+            repl.write().visivel = visivel;
+            if visivel {
+                repl.write().iniciar();
+            }
+            status.set(if visivel {
+                "REPL".into()
+            } else {
+                "REPL oculto".into()
             });
         }
         Acao::Novo => novo(editor, prefs, abas, status),
@@ -160,12 +174,6 @@ pub fn aplicar(
         Acao::MoverBaixo => {
             mover(&mut editor.write(), 1);
             status.set("Linha movida".into());
-        }
-        other => {
-            let msg = mensagem_reservada(other);
-            if !msg.is_empty() {
-                status.set(msg.to_string());
-            }
         }
     }
 }
@@ -701,6 +709,39 @@ pub fn adicionar_observado(nome: &str, mut depuracao: State<Depuracao>, mut camp
 
 pub fn remover_observado(nome: String, mut depuracao: State<Depuracao>) {
     depuracao.write().remover_observado(&nome);
+}
+
+pub fn enviar_repl(
+    mut repl: State<Repl>,
+    mut entrada: State<String>,
+    mut status: State<String>,
+) {
+    let linha = entrada.read().clone();
+    match repl.write().enviar(&linha) {
+        Ok(()) => {
+            entrada.set(String::new());
+            status.set("REPL".into());
+        }
+        Err(e) => status.set(e),
+    }
+}
+
+pub fn parar_repl(repl: State<Repl>, mut status: State<String>) {
+    repl.read().parar();
+    status.set("Parando REPL…".into());
+}
+
+pub fn limpar_repl(mut repl: State<Repl>) {
+    repl.write().limpar();
+}
+
+pub fn reiniciar_repl(mut repl: State<Repl>, mut status: State<String>) {
+    repl.write().reiniciar();
+    status.set("REPL reiniciado".into());
+}
+
+pub fn fechar_repl(mut repl: State<Repl>) {
+    repl.write().visivel = false;
 }
 
 pub fn aplicar_eventos(

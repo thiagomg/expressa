@@ -139,31 +139,6 @@ pub fn acao_de_tecla(key: &Key, modifiers: Modifiers) -> Option<Acao> {
     }
 }
 
-pub fn mensagem_reservada(acao: Acao) -> &'static str {
-    match acao {
-        Acao::Novo | Acao::Abrir | Acao::AbrirProjeto | Acao::Salvar | Acao::SalvarComo | Acao::FecharAba => "",
-        Acao::Executar | Acao::Parar => "",
-        Acao::Depurar | Acao::Proximo | Acao::Entrar | Acao::SairFuncao | Acao::Ponto => "",
-        Acao::MostrarArquivos | Acao::MostrarPainel => "",
-        Acao::IrParaLinha => "",
-        Acao::Buscar | Acao::BuscarProxima | Acao::Escapar => "",
-        Acao::Ajuda | Acao::Completar | Acao::IrDefinicao | Acao::Catalogo | Acao::Tutoriais => "",
-        Acao::Repl => "REPL ainda não está nesta versão Freya.",
-        Acao::Atalhos => "Atalhos do teclado",
-        Acao::Sair
-        | Acao::TemaClaro
-        | Acao::TemaEscuro
-        | Acao::ZoomMais
-        | Acao::ZoomMenos
-        | Acao::ZoomNormal
-        | Acao::Comentar
-        | Acao::Duplicar
-        | Acao::Recuar
-        | Acao::MoverCima
-        | Acao::MoverBaixo => "",
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
