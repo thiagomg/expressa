@@ -66,7 +66,8 @@ pub fn indentar_atual(editor: &mut CodeEditorData) {
     editor.move_cursor_to_row(row, col);
 }
 
-/// Handle Tab / Enter / closer keys. `true` lets the editor keep the event.
+/// Handle Tab. Other keys stay with the editor so IME/compose can finish.
+/// `true` lets the editor keep the event.
 pub fn tratar_tecla(e: &Event<KeyboardEventData>, editor: &mut CodeEditorData) -> bool {
     match &e.key {
         Key::Named(NamedKey::Tab) if e.modifiers.contains(Modifiers::SHIFT) => {
@@ -81,32 +82,26 @@ pub fn tratar_tecla(e: &Event<KeyboardEventData>, editor: &mut CodeEditorData) -
             recuar(editor, 4);
             false
         }
-        Key::Named(NamedKey::Enter) if !e.modifiers.contains(Modifiers::CONTROL) => {
-            e.stop_propagation();
-            e.prevent_default();
-            let pos = editor.cursor_pos();
-            let n = editor.insert("\n", pos);
-            editor.move_cursor_to(pos + n);
-            editor.parse();
-            indentar_atual(editor);
-            false
-        }
-        Key::Character(c) if c == "}" || c == "m" => {
-            let pos = editor.cursor_pos();
-            let n = editor.insert(c, pos);
-            editor.move_cursor_to(pos + n);
-            editor.parse();
-            let row = editor.cursor_row();
-            let linha = editor.rope.to_string();
-            let atual = linha.split('\n').nth(row).unwrap_or("");
-            if starts_with_closer(atual) {
-                indentar_atual(editor);
-            }
-            e.stop_propagation();
-            e.prevent_default();
-            false
-        }
         _ => true,
+    }
+}
+
+/// Enter, `}` and `m` indent *after* the editor has inserted the character.
+pub fn tecla_pede_indent(key: &Key, modifiers: Modifiers) -> bool {
+    match key {
+        Key::Named(NamedKey::Enter) if !modifiers.contains(Modifiers::CONTROL) => true,
+        Key::Character(c) if c == "}" || c == "m" => true,
+        _ => false,
+    }
+}
+
+/// Recede a closer or indent a blank line opened by Enter. No-op otherwise.
+pub fn reindentar_depois(editor: &mut CodeEditorData) {
+    let row = editor.cursor_row();
+    let texto = editor.rope.to_string();
+    let atual = texto.split('\n').nth(row).unwrap_or("");
+    if starts_with_closer(atual) || atual.chars().all(|c| c == ' ' || c == '\t') {
+        indentar_atual(editor);
     }
 }
 
@@ -162,5 +157,45 @@ mod tests {
         assert!(ed.is_edited());
         assert!(ed.undo().is_some());
         assert_eq!(ed.rope.to_string(), "se verdadeiro {\nx = 1\n}\n");
+    }
+
+    #[test]
+    fn tecla_m_nao_e_sempre_indent() {
+        assert!(tecla_pede_indent(
+            &Key::Character("m".into()),
+            Modifiers::default()
+        ));
+        assert!(tecla_pede_indent(
+            &Key::Named(NamedKey::Enter),
+            Modifiers::default()
+        ));
+        assert!(!tecla_pede_indent(
+            &Key::Character("a".into()),
+            Modifiers::default()
+        ));
+    }
+
+    #[test]
+    fn m_no_meio_da_palavra_nao_recua() {
+        let mut ed = editor_de_teste("    tempo\n");
+        ed.move_cursor_to_row(0, 9);
+        reindentar_depois(&mut ed);
+        assert_eq!(ed.rope.to_string(), "    tempo\n");
+    }
+
+    #[test]
+    fn fim_sozinho_recua_depois_da_tecla() {
+        let mut ed = editor_de_teste("se verdadeiro {\n    fim\n");
+        ed.move_cursor_to_row(1, 7);
+        reindentar_depois(&mut ed);
+        assert_eq!(ed.rope.to_string(), "se verdadeiro {\nfim\n");
+    }
+
+    #[test]
+    fn enter_indenta_linha_em_branco() {
+        let mut ed = editor_de_teste("se verdadeiro {\n\n");
+        ed.move_cursor_to_row(1, 0);
+        reindentar_depois(&mut ed);
+        assert_eq!(ed.rope.to_string(), "se verdadeiro {\n    \n");
     }
 }

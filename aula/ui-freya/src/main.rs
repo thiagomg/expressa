@@ -49,7 +49,7 @@ use crate::{
     repl::Repl,
     documentos::{Abas, Depois, DepoisNome, Dialogo, gravar_rascunhos, sincronizar},
     turma::Turma,
-    edicao::tratar_tecla,
+    edicao::{reindentar_depois, tecla_pede_indent, tratar_tecla},
     editor::{FONT_FAMILY, TEXTO_INICIAL, fonte_px, mensagem_sintaxe},
     prefs::Prefs,
     projeto::{Projeto, abrir_raiz, instalar_exemplos, restaurar_inicio},
@@ -114,6 +114,7 @@ fn app() -> impl IntoElement {
         t.url = prefs_iniciais.servidor.clone();
         t
     });
+    let mut indentar_pendente = use_state(|| false);
     let servidor_campo = use_state(|| prefs_iniciais.servidor.clone());
     let aluno_campo = use_state(|| "local".to_string());
 
@@ -176,6 +177,11 @@ fn app() -> impl IntoElement {
             dialogo.set(Dialogo::Recuperar { itens: rascunhos });
         }
     });
+
+    if *indentar_pendente.read() {
+        indentar_pendente.set(false);
+        reindentar_depois(&mut editor.write());
+    }
 
     let dark = prefs.read().dark;
     let paleta = Paleta::de(dark);
@@ -311,7 +317,11 @@ fn app() -> impl IntoElement {
                                 .font_family(FONT_FAMILY)
                                 .a11y_auto_focus(true)
                                 .on_pre_key_down(move |e: Event<KeyboardEventData>| {
-                                    tratar_tecla(&e, &mut editor.write())
+                                    let seguir = tratar_tecla(&e, &mut editor.write());
+                                    if seguir && tecla_pede_indent(&e.key, e.modifiers) {
+                                        indentar_pendente.set(true);
+                                    }
+                                    seguir
                                 }),
                         )
                         .maybe_child(
