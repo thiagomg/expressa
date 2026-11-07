@@ -58,7 +58,7 @@ use crate::{
     execucao::caminho_relativo,
     turma::Turma,
     edicao::{reindentar_depois, tecla_pede_indent, tratar_tecla},
-    editor::{TEXTO_INICIAL, fonte_familia, fonte_px, instalar_fonte, mensagem_sintaxe},
+    editor::{TEXTO_INICIAL, erro_sintaxe, fonte_familia, fonte_px, instalar_fonte},
     prefs::Prefs,
     projeto::{Projeto, abrir_raiz, instalar_exemplos, restaurar_inicio},
     shell::{
@@ -115,7 +115,7 @@ fn app() -> impl IntoElement {
     let busca_termo = use_state(String::new);
     let substituir_aberta = use_state(|| false);
     let substituir_por = use_state(String::new);
-    let mut sintaxe = use_state(String::new);
+    let mut sintaxe_linha = use_state(|| None::<u32>);
     let mut projeto = use_state(Projeto::default);
     let nome_campo = use_state(String::new);
     let mut exec = use_state(Execucao::default);
@@ -156,10 +156,20 @@ fn app() -> impl IntoElement {
     });
 
     use_future(move || async move {
+        let mut ultimo = String::new();
         loop {
-            tokio::time::sleep(std::time::Duration::from_millis(400)).await;
             let texto = editor.read().rope.to_string();
-            sintaxe.set(mensagem_sintaxe(&texto));
+            tokio::time::sleep(std::time::Duration::from_millis(800)).await;
+            let agora = editor.read().rope.to_string();
+            if agora != texto || agora == ultimo {
+                continue;
+            }
+            ultimo = agora.clone();
+            let linha = tokio::task::spawn_blocking(move || erro_sintaxe(&agora).map(|(l, _)| l))
+                .await
+                .ok()
+                .flatten();
+            sintaxe_linha.set(linha);
         }
     });
 
@@ -249,17 +259,8 @@ fn app() -> impl IntoElement {
             prefs.read().pasta.clone()
         }
     };
-    let recado = {
-        let s = status.read().clone();
-        let e = sintaxe.read().clone();
-        if e.is_empty() {
-            s
-        } else if s.is_empty() {
-            e
-        } else {
-            format!("{e}  ·  {s}")
-        }
-    };
+    let recado = status.read().clone();
+    let linha_erro = *sintaxe_linha.read();
     let linha = editor.read().cursor_row();
     let coluna = editor.read().cursor_col();
     let mut abas_agora = abas.read().clone();
@@ -440,6 +441,7 @@ fn app() -> impl IntoElement {
                                     let mut col = rect().direction(Direction::Vertical).width(Size::fill());
                                     for i in 0..n_linhas {
                                         let par = par_linhas.is_some_and(|(a, b)| i == a || i == b);
+                                        let erro = linha_erro.is_some_and(|l| i + 1 == l as usize);
                                         col = col.child(linha_gutter(
                                             i,
                                             &arquivo,
@@ -448,6 +450,7 @@ fn app() -> impl IntoElement {
                                             &pausa_arq,
                                             pausa_linha,
                                             par,
+                                            erro,
                                             font_size,
                                             line_height,
                                             paleta,

@@ -803,6 +803,7 @@ pub fn linha_gutter(
     pausa_arquivo: &str,
     pausa_linha: u32,
     par: bool,
+    erro: bool,
     font_size: f32,
     line_height: f32,
     paleta: Paleta,
@@ -812,6 +813,7 @@ pub fn linha_gutter(
     let marca = marca_gutter(pontos, arquivo, linha, pausado, pausa_arquivo, pausa_linha);
     let fundo = match marca {
         MarcaGutter::Atual | MarcaGutter::PontoAtual => (80, 70, 20, 255),
+        _ if erro => (90, 30, 30, 255),
         _ if par => (30, 70, 90, 255),
         _ => (0, 0, 0, 0),
     };

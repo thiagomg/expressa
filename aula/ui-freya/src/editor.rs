@@ -167,11 +167,31 @@ pub fn linhas_selecionadas(editor: &CodeEditorData) -> (usize, usize) {
     }
 }
 
-pub fn mensagem_sintaxe(texto: &str) -> String {
-    match expressa::parser::parse(texto) {
-        Ok(_) => String::new(),
-        Err(e) => format!("{} em {}:{}", e.message, e.span.line, e.span.col),
+const LIMITE_SINTAXE: usize = 80_000;
+
+pub fn erro_sintaxe(texto: &str) -> Option<(u32, String)> {
+    if texto.len() > LIMITE_SINTAXE {
+        return None;
     }
+    match expressa::parser::parse(texto) {
+        Ok(_) => None,
+        Err(e) => Some((
+            e.span.line,
+            format!("{} em {}:{}", e.message, e.span.line, e.span.col),
+        )),
+    }
+}
+
+pub fn mensagem_sintaxe(texto: &str) -> String {
+    erro_sintaxe(texto).map(|(_, m)| m).unwrap_or_default()
+}
+
+/// `None` while the buffer is still changing; otherwise the 1-based error line.
+pub fn linha_sintaxe_estavel(antes: &str, depois: &str) -> Option<Option<u32>> {
+    if antes != depois {
+        return None;
+    }
+    Some(erro_sintaxe(depois).map(|(l, _)| l))
 }
 
 #[cfg(test)]
@@ -212,6 +232,9 @@ mod tests {
         let msg = mensagem_sintaxe("se");
         assert!(msg.contains("em "), "{msg}");
         assert_eq!(mensagem_sintaxe("escreva(1)\n"), "");
+        assert_eq!(linha_sintaxe_estavel("se", "escreva(\"oi"), None);
+        assert_eq!(linha_sintaxe_estavel("escreva(1)\n", "escreva(1)\n"), Some(None));
+        assert_eq!(linha_sintaxe_estavel("se", "se"), Some(Some(1)));
     }
 
     #[test]
