@@ -414,7 +414,7 @@ pub fn fechar_aba(
             carregar_editor(&mut editor.write(), abas.read().atual(), &prefs.read());
             status.set("Aba fechada".into());
             if depois == Depois::Sair {
-                Platform::get().close_window(Platform::window_id());
+                sair(prefs, editor, status, abas, dialogo);
             } else if depois == Depois::Abrir {
                 abrir(editor, prefs, abas, status, dialogo);
             } else if depois == Depois::Novo {
@@ -451,23 +451,28 @@ pub fn confirmar_descarte(
 }
 
 fn sair(
-    _prefs: State<Prefs>,
-    editor: State<CodeEditorData>,
-    _status: State<String>,
+    prefs: State<Prefs>,
+    mut editor: State<CodeEditorData>,
+    mut status: State<String>,
     mut abas: State<Abas>,
     mut dialogo: State<Dialogo>,
 ) {
     sincronizar(&mut abas.write(), &editor.read());
     gravar_rascunhos(&abas.read());
-    if abas.read().alguma_suja() {
-        let id = abas.read().atual().id;
-        dialogo.set(Dialogo::Confirmar {
-            id,
-            depois: Depois::Sair,
-        });
+    let Some(id) = abas.read().proxima_suja() else {
+        Platform::get().close_window(Platform::window_id());
         return;
+    };
+    let idx = abas.read().itens.iter().position(|a| a.id == id);
+    if let Some(idx) = idx {
+        abas.write().ir_para(idx);
+        carregar_editor(&mut editor.write(), abas.read().atual(), &prefs.read());
+        status.set(format!("Salvar {}?", abas.read().atual().nome));
     }
-    Platform::get().close_window(Platform::window_id());
+    dialogo.set(Dialogo::Confirmar {
+        id,
+        depois: Depois::Sair,
+    });
 }
 
 pub fn ir_para_linha(

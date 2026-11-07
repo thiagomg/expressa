@@ -439,17 +439,29 @@ fn app() -> impl IntoElement {
                 aplicar_sugestao(s, editor, sugestoes)
             })
         }))
-        .maybe_child(matches!(dialogo_agora, Dialogo::Confirmar { .. }).then(move || {
-            dialogo_confirmar(
-                paleta,
-                move || confirmar_descarte(true, editor, prefs, abas, status, dialogo, turma),
-                move || confirmar_descarte(false, editor, prefs, abas, status, dialogo, turma),
-                move || {
-                    let mut dialogo = dialogo;
-                    dialogo.set(Dialogo::Nenhum);
-                },
-            )
-        }))
+        .maybe_child(
+            if let Dialogo::Confirmar { id, .. } = &dialogo_agora {
+                abas_agora
+                    .itens
+                    .iter()
+                    .find(|a| a.id == *id)
+                    .map(|a| a.nome.clone())
+            } else {
+                None
+            }
+            .map(|nome| {
+                dialogo_confirmar(
+                    paleta,
+                    nome,
+                    move || confirmar_descarte(true, editor, prefs, abas, status, dialogo, turma),
+                    move || confirmar_descarte(false, editor, prefs, abas, status, dialogo, turma),
+                    move || {
+                        let mut dialogo = dialogo;
+                        dialogo.set(Dialogo::Nenhum);
+                    },
+                )
+            }),
+        )
         .maybe_child(matches!(dialogo_agora, Dialogo::IrParaLinha).then(move || {
             dialogo_linha(
                 paleta,

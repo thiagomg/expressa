@@ -470,6 +470,7 @@ pub fn barra_abas(
 
 pub fn dialogo_confirmar(
     _paleta: Paleta,
+    nome: String,
     on_salvar: impl Fn() + Copy + 'static,
     on_descartar: impl Fn() + Copy + 'static,
     on_cancelar: impl Fn() + Copy + 'static,
@@ -478,7 +479,7 @@ pub fn dialogo_confirmar(
         .width(Size::px(420.0))
         .on_close_request(move |_| on_cancelar())
         .child(PopupTitle::new("Alterações não salvas".to_string()))
-        .child(PopupContent::new().child("Salvar as alterações desta aba?"))
+        .child(PopupContent::new().child(format!("Salvar as alterações de {nome}?")))
         .child(
             PopupButtons::new()
                 .child(

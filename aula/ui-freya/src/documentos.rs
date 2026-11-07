@@ -168,6 +168,10 @@ impl Abas {
         self.itens.iter().any(|a| a.dirty)
     }
 
+    pub fn proxima_suja(&self) -> Option<u64> {
+        self.itens.iter().find(|a| a.dirty).map(|a| a.id)
+    }
+
     #[allow(dead_code)]
     pub fn proxima(&mut self, passo: i32) {
         let n = self.itens.len() as i32;
@@ -392,6 +396,21 @@ mod tests {
         abas.atual_mut().dirty = true;
         assert_eq!(abas.fechar_id(1), Fechar::Confirma);
         assert_eq!(abas.itens.len(), 1);
+    }
+
+    #[test]
+    fn proxima_suja_percorre_todas() {
+        let mut abas = Abas::nova("a");
+        abas.atual_mut().dirty = true;
+        abas.nova_aba("b");
+        abas.atual_mut().dirty = true;
+        assert!(abas.alguma_suja());
+        assert_eq!(abas.proxima_suja(), Some(1));
+        abas.itens[0].dirty = false;
+        assert_eq!(abas.proxima_suja(), Some(2));
+        abas.itens[1].dirty = false;
+        assert!(!abas.alguma_suja());
+        assert_eq!(abas.proxima_suja(), None);
     }
 
     #[test]
