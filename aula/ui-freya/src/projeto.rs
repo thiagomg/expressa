@@ -56,6 +56,32 @@ impl Projeto {
         self.todos = listar(&raiz)?;
         Ok(())
     }
+
+    /// Expand parent folders and select `rel` (project-relative).
+    pub fn revelar(&mut self, rel: &str) {
+        if rel.is_empty() {
+            return;
+        }
+        self.selecionado = Some(rel.to_string());
+        let mut prefix = String::new();
+        let partes: Vec<&str> = rel.split('/').collect();
+        for (i, parte) in partes.iter().enumerate() {
+            if i + 1 == partes.len() {
+                break;
+            }
+            if !prefix.is_empty() {
+                prefix.push('/');
+            }
+            prefix.push_str(parte);
+            self.abertos.insert(prefix.clone());
+        }
+    }
+}
+
+pub fn rel_na_raiz(raiz: &Path, path: &Path) -> Option<String> {
+    path.strip_prefix(raiz)
+        .ok()
+        .map(|p| p.to_string_lossy().replace('\\', "/"))
 }
 
 fn pasta_aberta(abertos: &HashSet<String>, rel: &str) -> bool {
@@ -389,6 +415,16 @@ mod tests {
         assert!(caminho_no_projeto(root, "../x").is_err());
         assert!(caminho_no_projeto(root, "/etc/passwd").is_err());
         assert!(caminho_no_projeto(root, "ok/a.lep").is_ok());
+    }
+
+    #[test]
+    fn revelar_abre_os_pais() {
+        let mut p = Projeto::default();
+        p.revelar("lib/tartaruga.lep");
+        assert!(p.abertos.contains("lib"));
+        assert_eq!(p.selecionado.as_deref(), Some("lib/tartaruga.lep"));
+        p.revelar("a.lep");
+        assert_eq!(p.selecionado.as_deref(), Some("a.lep"));
     }
 
     #[test]

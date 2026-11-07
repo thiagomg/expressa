@@ -31,7 +31,8 @@ use crate::execucao::{
     EventoExec, Execucao, argumentos, caminho_relativo, preparar_copia, pasta_exec,
 };
 use crate::projeto::{
-    Projeto, apagar, abrir_raiz, criar_arquivo, criar_pasta, escolher_pasta, pasta_do_item, renomear,
+    Projeto, apagar, abrir_raiz, criar_arquivo, criar_pasta, escolher_pasta, pasta_do_item,
+    rel_na_raiz, renomear,
 };
 use crate::shell::{aplicar_tema_editor, tema_freya};
 
@@ -133,10 +134,10 @@ pub fn aplicar(
             });
         }
         Acao::Salvar => {
-            let _ = salvar(false, editor, prefs, abas, status, turma, dialogo, None);
+            let _ = salvar(false, editor, prefs, abas, status, turma, dialogo, None, projeto);
         }
         Acao::SalvarComo => {
-            let _ = salvar(true, editor, prefs, abas, status, turma, dialogo, None);
+            let _ = salvar(true, editor, prefs, abas, status, turma, dialogo, None, projeto);
         }
         Acao::FecharAba => fechar_aba(None, Depois::SoFechar, editor, prefs, abas, status, dialogo),
         Acao::IrParaLinha => dialogo.set(Dialogo::IrParaLinha),
@@ -341,6 +342,7 @@ pub fn salvar(
     turma: State<Turma>,
     dialogo: State<Dialogo>,
     expected_override: Option<Expected>,
+    projeto: State<Projeto>,
 ) -> bool {
     sincronizar(&mut abas.write(), &editor.read());
     let rel_remoto = abas.read().atual().rel_remoto.clone();
@@ -375,6 +377,7 @@ pub fn salvar(
         turma,
         dialogo,
         expected_override,
+        projeto,
     )
 }
 
@@ -422,11 +425,12 @@ pub fn confirmar_descarte(
     status: State<String>,
     mut dialogo: State<Dialogo>,
     turma: State<Turma>,
+    projeto: State<Projeto>,
 ) {
     let Dialogo::Confirmar { id, depois } = dialogo.read().clone() else {
         return;
     };
-    if salvar_antes && !salvar(false, editor, prefs, abas, status, turma, dialogo, None) {
+    if salvar_antes && !salvar(false, editor, prefs, abas, status, turma, dialogo, None, projeto) {
         return;
     }
     if !salvar_antes {
@@ -508,6 +512,7 @@ pub fn restaurar_arquivo(
     prefs: State<Prefs>,
     abas: State<Abas>,
     status: State<String>,
+    mut projeto: State<Projeto>,
 ) {
     let arquivo = prefs.read().arquivo.clone();
     if arquivo.is_empty() {
@@ -515,7 +520,78 @@ pub fn restaurar_arquivo(
     }
     let path = crate::prefs::expand_tilde(&arquivo);
     if path.is_file() {
+        let raiz = projeto.read().raiz.clone();
+        if let Some(raiz) = raiz
+            && let Some(rel) = rel_na_raiz(&raiz, &path)
+        {
+            projeto.write().revelar(&rel);
+        }
         abrir_caminho(path, editor, prefs, abas, status);
+    }
+}
+
+/// Clique direito num nó: seleciona e abre o menu (Novo / Pasta / Renomear / Apagar).
+pub fn menu_contexto_arvore(
+    rel: String,
+    mut projeto: State<Projeto>,
+    dialogo: State<Dialogo>,
+    nome_campo: State<String>,
+) {
+    projeto.write().selecionado = Some(rel);
+    ContextMenu::open_from_down(
+        Menu::new()
+            .child(
+                MenuButton::new()
+                    .on_press(move |_| {
+                        pedir_nome(
+                            DepoisNome::NovoArquivo(pasta_selecionada(projeto)),
+                            dialogo,
+                            nome_campo,
+                        )
+                    })
+                    .child("Novo ficheiro"),
+            )
+            .child(
+                MenuButton::new()
+                    .on_press(move |_| {
+                        pedir_nome(
+                            DepoisNome::NovaPasta(pasta_selecionada(projeto)),
+                            dialogo,
+                            nome_campo,
+                        )
+                    })
+                    .child("Nova pasta"),
+            )
+            .child(
+                MenuButton::new()
+                    .on_press(move |_| {
+                        if let Some(rel) = projeto.read().selecionado.clone() {
+                            pedir_nome(DepoisNome::Renomear(rel), dialogo, nome_campo);
+                        }
+                    })
+                    .child("Renomear"),
+            )
+            .child(
+                MenuButton::new()
+                    .on_press(move |_| pedir_apagar(dialogo, projeto))
+                    .child("Apagar"),
+            ),
+    );
+}
+
+pub fn atualizar_arvore(
+    mut projeto: State<Projeto>,
+    turma: State<Turma>,
+    mut status: State<String>,
+) {
+    let r = if projeto.read().remoto && turma.read().conectado {
+        turma.read().recarregar_arvore(&mut projeto.write())
+    } else {
+        projeto.write().recarregar()
+    };
+    match r {
+        Ok(()) => status.set("Árvore atualizada".into()),
+        Err(e) => status.set(e),
     }
 }
 
@@ -702,6 +778,9 @@ pub fn confirmar_nome(
     let r = match depois {
         DepoisNome::NovoArquivo(pasta) => criar_arquivo(&raiz, &pasta, nome).map(|p| {
             let _ = projeto.write().recarregar();
+            if let Some(rel) = rel_na_raiz(&raiz, &p) {
+                projeto.write().revelar(&rel);
+            }
             abrir_caminho(p, editor, prefs, abas, status);
         }),
         DepoisNome::NovaPasta(pasta) => criar_pasta(&raiz, &pasta, nome).map(|_| {
@@ -710,6 +789,9 @@ pub fn confirmar_nome(
         }),
         DepoisNome::Renomear(rel) => renomear(&raiz, &rel, nome).map(|p| {
             let _ = projeto.write().recarregar();
+            if let Some(rel) = rel_na_raiz(&raiz, &p) {
+                projeto.write().revelar(&rel);
+            }
             if p.is_file() {
                 abrir_caminho(p, editor, prefs, abas, status);
             } else {
@@ -830,7 +912,7 @@ pub fn abrir_projeto_servidor(
     match resultado {
         Ok(()) => {
             status.set(format!("Projeto {nome}"));
-            restaurar_arquivo(editor, prefs, abas, status);
+            restaurar_arquivo(editor, prefs, abas, status, projeto);
             true
         }
         Err(e) => {
@@ -866,7 +948,7 @@ pub fn abrir_recente(
                     turma.write().conectado = false;
                     turma.write().projeto.clear();
                     status.set("Projeto aberto".into());
-                    restaurar_arquivo(editor, prefs, abas, status);
+                    restaurar_arquivo(editor, prefs, abas, status, projeto);
                 }
                 Err(e) => {
                     prefs.write().esquecer_recente(&marca);
@@ -970,6 +1052,7 @@ pub fn resolver_conflito(
     mut status: State<String>,
     mut dialogo: State<Dialogo>,
     turma: State<Turma>,
+    projeto: State<Projeto>,
 ) {
     let Dialogo::Conflito {
         nome,
@@ -1003,7 +1086,7 @@ pub fn resolver_conflito(
         }
         "salvar_como" => {
             dialogo.set(Dialogo::Nenhum);
-            let _ = salvar(true, editor, prefs, abas, status, turma, dialogo, None);
+            let _ = salvar(true, editor, prefs, abas, status, turma, dialogo, None, projeto);
         }
         "substituir" => {
             let expected = match revisao_disco {
@@ -1020,6 +1103,7 @@ pub fn resolver_conflito(
                 turma,
                 dialogo,
                 Some(expected),
+                projeto,
             );
         }
         _ => {
@@ -1402,7 +1486,7 @@ pub fn aplicar_fundo(
                         turma.write().conectado = false;
                         turma.write().projeto.clear();
                         status.set("Projeto aberto".into());
-                        restaurar_arquivo(editor, prefs, abas, status);
+                        restaurar_arquivo(editor, prefs, abas, status, projeto);
                     }
                     Err(e) => status.set(e),
                 }
@@ -1422,6 +1506,7 @@ pub fn aplicar_fundo(
                     turma,
                     dialogo,
                     None,
+                    projeto,
                 );
             }
             ResultadoFundo::Conectou { resultado, projeto: nome } => match resultado {
@@ -1461,6 +1546,7 @@ fn salvar_em(
     turma: State<Turma>,
     mut dialogo: State<Dialogo>,
     expected_override: Option<Expected>,
+    mut projeto: State<Projeto>,
 ) -> bool {
     sincronizar(&mut abas.write(), &editor.read());
     let rel_remoto = abas.read().atual().rel_remoto.clone();
@@ -1500,6 +1586,15 @@ fn salvar_em(
             crate::documentos::apagar_rascunho(abas.read().atual().id);
             prefs.write().arquivo = caminho.display().to_string();
             prefs.read().save();
+            let raiz = projeto.read().raiz.clone();
+            if let Some(raiz) = raiz
+                && caminho.starts_with(&raiz)
+            {
+                let _ = projeto.write().recarregar();
+                if let Some(rel) = rel_na_raiz(&raiz, &caminho) {
+                    projeto.write().revelar(&rel);
+                }
+            }
             status.set(format!("Salvo {}", nome_de_caminho(&caminho)));
             true
         }

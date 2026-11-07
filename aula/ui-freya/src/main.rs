@@ -35,6 +35,7 @@ use crate::{
     atalhos::{Acao, acao_de_tecla_com_foco},
     comandos::{
         achar, adicionar_observado, abrir_projeto_servidor, aplicar, aplicar_eventos, aplicar_fundo,
+        atualizar_arvore,
         substituir_todas_no_arquivo, substituir_uma,
         aplicar_sugestao, abrir_recente, alternar_ponto_em, clicar_arvore, confirmar_apagar, confirmar_descarte, confirmar_nome,
         conectar_servidor, criar_projeto_servidor, descartar_rascunhos, escolher_projeto,
@@ -42,7 +43,8 @@ use crate::{
         fechar_aba, clique_tela_graf, destacar_graficos, enviar_repl, fechar_repl, fechar_tela_graf,
         tecla_tela_graf,
         ir_para_linha, ir_para_pausa, ir_para_saida, limpar_repl, parar_repl, pasta_selecionada,
-        pedir_apagar, pedir_nome, recuperar_rascunhos, reiniciar_repl, remover_observado,
+        menu_contexto_arvore, pedir_apagar, pedir_nome, recuperar_rascunhos, reiniciar_repl,
+        remover_observado,
         resolver_conflito, responder_leia, restaurar_arquivo, selecionar_aba,
     },
     ajuda::{Sugestao, assinatura, catalogo, ficha},
@@ -215,7 +217,7 @@ fn app() -> impl IntoElement {
         let pasta = restaurar_inicio(&prefs.read());
         if let Some(pasta) = pasta {
             let _ = abrir_raiz(&mut projeto.write(), &mut prefs.write(), pasta);
-            restaurar_arquivo(editor, prefs, abas, status);
+            restaurar_arquivo(editor, prefs, abas, status, projeto);
         }
         let rascunhos = crate::turma::listar_rascunhos();
         if !rascunhos.is_empty() {
@@ -313,6 +315,7 @@ fn app() -> impl IntoElement {
         .height(Size::fill())
         .background(paleta.fundo)
         .color(paleta.texto)
+        .child(ContextMenuViewer::new())
         .on_global_key_down({
             let dialogo_atalho = dialogo_agora.clone();
             let foco_campos = foco_campos.clone();
@@ -407,6 +410,8 @@ fn app() -> impl IntoElement {
                             },
                             move || pedir_apagar(dialogo, projeto),
                             move || escolher_projeto(editor, prefs, abas, status, projeto, turma),
+                            move || atualizar_arvore(projeto, turma, status),
+                            move |rel| menu_contexto_arvore(rel, projeto, dialogo, nome_campo),
                         ))
                         .child(alca_vertical(paleta, largura_arvore, false, arrasto_arvore))
                 }))
@@ -632,8 +637,8 @@ fn app() -> impl IntoElement {
                 dialogo_confirmar(
                     paleta,
                     nome,
-                    move || confirmar_descarte(true, editor, prefs, abas, status, dialogo, turma),
-                    move || confirmar_descarte(false, editor, prefs, abas, status, dialogo, turma),
+                    move || confirmar_descarte(true, editor, prefs, abas, status, dialogo, turma, projeto),
+                    move || confirmar_descarte(false, editor, prefs, abas, status, dialogo, turma, projeto),
                     move || {
                         let mut dialogo = dialogo;
                         dialogo.set(Dialogo::Nenhum);
@@ -758,11 +763,11 @@ fn app() -> impl IntoElement {
             .map(|nome| {
                 dialogo_conflito(
                     nome,
-                    move || resolver_conflito("comparar", editor, prefs, abas, status, dialogo, turma),
-                    move || resolver_conflito("recarregar", editor, prefs, abas, status, dialogo, turma),
-                    move || resolver_conflito("salvar_como", editor, prefs, abas, status, dialogo, turma),
-                    move || resolver_conflito("substituir", editor, prefs, abas, status, dialogo, turma),
-                    move || resolver_conflito("cancelar", editor, prefs, abas, status, dialogo, turma),
+                    move || resolver_conflito("comparar", editor, prefs, abas, status, dialogo, turma, projeto),
+                    move || resolver_conflito("recarregar", editor, prefs, abas, status, dialogo, turma, projeto),
+                    move || resolver_conflito("salvar_como", editor, prefs, abas, status, dialogo, turma, projeto),
+                    move || resolver_conflito("substituir", editor, prefs, abas, status, dialogo, turma, projeto),
+                    move || resolver_conflito("cancelar", editor, prefs, abas, status, dialogo, turma, projeto),
                 )
             }),
         )

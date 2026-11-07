@@ -851,6 +851,8 @@ pub fn painel_arvore(
     on_renomear: impl Fn() + Copy + 'static,
     on_apagar: impl Fn() + Copy + 'static,
     on_projeto: impl Fn() + Copy + 'static,
+    on_atualizar: impl Fn() + Copy + 'static,
+    on_contexto: impl Fn(String) + Copy + 'static,
 ) -> impl IntoElement {
     let mut lista = rect()
         .direction(Direction::Vertical)
@@ -876,7 +878,14 @@ pub fn painel_arvore(
                 .width(Size::fill())
                 .background(fundo)
                 .padding((2.0, 6.0, 2.0, pad))
-                .on_press(move |_| on_abrir(rel.clone()))
+                .on_press({
+                    let rel = rel.clone();
+                    move |_| on_abrir(rel.clone())
+                })
+                .on_secondary_down({
+                    let rel = rel.clone();
+                    move |_| on_contexto(rel.clone())
+                })
                 .child(label().font_size(13.0).text(format!("{marca}{}", no.nome))),
         );
     }
@@ -914,11 +923,23 @@ pub fn painel_arvore(
                         }),
                 )
                 .child(
-                    Button::new()
-                        .flat()
-                        .compact()
-                        .on_press(move |_| on_projeto())
-                        .child("…"),
+                    rect()
+                        .direction(Direction::Horizontal)
+                        .spacing(4.0)
+                        .child(
+                            Button::new()
+                                .flat()
+                                .compact()
+                                .on_press(move |_| on_atualizar())
+                                .child("↻"),
+                        )
+                        .child(
+                            Button::new()
+                                .flat()
+                                .compact()
+                                .on_press(move |_| on_projeto())
+                                .child("…"),
+                        ),
                 ),
         )
         .child(ScrollView::new().height(Size::fill()).child(lista))
