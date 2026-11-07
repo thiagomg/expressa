@@ -301,18 +301,20 @@ pub fn painel_console(
                 } else {
                     t.fg.unwrap_or(paleta.texto)
                 };
-                row = row.child(
-                    label()
-                        .font_size(13.0)
-                        .font_family("DejaVu Sans Mono")
-                        .color(cor)
-                        .font_weight(if t.negrito {
-                            FontWeight::BOLD
-                        } else {
-                            FontWeight::NORMAL
-                        })
-                        .text(t.texto.clone()),
-                );
+                let lab = label()
+                    .font_size(13.0)
+                    .font_family("DejaVu Sans Mono")
+                    .color(cor)
+                    .font_weight(if t.negrito {
+                        FontWeight::BOLD
+                    } else {
+                        FontWeight::NORMAL
+                    })
+                    .text(t.texto.clone());
+                row = row.child(match t.bg {
+                    Some(bg) => rect().background(bg).child(lab),
+                    None => rect().child(lab),
+                });
             }
         }
         row = row.on_press(move |_| on_linha(texto.clone()));
