@@ -41,4 +41,39 @@ mod tests {
         assert!(dump.contains("keyword"), "{dump}");
         assert!(dump.contains("string"), "{dump}");
     }
+
+    #[test]
+    fn dois_pontos_ident_nao_e_variavel() {
+        let mut parser = tree_sitter::Parser::new();
+        parser
+            .set_language(&super::LANGUAGE.into())
+            .expect("gramática Expressa");
+        let tree = parser
+            .parse("g.cart::plote(função(x) { x }, :azul)\n", None)
+            .expect("árvore");
+        let dump = tree.root_node().to_sexp();
+        assert!(dump.contains("key_ident"), "{dump}");
+        assert!(
+            !dump.contains("(identifier :azul)"),
+            "{dump}"
+        );
+        assert!(super::HIGHLIGHTS_QUERY.contains("(key_ident) @string"));
+    }
+
+    #[test]
+    fn gramatica_lista_as_keywords_da_aula() {
+        let grammar = include_str!("../../grammar.js");
+        for k in [
+            "função",
+            "funcao",
+            "início",
+            "inicio",
+            "não",
+            "nao",
+            "senão",
+            "senao",
+        ] {
+            assert!(grammar.contains(&format!("\"{k}\"")), "{k}");
+        }
+    }
 }

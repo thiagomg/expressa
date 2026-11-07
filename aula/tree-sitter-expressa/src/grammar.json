@@ -19,6 +19,10 @@
         },
         {
           "type": "SYMBOL",
+          "name": "key_ident"
+        },
+        {
+          "type": "SYMBOL",
           "name": "identifier"
         },
         {
@@ -237,11 +241,19 @@
         }
       ]
     },
+    "key_ident": {
+      "type": "TOKEN",
+      "content": {
+        "type": "PATTERN",
+        "value": ":[\\p{L}_][\\p{L}\\p{N}_]*",
+        "flags": "u"
+      }
+    },
     "identifier": {
       "type": "TOKEN",
       "content": {
         "type": "PATTERN",
-        "value": ":?[\\p{L}_][\\p{L}\\p{N}_]*",
+        "value": "[\\p{L}_][\\p{L}\\p{N}_]*",
         "flags": "u"
       }
     },

@@ -11,6 +11,7 @@ module.exports = grammar({
 
     _item: $ => choice(
       $.keyword,
+      $.key_ident,
       $.identifier,
       $.string,
       $.number,
@@ -59,7 +60,9 @@ module.exports = grammar({
       "continua",
     ),
 
-    identifier: _ => token(/:?[\p{L}_][\p{L}\p{N}_]*/u),
+    key_ident: _ => token(/:[\p{L}_][\p{L}\p{N}_]*/u),
+
+    identifier: _ => token(/[\p{L}_][\p{L}\p{N}_]*/u),
 
     punctuation: _ => choice(
       "{", "}", "(", ")", "[", "]", ",", "=", ".", ":",

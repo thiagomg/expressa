@@ -23,6 +23,10 @@
           "named": true
         },
         {
+          "type": "key_ident",
+          "named": true
+        },
+        {
           "type": "keyword",
           "named": true
         },
@@ -181,6 +185,10 @@
   {
     "type": "início",
     "named": false
+  },
+  {
+    "type": "key_ident",
+    "named": true
   },
   {
     "type": "nao",
