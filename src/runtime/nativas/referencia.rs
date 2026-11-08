@@ -54,6 +54,7 @@ const TELA: &str = include_str!("../../../docs/nativas/tela.lep");
 const MAT: &str = include_str!("../../../docs/nativas/mat.lep");
 const MATRIZ: &str = include_str!("../../../docs/nativas/matriz.lep");
 const ARQUIVO: &str = include_str!("../../../docs/nativas/arquivo.lep");
+const CRONO: &str = include_str!("../../../docs/nativas/crono.lep");
 const CARTESIANO: &str = include_str!("../../../docs/nativas/cartesiano.lep");
 const TELA_GRAFICA: &str = include_str!("../../../docs/nativas/tela_grafica.lep");
 const IMAGEM: &str = include_str!("../../../docs/nativas/imagem.lep");
@@ -91,6 +92,109 @@ pub fn lookup_alvo(alvo: &str) -> Option<&'static BuiltinDoc> {
     lookup_builtin_doc(alvo)
 }
 
+/// Help heading for a native module (`Núcleo`, `importe "tela"`).
+pub fn titulo_modulo(module: Option<&str>) -> String {
+    match module {
+        None => "Núcleo".to_string(),
+        Some(m) => format!("importe \"{m}\""),
+    }
+}
+
+/// Topic inside a module (`Texto`, `Data`, …). Empty when the module is one block.
+pub fn tema_de(module: Option<&str>, name: &str) -> &'static str {
+    match (module, name) {
+        (
+            None,
+            "escreva" | "escreva_erro" | "leia" | "leia_linhas" | "saia" | "durma" | "argumentos",
+        ) => "Entrada e saída",
+        (None, "numero" | "formato") => "Número",
+        (
+            None,
+            "formate" | "maiuscula" | "minuscula" | "sem_acento" | "substitua" | "procure"
+            | "separe" | "junte" | "limpe" | "comeca_com" | "termina_com",
+        ) => "Texto",
+        (None, "mapa" | "conjunto" | "tamanho" | "primeiro" | "ultimo" | "remova" | "ordene") => {
+            "Coleção"
+        }
+        (None, "ambiente") => "Sistema",
+        (None, "avalie" | "catalogo" | "ajuda" | "tipo" | "tipos") => "Linguagem",
+        (
+            Some("tela"),
+            "cls" | "casa" | "eh_terminal" | "colunas" | "linhas" | "posicao_cursor"
+            | "apague_linha",
+        ) => "Tela",
+        (Some("tela"), "pinte" | "fundo" | "negrito") => "Cor",
+        (Some("tela"), "quadro" | "nova_linha" | "bloco" | "escreva_em") => "Quadro",
+        (Some("mat"), "aleatorio" | "semente") => "Aleatório",
+        (
+            Some("mat"),
+            "seno" | "cosseno" | "tangente" | "arcoseno" | "arcocosseno" | "arcotangente"
+            | "arcotangente2" | "radianos" | "graus",
+        ) => "Trig",
+        (Some("mat"), "raiz" | "pi" | "exp" | "log" | "log10" | "potencia") => "Análise",
+        (Some("mat"), "piso" | "teto" | "arredonde") => "Arredondar",
+        (
+            Some("arquivo"),
+            "leia_arquivo" | "salve_arquivo" | "adicione_arquivo" | "leia_csv" | "salve_csv",
+        ) => "Conteúdo",
+        (
+            Some("arquivo"),
+            "existe" | "eh_pasta" | "liste" | "crie_pasta" | "apague_arquivo" | "apague_pasta"
+            | "mova" | "copie",
+        ) => "Pastas e arquivos",
+        (
+            Some("arquivo"),
+            "junte_caminho" | "nome_do_arquivo" | "pasta_de" | "extensao" | "pasta_atual",
+        ) => "Caminho",
+        _ => "",
+    }
+}
+
+fn ordem_modulo(module: Option<&str>) -> u8 {
+    match module {
+        None => 0,
+        Some("tela") => 1,
+        Some("mat") => 2,
+        Some("matriz") => 3,
+        Some("arquivo") => 4,
+        Some("crono") => 5,
+        Some("cartesiano") => 6,
+        Some("tela_grafica") => 7,
+        Some("imagem") => 8,
+        Some("processo") => 9,
+        _ => 10,
+    }
+}
+
+fn ordem_tema(module: Option<&str>, tema: &str) -> u8 {
+    let temas: &[&str] = match module {
+        None => &[
+            "Entrada e saída",
+            "Número",
+            "Texto",
+            "Coleção",
+            "Sistema",
+            "Linguagem",
+        ],
+        Some("tela") => &["Tela", "Cor", "Quadro"],
+        Some("mat") => &["Aleatório", "Trig", "Análise", "Arredondar"],
+        Some("arquivo") => &["Conteúdo", "Pastas e arquivos", "Caminho"],
+        _ => return 0,
+    };
+    temas.iter().position(|&t| t == tema).unwrap_or(99) as u8
+}
+
+/// Builtins in help order: module, then topic, then file order inside a topic.
+pub fn docs_agrupados() -> Vec<&'static BuiltinDoc> {
+    let mut docs: Vec<&BuiltinDoc> = builtin_docs().iter().collect();
+    docs.sort_by_key(|d| {
+        let m = d.module.as_deref();
+        let tema = tema_de(m, &d.name);
+        (ordem_modulo(m), ordem_tema(m, tema))
+    });
+    docs
+}
+
 fn nativa_aliases(canon: &str) -> impl Iterator<Item = &'static str> {
     NATIVAS
         .iter()
@@ -107,6 +211,7 @@ fn load_all() -> Vec<BuiltinDoc> {
         (MAT, Some("mat")),
         (MATRIZ, Some("matriz")),
         (ARQUIVO, Some("arquivo")),
+        (CRONO, Some("crono")),
         (CARTESIANO, Some("cartesiano")),
         (TELA_GRAFICA, Some("tela_grafica")),
         (IMAGEM, Some("imagem")),
@@ -249,7 +354,7 @@ fn summary_and_example(doc: &str) -> (String, String) {
 
 #[cfg(test)]
 mod tests {
-    use super::{builtin_docs, lookup_alvo, lookup_ficha};
+    use super::{builtin_docs, docs_agrupados, lookup_alvo, lookup_ficha, tema_de};
     use crate::runtime::nativas::NATIVAS;
 
     #[test]
@@ -287,5 +392,72 @@ mod tests {
         assert!(d.signatures.len() >= 2);
         assert!(!d.summary.is_empty());
         assert!(builtin_docs().len() > NATIVAS.len());
+    }
+
+    #[test]
+    fn temas_cobrem_nucleo_tela_mat_arquivo() {
+        for d in builtin_docs() {
+            let t = tema_de(d.module.as_deref(), &d.name);
+            match d.module.as_deref() {
+                None | Some("tela" | "mat" | "arquivo") => {
+                    assert!(!t.is_empty(), "falta tema para {} ({:?})", d.name, d.module);
+                }
+                Some(_) => {
+                    assert!(
+                        t.is_empty(),
+                        "tema inesperado {} para {}::{}",
+                        t,
+                        d.module.as_deref().unwrap(),
+                        d.name
+                    );
+                }
+            }
+        }
+    }
+
+    fn fatia_do_tema<'a>(nomes: &[&'a str], module: Option<&str>, tema: &str) -> Vec<&'a str> {
+        let start = nomes
+            .iter()
+            .position(|n| tema_de(module, n) == tema)
+            .unwrap_or_else(|| panic!("tema {tema} ausente"));
+        nomes
+            .iter()
+            .skip(start)
+            .take_while(|n| tema_de(module, n) == tema)
+            .copied()
+            .collect()
+    }
+
+    #[test]
+    fn docs_agrupados_junta_texto() {
+        let nucleo: Vec<&str> = docs_agrupados()
+            .into_iter()
+            .filter(|d| d.module.is_none())
+            .map(|d| d.name.as_str())
+            .collect();
+        let texto = fatia_do_tema(&nucleo, None, "Texto");
+        assert!(texto.contains(&"formate"));
+        assert!(texto.contains(&"maiuscula"));
+        assert!(texto.contains(&"limpe"));
+        assert!(texto.contains(&"comeca_com"));
+        assert_eq!(
+            texto.len(),
+            nucleo
+                .iter()
+                .filter(|n| tema_de(None, n) == "Texto")
+                .count()
+        );
+        let crono: Vec<&str> = docs_agrupados()
+            .into_iter()
+            .filter(|d| d.module.as_deref() == Some("crono"))
+            .map(|d| d.name.as_str())
+            .collect();
+        assert!(crono.contains(&"agora"));
+        assert!(crono.contains(&"data"));
+        assert!(crono.contains(&"hoje"));
+        assert!(crono.contains(&"adicione"));
+        assert!(crono.contains(&"dias_entre"));
+        assert!(crono.contains(&"eh_bissexto"));
+        assert!(crono.contains(&"formate_data"));
     }
 }

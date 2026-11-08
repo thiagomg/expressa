@@ -2,12 +2,12 @@
 //! the cursor, the call around it. Works on plain text (often incomplete
 //! while typing), so it does not use the parser. Offsets are byte offsets.
 //!
-//! Native functions come from the interpreter (`NATIVAS`, `lookup_builtin_doc`),
+//! Native functions come from the interpreter (`NATIVAS`, `lookup_alvo`),
 //! so the help always matches what `expressa` accepts.
 
 use std::sync::OnceLock;
 
-use expressa::runtime::{NATIVAS, builtin_docs, lookup_builtin_doc};
+use expressa::runtime::{builtin_docs, lookup_alvo, NATIVAS};
 
 /// Reserved words (`src/lexer/tokens.rs`, checked by a test).
 pub const KEYWORDS: &[&str] = &[
@@ -61,7 +61,11 @@ pub fn natives() -> &'static [Native] {
         let mut out: Vec<Native> = NATIVAS
             .iter()
             .map(|n| {
-                let doc = lookup_builtin_doc(n.names[0]);
+                let alvo = match n.module {
+                    Some(m) => format!("{m}::{}", n.names[0]),
+                    None => n.names[0].to_string(),
+                };
+                let doc = lookup_alvo(&alvo);
                 Native {
                     name: n.names[0],
                     aliases: n.names[1..].to_vec(),
@@ -760,6 +764,7 @@ mod tests {
             [
                 "arquivo",
                 "cartesiano",
+                "crono",
                 "imagem",
                 "mat",
                 "matriz",

@@ -68,7 +68,7 @@ pub(crate) struct Vm<'a, 'c> {
     modules: HashMap<PathBuf, Rc<RefCell<Env>>>,
     pub(crate) native_modules: HashMap<String, Rc<RefCell<Env>>>,
     /// If set, file I/O and `importe` must stay under this directory.
-    workspace_root: Option<PathBuf>,
+    pub(crate) workspace_root: Option<PathBuf>,
     deadline: Option<Instant>,
     pub(crate) leia_host: Option<&'a mut dyn LeiaHost>,
     pub(crate) cartesiano_host: Option<&'c mut dyn CartesianoHost>,
@@ -665,6 +665,15 @@ impl<'a, 'c> Vm<'a, 'c> {
         } else {
             let bindings = module_env.borrow().bindings_sorted();
             for (name, value) in bindings {
+                if Env::definido_no_programa(env, &name) {
+                    return Err(self.err(
+                        format!(
+                            "já existe `{name}` neste escopo. Use um apelido: m = importe \"{}\"",
+                            import.path
+                        ),
+                        import.span,
+                    ));
+                }
                 self.assign_name(env, &name, value, import.span)?;
             }
         }
@@ -690,9 +699,18 @@ impl<'a, 'c> Vm<'a, 'c> {
     }
 
     pub(crate) fn confine(&self, path: PathBuf, span: Span) -> Result<PathBuf, EvalError> {
-        let Some(root) = &self.workspace_root else {
-            return Ok(path);
-        };
+        match &self.workspace_root {
+            None => Ok(path),
+            Some(root) => self.confine_in(path, root, span),
+        }
+    }
+
+    pub(crate) fn confine_in(
+        &self,
+        path: PathBuf,
+        root: &Path,
+        span: Span,
+    ) -> Result<PathBuf, EvalError> {
         let full = lexical_normalize(&path);
         if !full.starts_with(root) {
             return Err(self.err(
@@ -2029,7 +2047,7 @@ impl<'a, 'c> Vm<'a, 'c> {
     }
 }
 
-fn lexical_normalize(path: &Path) -> PathBuf {
+pub(crate) fn lexical_normalize(path: &Path) -> PathBuf {
     use std::path::Component;
     let mut out = PathBuf::new();
     for c in path.components() {
@@ -3262,6 +3280,28 @@ escreva(soma(4, 5))
         let out = run_to_string(src, main.to_str().unwrap()).unwrap();
         assert_eq!(out, "5\n9\n");
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn importe_achatado_nao_cobre_nome_existente() {
+        let err = run_err(
+            r#"
+importe "tela"
+importe "tela_grafica"
+"#,
+        );
+        assert!(err.contains("já existe"), "{err}");
+        assert!(err.contains("fundo"), "{err}");
+        assert!(err.contains("m = importe \"tela_grafica\""), "{err}");
+        assert!(run_err("importe \"tela\"\nimporte \"tela\"\n").contains("já existe"));
+        assert_eq!(
+            run(r#"
+t = importe "tela"
+g = importe "tela_grafica"
+escreva(tipo(t::fundo), tipo(g::fundo))
+"#),
+            "funcao funcao\n"
+        );
     }
 
     #[test]

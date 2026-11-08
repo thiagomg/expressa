@@ -2,7 +2,8 @@
 //!
 //! Body indent is the **leading whitespace of the line that opened the
 //! block** plus 4, not `n_tokens * 4`. So `se a == 1 {` opens one level
-//! from column 0, not two.
+//! from column 0, not two. The same rule applies to `[` / `]` lists and
+//! `(` / `)` argument lists.
 
 use gtk::prelude::*;
 use sourceview5::Buffer as SourceBuffer;
@@ -55,11 +56,11 @@ fn events(code: &str) -> Vec<Ev> {
             continue;
         }
         match code[i..].chars().next() {
-            Some('{') => {
+            Some('{') | Some('[') | Some('(') => {
                 out.push(Ev::Open);
                 i += 1;
             }
-            Some('}') => {
+            Some('}') | Some(']') | Some(')') => {
                 out.push(Ev::Close);
                 i += 1;
             }
@@ -87,7 +88,10 @@ fn word_at(s: &str, i: usize, word: &str) -> bool {
 
 fn starts_with_closer(code: &str) -> bool {
     let t = code.trim_start();
-    t.starts_with('}') || (t.starts_with("fim") && word_at(t, 0, "fim"))
+    t.starts_with('}')
+        || t.starts_with(']')
+        || t.starts_with(')')
+        || (t.starts_with("fim") && word_at(t, 0, "fim"))
 }
 
 /// Stack of leading indents of lines that still have an open block.
@@ -135,7 +139,7 @@ pub fn line_starts_with_closer(buffer: &SourceBuffer, line: i32) -> bool {
     starts_with_closer(&t)
 }
 
-/// Reindent `line` only if it is a closer (`fim` / `}`).
+/// Reindent `line` only if it is a closer (`fim` / `}` / `]` / `)`).
 pub fn indent_if_closer(buffer: &SourceBuffer, line: i32) {
     if line_starts_with_closer(buffer, line) {
         indent_line(buffer, line);
@@ -351,8 +355,8 @@ pub fn block_pair(text: &str, cursor: usize) -> Option<((usize, usize), (usize, 
     Some(((tokens[o].1, tokens[o].2), (tokens[c].1, tokens[c].2)))
 }
 
-/// Electric indent: after a typed newline, indent the new line; after `}`
-/// or the `m` of `fim` at the start of a line, reindent it.
+/// Electric indent: after a typed newline, indent the new line; after `}`,
+/// `]`, `)`, or the `m` of `fim` at the start of a line, reindent it.
 ///
 /// Runs after the buffer's own `insert-text` handler (GtkSourceBuffer still
 /// uses the iterator inside it), within the keystroke's user action: one
@@ -398,7 +402,7 @@ pub fn attach_electric(buffer: &SourceBuffer) {
         let line = at.line();
         match text.as_str() {
             "\n" => indent_line(&b, line),
-            "}" | "m" => indent_if_closer(&b, line),
+            "}" | "]" | ")" | "m" => indent_if_closer(&b, line),
             _ => {}
         }
         None
@@ -493,6 +497,38 @@ mod tests {
         assert_eq!(want_indent(&[r#"s = "{""#], "x"), 0);
         assert_eq!(want_indent(&["x // {"], "y"), 0);
         assert_eq!(want_indent(&["se a {", r#"    s = "fim""#], "x"), 4);
+    }
+
+    #[test]
+    fn list_items_are_indented() {
+        assert_eq!(
+            want_indent(&["tarefas = ["], r#"nova("Dormir", falso),"#),
+            4
+        );
+        assert_eq!(
+            want_indent(
+                &["tarefas = [", r#"    nova("Dormir", falso),"#],
+                r#"nova("Acordar", falso),"#
+            ),
+            4
+        );
+        assert_eq!(
+            want_indent(
+                &[
+                    "tarefas = [",
+                    r#"    nova("Dormir", falso),"#,
+                    r#"    nova("Acordar", falso),"#,
+                    r#"    nova("Trabalhar", verdadeiro)"#,
+                ],
+                "]"
+            ),
+            0
+        );
+        assert_eq!(want_indent(&["x = verso[1..5]"], "y = 1"), 0);
+        assert_eq!(want_indent(&["xs = [", "    ["], "1"), 8);
+        assert_eq!(want_indent(&["xs = [", "    [", "        1"], "]"), 4);
+        assert_eq!(want_indent(&["escreva("], "1,"), 4);
+        assert_eq!(want_indent(&["escreva(", "    1,"], ")"), 0);
     }
 }
 
@@ -622,6 +658,21 @@ mod buffer_tests {
             assert_eq!(
                 text(&b),
                 "se a {\n    x\n\n    se b {\n        y\n    }\n}\n"
+            );
+
+            // Multiline list: Tab and reindent follow the `[`.
+            b.set_text("tarefas = [\nnova(\"Dormir\", falso),\nnova(\"Acordar\", falso),\nnova(\"Trabalhar\", verdadeiro)\n]\n");
+            select(&b, 0, 0, 5, 0);
+            indent_region_or_line(&b);
+            assert_eq!(
+                text(&b),
+                "tarefas = [\n    nova(\"Dormir\", falso),\n    nova(\"Acordar\", falso),\n    nova(\"Trabalhar\", verdadeiro)\n]\n"
+            );
+            cursor(&b, 1, 0);
+            tab(&b);
+            assert_eq!(
+                text(&b),
+                "tarefas = [\n    nova(\"Dormir\", falso),\n    nova(\"Acordar\", falso),\n    nova(\"Trabalhar\", verdadeiro)\n]\n"
             );
         });
     }

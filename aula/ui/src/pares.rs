@@ -406,6 +406,10 @@ mod tests {
             digitar(&b, "se x {\n");
             assert_eq!(com_cursor(&b), "se x {\n    |\n}");
 
+            b.set_text("");
+            digitar(&b, "tarefas = [\n");
+            assert_eq!(com_cursor(&b), "tarefas = [\n    |\n]");
+
             // A paste is left alone.
             b.set_text("");
             b.begin_user_action();

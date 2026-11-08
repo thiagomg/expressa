@@ -46,6 +46,7 @@
   "modules": [
     "arquivo",
     "cartesiano",
+    "crono",
     "imagem",
     "mat",
     "matriz",
@@ -428,28 +429,6 @@
       "doc": "Verdadeiro se o texto termina com o sufixo.\n\nExemplo: termina_com(\"relatorio.csv\", \".csv\")"
     },
     {
-      "name": "agora",
-      "aliases": [],
-      "module": null,
-      "kind": "funcao",
-      "signatures": [
-        "agora()"
-      ],
-      "summary": "Data e hora locais: mapa :ano, :mes, :dia, :hora, :minuto, :segundo.",
-      "doc": "Data e hora locais: mapa :ano, :mes, :dia, :hora, :minuto, :segundo.\n\nTambém :dia_da_semana (1 = domingo … 7 = sábado) e :epoch (segundos\ndesde 1970). Fora do Linux/macOS o horário é UTC.\n\nExemplo: agora():ano"
-    },
-    {
-      "name": "formate_data",
-      "aliases": [],
-      "module": null,
-      "kind": "funcao",
-      "signatures": [
-        "formate_data(data, modelo)"
-      ],
-      "summary": "Monta um texto com a data: %Y ano, %m mês, %d dia, %H hora, %M minuto, %S segundo.",
-      "doc": "Monta um texto com a data: %Y ano, %m mês, %d dia, %H hora, %M minuto, %S segundo.\n\nA data é o mapa de agora() ou um número de segundos desde 1970 (:epoch).\n%% escreve %. Outra letra depois de % é erro.\n\nExemplo: formate_data(agora(), \"backup-%Y-%m-%d.tar\")"
-    },
-    {
       "name": "cls",
       "aliases": [
         "limpe_tela"
@@ -461,6 +440,31 @@
       ],
       "summary": "Limpa a tela do terminal. Também limpe_tela().",
       "doc": "Limpa a tela do terminal. Também limpe_tela().\n\nColoca o cursor no canto superior esquerdo. Sem argumentos.\nNo REPL, a linha cls (sem parênteses) também limpa a tela.\nNa Aula, limpa o painel de saída.\nEm uma animação, cls() a cada quadro pisca: use casa() no laço.\n\nExemplo: cls()"
+    },
+    {
+      "name": "posicao_cursor",
+      "aliases": [
+        "posição_cursor"
+      ],
+      "module": "tela",
+      "kind": "funcao",
+      "signatures": [
+        "posicao_cursor()",
+        "posicao_cursor(pos)"
+      ],
+      "summary": "Consulta ou altera a posição do cursor de saída. Também posição_cursor().",
+      "doc": "Consulta ou altera a posição do cursor de saída. Também posição_cursor().\n\nSem argumentos, devolve um mapa {:linha, :coluna}, com posições a partir de zero.\nCom um mapa, move o cursor sem apagar nem alterar o mapa recebido.\nFunciona na Aula e em terminais compatíveis. A consulta falha em pipes/arquivos\nou quando o terminal não responde. Na Aula, as linhas são as quebras explícitas:\no ajuste visual de uma linha longa não muda a numeração. Rolagem pode invalidar\nposições guardadas. Na Aula, leia() começa na posição escolhida e substitui\no restante daquela linha, preservando as linhas de baixo.\n\nExemplo: pos = posicao_cursor()"
+    },
+    {
+      "name": "apague_linha",
+      "aliases": [],
+      "module": "tela",
+      "kind": "funcao",
+      "signatures": [
+        "apague_linha()"
+      ],
+      "summary": "Apaga a linha atual inteira e deixa o cursor no início dela.",
+      "doc": "Apaga a linha atual inteira e deixa o cursor no início dela.\n\nNão remove a linha nem desloca as linhas de baixo. Sem argumentos.\nFunciona no terminal e no painel de saída da Aula.\n\nExemplo: apague_linha()"
     },
     {
       "name": "casa",
@@ -914,7 +918,7 @@
         "leia_arquivo(caminho)"
       ],
       "summary": "Lê o arquivo; cada linha vira um texto (sem quebra de linha).",
-      "doc": "Lê o arquivo; cada linha vira um texto (sem quebra de linha).\n\nArquivo vazio devolve []. Caminhos relativos partem da pasta do .lep.\nFalhas de leitura são erros de execução (se_falhar).\n\nExemplo: leia_arquivo(\"dados.txt\") se_falhar []"
+      "doc": "Lê o arquivo; cada linha vira um texto (sem quebra de linha).\n\nArquivo vazio devolve []. Caminhos relativos partem da pasta do .lep.\n`~` e `~/pasta` são a pasta pessoal. Falhas de leitura são erros (se_falhar).\n\nExemplo: leia_arquivo(\"dados.txt\") se_falhar []"
     },
     {
       "name": "salve_arquivo",
@@ -1005,7 +1009,7 @@
         "crie_pasta(caminho)"
       ],
       "summary": "Cria a pasta e as que faltarem no caminho. Já existir não é erro.",
-      "doc": "Cria a pasta e as que faltarem no caminho. Já existir não é erro.\n\nExemplo: crie_pasta(\"saida/2024\")"
+      "doc": "Cria a pasta e as que faltarem no caminho. Já existir não é erro.\n\n`~` é a pasta pessoal: crie_pasta(\"~/.local/share/tarefas\").\n\nExemplo: crie_pasta(\"saida/2024\")"
     },
     {
       "name": "apague_arquivo",
@@ -1199,6 +1203,86 @@
       ],
       "summary": "Abre ou atualiza a janela deste documento e devolve o foco. Não espera fechar.",
       "doc": "Abre ou atualiza a janela deste documento e devolve o foco. Não espera fechar.\n\nO primeiro mostre abre; os seguintes só atualizam a mesma janela. Folha vazia é erro.\n\nExemplo: c.mostre()"
+    },
+    {
+      "name": "agora",
+      "aliases": [],
+      "module": "crono",
+      "kind": "funcao",
+      "signatures": [
+        "agora()"
+      ],
+      "summary": "Data e hora locais: mapa :ano, :mes, :dia, :hora, :minuto, :segundo.",
+      "doc": "Data e hora locais: mapa :ano, :mes, :dia, :hora, :minuto, :segundo.\n\nTambém :dia_da_semana (1 = domingo … 7 = sábado) e :epoch (segundos\ndesde 1970). Fora do Linux/macOS o horário é UTC.\n\nExemplo: agora():ano"
+    },
+    {
+      "name": "hoje",
+      "aliases": [],
+      "module": "crono",
+      "kind": "funcao",
+      "signatures": [
+        "hoje()"
+      ],
+      "summary": "Data de hoje à meia-noite local (hora, minuto e segundo 0).",
+      "doc": "Data de hoje à meia-noite local (hora, minuto e segundo 0).\n\nExemplo: hoje():dia"
+    },
+    {
+      "name": "data",
+      "aliases": [],
+      "module": "crono",
+      "kind": "funcao",
+      "signatures": [
+        "data(ano, mes, dia)",
+        "data(ano, mes, dia, hora, minuto, segundo)"
+      ],
+      "summary": "Constrói uma data. Sem hora, fica meia-noite (0, 0, 0).",
+      "doc": "Constrói uma data. Sem hora, fica meia-noite (0, 0, 0).\n\nData inválida (29 de fevereiro fora de bissexto, mês 13, …) é erro (se_falhar).\nO mapa é o mesmo de agora(): :ano :mes :dia :hora :minuto :segundo\n:dia_da_semana :epoch.\n\nExemplo: data(2024, 2, 29)"
+    },
+    {
+      "name": "adicione",
+      "aliases": [],
+      "module": "crono",
+      "kind": "funcao",
+      "signatures": [
+        "adicione(data, n, unidade)"
+      ],
+      "summary": "Soma n unidades à data. n pode ser negativo.",
+      "doc": "Soma n unidades à data. n pode ser negativo.\n\nUnidades: :dias, :meses, :anos, :horas, :minutos, :segundos.\nDias, meses e anos andam no calendário (31 de janeiro + 1 mês = último\ndia de fevereiro). Horas, minutos e segundos andam no relógio (:epoch).\n\nExemplo: data(2024, 1, 31).adicione(1, :meses)"
+    },
+    {
+      "name": "dias_entre",
+      "aliases": [],
+      "module": "crono",
+      "kind": "funcao",
+      "signatures": [
+        "dias_entre(a, b)"
+      ],
+      "summary": "Dias de calendário de a até b (positivo se b é depois; ignora a hora).",
+      "doc": "Dias de calendário de a até b (positivo se b é depois; ignora a hora).\n\nExemplo: dias_entre(data(2024, 1, 1), data(2024, 1, 8))"
+    },
+    {
+      "name": "eh_bissexto",
+      "aliases": [
+        "é_bissexto"
+      ],
+      "module": "crono",
+      "kind": "funcao",
+      "signatures": [
+        "eh_bissexto(ano)"
+      ],
+      "summary": "Verdadeiro se o ano é bissexto. Também é_bissexto. Aceita o mapa de data.",
+      "doc": "Verdadeiro se o ano é bissexto. Também é_bissexto. Aceita o mapa de data.\n\nExemplo: eh_bissexto(2024)"
+    },
+    {
+      "name": "formate_data",
+      "aliases": [],
+      "module": "crono",
+      "kind": "funcao",
+      "signatures": [
+        "formate_data(data, modelo)"
+      ],
+      "summary": "Monta um texto com a data: %Y ano, %m mês, %d dia, %H hora, %M minuto, %S segundo.",
+      "doc": "Monta um texto com a data: %Y ano, %m mês, %d dia, %H hora, %M minuto, %S segundo.\n\nA data é o mapa de agora() ou um número de segundos desde 1970 (:epoch).\n%% escreve %. Outra letra depois de % é erro.\n\nExemplo: formate_data(agora(), \"backup-%Y-%m-%d.tar\")"
     },
     {
       "name": "nova",

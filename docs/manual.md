@@ -151,7 +151,7 @@ importe "matematica"      // nomes soltos
 soma(10, 5)
 ```
 
-Nativos: `tela`, `mat`, `matriz`, `arquivo`, `cartesiano`, `tela_grafica`, `imagem`. Nome sem `/` nem `.lep` procura o nativo primeiro. `importe "./matriz"` força arquivo local.
+Nativos: `tela`, `mat`, `matriz`, `arquivo`, `crono`, `cartesiano`, `tela_grafica`, `imagem`. Nome sem `/` nem `.lep` procura o nativo primeiro. `importe "./matriz"` força arquivo local. Espalhar um nome que já existe é erro; use apelido (`g = importe "tela_grafica"`).
 
 ---
 
@@ -418,9 +418,9 @@ Verdadeiro ou falso.
 
 Variável de ambiente. Não existe → erro: `ambiente("EDITOR") se_falhar "vim"`.
 
-### `agora()` · `formate_data(data, modelo)`
+### `importe "crono"`
 
-`agora()` é um mapa `:ano` `:mes` `:dia` `:hora` `:minuto` `:segundo` `:dia_da_semana` (1 = domingo) `:epoch`. `formate_data(agora(), "%Y-%m-%d %H:%M:%S")`.
+`agora()` é um mapa `:ano` `:mes` `:dia` `:hora` `:minuto` `:segundo` `:dia_da_semana` (1 = domingo) `:epoch`. `hoje()` é meia-noite de hoje. `data(2024, 2, 29)` constrói uma data (com hora opcional). `adicione(d, n, :dias|:meses|:anos|:horas|:minutos|:segundos)` soma `n` (pode ser negativo). `dias_entre(a, b)` conta dias de calendário. `eh_bissexto(2024)`. `formate_data(agora(), "%Y-%m-%d %H:%M:%S")`.
 
 ### Listas e fatias
 
@@ -683,7 +683,7 @@ A * B            // produto de matrizes
 
 ## `importe "arquivo"`
 
-Caminhos relativos: pasta do `.lep`, não a pasta de onde você chamou `expressa`. Na Aula, só a pasta do projeto.
+Caminhos relativos: pasta do `.lep`, não a pasta de onde você chamou `expressa`. `~` e `~/pasta` são a pasta pessoal. Na Aula, caminhos relativos ficam na pasta do projeto; `~` pode escrever na casa.
 
 ### `leia_arquivo(caminho)`
 

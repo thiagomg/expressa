@@ -482,34 +482,42 @@ fn print_catalogo(v: &Value) {
 }
 
 fn print_help_funcoes() {
-    println!("Núcleo (sempre no escopo):\n");
-    print_docs_for(None);
-    for (mod_name, title) in [
-        ("matriz", r#"Módulo matriz — importe "matriz":"#),
-        ("arquivo", r#"Módulo arquivo — importe "arquivo":"#),
-        ("tela", r#"Módulo tela — importe "tela":"#),
-        ("mat", r#"Módulo mat — importe "mat":"#),
-        ("imagem", r#"Módulo imagem — importe "imagem":"#),
-        ("processo", r#"Módulo processo — importe "processo":"#),
-    ] {
-        println!("\n{title}\n");
-        print_docs_for(Some(mod_name));
-    }
-    println!("\n  ajuda <nome>          detalhe, ex.: ajuda raiz");
+    print!("{}", texto_ajuda_funcoes());
 }
 
-fn print_docs_for(module: Option<&str>) {
-    for doc in super::nativas::builtin_docs() {
-        if doc.module.as_deref() != module {
-            continue;
+fn texto_ajuda_funcoes() -> String {
+    use super::nativas::{docs_agrupados, tema_de};
+    let mut out = String::new();
+    let mut last_mod: Option<Option<&str>> = None;
+    let mut last_tema: Option<&str> = None;
+    for doc in docs_agrupados() {
+        let m = doc.module.as_deref();
+        if last_mod != Some(m) {
+            if last_mod.is_some() {
+                out.push('\n');
+            }
+            match m {
+                None => out.push_str("Núcleo (sempre no escopo):\n"),
+                Some(nome) => out.push_str(&format!("importe \"{nome}\":\n")),
+            }
+            last_mod = Some(m);
+            last_tema = None;
+        }
+        let tema = tema_de(m, &doc.name);
+        if !tema.is_empty() && last_tema != Some(tema) {
+            out.push_str(&format!("\n  {tema}\n"));
+            last_tema = Some(tema);
         }
         let label = if doc.signatures.is_empty() {
             doc.name.as_str()
         } else {
             doc.sig.as_str()
         };
-        println!("  {label:<22} {}", doc.summary);
+        let indent = if tema.is_empty() { "  " } else { "    " };
+        out.push_str(&format!("{indent}{label:<22} {}\n", doc.summary));
     }
+    out.push_str("\n  ajuda <nome>          detalhe, ex.: ajuda raiz\n");
+    out
 }
 
 fn print_help_linguagem() {
@@ -593,6 +601,20 @@ mod tests {
         let vals =
             eval_snippets(&["dobra = funcao(n)\ninicio\n    n * 2\nfim\n", "dobra(21)"]).unwrap();
         assert_eq!(vals.last().unwrap(), "42");
+    }
+
+    #[test]
+    fn ajuda_funcoes_lista_temas() {
+        let t = texto_ajuda_funcoes();
+        let i_texto = t.find("  Texto\n").expect(&t);
+        let i_maiuscula = t.find("maiuscula").expect(&t);
+        let i_crono = t.find("importe \"crono\":").expect(&t);
+        let i_agora = t.find("agora()").expect(&t);
+        assert!(i_texto < i_maiuscula, "{t}");
+        assert!(i_crono < i_agora, "{t}");
+        assert!(t.contains("importe \"cartesiano\":"), "{t}");
+        assert!(t.contains("importe \"tela_grafica\":"), "{t}");
+        assert!(t.contains("  Pastas e arquivos\n"), "{t}");
     }
 
     #[test]

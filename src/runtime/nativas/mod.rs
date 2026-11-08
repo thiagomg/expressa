@@ -11,6 +11,7 @@ use super::value::{Value, format_numero};
 
 mod arquivo;
 mod cartesiano;
+mod crono;
 mod graf;
 mod imagem;
 mod mat;
@@ -21,7 +22,10 @@ mod referencia;
 mod sistema;
 mod tela;
 
-pub use referencia::{BuiltinDoc, builtin_docs, lookup_alvo, lookup_builtin_doc, lookup_ficha};
+pub use referencia::{
+    BuiltinDoc, builtin_docs, docs_agrupados, lookup_alvo, lookup_builtin_doc, lookup_ficha,
+    tema_de, titulo_modulo,
+};
 
 pub struct Nativa {
     pub names: &'static [&'static str],
@@ -155,14 +159,6 @@ pub const NATIVAS: &[Nativa] = &[
     },
     Nativa {
         names: &["termina_com"],
-        module: None,
-    },
-    Nativa {
-        names: &["agora"],
-        module: None,
-    },
-    Nativa {
-        names: &["formate_data"],
         module: None,
     },
     Nativa {
@@ -438,6 +434,34 @@ pub const NATIVAS: &[Nativa] = &[
         module: Some("cartesiano"),
     },
     Nativa {
+        names: &["agora"],
+        module: Some("crono"),
+    },
+    Nativa {
+        names: &["hoje"],
+        module: Some("crono"),
+    },
+    Nativa {
+        names: &["data"],
+        module: Some("crono"),
+    },
+    Nativa {
+        names: &["adicione"],
+        module: Some("crono"),
+    },
+    Nativa {
+        names: &["dias_entre"],
+        module: Some("crono"),
+    },
+    Nativa {
+        names: &["eh_bissexto", "é_bissexto"],
+        module: Some("crono"),
+    },
+    Nativa {
+        names: &["formate_data"],
+        module: Some("crono"),
+    },
+    Nativa {
         names: &["nova"],
         module: Some("tela_grafica"),
     },
@@ -652,6 +676,10 @@ impl Vm<'_, '_> {
             "comeca_com" | "começa_com" => self.bi_comeca_com(args, span),
             "termina_com" => self.bi_termina_com(args, span),
             "agora" => self.bi_agora(args, span),
+            "hoje" => self.bi_hoje(args, span),
+            "data" => self.bi_data(args, span),
+            "dias_entre" => self.bi_dias_entre(args, span),
+            "eh_bissexto" | "é_bissexto" => self.bi_eh_bissexto(args, span),
             "formate_data" => self.bi_formate_data(args, span),
             "existe" => self.bi_existe(args, span),
             "eh_pasta" | "é_pasta" => self.bi_eh_pasta(args, span),
@@ -672,7 +700,18 @@ impl Vm<'_, '_> {
             "grafico" => self.bi_grafico(args, span),
             "eixos" => self.bi_eixos(args, span),
             "plote" => self.bi_plote(args, span, env),
-            "adicione" => self.bi_adicione(args, span),
+            "adicione" => {
+                if args.len() == 3 {
+                    self.bi_crono_adicione(args, span)
+                } else if args.len() == 2 && crono::eh_data_ou_epoch(&args[0]) {
+                    Err(self.err(
+                        "adicione espera 3 argumentos: data, n, :dias|:meses|:anos|:horas|:minutos|:segundos",
+                        span,
+                    ))
+                } else {
+                    self.bi_adicione(args, span)
+                }
+            }
             "nova" => self.bi_graf_nova(args, span),
             "cor" => self.bi_graf_cor(args, span),
             "linha" => self.bi_graf_linha(args, span),

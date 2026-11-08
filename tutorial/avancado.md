@@ -245,9 +245,9 @@ escreva(soma(10, 32))
 ```
 
 No caso 1, o arquivo vira `mat`, então os nomes levam `::`.  
-No caso 2, as funções entram diretamente no arquivo.
+No caso 2, as funções entram diretamente no arquivo. Se um nome já existir (outro `importe` achatado, ou uma variável sua), o programa para: use um apelido.
 
-Nativos (`"tela"`, `"mat"`, `"matriz"`, `"arquivo"`) não têm arquivo seu: `importe "mat"` basta, de qualquer pasta.
+Nativos (`"tela"`, `"mat"`, `"matriz"`, `"arquivo"`, `"crono"`) não têm arquivo seu: `importe "mat"` basta, de qualquer pasta.
 
 **Desafio:** no `usa_matematica.lep`, depois do caso 1 escreva `mat::minimo(notas)` e `mat::maximo(notas)`. Depois do caso 2, `minimo(notas)` e `maximo(notas)`. Essas funções já existem em `matematica.lep`.
 
@@ -278,7 +278,7 @@ expressa> leia_arquivo("oi.txt")
 
 Diário (grava e relê): `../exemplos/programas/diario.lep`. Agenda CSV: `../exemplos/programas/contatos.lep`.
 
-No expressa-aula o programa só vê a pasta do projeto.
+No expressa-aula o programa só vê a pasta do projeto; `~` e `~/pasta` são a pasta pessoal.
 
 **Desafio:** execute o diário e abra `exemplos/programas/saida/diario.txt`.
 

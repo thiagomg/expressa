@@ -410,7 +410,7 @@ Com `importe "tela"`: `cls()` (também `limpe_tela()`) limpa a tela; `casa()` ma
 
 `ambiente(nome)` devolve a variável de ambiente como texto (`ambiente("HOME")`). Se ela não existe, é erro: `ambiente("EDITOR") se_falhar "vim"`.
 
-`agora()` é a data e a hora locais: mapa `:ano`, `:mes`, `:dia`, `:hora`, `:minuto`, `:segundo`, `:dia_da_semana` (1 = domingo … 7 = sábado) e `:epoch` (segundos desde 1970). Fora do Linux/macOS o horário é UTC. `formate_data(data, modelo)` monta um texto com `%Y`, `%m`, `%d`, `%H`, `%M`, `%S` (dois dígitos, ano com quatro) e `%%`; outra letra depois de `%` é erro. A data é o mapa de `agora()` (bastam `:ano` … `:segundo`) ou um número de segundos (`:epoch`).
+Com `importe "crono"`: `agora()` é a data e a hora locais: mapa `:ano`, `:mes`, `:dia`, `:hora`, `:minuto`, `:segundo`, `:dia_da_semana` (1 = domingo … 7 = sábado) e `:epoch` (segundos desde 1970). Fora do Linux/macOS o horário é UTC. `hoje()` é a data de hoje à meia-noite. `data(ano, mes, dia)` e `data(ano, mes, dia, hora, minuto, segundo)` constroem o mesmo mapa; data inválida é erro (`se_falhar`). `adicione(d, n, unidade)` soma `n` (positivo ou negativo) em `:dias`, `:meses`, `:anos`, `:horas`, `:minutos` ou `:segundos`; mês e ano prendem o dia no último dia do mês destino (31 de janeiro + 1 mês = último de fevereiro). `dias_entre(a, b)` é o número com sinal de dias de calendário, ignorando a hora. `eh_bissexto(ano)` (também `é_bissexto`) aceita o ano ou o mapa. `formate_data(data, modelo)` monta um texto com `%Y`, `%m`, `%d`, `%H`, `%M`, `%S` (dois dígitos, ano com quatro) e `%%`; outra letra depois de `%` é erro. A data é o mapa de `agora()` (bastam `:ano` … `:segundo`) ou um número de segundos (`:epoch`). `adicione` do `crono` tem 3 argumentos; o de `cartesiano` tem 2.
 
 `saia()` encerra o programa com código 0. `saia(1)` encerra com falha (o shell vê o código). Não é capturado por `se_falhar`.
 
@@ -474,7 +474,7 @@ extensao("a.tar.gz")                      // "gz" (sem ponto; sem extensão, "")
 pasta_atual()                             // pasta de onde o programa foi chamado
 ```
 
-Caminhos relativos partem da **pasta do `.lep`**, não de `pasta_atual()`. Um arquivo passado na linha de comando, relativo ao terminal, vira `junte_caminho(pasta_atual(), argumentos[0])`. Falhas (arquivo que não existe, sem permissão) são erros (`se_falhar`). Na Aula, todo caminho tem que ficar na pasta do aluno.
+Caminhos relativos partem da **pasta do `.lep`**, não de `pasta_atual()`. `~` e `~/pasta` são a pasta pessoal (`HOME` / `USERPROFILE`). `~nome` não expande. Um arquivo passado na linha de comando, relativo ao terminal, vira `junte_caminho(pasta_atual(), argumentos[0])`. Falhas (arquivo que não existe, sem permissão) são erros (`se_falhar`). Na Aula, caminhos relativos ficam na pasta do aluno; `~` permanece sob a pasta pessoal.
 
 ---
 
@@ -496,7 +496,7 @@ item = lista[99] se_falhar "não existe"
 
 ## 16. Módulos / Importação
 
-A mesma forma vale para arquivos `.lep` e para os módulos nativos `matriz`, `arquivo`, `tela`, `mat`, `cartesiano` e `processo`.
+A mesma forma vale para arquivos `.lep` e para os módulos nativos `matriz`, `arquivo`, `tela`, `mat`, `crono`, `cartesiano` e `processo`.
 
 ```text
 mat = importe "matematica"     // alias: nomes em mat::
@@ -505,6 +505,8 @@ mat::soma(10, 5)
 importe "matematica"           // espalha os nomes no escopo atual
 soma(10, 5)
 ```
+
+Espalhar um nome que **já existe** no escopo é erro (`já existe \`fundo\` neste escopo`). O segundo módulo não substitui o primeiro. Use apelido: `g = importe "tela_grafica"`. Importar o mesmo módulo duas vezes, achatado, também é erro. Apelidos diferentes não conflitam (`t::fundo` e `g::fundo`).
 
 Nome **sem** `/`, `./` nem `.lep` procura primeiro um módulo nativo. Caminho com `./`, `/` ou sufixo `.lep` é arquivo. Se o nome nativo também existir como arquivo no mesmo diretório (`matriz.lep` ao lado do programa), `importe "matriz"` é **erro**: use `importe "./matriz"` para o arquivo. Enquanto o arquivo estiver no caminho do nome nu, o nativo fica inacessível por esse nome.
 

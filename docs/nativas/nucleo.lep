@@ -265,19 +265,3 @@ comeca_com = funcao(texto, prefixo) { 0 }
 ///
 /// Exemplo: termina_com("relatorio.csv", ".csv")
 termina_com = funcao(texto, sufixo) { 0 }
-
-/// Data e hora locais: mapa :ano, :mes, :dia, :hora, :minuto, :segundo.
-///
-/// Também :dia_da_semana (1 = domingo … 7 = sábado) e :epoch (segundos
-/// desde 1970). Fora do Linux/macOS o horário é UTC.
-///
-/// Exemplo: agora():ano
-agora = funcao() { 0 }
-
-/// Monta um texto com a data: %Y ano, %m mês, %d dia, %H hora, %M minuto, %S segundo.
-///
-/// A data é o mapa de agora() ou um número de segundos desde 1970 (:epoch).
-/// %% escreve %. Outra letra depois de % é erro.
-///
-/// Exemplo: formate_data(agora(), "backup-%Y-%m-%d.tar")
-formate_data = funcao(data, modelo) { 0 }

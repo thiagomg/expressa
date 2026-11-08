@@ -209,6 +209,11 @@
       <keyword>começa_com</keyword>
       <keyword>termina_com</keyword>
       <keyword>agora</keyword>
+      <keyword>hoje</keyword>
+      <keyword>data</keyword>
+      <keyword>dias_entre</keyword>
+      <keyword>eh_bissexto</keyword>
+      <keyword>é_bissexto</keyword>
       <keyword>formate_data</keyword>
       <keyword>imagem</keyword>
       <keyword>carregue</keyword>

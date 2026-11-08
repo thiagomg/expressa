@@ -82,6 +82,7 @@ function readDocs() {
     'mat.lep': 'mat',
     'matriz.lep': 'matriz',
     'arquivo.lep': 'arquivo',
+    'crono.lep': 'crono',
     'cartesiano.lep': 'cartesiano',
     'tela_grafica.lep': 'tela_grafica',
     'imagem.lep': 'imagem',

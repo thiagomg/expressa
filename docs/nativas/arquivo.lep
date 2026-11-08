@@ -1,7 +1,7 @@
 /// Lê o arquivo; cada linha vira um texto (sem quebra de linha).
 ///
 /// Arquivo vazio devolve []. Caminhos relativos partem da pasta do .lep.
-/// Falhas de leitura são erros de execução (se_falhar).
+/// `~` e `~/pasta` são a pasta pessoal. Falhas de leitura são erros (se_falhar).
 ///
 /// Exemplo: leia_arquivo("dados.txt") se_falhar []
 leia_arquivo = funcao(caminho) { 0 }
@@ -52,6 +52,8 @@ liste = funcao(pasta) { 0 }
 liste = funcao(pasta, padrao) { 0 }
 
 /// Cria a pasta e as que faltarem no caminho. Já existir não é erro.
+///
+/// `~` é a pasta pessoal: crie_pasta("~/.local/share/tarefas").
 ///
 /// Exemplo: crie_pasta("saida/2024")
 crie_pasta = funcao(caminho) { 0 }
