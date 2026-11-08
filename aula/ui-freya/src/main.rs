@@ -62,7 +62,7 @@ use crate::{
     prefs::Prefs,
     projeto::{Projeto, abrir_raiz, instalar_exemplos, restaurar_inicio},
     shell::{
-        MenuAberto, Paleta, barra_abas, barra_argumentos, barra_busca,
+        AbaFundo, MenuAberto, Paleta, abas_fundo, barra_abas, barra_argumentos, barra_busca,
         ALTURA_CONSOLE, LARGURA_ARVORE, LARGURA_DEBUG, alca_horizontal, alca_vertical, aplicar_arrasto,
         aplicar_arrasto_v, barra_menus, barra_status,
         MarcasVer,
@@ -158,6 +158,7 @@ fn app() -> impl IntoElement {
     let mut largura_arvore = use_state(|| LARGURA_ARVORE);
     let mut largura_debug = use_state(|| LARGURA_DEBUG);
     let mut altura_console = use_state(|| ALTURA_CONSOLE);
+    let aba_fundo = use_state(AbaFundo::default);
     let mut arrasto_arvore = use_state(|| None::<f32>);
     let mut arrasto_debug = use_state(|| None::<f32>);
     let mut arrasto_console = use_state(|| None::<f32>);
@@ -295,7 +296,7 @@ fn app() -> impl IntoElement {
     let graficos_dock = graficos_agora.clone();
     let n_linhas = editor.read().rope.len_lines().max(1);
     let line_height = (font_size * 1.4).floor();
-    let gutter_w = font_size * 5.0;
+    let gutter_w = (font_size * 1.7 + 16.0).max(36.0);
     let arquivo_gutter = caminho_relativo(
         projeto_agora.raiz.as_deref().unwrap_or(std::path::Path::new(".")),
         abas_agora.atual().caminho.as_deref(),
@@ -337,6 +338,13 @@ fn app() -> impl IntoElement {
             turma,
             assinatura_oculta,
         );
+        let mut aba_fundo = aba_fundo;
+        match acao {
+            Acao::Repl if repl.read().visivel => aba_fundo.set(AbaFundo::Repl),
+            Acao::Repl => aba_fundo.set(AbaFundo::Saida),
+            Acao::Executar | Acao::Depurar => aba_fundo.set(AbaFundo::Saida),
+            _ => {}
+        }
     };
 
     rect()
@@ -415,6 +423,7 @@ fn app() -> impl IntoElement {
                 .direction(Direction::Horizontal)
                 .width(Size::fill())
                 .height(Size::flex(1.0))
+                .content(Content::flex())
                 .maybe_child(projeto_agora.visivel.then(move || {
                     rect()
                         .direction(Direction::Horizontal)
@@ -453,7 +462,7 @@ fn app() -> impl IntoElement {
                 .child(
                     rect()
                         .direction(Direction::Vertical)
-                        .width(Size::fill())
+                        .width(Size::flex(1.0))
                         .height(Size::fill())
                         .content(Content::flex())
                         .child(
@@ -461,6 +470,7 @@ fn app() -> impl IntoElement {
                                 .direction(Direction::Horizontal)
                                 .width(Size::fill())
                                 .height(Size::flex(1.0))
+                                .content(Content::flex())
                                 .min_height(Size::px(0.0))
                                 .max_height(Size::fill())
                                 .overflow(Overflow::Clip)
@@ -468,47 +478,54 @@ fn app() -> impl IntoElement {
                                     let arquivo = arquivo_gutter.clone();
                                     let pontos = pontos_gutter.clone();
                                     let pausa_arq = pausa_arq.clone();
-                                    VirtualScrollView::new(move |item, _| {
-                                        let i = item.index;
-                                        let par = par_linhas.is_some_and(|(a, b)| i == a || i == b);
-                                        let erro = linha_erro.is_some_and(|l| i + 1 == l as usize);
-                                        linha_gutter(
-                                            i,
-                                            &arquivo,
-                                            &pontos,
-                                            pausado_gutter,
-                                            &pausa_arq,
-                                            pausa_linha,
-                                            par,
-                                            erro,
-                                            font_size,
-                                            line_height,
-                                            paleta,
-                                            move |linha| {
-                                                alternar_ponto_em(
-                                                    linha,
-                                                    editor,
-                                                    prefs,
-                                                    abas,
-                                                    status,
-                                                    projeto,
-                                                    exec,
-                                                    depuracao,
+                                    rect()
+                                        .width(Size::px(gutter_w))
+                                        .height(Size::fill())
+                                        .child(
+                                            VirtualScrollView::new(move |item, _| {
+                                                let i = item.index;
+                                                let par = par_linhas
+                                                    .is_some_and(|(a, b)| i == a || i == b);
+                                                let erro = linha_erro
+                                                    .is_some_and(|l| i + 1 == l as usize);
+                                                linha_gutter(
+                                                    i,
+                                                    &arquivo,
+                                                    &pontos,
+                                                    pausado_gutter,
+                                                    &pausa_arq,
+                                                    pausa_linha,
+                                                    par,
+                                                    erro,
+                                                    font_size,
+                                                    line_height,
+                                                    paleta,
+                                                    move |linha| {
+                                                        alternar_ponto_em(
+                                                            linha,
+                                                            editor,
+                                                            prefs,
+                                                            abas,
+                                                            status,
+                                                            projeto,
+                                                            exec,
+                                                            depuracao,
+                                                        )
+                                                    },
                                                 )
-                                            },
+                                                .into_element()
+                                            })
+                                            .width(Size::fill())
+                                            .height(Size::fill())
+                                            .show_scrollbar(false)
+                                            .scroll_controller(scroll_editor)
+                                            .length(n_linhas)
+                                            .item_size(line_height),
                                         )
-                                        .into_element()
-                                    })
-                                    .width(Size::px(gutter_w))
-                                    .height(Size::fill())
-                                    .show_scrollbar(false)
-                                    .scroll_controller(scroll_editor)
-                                    .length(n_linhas)
-                                    .item_size(line_height)
                                 })
                                 .child(
                                     rect()
-                                        .width(Size::fill())
+                                        .width(Size::flex(1.0))
                                         .height(Size::fill())
                                         .child(
                                             CodeEditor::new(editor, a11y_id)
@@ -553,37 +570,83 @@ fn app() -> impl IntoElement {
                                 },
                             ),
                         )
-                        .maybe_child(repl_agora.visivel.then(move || {
-                            painel_repl(
-                                repl_agora.clone(),
-                                paleta,
-                                repl_entrada,
-                                move || enviar_repl(repl, repl_entrada, status),
-                                move || parar_repl(repl, status),
-                                move || limpar_repl(repl),
-                                move || reiniciar_repl(repl, status),
-                                move || fechar_repl(repl),
-                            )
-                        }))
                         .child(alca_horizontal(paleta, altura_console, arrasto_console))
-                        .child(painel_console(
-                            nucleo_term.read().1.clone(),
-                            paleta,
-                            font_size,
-                            *altura_console.read(),
-                            console.read().ponte.leia_aberta(),
-                            move |linha| {
-                                ir_para_saida(
-                                    &linha,
-                                    editor,
-                                    prefs,
-                                    abas,
-                                    status,
-                                    projeto,
-                                    dialogo,
-                                )
-                            },
-                        )),
+                        .child(
+                            rect()
+                                .direction(Direction::Vertical)
+                                .width(Size::fill())
+                                .height(Size::px(*altura_console.read()))
+                                .content(Content::flex())
+                                .child(abas_fundo(
+                                    paleta,
+                                    aba_fundo(),
+                                    move || {
+                                        let mut aba_fundo = aba_fundo;
+                                        aba_fundo.set(AbaFundo::Saida);
+                                    },
+                                    move || {
+                                        let mut aba_fundo = aba_fundo;
+                                        let mut repl = repl;
+                                        aba_fundo.set(AbaFundo::Repl);
+                                        if !repl.read().visivel {
+                                            repl.write().visivel = true;
+                                            repl.write().iniciar();
+                                        }
+                                    },
+                                ))
+                                .child(
+                                    rect()
+                                        .width(Size::fill())
+                                        .height(Size::flex(1.0))
+                                        .child(painel_console(
+                                            nucleo_term.read().1.clone(),
+                                            paleta,
+                                            font_size,
+                                            console.read().ponte.leia_aberta(),
+                                            move |linha| {
+                                                ir_para_saida(
+                                                    &linha,
+                                                    editor,
+                                                    prefs,
+                                                    abas,
+                                                    status,
+                                                    projeto,
+                                                    dialogo,
+                                                )
+                                            },
+                                        ))
+                                        .maybe_child((aba_fundo() == AbaFundo::Repl).then(
+                                            move || {
+                                                rect()
+                                                    .position(
+                                                        Position::new_absolute().top(0.).left(0.),
+                                                    )
+                                                    .width(Size::fill())
+                                                    .height(Size::fill())
+                                                    .child(painel_repl(
+                                                        repl_agora.clone(),
+                                                        paleta,
+                                                        repl_entrada,
+                                                        move || {
+                                                            enviar_repl(
+                                                                repl,
+                                                                repl_entrada,
+                                                                status,
+                                                            )
+                                                        },
+                                                        move || parar_repl(repl, status),
+                                                        move || limpar_repl(repl),
+                                                        move || reiniciar_repl(repl, status),
+                                                        move || {
+                                                            let mut aba_fundo = aba_fundo;
+                                                            fechar_repl(repl);
+                                                            aba_fundo.set(AbaFundo::Saida);
+                                                        },
+                                                    ))
+                                            },
+                                        )),
+                                ),
+                        ),
                 )
                 .maybe_child(depuracao_agora.visivel.then(move || {
                     rect()

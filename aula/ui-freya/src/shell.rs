@@ -27,6 +27,13 @@ use crate::{
 };
 
 #[derive(Clone, Copy, PartialEq, Eq, Default)]
+pub enum AbaFundo {
+    #[default]
+    Saida,
+    Repl,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Default)]
 pub enum MenuAberto {
     #[default]
     Nenhum,
@@ -485,11 +492,60 @@ pub fn barra_argumentos(
         .child(botao("A+", Acao::ZoomMais, on_acao))
 }
 
+pub fn abas_fundo(
+    paleta: Paleta,
+    atual: AbaFundo,
+    on_saida: impl Fn() + Copy + 'static,
+    on_repl: impl Fn() + Copy + 'static,
+) -> impl IntoElement {
+    fn aba(
+        nome: &'static str,
+        esta: bool,
+        paleta: Paleta,
+        on_press: impl Fn() + Copy + 'static,
+    ) -> impl IntoElement {
+        rect()
+            .padding((4.0, 10.0, 4.0, 10.0))
+            .background(if esta { paleta.status } else { paleta.barra })
+            .on_press(move |_| on_press())
+            .child(
+                label()
+                    .font_size(12.0)
+                    .font_weight(if esta {
+                        FontWeight::BOLD
+                    } else {
+                        FontWeight::NORMAL
+                    })
+                    .text(nome),
+            )
+    }
+    rect()
+        .direction(Direction::Horizontal)
+        .width(Size::fill())
+        .height(Size::px(28.0))
+        .background(paleta.barra)
+        .color(paleta.texto)
+        .cross_align(Alignment::Center)
+        .padding((0.0, 4.0, 0.0, 4.0))
+        .spacing(4.0)
+        .border(
+            Border::new()
+                .width(BorderWidth {
+                    top: 1.0,
+                    right: 0.0,
+                    bottom: 0.0,
+                    left: 0.0,
+                })
+                .fill(paleta.borda),
+        )
+        .child(aba("Saída", atual == AbaFundo::Saida, paleta, on_saida))
+        .child(aba("REPL", atual == AbaFundo::Repl, paleta, on_repl))
+}
+
 pub fn painel_console(
     handle: Option<TerminalHandle>,
     paleta: Paleta,
     fonte: f32,
-    altura: f32,
     leia_aberta: bool,
     on_linha: impl Fn(String) + Copy + 'static,
 ) -> impl IntoElement {
@@ -509,7 +565,7 @@ pub fn painel_console(
     let mut painel = rect()
         .direction(Direction::Vertical)
         .width(Size::fill())
-        .height(Size::px(altura))
+        .height(Size::fill())
         .background(paleta.status)
         .color(paleta.texto)
         .border(
@@ -954,19 +1010,26 @@ pub fn linha_gutter(
         .background(fundo)
         .direction(Direction::Horizontal)
         .cross_align(Alignment::Center)
-        .padding((0., 4.0, 0., 4.0))
+        .padding((0., 4.0, 0., 2.0))
+        .spacing(2.0)
         .on_press(move |_| on_linha(linha))
         .child(
             label()
                 .font_size(font_size * 0.7)
+                .width(Size::px(11.0))
                 .color(cor_ponto)
                 .text(simbolo),
         )
         .child(
-            label()
-                .font_size(font_size * 0.75)
-                .color(paleta.texto)
-                .text(format!("{linha}")),
+            rect()
+                .width(Size::fill())
+                .main_align(Alignment::End)
+                .child(
+                    label()
+                        .font_size(font_size * 0.75)
+                        .color(paleta.texto)
+                        .text(format!("{linha}")),
+                ),
         )
 }
 
@@ -1631,6 +1694,18 @@ pub fn painel_debug(
         .direction(Direction::Vertical)
         .width(Size::fill())
         .spacing(1.0);
+    if dep.vars.is_empty() {
+        vars = vars.child(
+            label()
+                .font_size(12.0)
+                .color((140, 140, 148))
+                .text(if dep.pausado {
+                    "(nenhuma variável neste ponto)"
+                } else {
+                    "(depurar com F6 para ver as variáveis)"
+                }),
+        );
+    }
     for v in &dep.vars {
         vars = vars.child(
             label()
@@ -1643,6 +1718,14 @@ pub fn painel_debug(
         .direction(Direction::Vertical)
         .width(Size::fill())
         .spacing(1.0);
+    if dep.pilha.is_empty() {
+        pilha = pilha.child(
+            label()
+                .font_size(12.0)
+                .color((140, 140, 148))
+                .text("(pilha vazia)"),
+        );
+    }
     for q in &dep.pilha {
         let arq = q.arquivo.clone();
         let linha = q.linha;
@@ -1680,6 +1763,7 @@ pub fn painel_debug(
         .direction(Direction::Vertical)
         .width(Size::px(largura))
         .height(Size::fill())
+        .content(Content::flex())
         .background(paleta.barra)
         .color(paleta.texto)
         .border(
@@ -1744,14 +1828,22 @@ pub fn painel_debug(
                 .font_weight(FontWeight::BOLD)
                 .text("Variáveis"),
         )
-        .child(ScrollView::new().height(Size::fill()).child(vars))
+        .child(
+            ScrollView::new()
+                .height(Size::flex(1.0))
+                .child(vars),
+        )
         .child(
             label()
                 .font_size(11.0)
                 .font_weight(FontWeight::BOLD)
                 .text("Pilha"),
         )
-        .child(ScrollView::new().height(Size::px(120.0)).child(pilha))
+        .child(
+            ScrollView::new()
+                .height(Size::flex(1.0))
+                .child(pilha),
+        )
 }
 
 pub fn painel_repl(
@@ -1762,64 +1854,53 @@ pub fn painel_repl(
     on_parar: impl Fn() + Copy + 'static,
     on_limpar: impl Fn() + Copy + 'static,
     on_reiniciar: impl Fn() + Copy + 'static,
-    on_fechar: impl Fn() + Copy + 'static,
+    _on_fechar: impl Fn() + Copy + 'static,
 ) -> impl IntoElement {
     let mut lista = rect()
         .direction(Direction::Vertical)
         .width(Size::fill())
-        .padding(6.0);
+        .spacing(0.0)
+        .padding((4.0, 8.0, 4.0, 8.0));
+    if repl.linhas.is_empty() {
+        lista = lista.child(
+            label()
+                .font_size(13.0)
+                .font_family(fonte_familia())
+                .color((140, 140, 148))
+                .text("Cada linha roda na hora. As variáveis ficam para as próximas."),
+        );
+    }
     for l in &repl.linhas {
         let cor = match l.tipo {
             TipoLinha::Eco => (140, 140, 148),
             TipoLinha::Erro => (229, 57, 53),
             TipoLinha::Saida => paleta.texto,
         };
+        let texto = if l.texto.is_empty() {
+            " ".to_string()
+        } else {
+            l.texto.clone()
+        };
         lista = lista.child(
             label()
                 .font_size(13.0)
                 .font_family(fonte_familia())
                 .color(cor)
-                .text(l.texto.clone()),
+                .text(texto),
         );
     }
     rect()
         .direction(Direction::Vertical)
         .width(Size::fill())
-        .height(Size::px(220.0))
+        .height(Size::fill())
+        .content(Content::flex())
         .background(paleta.status)
         .color(paleta.texto)
-        .border(
-            Border::new()
-                .width(BorderWidth {
-                    top: 1.0,
-                    right: 0.0,
-                    bottom: 0.0,
-                    left: 0.0,
-                })
-                .fill(paleta.borda),
-        )
         .child(
-            rect()
-                .direction(Direction::Horizontal)
-                .width(Size::fill())
-                .padding((4.0, 6.0, 4.0, 6.0))
-                .main_align(Alignment::SpaceBetween)
-                .cross_align(Alignment::Center)
-                .child(
-                    label()
-                        .font_size(12.0)
-                        .font_weight(FontWeight::BOLD)
-                        .text("REPL"),
-                )
-                .child(
-                    Button::new()
-                        .flat()
-                        .compact()
-                        .on_press(move |_| on_fechar())
-                        .child("×"),
-                ),
+            ScrollView::new()
+                .height(Size::flex(1.0))
+                .child(lista),
         )
-        .child(ScrollView::new().height(Size::fill()).child(lista))
         .child(
             rect()
                 .direction(Direction::Horizontal)

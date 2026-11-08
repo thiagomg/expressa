@@ -1143,6 +1143,9 @@ pub fn executar(
     sincronizar(&mut abas.write(), &editor.read());
     console.write().limpar();
     depuracao.write().fim();
+    if debug {
+        depuracao.write().visivel = true;
+    }
     graficos.write().limpar();
     let fonte = editor.read().rope.to_string();
     let raiz = projeto.read().raiz.clone();
