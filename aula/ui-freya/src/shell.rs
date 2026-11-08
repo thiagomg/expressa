@@ -718,11 +718,14 @@ pub fn barra_status(linha: usize, coluna: usize, projeto: &str, recado: &str, pa
         .child(label().font_size(12.0).text(caminho))
 }
 
-pub fn painel_atalhos(paleta: Paleta, mut fechar: impl FnMut() + Clone + 'static) -> impl IntoElement {
+pub const TITULO_ATALHOS: &str = "Atalhos do teclado";
+
+pub fn janela_atalhos(paleta: Paleta) -> impl IntoElement {
     let mut corpo = rect()
         .direction(Direction::Vertical)
+        .width(Size::fill())
         .spacing(8.0)
-        .padding(16.0);
+        .padding((12.0, 16.0, 16.0, 16.0));
     for (secao, itens) in ATALHOS {
         corpo = corpo.child(
             label()
@@ -734,28 +737,37 @@ pub fn painel_atalhos(paleta: Paleta, mut fechar: impl FnMut() + Clone + 'static
             corpo = corpo.child(
                 rect()
                     .direction(Direction::Horizontal)
-                    .spacing(16.0)
-                    .child(label().font_size(13.0).text((*teclas).to_string()))
+                    .width(Size::fill())
+                    .spacing(24.0)
+                    .child(
+                        label()
+                            .font_size(13.0)
+                            .font_family(fonte_familia())
+                            .width(Size::px(200.0))
+                            .text((*teclas).to_string()),
+                    )
                     .child(label().font_size(13.0).text((*o_que).to_string())),
             );
         }
     }
     rect()
-        .position(Position::new_global().top(0.).left(0.))
+        .direction(Direction::Vertical)
         .width(Size::fill())
         .height(Size::fill())
-        .background((0, 0, 0, 120))
-        .center()
-        .on_press(move |_| fechar())
+        .content(Content::flex())
+        .background(paleta.fundo)
+        .color(paleta.texto)
+        .a11y_focusable(true)
+        .on_key_down(move |e: Event<KeyboardEventData>| {
+            if matches!(e.key, Key::Named(NamedKey::Escape)) {
+                e.stop_propagation();
+                Platform::get().close_window(Platform::window_id());
+            }
+        })
         .child(
-            rect()
-                .width(Size::px(520.0))
-                .height(Size::px(560.0))
-                .background(paleta.fundo)
-                .color(paleta.texto)
-                .corner_radius(8.0)
-                .on_press(|e: Event<PressEventData>| e.stop_propagation())
-                .child(ScrollView::new().child(corpo)),
+            ScrollView::new()
+                .height(Size::flex(1.0))
+                .child(corpo),
         )
 }
 
@@ -816,37 +828,140 @@ pub fn barra_abas(
         .child(lista)
 }
 
+fn borda_janela(paleta: Paleta) -> Border {
+    Border::new()
+        .width(BorderWidth {
+            top: 1.0,
+            right: 1.0,
+            bottom: 1.0,
+            left: 1.0,
+        })
+        .fill(paleta.borda)
+}
+
+/// Diálogo modal com borda e barra de título, para não misturar com o editor.
+fn quadro_dialogo(
+    paleta: Paleta,
+    titulo: String,
+    largura: f32,
+    on_fechar: impl Fn() + Copy + 'static,
+    corpo: impl IntoElement,
+    botoes: impl IntoElement,
+) -> impl IntoElement {
+    rect()
+        .layer(Layer::Overlay)
+        .position(Position::new_global().top(0.).left(0.))
+        .width(Size::window_percent(100.))
+        .height(Size::window_percent(100.))
+        .on_global_key_down(move |e: Event<KeyboardEventData>| {
+            if matches!(e.key, Key::Named(NamedKey::Escape)) {
+                e.stop_propagation();
+                on_fechar();
+            }
+        })
+        .child(
+            rect()
+                .position(Position::new_global().top(0.).left(0.))
+                .width(Size::window_percent(100.))
+                .height(Size::window_percent(100.))
+                .background((0, 0, 0, 150))
+                .on_press(move |_| on_fechar()),
+        )
+        .child(
+            rect()
+                .position(Position::new_global().top(0.).left(0.))
+                .width(Size::window_percent(100.))
+                .height(Size::window_percent(100.))
+                .center()
+                .child(
+                    rect()
+                        .direction(Direction::Vertical)
+                        .width(Size::px(largura))
+                        .background(paleta.fundo)
+                        .color(paleta.texto)
+                        .corner_radius(8.0)
+                        .border(borda_janela(paleta))
+                        .shadow(Shadow::new().y(6.).blur(16.).color((0, 0, 0, 90)))
+                        .on_press(|e: Event<PressEventData>| e.stop_propagation())
+                        .child(
+                            rect()
+                                .direction(Direction::Horizontal)
+                                .width(Size::fill())
+                                .background(paleta.barra)
+                                .padding((8.0, 10.0, 8.0, 10.0))
+                                .main_align(Alignment::SpaceBetween)
+                                .cross_align(Alignment::Center)
+                                .border(
+                                    Border::new()
+                                        .width(BorderWidth {
+                                            top: 0.0,
+                                            right: 0.0,
+                                            bottom: 1.0,
+                                            left: 0.0,
+                                        })
+                                        .fill(paleta.borda),
+                                )
+                                .child(
+                                    label()
+                                        .font_size(14.0)
+                                        .font_weight(FontWeight::BOLD)
+                                        .text(titulo),
+                                )
+                                .child(
+                                    Button::new()
+                                        .flat()
+                                        .compact()
+                                        .on_press(move |_| on_fechar())
+                                        .child("×"),
+                                ),
+                        )
+                        .child(rect().width(Size::fill()).padding((12.0, 14.0, 12.0, 14.0)).child(corpo))
+                        .child(
+                            rect()
+                                .direction(Direction::Horizontal)
+                                .width(Size::fill())
+                                .padding((0.0, 12.0, 12.0, 12.0))
+                                .spacing(8.0)
+                                .main_align(Alignment::End)
+                                .child(botoes),
+                        ),
+                ),
+        )
+}
+
 pub fn dialogo_confirmar(
-    _paleta: Paleta,
+    paleta: Paleta,
     nome: String,
     on_salvar: impl Fn() + Copy + 'static,
     on_descartar: impl Fn() + Copy + 'static,
     on_cancelar: impl Fn() + Copy + 'static,
 ) -> impl IntoElement {
-    Popup::new()
-        .width(Size::px(420.0))
-        .on_close_request(move |_| on_cancelar())
-        .child(PopupTitle::new("Alterações não salvas".to_string()))
-        .child(PopupContent::new().child(format!("Salvar as alterações de {nome}?")))
-        .child(
-            PopupButtons::new()
-                .child(
-                    Button::new()
-                        .on_press(move |_| on_salvar())
-                        .filled()
-                        .child("Salvar"),
-                )
-                .child(
-                    Button::new()
-                        .on_press(move |_| on_descartar())
-                        .child("Descartar"),
-                )
-                .child(
-                    Button::new()
-                        .on_press(move |_| on_cancelar())
-                        .child("Cancelar"),
-                ),
-        )
+    quadro_dialogo(
+        paleta,
+        "Alterações não salvas".into(),
+        420.0,
+        on_cancelar,
+        label().font_size(13.0).text(format!("Salvar as alterações de {nome}?")),
+        rect()
+            .direction(Direction::Horizontal)
+            .spacing(8.0)
+            .child(
+                Button::new()
+                    .on_press(move |_| on_salvar())
+                    .filled()
+                    .child("Salvar"),
+            )
+            .child(
+                Button::new()
+                    .on_press(move |_| on_descartar())
+                    .child("Descartar"),
+            )
+            .child(
+                Button::new()
+                    .on_press(move |_| on_cancelar())
+                    .child("Cancelar"),
+            ),
+    )
 }
 
 pub fn barra_busca(
@@ -1181,165 +1296,184 @@ pub fn painel_arvore(
 }
 
 pub fn dialogo_linha(
-    _paleta: Paleta,
+    paleta: Paleta,
     valor: State<String>,
     on_ir: impl Fn() + Copy + 'static,
     on_cancelar: impl Fn() + Copy + 'static,
 ) -> impl IntoElement {
-    Popup::new()
-        .width(Size::px(320.0))
-        .on_close_request(move |_| on_cancelar())
-        .child(PopupTitle::new("Ir para linha".to_string()))
-        .child(
-            PopupContent::new().child(
-                CampoTexto::new(valor)
-                    .placeholder("número da linha")
-                    .width(Size::fill())
-                    .auto_focus(true)
-                    .on_submit(move |_| on_ir()),
+    quadro_dialogo(
+        paleta,
+        "Ir para linha".into(),
+        360.0,
+        on_cancelar,
+        CampoTexto::new(valor)
+            .placeholder("número da linha")
+            .width(Size::fill())
+            .auto_focus(true)
+            .on_submit(move |_| on_ir()),
+        rect()
+            .direction(Direction::Horizontal)
+            .spacing(8.0)
+            .child(
+                Button::new()
+                    .on_press(move |_| on_ir())
+                    .filled()
+                    .child("Ir"),
+            )
+            .child(
+                Button::new()
+                    .on_press(move |_| on_cancelar())
+                    .child("Cancelar"),
             ),
-        )
-        .child(
-            PopupButtons::new()
-                .child(
-                    Button::new()
-                        .on_press(move |_| on_ir())
-                        .filled()
-                        .child("Ir"),
-                )
-                .child(
-                    Button::new()
-                        .on_press(move |_| on_cancelar())
-                        .child("Cancelar"),
-                ),
-        )
+    )
 }
 
 pub fn dialogo_nome(
+    paleta: Paleta,
     titulo: String,
     valor: State<String>,
     on_ok: impl Fn() + Copy + 'static,
     on_cancelar: impl Fn() + Copy + 'static,
 ) -> impl IntoElement {
-    Popup::new()
-        .width(Size::px(360.0))
-        .on_close_request(move |_| on_cancelar())
-        .child(PopupTitle::new(titulo))
-        .child(
-            PopupContent::new().child(
-                CampoTexto::new(valor)
-                    .placeholder("nome")
-                    .width(Size::fill())
-                    .auto_focus(true)
-                    .on_submit(move |_| on_ok()),
+    quadro_dialogo(
+        paleta,
+        titulo,
+        360.0,
+        on_cancelar,
+        CampoTexto::new(valor)
+            .placeholder("nome")
+            .width(Size::fill())
+            .auto_focus(true)
+            .on_submit(move |_| on_ok()),
+        rect()
+            .direction(Direction::Horizontal)
+            .spacing(8.0)
+            .child(
+                Button::new()
+                    .on_press(move |_| on_ok())
+                    .filled()
+                    .child("OK"),
+            )
+            .child(
+                Button::new()
+                    .on_press(move |_| on_cancelar())
+                    .child("Cancelar"),
             ),
-        )
-        .child(
-            PopupButtons::new()
-                .child(
-                    Button::new()
-                        .on_press(move |_| on_ok())
-                        .filled()
-                        .child("OK"),
-                )
-                .child(
-                    Button::new()
-                        .on_press(move |_| on_cancelar())
-                        .child("Cancelar"),
-                ),
-        )
+    )
 }
 
-pub fn painel_ficha(
-    texto: String,
+pub fn janela_ajuda(
+    escolhida: State<Option<String>>,
     paleta: Paleta,
-    on_fechar: impl Fn() + Copy + 'static,
 ) -> impl IntoElement {
-    rect()
-        .position(Position::new_global().top(80.).right(16.))
-        .width(Size::px(420.0))
-        .height(Size::px(360.0))
-        .background(paleta.fundo)
-        .color(paleta.texto)
-        .corner_radius(8.0)
-        .border(
-            Border::new()
-                .width(BorderWidth {
-                    top: 1.0,
-                    right: 1.0,
-                    bottom: 1.0,
-                    left: 1.0,
-                })
-                .fill(paleta.borda),
-        )
-        .child(
-            rect()
-                .direction(Direction::Vertical)
-                .width(Size::fill())
-                .height(Size::fill())
-                .child(
-                    rect()
-                        .direction(Direction::Horizontal)
-                        .width(Size::fill())
-                        .main_align(Alignment::SpaceBetween)
-                        .padding(8.0)
-                        .child(label().font_weight(FontWeight::BOLD).text("Ajuda"))
-                        .child(
-                            Button::new()
-                                .flat()
-                                .compact()
-                                .on_press(move |_| on_fechar())
-                                .child("×"),
-                        ),
-                )
-                .child(ScrollView::new().child(label().font_size(13.0).text(texto))),
-        )
-}
-
-pub fn painel_catalogo(
-    itens: Vec<(String, String)>,
-    paleta: Paleta,
-    on_item: impl Fn(String) + Copy + 'static,
-    on_fechar: impl Fn() + Copy + 'static,
-) -> impl IntoElement {
-    let mut lista = rect().direction(Direction::Vertical).spacing(2.0).padding(8.0);
-    for (nome, _) in itens {
-        let n = nome.clone();
+    let filtro = use_state(String::new);
+    let q = filtro.read().to_lowercase();
+    let entradas = crate::ajuda::entradas_catalogo();
+    let mut lista = rect()
+        .direction(Direction::Vertical)
+        .width(Size::fill())
+        .spacing(1.0)
+        .padding((4.0, 6.0, 4.0, 6.0));
+    let mut grupo_atual = String::new();
+    for e in &entradas {
+        if !q.is_empty()
+            && !e.chave.to_lowercase().contains(&q)
+            && !e.rotulo.to_lowercase().contains(&q)
+        {
+            continue;
+        }
+        if e.grupo != grupo_atual {
+            grupo_atual = e.grupo.clone();
+            lista = lista.child(
+                label()
+                    .font_size(11.0)
+                    .font_weight(FontWeight::BOLD)
+                    .color((140, 140, 148))
+                    .text(e.grupo.clone()),
+            );
+        }
+        let chave = e.chave.clone();
+        let esta = escolhida.read().as_deref() == Some(chave.as_str());
         lista = lista.child(
-            Button::new()
-                .flat()
-                .on_press(move |_| on_item(n.clone()))
-                .child(nome),
+            rect()
+                .width(Size::fill())
+                .padding((3.0, 6.0, 3.0, 6.0))
+                .background(if esta { paleta.botao } else { paleta.fundo })
+                .on_press({
+                    let chave = chave.clone();
+                    move |_| {
+                        let mut escolhida = escolhida;
+                        escolhida.set(Some(chave.clone()));
+                    }
+                })
+                .child(
+                    label()
+                        .font_size(13.0)
+                        .font_family(fonte_familia())
+                        .text(e.rotulo.clone()),
+                ),
         );
     }
+    let ficha = escolhida
+        .read()
+        .as_deref()
+        .and_then(crate::ajuda::ficha)
+        .unwrap_or_else(|| "Escolha uma função à esquerda.".into());
     rect()
-        .position(Position::new_global().top(80.).left(260.))
-        .width(Size::px(360.0))
-        .height(Size::px(480.0))
+        .direction(Direction::Horizontal)
+        .width(Size::fill())
+        .height(Size::fill())
+        .content(Content::flex())
         .background(paleta.fundo)
         .color(paleta.texto)
-        .corner_radius(8.0)
         .child(
             rect()
                 .direction(Direction::Vertical)
-                .width(Size::fill())
+                .width(Size::px(280.0))
+                .height(Size::fill())
+                .content(Content::flex())
+                .background(paleta.barra)
+                .border(
+                    Border::new()
+                        .width(BorderWidth {
+                            top: 0.0,
+                            right: 1.0,
+                            bottom: 0.0,
+                            left: 0.0,
+                        })
+                        .fill(paleta.borda),
+                )
+                .child(
+                    rect()
+                        .width(Size::fill())
+                        .padding(8.0)
+                        .child(
+                            CampoTexto::new(filtro)
+                                .placeholder("filtrar (escreva, matriz::zeros, …)")
+                                .width(Size::fill()),
+                        ),
+                )
+                .child(
+                    ScrollView::new()
+                        .height(Size::flex(1.0))
+                        .child(lista),
+                ),
+        )
+        .child(
+            ScrollView::new()
+                .width(Size::flex(1.0))
                 .height(Size::fill())
                 .child(
                     rect()
-                        .direction(Direction::Horizontal)
                         .width(Size::fill())
-                        .main_align(Alignment::SpaceBetween)
-                        .padding(8.0)
-                        .child(label().font_weight(FontWeight::BOLD).text("Funções nativas"))
+                        .padding(12.0)
                         .child(
-                            Button::new()
-                                .flat()
-                                .compact()
-                                .on_press(move |_| on_fechar())
-                                .child("×"),
+                            label()
+                                .font_size(13.0)
+                                .font_family(fonte_familia())
+                                .text(ficha),
                         ),
-                )
-                .child(ScrollView::new().child(lista)),
+                ),
         )
 }
 
@@ -1386,59 +1520,68 @@ pub fn painel_sugestoes(
         .background(paleta.fundo)
         .color(paleta.texto)
         .corner_radius(6.0)
+        .border(
+            Border::new()
+                .width(BorderWidth {
+                    top: 1.0,
+                    right: 1.0,
+                    bottom: 1.0,
+                    left: 1.0,
+                })
+                .fill(paleta.borda),
+        )
         .child(lista)
 }
 
 pub fn dialogo_servidor(
+    paleta: Paleta,
     url: State<String>,
     aluno: State<String>,
     on_ok: impl Fn() + Copy + 'static,
     on_cancelar: impl Fn() + Copy + 'static,
 ) -> impl IntoElement {
-    Popup::new()
-        .width(Size::px(440.0))
-        .on_close_request(move |_| on_cancelar())
-        .child(PopupTitle::new("Servidor da turma".to_string()))
-        .child(
-            PopupContent::new()
-                .child(
-                    rect()
-                        .direction(Direction::Vertical)
-                        .spacing(8.0)
-                        .width(Size::fill())
-                        .child(label().font_size(13.0).text("URL (em casa: 127.0.0.1:50051)"))
-                        .child(
-                            CampoTexto::new(url)
-                                .placeholder("http://127.0.0.1:50051")
-                                .width(Size::fill())
-                                .auto_focus(true),
-                        )
-                        .child(label().font_size(13.0).text("Aluno"))
-                        .child(
-                            CampoTexto::new(aluno)
-                                .placeholder("local")
-                                .width(Size::fill())
-                                .on_submit(move |_| on_ok()),
-                        ),
-                ),
-        )
-        .child(
-            PopupButtons::new()
-                .child(
-                    Button::new()
-                        .on_press(move |_| on_ok())
-                        .filled()
-                        .child("Conectar"),
-                )
-                .child(
-                    Button::new()
-                        .on_press(move |_| on_cancelar())
-                        .child("Cancelar"),
-                ),
-        )
+    quadro_dialogo(
+        paleta,
+        "Servidor da turma".into(),
+        440.0,
+        on_cancelar,
+        rect()
+            .direction(Direction::Vertical)
+            .spacing(8.0)
+            .width(Size::fill())
+            .child(label().font_size(13.0).text("URL (em casa: 127.0.0.1:50051)"))
+            .child(
+                CampoTexto::new(url)
+                    .placeholder("http://127.0.0.1:50051")
+                    .width(Size::fill())
+                    .auto_focus(true),
+            )
+            .child(label().font_size(13.0).text("Aluno"))
+            .child(
+                CampoTexto::new(aluno)
+                    .placeholder("local")
+                    .width(Size::fill())
+                    .on_submit(move |_| on_ok()),
+            ),
+        rect()
+            .direction(Direction::Horizontal)
+            .spacing(8.0)
+            .child(
+                Button::new()
+                    .on_press(move |_| on_ok())
+                    .filled()
+                    .child("Conectar"),
+            )
+            .child(
+                Button::new()
+                    .on_press(move |_| on_cancelar())
+                    .child("Cancelar"),
+            ),
+    )
 }
 
 pub fn dialogo_projetos(
+    paleta: Paleta,
     nomes: Vec<String>,
     novo: State<String>,
     on_abrir: impl Fn(String) + Copy + 'static,
@@ -1460,44 +1603,43 @@ pub fn dialogo_projetos(
                 .child(nome),
         );
     }
-    Popup::new()
-        .width(Size::px(420.0))
-        .on_close_request(move |_| on_cancelar())
-        .child(PopupTitle::new("Projetos no servidor".to_string()))
-        .child(
-            PopupContent::new().child(
-                rect()
-                    .direction(Direction::Vertical)
-                    .spacing(8.0)
+    quadro_dialogo(
+        paleta,
+        "Projetos no servidor".into(),
+        420.0,
+        on_cancelar,
+        rect()
+            .direction(Direction::Vertical)
+            .spacing(8.0)
+            .width(Size::fill())
+            .child(ScrollView::new().height(Size::px(180.0)).child(lista))
+            .child(label().font_size(13.0).text("Novo projeto"))
+            .child(
+                CampoTexto::new(novo)
+                    .placeholder("nome")
                     .width(Size::fill())
-                    .child(ScrollView::new().height(Size::px(180.0)).child(lista))
-                    .child(label().font_size(13.0).text("Novo projeto"))
-                    .child(
-                        CampoTexto::new(novo)
-                            .placeholder("nome")
-                            .width(Size::fill())
-                            .auto_focus(true)
-                            .on_submit(move |_| on_criar()),
-                    ),
+                    .auto_focus(true)
+                    .on_submit(move |_| on_criar()),
             ),
-        )
-        .child(
-            PopupButtons::new()
-                .child(
-                    Button::new()
-                        .on_press(move |_| on_criar())
-                        .filled()
-                        .child("Criar"),
-                )
-                .child(
-                    Button::new()
-                        .on_press(move |_| on_cancelar())
-                        .child("Cancelar"),
-                ),
-        )
+        rect()
+            .direction(Direction::Horizontal)
+            .spacing(8.0)
+            .child(
+                Button::new()
+                    .on_press(move |_| on_criar())
+                    .filled()
+                    .child("Criar"),
+            )
+            .child(
+                Button::new()
+                    .on_press(move |_| on_cancelar())
+                    .child("Cancelar"),
+            ),
+    )
 }
 
 pub fn dialogo_recuperar(
+    paleta: Paleta,
     nomes: Vec<String>,
     on_ok: impl Fn() + Copy + 'static,
     on_descartar: impl Fn() + Copy + 'static,
@@ -1508,40 +1650,39 @@ pub fn dialogo_recuperar(
     } else {
         format!(
             "Há rascunhos não salvos:\n{}",
-            nomes
-                .into_iter()
-                .take(8)
-                .collect::<Vec<_>>()
-                .join("\n")
+            nomes.into_iter().take(8).collect::<Vec<_>>().join("\n")
         )
     };
-    Popup::new()
-        .width(Size::px(440.0))
-        .on_close_request(move |_| on_fechar())
-        .child(PopupTitle::new("Recuperar rascunhos".to_string()))
-        .child(PopupContent::new().child(lista))
-        .child(
-            PopupButtons::new()
-                .child(
-                    Button::new()
-                        .on_press(move |_| on_ok())
-                        .filled()
-                        .child("Recuperar"),
-                )
-                .child(
-                    Button::new()
-                        .on_press(move |_| on_descartar())
-                        .child("Descartar"),
-                )
-                .child(
-                    Button::new()
-                        .on_press(move |_| on_fechar())
-                        .child("Cancelar"),
-                ),
-        )
+    quadro_dialogo(
+        paleta,
+        "Recuperar rascunhos".into(),
+        440.0,
+        on_fechar,
+        label().font_size(13.0).text(lista),
+        rect()
+            .direction(Direction::Horizontal)
+            .spacing(8.0)
+            .child(
+                Button::new()
+                    .on_press(move |_| on_ok())
+                    .filled()
+                    .child("Recuperar"),
+            )
+            .child(
+                Button::new()
+                    .on_press(move |_| on_descartar())
+                    .child("Descartar"),
+            )
+            .child(
+                Button::new()
+                    .on_press(move |_| on_fechar())
+                    .child("Cancelar"),
+            ),
+    )
 }
 
 pub fn dialogo_conflito(
+    paleta: Paleta,
     nome: String,
     on_comparar: impl Fn() + Copy + 'static,
     on_recarregar: impl Fn() + Copy + 'static,
@@ -1549,114 +1690,114 @@ pub fn dialogo_conflito(
     on_substituir: impl Fn() + Copy + 'static,
     on_cancelar: impl Fn() + Copy + 'static,
 ) -> impl IntoElement {
-    Popup::new()
-        .width(Size::px(520.0))
-        .on_close_request(move |_| on_cancelar())
-        .child(PopupTitle::new(format!("Conflito ao salvar {nome}")))
-        .child(PopupContent::new().child(
+    quadro_dialogo(
+        paleta,
+        format!("Conflito ao salvar {nome}"),
+        560.0,
+        on_cancelar,
+        label().font_size(13.0).text(
             "O arquivo mudou desde que esta aba foi aberta. Suas alterações continuam na aba. Substituir grava o texto da aba sobre a versão deste aviso.",
-        ))
-        .child(
-            PopupButtons::new()
-                .child(
-                    Button::new()
-                        .on_press(move |_| on_comparar())
-                        .filled()
-                        .child("Comparar"),
-                )
-                .child(
-                    Button::new()
-                        .on_press(move |_| on_recarregar())
-                        .child("Recarregar"),
-                )
-                .child(
-                    Button::new()
-                        .on_press(move |_| on_salvar_como())
-                        .child("Salvar como"),
-                )
-                .child(
-                    Button::new()
-                        .on_press(move |_| on_substituir())
-                        .child("Substituir"),
-                )
-                .child(
-                    Button::new()
-                        .on_press(move |_| on_cancelar())
-                        .child("Cancelar"),
-                ),
-        )
+        ),
+        rect()
+            .direction(Direction::Horizontal)
+            .spacing(8.0)
+            .child(
+                Button::new()
+                    .on_press(move |_| on_comparar())
+                    .filled()
+                    .child("Comparar"),
+            )
+            .child(
+                Button::new()
+                    .on_press(move |_| on_recarregar())
+                    .child("Recarregar"),
+            )
+            .child(
+                Button::new()
+                    .on_press(move |_| on_salvar_como())
+                    .child("Salvar como"),
+            )
+            .child(
+                Button::new()
+                    .on_press(move |_| on_substituir())
+                    .child("Substituir"),
+            )
+            .child(
+                Button::new()
+                    .on_press(move |_| on_cancelar())
+                    .child("Cancelar"),
+            ),
+    )
 }
 
 pub fn dialogo_comparar(
+    paleta: Paleta,
     nome: String,
     aba: String,
     disco: String,
     on_fechar: impl Fn() + Copy + 'static,
 ) -> impl IntoElement {
-    Popup::new()
-        .width(Size::px(640.0))
-        .on_close_request(move |_| on_fechar())
-        .child(PopupTitle::new(format!("Comparar — {nome}")))
-        .child(
-            PopupContent::new().child(
-                rect()
-                    .direction(Direction::Horizontal)
-                    .spacing(12.0)
-                    .width(Size::fill())
-                    .height(Size::px(280.0))
-                    .child(
-                        ScrollView::new().width(Size::fill()).child(
-                            rect()
-                                .direction(Direction::Vertical)
-                                .spacing(4.0)
-                                .child(label().font_weight(FontWeight::BOLD).text("Sua aba"))
-                                .child(label().font_size(12.0).text(aba)),
-                        ),
-                    )
-                    .child(
-                        ScrollView::new().width(Size::fill()).child(
-                            rect()
-                                .direction(Direction::Vertical)
-                                .spacing(4.0)
-                                .child(label().font_weight(FontWeight::BOLD).text("Arquivo salvo"))
-                                .child(label().font_size(12.0).text(disco)),
-                        ),
-                    ),
+    quadro_dialogo(
+        paleta,
+        format!("Comparar — {nome}"),
+        720.0,
+        on_fechar,
+        rect()
+            .direction(Direction::Horizontal)
+            .spacing(12.0)
+            .width(Size::fill())
+            .height(Size::px(280.0))
+            .child(
+                ScrollView::new().width(Size::fill()).child(
+                    rect()
+                        .direction(Direction::Vertical)
+                        .spacing(4.0)
+                        .child(label().font_weight(FontWeight::BOLD).text("Sua aba"))
+                        .child(label().font_size(12.0).font_family(fonte_familia()).text(aba)),
+                ),
+            )
+            .child(
+                ScrollView::new().width(Size::fill()).child(
+                    rect()
+                        .direction(Direction::Vertical)
+                        .spacing(4.0)
+                        .child(label().font_weight(FontWeight::BOLD).text("Arquivo salvo"))
+                        .child(label().font_size(12.0).font_family(fonte_familia()).text(disco)),
+                ),
             ),
-        )
-        .child(
-            PopupButtons::new().child(
-                Button::new()
-                    .on_press(move |_| on_fechar())
-                    .child("Fechar"),
-            ),
-        )
+        Button::new()
+            .on_press(move |_| on_fechar())
+            .child("Fechar"),
+    )
 }
 
 pub fn dialogo_apagar(
+    paleta: Paleta,
     rel: String,
     on_ok: impl Fn() + Copy + 'static,
     on_cancelar: impl Fn() + Copy + 'static,
 ) -> impl IntoElement {
-    Popup::new()
-        .width(Size::px(400.0))
-        .on_close_request(move |_| on_cancelar())
-        .child(PopupTitle::new("Apagar".to_string()))
-        .child(PopupContent::new().child(format!("Apagar {rel}?")))
-        .child(
-            PopupButtons::new()
-                .child(
-                    Button::new()
-                        .on_press(move |_| on_ok())
-                        .filled()
-                        .child("Apagar"),
-                )
-                .child(
-                    Button::new()
-                        .on_press(move |_| on_cancelar())
-                        .child("Cancelar"),
-                ),
-        )
+    quadro_dialogo(
+        paleta,
+        "Apagar".into(),
+        400.0,
+        on_cancelar,
+        label().font_size(13.0).text(format!("Apagar {rel}?")),
+        rect()
+            .direction(Direction::Horizontal)
+            .spacing(8.0)
+            .child(
+                Button::new()
+                    .on_press(move |_| on_ok())
+                    .filled()
+                    .child("Apagar"),
+            )
+            .child(
+                Button::new()
+                    .on_press(move |_| on_cancelar())
+                    .child("Cancelar"),
+            ),
+    )
 }
 
 pub fn painel_debug(

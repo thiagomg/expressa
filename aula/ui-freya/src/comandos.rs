@@ -7,8 +7,8 @@ use freya::prelude::*;
 use freya::text_edit::TextEditor;
 
 use crate::ajuda::{
-    Sugestao, achar_importe, completar_em, deslocamento_importe, ficha, garantir_importe,
-    nome_no_cursor, prefixo_em, spawn_tutorial,
+    Sugestao, TITULO_AJUDA, achar_importe, completar_em, deslocamento_importe, ficha,
+    garantir_importe, nome_no_cursor, prefixo_em, spawn_tutorial,
 };
 use crate::atalhos::Acao;
 use crate::debug::Depuracao;
@@ -34,7 +34,9 @@ use crate::projeto::{
     Projeto, apagar, abrir_raiz, criar_arquivo, criar_pasta, escolher_pasta, pasta_do_item,
     rel_na_raiz, renomear,
 };
-use crate::shell::{Paleta, aplicar_tema_editor, janela_tela_grafica, painel_graficos, tema_freya};
+use crate::shell::{
+    Paleta, aplicar_tema_editor, janela_ajuda, janela_tela_grafica, painel_graficos, tema_freya,
+};
 
 pub fn aplicar(
     acao: Acao,
@@ -167,8 +169,6 @@ pub fn aplicar(
             substituir_aberta.set(false);
             dialogo.set(Dialogo::Nenhum);
             atalhos_visiveis.set(false);
-            ajuda.set(None);
-            catalogo.set(false);
             sugestoes.set(Vec::new());
             assinatura_oculta.set(true);
         }
@@ -1327,6 +1327,107 @@ pub fn destacar_graficos(mut graficos: State<Graficos>) {
     graficos.write().destacado = v;
 }
 
+#[derive(Clone, Debug, Default)]
+pub struct JanelaOs {
+    pub id: Option<freya::winit::window::WindowId>,
+    pub abrindo: bool,
+    pub focar: bool,
+}
+
+pub fn garantir_janela(
+    aberta: State<bool>,
+    mut janela: State<JanelaOs>,
+    titulo: &'static str,
+    largura: f64,
+    altura: f64,
+    min_l: f64,
+    min_a: f64,
+    app: impl Fn() -> Element + Clone + 'static,
+) {
+    let quer = aberta();
+    let id = janela.read().id;
+    let abrindo = janela.read().abrindo;
+    let focar = janela.read().focar;
+    match (quer, id, abrindo) {
+        (true, Some(wid), _) if focar => {
+            janela.write().focar = false;
+            Platform::get().focus_window(wid);
+        }
+        (true, None, false) => {
+            janela.write().abrindo = true;
+            janela.write().focar = false;
+            spawn_in_window(async move {
+                let app = app.clone();
+                let wid = Platform::get()
+                    .launch_window(
+                        WindowConfig::new(move || app())
+                            .with_title(titulo)
+                            .with_size(largura, altura)
+                            .with_min_size(min_l, min_a)
+                            .with_app_id("dev.expressa.aula")
+                            .with_on_close(move |_, _| {
+                                janela.write().id = None;
+                                janela.write().abrindo = false;
+                                janela.write().focar = false;
+                                let mut aberta = aberta;
+                                aberta.set(false);
+                                CloseDecision::Close
+                            }),
+                    )
+                    .await;
+                janela.write().abrindo = false;
+                if aberta() {
+                    janela.write().id = Some(wid);
+                } else {
+                    Platform::get().close_window(wid);
+                }
+            });
+        }
+        (false, Some(wid), _) => {
+            janela.write().id = None;
+            janela.write().abrindo = false;
+            janela.write().focar = false;
+            Platform::get().close_window(wid);
+        }
+        _ => {}
+    }
+}
+
+pub fn garantir_janela_ajuda(
+    catalogo: State<bool>,
+    ajuda: State<Option<String>>,
+    janela: State<JanelaOs>,
+    paleta: Paleta,
+) {
+    garantir_janela(
+        catalogo,
+        janela,
+        TITULO_AJUDA,
+        860.0,
+        540.0,
+        480.0,
+        320.0,
+        move || janela_ajuda(ajuda, paleta).into_element(),
+    );
+}
+
+pub fn garantir_janela_atalhos(
+    visivel: State<bool>,
+    janela: State<JanelaOs>,
+    paleta: Paleta,
+) {
+    garantir_janela(
+        visivel,
+        janela,
+        crate::shell::TITULO_ATALHOS,
+        520.0,
+        560.0,
+        360.0,
+        320.0,
+        move || crate::shell::janela_atalhos(paleta).into_element(),
+    );
+}
+
 pub fn garantir_janelas_graf(
     mut graficos: State<Graficos>,
     exec: State<Execucao>,
@@ -1823,13 +1924,12 @@ pub fn mostrar_ajuda(
     let texto = editor.read().rope.to_string();
     let byte = crate::editor::byte_do_cursor(&editor.read());
     match nome_no_cursor(&texto, byte).and_then(|n| ficha(&n).map(|f| (n, f))) {
-        Some((nome, f)) => {
-            ajuda.set(Some(f));
-            catalogo.set(false);
+        Some((nome, _)) => {
+            ajuda.set(Some(nome.clone()));
+            catalogo.set(true);
             status.set(format!("Ajuda: {nome}"));
         }
         None => {
-            ajuda.set(None);
             catalogo.set(true);
             status.set("Funções nativas".into());
         }

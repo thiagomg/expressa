@@ -43,18 +43,46 @@ pub fn ficha(nome: &str) -> Option<String> {
 }
 
 pub fn catalogo() -> Vec<(String, String)> {
-    let mut out: Vec<(String, String)> = builtin_docs()
+    entradas_catalogo()
+        .into_iter()
+        .map(|e| (e.chave, e.rotulo))
+        .collect()
+}
+
+/// Título da janela irmã de F1 / Funções nativas (igual ao GTK).
+pub const TITULO_AJUDA: &str = "Ajuda — funções nativas";
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct EntradaCatalogo {
+    pub chave: String,
+    pub rotulo: String,
+    pub grupo: String,
+}
+
+pub fn entradas_catalogo() -> Vec<EntradaCatalogo> {
+    builtin_docs()
         .iter()
         .map(|d| {
-            let nome = match &d.module {
+            let grupo = match d.module.as_deref() {
+                None => "Núcleo".to_string(),
+                Some(m) => format!("importe \"{m}\""),
+            };
+            let chave = match d.module.as_deref() {
                 Some(m) => format!("{m}::{}", d.name),
                 None => d.name.clone(),
             };
-            (nome, d.ficha())
+            let rotulo = if d.is_value {
+                d.name.clone()
+            } else {
+                chave.clone()
+            };
+            EntradaCatalogo {
+                chave,
+                rotulo,
+                grupo,
+            }
         })
-        .collect();
-    out.sort_by(|a, b| a.0.cmp(&b.0));
-    out
+        .collect()
 }
 
 /// Hint for the call that contains the cursor (`escreva(«valor», ...)`).

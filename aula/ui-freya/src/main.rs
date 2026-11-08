@@ -42,12 +42,12 @@ use crate::{
         conectar_servidor, criar_projeto_servidor, descartar_rascunhos, escolher_projeto,
         fechar_dialogo_rascunhos,
         fechar_aba, destacar_graficos, enviar_repl, fechar_repl, garantir_janelas_graf,
-        ir_para_linha, ir_para_pausa, ir_para_saida, limpar_repl, parar_repl, pasta_selecionada,
+        garantir_janela_ajuda, garantir_janela_atalhos, ir_para_linha, ir_para_pausa, ir_para_saida, limpar_repl, parar_repl, pasta_selecionada,
         menu_contexto_arvore, pedir_apagar, pedir_nome, recuperar_rascunhos, reiniciar_repl,
         remover_observado,
-        resolver_conflito, restaurar_arquivo, selecionar_aba,
+        resolver_conflito, restaurar_arquivo, selecionar_aba, JanelaOs,
     },
-    ajuda::{Sugestao, assinatura, catalogo, ficha},
+    ajuda::{Sugestao, assinatura},
     console::Console,
     debug::Depuracao,
     execucao::Execucao,
@@ -70,7 +70,7 @@ use crate::{
         FocoCampos,
         dialogo_apagar, dialogo_comparar, dialogo_confirmar, dialogo_conflito, dialogo_linha,
         dialogo_nome, dialogo_projetos, dialogo_recuperar, dialogo_servidor, editor_inicial,
-        painel_arvore, painel_atalhos, painel_catalogo, painel_console, painel_debug, painel_ficha,
+        painel_arvore, painel_console, painel_debug,
         painel_assinatura, painel_graficos, painel_repl, painel_sugestoes, tema_freya,
     },
 };
@@ -108,7 +108,7 @@ fn app() -> impl IntoElement {
     let mut editor = use_state(|| editor_inicial(TEXTO_INICIAL, prefs_iniciais.dark));
     let status = use_state(String::new);
     let menu = use_state(MenuAberto::default);
-    let mut atalhos_visiveis = use_state(|| false);
+    let atalhos_visiveis = use_state(|| false);
     let mut abas = use_state(|| Abas::nova(TEXTO_INICIAL));
     let mut dialogo = use_state(Dialogo::default);
     let linha_campo = use_state(String::new);
@@ -141,6 +141,8 @@ fn app() -> impl IntoElement {
     let args = use_state(String::new);
     let ajuda = use_state(|| None::<String>);
     let catalogo_aberto = use_state(|| false);
+    let janela_ajuda = use_state(JanelaOs::default);
+    let janela_atalhos = use_state(JanelaOs::default);
     let sugestoes = use_state(Vec::<Sugestao>::new);
     let mut assinatura_oculta = use_state(|| false);
     let depuracao = use_state(Depuracao::default);
@@ -238,6 +240,17 @@ fn app() -> impl IntoElement {
                 }
             }
             garantir_janelas_graf(graficos, exec, janelas, Paleta::de(prefs.read().dark));
+            garantir_janela_ajuda(
+                catalogo_aberto,
+                ajuda,
+                janela_ajuda,
+                Paleta::de(prefs.read().dark),
+            );
+            garantir_janela_atalhos(
+                atalhos_visiveis,
+                janela_atalhos,
+                Paleta::de(prefs.read().dark),
+            );
         }
             }
         }
@@ -343,6 +356,14 @@ fn app() -> impl IntoElement {
             Acao::Repl if repl.read().visivel => aba_fundo.set(AbaFundo::Repl),
             Acao::Repl => aba_fundo.set(AbaFundo::Saida),
             Acao::Executar | Acao::Depurar => aba_fundo.set(AbaFundo::Saida),
+            Acao::Ajuda | Acao::Catalogo => {
+                let mut janela_ajuda = janela_ajuda;
+                janela_ajuda.write().focar = true;
+            }
+            Acao::Atalhos => {
+                let mut janela_atalhos = janela_atalhos;
+                janela_atalhos.write().focar = true;
+            }
             _ => {}
         }
     };
@@ -697,29 +718,6 @@ fn app() -> impl IntoElement {
             )
         }))
         .child(barra_status(linha, coluna, &pasta, &recado, paleta))
-        .maybe_child(atalhos_visiveis().then(move || {
-            painel_atalhos(paleta, move || atalhos_visiveis.set(false))
-        }))
-        .maybe_child(ajuda.read().clone().map(|texto| {
-            painel_ficha(texto, paleta, move || {
-                let mut ajuda = ajuda;
-                ajuda.set(None);
-            })
-        }))
-        .maybe_child(catalogo_aberto().then(move || {
-            painel_catalogo(
-                catalogo(),
-                paleta,
-                move |nome| {
-                    let mut ajuda = ajuda;
-                    ajuda.set(ficha(&nome));
-                },
-                move || {
-                    let mut catalogo_aberto = catalogo_aberto;
-                    catalogo_aberto.set(false);
-                },
-            )
-        }))
         .maybe_child({
             let texto = editor.read().rope.to_string();
             let byte = crate::editor::byte_do_cursor(&editor.read());
@@ -777,6 +775,7 @@ fn app() -> impl IntoElement {
             }
             .map(|titulo| {
                 dialogo_nome(
+                    paleta,
                     titulo,
                     nome_campo,
                     move || confirmar_nome(&nome_campo.read(), editor, prefs, abas, status, dialogo, projeto, turma),
@@ -795,6 +794,7 @@ fn app() -> impl IntoElement {
             }
             .map(|rel| {
                 dialogo_apagar(
+                    paleta,
                     rel,
                     move || confirmar_apagar(status, dialogo, projeto, turma),
                     move || {
@@ -806,6 +806,7 @@ fn app() -> impl IntoElement {
         )
         .maybe_child(matches!(dialogo_agora, Dialogo::Servidor).then(move || {
             dialogo_servidor(
+                paleta,
                 servidor_campo,
                 aluno_campo,
                 move || {
@@ -826,6 +827,7 @@ fn app() -> impl IntoElement {
         }))
         .maybe_child(matches!(dialogo_agora, Dialogo::Projetos).then(move || {
             dialogo_projetos(
+                paleta,
                 turma.read().projetos.clone(),
                 nome_campo,
                 move |nome| {
@@ -859,6 +861,7 @@ fn app() -> impl IntoElement {
             }
             .map(|nomes| {
                 dialogo_recuperar(
+                    paleta,
                     nomes,
                     move || recuperar_rascunhos(editor, prefs, abas, status, dialogo),
                     move || descartar_rascunhos(dialogo, status),
@@ -874,6 +877,7 @@ fn app() -> impl IntoElement {
             }
             .map(|nome| {
                 dialogo_conflito(
+                    paleta,
                     nome,
                     move || resolver_conflito("comparar", editor, prefs, abas, status, dialogo, turma, projeto),
                     move || resolver_conflito("recarregar", editor, prefs, abas, status, dialogo, turma, projeto),
@@ -890,7 +894,7 @@ fn app() -> impl IntoElement {
                 None
             }
             .map(|(nome, aba, disco)| {
-                dialogo_comparar(nome, aba, disco, move || {
+                dialogo_comparar(paleta, nome, aba, disco, move || {
                     let mut dialogo = dialogo;
                     dialogo.set(Dialogo::Nenhum);
                 })
