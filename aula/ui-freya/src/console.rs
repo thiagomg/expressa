@@ -1,4 +1,9 @@
 //! Program output: ANSI colors, cls/quadro, clickable `arquivo:linha`.
+//!
+//! The Freya UI renders this through `freya-terminal`; this model stays so CSI
+//! tests match GTK and error clicks can still parse `arquivo:linha`.
+
+use crate::terminal_aula::PonteSaida;
 
 pub const MAX_LINHAS: usize = 5000;
 
@@ -16,6 +21,7 @@ pub struct Console {
     pub linhas: Vec<Vec<Trecho>>,
     pub leia_prompt: Option<String>,
     pub entrada: String,
+    pub ponte: PonteSaida,
     tela: Tela,
     estilo: AnsiStyle,
 }
@@ -38,9 +44,11 @@ impl Console {
         self.entrada.clear();
         self.tela = Tela::default();
         self.estilo = AnsiStyle::default();
+        self.ponte.limpar();
     }
 
     pub fn escrever(&mut self, texto: &str, stderr: bool) {
+        self.ponte.escrever(texto, stderr);
         if !stderr
             && (self.tela.row.is_some()
                 || !self.tela.held.is_empty()

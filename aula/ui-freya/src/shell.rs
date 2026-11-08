@@ -1,20 +1,23 @@
-//! Menubar, toolbar and status bar.
+//! Menubar, status bar and resizable panes.
 
 use std::cell::RefCell;
 use std::collections::HashSet;
 use std::rc::Rc;
 
 use freya::{
+    clipboard::Clipboard,
     code_editor::{CodeEditorData, CodeEditorThemeExt, EditorSyntaxTheme},
     engine::prelude::AlphaType,
     prelude::*,
+    terminal::{
+        SelectionType, Terminal, TerminalHandle, TerminalMouseButton,
+    },
 };
 
 use crate::{
     ajuda::Sugestao,
     atalhos::{Acao, ATALHOS},
     prefs::Recente,
-    console::Console,
     debug::{Depuracao, MarcaGutter, marca_gutter, valor_observado},
     documentos::Abas,
     editor::{fonte_familia, new_editor},
@@ -184,6 +187,7 @@ pub fn barra_menus(
     recentes: Vec<Recente>,
     marcas: MarcasVer,
 ) -> impl IntoElement {
+    let mut pode_fechar = use_state(|| false);
     rect()
         .direction(Direction::Horizontal)
         .width(Size::fill())
@@ -202,8 +206,14 @@ pub fn barra_menus(
         )
         .padding((0.0, 6.0, 0.0, 6.0))
         .cross_align(Alignment::Center)
+        .on_global_pointer_down(move |_| {
+            if aberto() != MenuAberto::Nenhum {
+                pode_fechar.set(true);
+            }
+        })
         .child(menu_arquivo(
             aberto,
+            pode_fechar,
             paleta,
             on_acao,
             on_recente,
@@ -213,6 +223,7 @@ pub fn barra_menus(
             "Executar",
             MenuAberto::Executar,
             aberto,
+            pode_fechar,
             paleta,
             on_acao,
             &[
@@ -225,6 +236,7 @@ pub fn barra_menus(
             "Depurar",
             MenuAberto::Depurar,
             aberto,
+            pode_fechar,
             paleta,
             on_acao,
             &[
@@ -240,6 +252,7 @@ pub fn barra_menus(
             "Ver",
             MenuAberto::Ver,
             aberto,
+            pode_fechar,
             paleta,
             on_acao,
             &[
@@ -268,6 +281,7 @@ pub fn barra_menus(
             "Ajuda",
             MenuAberto::Ajuda,
             aberto,
+            pode_fechar,
             paleta,
             on_acao,
             &[
@@ -279,17 +293,31 @@ pub fn barra_menus(
         ))
 }
 
-fn menu_arquivo(
+/// Freya tem [`Menu`]/[`MenuButton`]/[`SubMenu`]. [`ContextMenu`] ancora no
+/// cursor (clique direito). O menubar ancora o [`Menu`] na caixa do título.
+fn entrada_menu(
+    titulo: &'static str,
+    id: MenuAberto,
     mut aberto: State<MenuAberto>,
-    _paleta: Paleta,
-    on_acao: impl Fn(Acao) + Copy + 'static,
-    on_recente: impl Fn(Recente) + Copy + 'static,
-    recentes: Vec<Recente>,
+    mut pode_fechar: State<bool>,
+    paleta: Paleta,
+    construir: impl Fn() -> Menu + Clone + 'static,
 ) -> impl IntoElement {
-    let id = MenuAberto::Arquivo;
-    let esta = aberto() == id;
+    let mut area = use_state(|| None::<Area>);
+    let este = aberto() == id;
     rect()
-        .content(Content::fit())
+        .height(Size::fill())
+        .main_align(Alignment::Center)
+        .background(if este { paleta.botao } else { paleta.barra })
+        .on_sized(move |e: Event<SizedEventData>| {
+            area.set(Some(e.area));
+        })
+        .on_pointer_enter(move |_| {
+            if aberto() != MenuAberto::Nenhum && aberto() != id {
+                aberto.set(id);
+                pode_fechar.set(false);
+            }
+        })
         .child(
             Button::new()
                 .flat()
@@ -299,11 +327,63 @@ fn menu_arquivo(
                         aberto.set(MenuAberto::Nenhum);
                     } else {
                         aberto.set(id);
+                        pode_fechar.set(false);
                     }
                 })
-                .child("Arquivo"),
+                .child(titulo),
         )
-        .maybe_child(esta.then(move || {
+        .maybe_child(este.then(move || {
+            let a = area().unwrap_or_default();
+            let x = a.origin.x.round();
+            let y = (a.origin.y + a.size.height).round();
+            rect()
+                .layer(Layer::Overlay)
+                .position(Position::new_global().left(x).top(y))
+                .child(
+                    construir()
+                        .on_close(move |_| {
+                            if pode_fechar() {
+                                aberto.set(MenuAberto::Nenhum);
+                            }
+                        })
+                        .on_escape(move |_| {
+                            aberto.set(MenuAberto::Nenhum);
+                        }),
+                )
+        }))
+}
+
+fn item_menu(
+    nome: &'static str,
+    atalho: &'static str,
+    acao: Acao,
+    marcado: bool,
+    on_acao: impl Fn(Acao) + Copy + 'static,
+    mut aberto: State<MenuAberto>,
+) -> MenuButton {
+    MenuButton::new()
+        .on_press(move |_| {
+            aberto.set(MenuAberto::Nenhum);
+            on_acao(acao);
+        })
+        .child(rotulo_menu(nome, atalho, marcado))
+}
+
+fn menu_arquivo(
+    mut aberto: State<MenuAberto>,
+    pode_fechar: State<bool>,
+    paleta: Paleta,
+    on_acao: impl Fn(Acao) + Copy + 'static,
+    on_recente: impl Fn(Recente) + Copy + 'static,
+    recentes: Vec<Recente>,
+) -> impl IntoElement {
+    entrada_menu(
+        "Arquivo",
+        MenuAberto::Arquivo,
+        aberto,
+        pode_fechar,
+        paleta,
+        move || {
             let itens = [
                 ("Novo", "Ctrl+N", Acao::Novo),
                 ("Abrir…", "", Acao::Abrir),
@@ -315,22 +395,15 @@ fn menu_arquivo(
                 ("Salvar como…", "Ctrl+Shift+S", Acao::SalvarComo),
                 ("Sair", "Ctrl+Q", Acao::Sair),
             ];
-            let mut menu = Menu::new().on_close(move |_| aberto.set(MenuAberto::Nenhum));
+            let mut menu = Menu::new();
             for (nome, atalho, acao) in itens {
-                menu = menu.child(
-                    MenuButton::new()
-                        .on_press(move |_| {
-                            aberto.set(MenuAberto::Nenhum);
-                            on_acao(acao);
-                        })
-                        .child(rotulo_menu(nome, atalho, false)),
-                );
+                menu = menu.child(item_menu(nome, atalho, acao, false, on_acao, aberto));
             }
             let mut sub = SubMenu::new().label("Recentes");
             if recentes.is_empty() {
                 sub = sub.child(MenuButton::new().child("Nenhum recente"));
             } else {
-                for r in recentes {
+                for r in recentes.clone() {
                     let escolhido = r.clone();
                     sub = sub.child(
                         MenuButton::new()
@@ -344,64 +417,43 @@ fn menu_arquivo(
             }
             menu = menu.child(sub);
             for (nome, atalho, acao) in depois {
-                menu = menu.child(
-                    MenuButton::new()
-                        .on_press(move |_| {
-                            aberto.set(MenuAberto::Nenhum);
-                            on_acao(acao);
-                        })
-                        .child(rotulo_menu(nome, atalho, false)),
-                );
+                menu = menu.child(item_menu(nome, atalho, acao, false, on_acao, aberto));
             }
             menu
-        }))
+        },
+    )
 }
 
 fn botao_menu(
     titulo: &'static str,
     id: MenuAberto,
-    mut aberto: State<MenuAberto>,
-    _paleta: Paleta,
+    aberto: State<MenuAberto>,
+    pode_fechar: State<bool>,
+    paleta: Paleta,
     on_acao: impl Fn(Acao) + Copy + 'static,
     itens: &'static [(&'static str, &'static str, Acao)],
     marcado: impl Fn(Acao) -> bool + Copy + 'static,
 ) -> impl IntoElement {
-    let esta = aberto() == id;
-    rect()
-        .content(Content::fit())
-        .child(
-            Button::new()
-                .flat()
-                .compact()
-                .on_press(move |_| {
-                    if aberto() == id {
-                        aberto.set(MenuAberto::Nenhum);
-                    } else {
-                        aberto.set(id);
-                    }
-                })
-                .child(titulo),
-        )
-        .maybe_child(esta.then(move || {
-            let mut menu = Menu::new().on_close(move |_| aberto.set(MenuAberto::Nenhum));
-            for (nome, atalho, acao) in itens {
-                let acao = *acao;
-                let texto = rotulo_menu(nome, atalho, marcado(acao));
-                menu = menu.child(
-                    MenuButton::new()
-                        .on_press(move |_| {
-                            aberto.set(MenuAberto::Nenhum);
-                            on_acao(acao);
-                        })
-                        .child(texto),
-                );
-            }
-            menu
-        }))
+    entrada_menu(titulo, id, aberto, pode_fechar, paleta, move || {
+        let mut menu = Menu::new();
+        for (nome, atalho, acao) in itens {
+            let acao = *acao;
+            menu = menu.child(item_menu(
+                nome,
+                atalho,
+                acao,
+                marcado(acao),
+                on_acao,
+                aberto,
+            ));
+        }
+        menu
+    })
 }
 
-pub fn barra_ferramentas(
+pub fn barra_argumentos(
     paleta: Paleta,
+    args: State<String>,
     on_acao: impl Fn(Acao) + Copy + 'static,
 ) -> impl IntoElement {
     fn botao(
@@ -417,29 +469,6 @@ pub fn barra_ferramentas(
     rect()
         .direction(Direction::Horizontal)
         .width(Size::fill())
-        .height(Size::px(36.0))
-        .background(paleta.botao)
-        .color(paleta.texto)
-        .padding((4.0, 8.0, 4.0, 8.0))
-        .spacing(6.0)
-        .cross_align(Alignment::Center)
-        .child(botao("Novo", Acao::Novo, on_acao))
-        .child(botao("Abrir", Acao::Abrir, on_acao))
-        .child(botao("Salvar", Acao::Salvar, on_acao))
-        .child(botao("Rodar", Acao::Executar, on_acao))
-        .child(botao("Parar", Acao::Parar, on_acao))
-        .child(botao("Depurar", Acao::Depurar, on_acao))
-        .child(botao("A−", Acao::ZoomMenos, on_acao))
-        .child(botao("A+", Acao::ZoomMais, on_acao))
-}
-
-pub fn barra_argumentos(
-    paleta: Paleta,
-    args: State<String>,
-) -> impl IntoElement {
-    rect()
-        .direction(Direction::Horizontal)
-        .width(Size::fill())
         .height(Size::px(32.0))
         .background(paleta.botao)
         .color(paleta.texto)
@@ -452,56 +481,35 @@ pub fn barra_argumentos(
                 .placeholder("ex.: Ana --ajuda")
                 .width(Size::fill()),
         )
+        .child(botao("A−", Acao::ZoomMenos, on_acao))
+        .child(botao("A+", Acao::ZoomMais, on_acao))
 }
 
 pub fn painel_console(
-    console: Console,
+    handle: Option<TerminalHandle>,
     paleta: Paleta,
-    entrada: State<String>,
-    on_leia: impl Fn() + Copy + 'static,
+    fonte: f32,
+    altura: f32,
+    leia_aberta: bool,
     on_linha: impl Fn(String) + Copy + 'static,
 ) -> impl IntoElement {
-    let mut lista = rect()
-        .direction(Direction::Vertical)
-        .width(Size::fill())
-        .padding(6.0);
-    for (i, linha) in console.linhas.iter().enumerate() {
-        let texto = console.texto_linha(i);
-        let mut row = rect()
-            .direction(Direction::Horizontal)
-            .width(Size::fill());
-        if linha.is_empty() {
-            row = row.child(label().font_size(13.0).font_family(fonte_familia()).text(" "));
-        } else {
-            for t in linha {
-                let cor = if t.stderr {
-                    (229, 57, 53)
-                } else {
-                    t.fg.unwrap_or(paleta.texto)
-                };
-                let lab = label()
-                    .font_size(13.0)
-                    .font_family(fonte_familia())
-                    .color(cor)
-                    .font_weight(if t.negrito {
-                        FontWeight::BOLD
-                    } else {
-                        FontWeight::NORMAL
-                    })
-                    .text(t.texto.clone());
-                row = row.child(match t.bg {
-                    Some(bg) => rect().background(bg).child(lab),
-                    None => rect().child(lab),
-                });
-            }
+    let a11y_id = use_a11y();
+    let mut dimensions = use_state(|| (8.0f32, 16.0f32));
+    let mut click_origin = use_state(|| None::<(usize, usize)>);
+    let mut pediu_foco = use_state(|| false);
+    if leia_aberta {
+        if !*pediu_foco.read() {
+            a11y_id.request_focus();
+            pediu_foco.set(true);
         }
-        row = row.on_press(move |_| on_linha(texto.clone()));
-        lista = lista.child(row);
+    } else if *pediu_foco.read() {
+        pediu_foco.set(false);
     }
+
     let mut painel = rect()
         .direction(Direction::Vertical)
         .width(Size::fill())
-        .height(Size::px(160.0))
+        .height(Size::px(altura))
         .background(paleta.status)
         .color(paleta.texto)
         .border(
@@ -513,25 +521,122 @@ pub fn painel_console(
                     left: 0.0,
                 })
                 .fill(paleta.borda),
-        )
-        .child(ScrollView::new().height(Size::fill()).child(lista));
-    if console.leia_prompt.is_some() {
-        let prompt = console.leia_prompt.clone().unwrap_or_default();
+        );
+    if let Some(handle) = handle {
         painel = painel.child(
-            rect()
-                .direction(Direction::Horizontal)
-                .width(Size::fill())
-                .padding((4.0, 6.0, 4.0, 6.0))
-                .spacing(6.0)
-                .cross_align(Alignment::Center)
-                .child(label().font_size(13.0).text(prompt))
-                .child(
-                    CampoTexto::new(entrada)
-                        .placeholder("leia")
-                        .width(Size::fill())
-                        .auto_focus(true)
-                        .on_submit(move |_| on_leia()),
-                ),
+            Terminal::new(handle.clone())
+                .font_family(fonte_familia().to_string())
+                .font_size(fonte)
+                .foreground(paleta.texto)
+                .background(paleta.status)
+                .a11y_id(a11y_id)
+                .a11y_auto_focus(false)
+                .on_measured(move |(char_width, line_height)| {
+                    dimensions.set((char_width, line_height));
+                })
+                .on_mouse_down({
+                    let handle = handle.clone();
+                    move |e: Event<MouseEventData>| {
+                        a11y_id.request_focus();
+                        let (char_width, line_height) = dimensions();
+                        if char_width <= 0.0 || line_height <= 0.0 {
+                            return;
+                        }
+                        let col = (e.element_location.x / char_width as f64) as f32;
+                        let row = (e.element_location.y / line_height as f64) as f32;
+                        click_origin.set(Some((row as usize, col as usize)));
+                        let button = match e.button {
+                            Some(MouseButton::Middle) => TerminalMouseButton::Middle,
+                            Some(MouseButton::Right) => TerminalMouseButton::Right,
+                            _ => TerminalMouseButton::Left,
+                        };
+                        handle.mouse_down(row, col, button, SelectionType::Simple);
+                    }
+                })
+                .on_mouse_move({
+                    let handle = handle.clone();
+                    move |e: Event<MouseEventData>| {
+                        let (char_width, line_height) = dimensions();
+                        if char_width <= 0.0 || line_height <= 0.0 {
+                            return;
+                        }
+                        let col = (e.element_location.x / char_width as f64) as f32;
+                        let row = (e.element_location.y / line_height as f64) as f32;
+                        handle.mouse_move(row, col);
+                    }
+                })
+                .on_mouse_up({
+                    let handle = handle.clone();
+                    move |e: Event<MouseEventData>| {
+                        let (char_width, line_height) = dimensions();
+                        if char_width <= 0.0 || line_height <= 0.0 {
+                            return;
+                        }
+                        let col = (e.element_location.x / char_width as f64) as f32;
+                        let row = (e.element_location.y / line_height as f64) as f32;
+                        let button = match e.button {
+                            Some(MouseButton::Middle) => TerminalMouseButton::Middle,
+                            Some(MouseButton::Right) => TerminalMouseButton::Right,
+                            _ => TerminalMouseButton::Left,
+                        };
+                        handle.mouse_up(row, col, button);
+                        let origin = click_origin();
+                        click_origin.set(None);
+                        if button != TerminalMouseButton::Left {
+                            return;
+                        }
+                        if let Some(texto) = handle.get_selected_text() {
+                            on_linha(texto);
+                        } else if origin == Some((row as usize, col as usize)) {
+                            if let Some(url) = handle.hyperlink_at(row, col) {
+                                on_linha(url);
+                            }
+                        }
+                    }
+                })
+                .on_wheel({
+                    let handle = handle.clone();
+                    move |e: Event<WheelEventData>| {
+                        let (char_width, line_height) = dimensions();
+                        let (mouse_x, mouse_y) = e.element_location.to_tuple();
+                        let col = (mouse_x / char_width as f64) as f32;
+                        let row = (mouse_y / line_height as f64) as f32;
+                        handle.wheel(e.delta_y, row, col);
+                    }
+                })
+                .on_key_down({
+                    let handle = handle.clone();
+                    move |e: Event<KeyboardEventData>| {
+                        let ctrl_shift =
+                            e.modifiers.contains(Modifiers::CONTROL | Modifiers::SHIFT);
+                        match &e.key {
+                            Key::Character(ch)
+                                if ctrl_shift && ch.eq_ignore_ascii_case("c") =>
+                            {
+                                if let Some(text) = handle.get_selected_text() {
+                                    let _ = Clipboard::set(text);
+                                }
+                            }
+                            Key::Character(ch)
+                                if ctrl_shift && ch.eq_ignore_ascii_case("v") =>
+                            {
+                                if let Ok(text) = Clipboard::get() {
+                                    let _ = handle.paste(&text);
+                                }
+                            }
+                            _ => {
+                                let _ = handle.write_key(&e.key, e.modifiers);
+                            }
+                        }
+                    }
+                }),
+        );
+    } else {
+        painel = painel.child(
+            label()
+                .font_size(13.0)
+                .padding(8.0)
+                .text("Terminal indisponível"),
         );
     }
     painel
@@ -777,6 +882,9 @@ pub const LARGURA_ARVORE: f32 = 240.0;
 pub const LARGURA_DEBUG: f32 = 280.0;
 pub const LARGURA_PAINEL_MIN: f32 = 140.0;
 pub const LARGURA_PAINEL_MAX: f32 = 480.0;
+pub const ALTURA_CONSOLE: f32 = 160.0;
+pub const ALTURA_CONSOLE_MIN: f32 = 64.0;
+pub const ALTURA_CONSOLE_MAX: f32 = 700.0;
 
 pub fn alca_vertical(
     paleta: Paleta,
@@ -788,10 +896,28 @@ pub fn alca_vertical(
         .width(Size::px(6.0))
         .height(Size::fill())
         .background(paleta.borda)
+        .cursor(CursorIcon::EwResize)
         .on_pointer_down(move |e: Event<PointerEventData>| {
             let x = e.data().global_location().x as f32;
             let atual = *largura.read();
             arrasto.set(Some(if inverter { x + atual } else { x - atual }));
+        })
+}
+
+pub fn alca_horizontal(
+    paleta: Paleta,
+    altura: State<f32>,
+    mut arrasto: State<Option<f32>>,
+) -> impl IntoElement {
+    rect()
+        .width(Size::fill())
+        .height(Size::px(6.0))
+        .background(paleta.borda)
+        .cursor(CursorIcon::NsResize)
+        .on_pointer_down(move |e: Event<PointerEventData>| {
+            let y = e.data().global_location().y as f32;
+            let atual = *altura.read();
+            arrasto.set(Some(y + atual));
         })
 }
 
@@ -851,6 +977,10 @@ pub fn aplicar_arrasto(arrasto: Option<f32>, x: f32, inverter: bool) -> Option<f
     })
 }
 
+pub fn aplicar_arrasto_v(arrasto: Option<f32>, y: f32) -> Option<f32> {
+    arrasto.map(|origem| (origem - y).clamp(ALTURA_CONSOLE_MIN, ALTURA_CONSOLE_MAX))
+}
+
 pub fn painel_arvore(
     projeto: Projeto,
     paleta: Paleta,
@@ -903,6 +1033,7 @@ pub fn painel_arvore(
         .direction(Direction::Vertical)
         .width(Size::px(largura))
         .height(Size::fill())
+        .content(Content::flex())
         .background(paleta.barra)
         .color(paleta.texto)
         .border(
@@ -952,7 +1083,7 @@ pub fn painel_arvore(
                         ),
                 ),
         )
-        .child(ScrollView::new().height(Size::fill()).child(lista))
+        .child(ScrollView::new().height(Size::flex(1.0)).child(lista))
         .child(
             rect()
                 .direction(Direction::Horizontal)
@@ -1726,32 +1857,34 @@ pub fn painel_repl(
 }
 
 fn canvas_pixels(w: u32, h: u32, rgba: Vec<u8>) -> Element {
+    canvas_pixels_com_tamanho(w, h, rgba, Size::px(w.max(1) as f32), Size::px(h.max(1) as f32))
+}
+
+fn canvas_pixels_preencher(w: u32, h: u32, rgba: Vec<u8>) -> Element {
+    canvas_pixels_com_tamanho(w, h, rgba, Size::fill(), Size::fill())
+}
+
+fn canvas_pixels_com_tamanho(w: u32, h: u32, rgba: Vec<u8>, largura: Size, altura: Size) -> Element {
     let w = w.max(1);
     let h = h.max(1);
     if let Some(handle) =
         freya::elements::image::ImageHandle::from_rgba(w, h, Bytes::from(rgba), AlphaType::Unpremul)
     {
         image(handle)
-            .width(Size::px(w as f32))
-            .height(Size::px(h as f32))
+            .width(largura)
+            .height(altura)
             .sampling_mode(SamplingMode::Nearest)
             .into()
     } else {
-        rect()
-            .width(Size::px(w as f32))
-            .height(Size::px(h as f32))
-            .into()
+        rect().width(largura).height(altura).into()
     }
 }
 
 pub fn painel_graficos(
     g: Graficos,
     paleta: Paleta,
-    destacado: bool,
+    janela_propria: bool,
     on_destacar: impl Fn() + Copy + 'static,
-    on_fechar_tela: impl Fn(u64) + Copy + 'static,
-    on_clique: impl Fn(u64, f64, f64, f64, f64) + Copy + 'static,
-    on_tecla: impl Fn(String) + Copy + 'static,
 ) -> impl IntoElement {
     let mut corpo = rect()
         .direction(Direction::Vertical)
@@ -1762,53 +1895,14 @@ pub fn painel_graficos(
         let (w, h, rgba) = rgba_folha(folha);
         corpo = corpo.child(canvas_pixels(w, h, rgba));
     }
-    for tela in &g.telas {
-        let id = tela.id;
-        let (w, h, rgba) = rgba_tela(tela);
-        let wf = w as f64;
-        let hf = h as f64;
-        corpo = corpo.child(
-            rect()
-                .direction(Direction::Vertical)
-                .child(
-                    rect()
-                        .direction(Direction::Horizontal)
-                        .width(Size::fill())
-                        .main_align(Alignment::SpaceBetween)
-                        .child(label().font_size(12.0).text(format!("tela {id}")))
-                        .child(
-                            Button::new()
-                                .flat()
-                                .compact()
-                                .on_press(move |_| on_fechar_tela(id))
-                                .child("×"),
-                        ),
-                )
-                .child(
-                    rect()
-                        .a11y_focusable(true)
-                        .on_press(move |e: Event<PressEventData>| {
-                            if let PressEventData::Mouse(m) = &*e {
-                                let p = m.element_location;
-                                on_clique(id, p.x, p.y, wf, hf);
-                            }
-                        })
-                        .on_key_down(move |e: Event<KeyboardEventData>| {
-                            let nome = tecla_de_freya(&e.key);
-                            if nome.is_empty() {
-                                return;
-                            }
-                            e.stop_propagation();
-                            on_tecla(nome);
-                        })
-                        .child(canvas_pixels(w, h, rgba)),
-                ),
-        );
-    }
-    let mut caixa = rect()
+    rect()
         .direction(Direction::Vertical)
-        .width(if destacado { Size::px(440.0) } else { Size::fill() })
-        .height(if destacado { Size::px(360.0) } else { Size::px(240.0) })
+        .width(Size::fill())
+        .height(if janela_propria {
+            Size::fill()
+        } else {
+            Size::px(240.0)
+        })
         .background(paleta.status)
         .color(paleta.texto)
         .border(
@@ -1838,12 +1932,51 @@ pub fn painel_graficos(
                         .flat()
                         .compact()
                         .on_press(move |_| on_destacar())
-                        .child(if destacado { "Acoplar" } else { "Destacar" }),
+                        .child(if janela_propria { "Acoplar" } else { "Destacar" }),
                 ),
         )
-        .child(ScrollView::new().height(Size::fill()).child(corpo));
-    if destacado {
-        caixa = caixa.position(Position::new_global().top(80.).right(20.));
+        .child(ScrollView::new().height(Size::fill()).child(corpo))
+}
+
+pub fn janela_tela_grafica(
+    id: u64,
+    graficos: State<crate::grafico::Graficos>,
+    paleta: Paleta,
+    on_clique: impl Fn(u64, f64, f64, f64, f64) + Copy + 'static,
+    on_tecla: impl Fn(String) + Copy + 'static,
+) -> impl IntoElement {
+    let tela = graficos.read().telas.iter().find(|t| t.id == id).cloned();
+    let size = Platform::get().current_window().root_size;
+    let mut caixa = rect()
+        .direction(Direction::Vertical)
+        .width(Size::fill())
+        .height(Size::fill())
+        .background(paleta.status)
+        .a11y_focusable(true)
+        .on_key_down(move |e: Event<KeyboardEventData>| {
+            let nome = tecla_de_freya(&e.key);
+            if nome.is_empty() {
+                return;
+            }
+            e.stop_propagation();
+            on_tecla(nome);
+        });
+    if let Some(tela) = tela {
+        let (w, h, rgba) = rgba_tela(&tela);
+        caixa = caixa
+            .on_press(move |e: Event<PressEventData>| {
+                if let PressEventData::Mouse(m) = &*e {
+                    let area = *size.read();
+                    on_clique(
+                        id,
+                        m.element_location.x,
+                        m.element_location.y,
+                        area.width as f64,
+                        area.height as f64,
+                    );
+                }
+            })
+            .child(canvas_pixels_preencher(w, h, rgba));
     }
     caixa
 }
@@ -1871,6 +2004,14 @@ mod tests {
             Some(LARGURA_PAINEL_MAX)
         );
         assert_eq!(aplicar_arrasto(Some(500.0), 220.0, true), Some(280.0));
+    }
+
+    #[test]
+    fn arrasto_vertical_cresce_para_cima() {
+        assert_eq!(aplicar_arrasto_v(Some(400.0), 240.0), Some(160.0));
+        assert_eq!(aplicar_arrasto_v(Some(400.0), 390.0), Some(ALTURA_CONSOLE_MIN));
+        assert_eq!(aplicar_arrasto_v(Some(800.0), 0.0), Some(ALTURA_CONSOLE_MAX));
+        assert_eq!(aplicar_arrasto_v(None, 100.0), None);
     }
 }
 

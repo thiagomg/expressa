@@ -165,6 +165,10 @@ impl Execucao {
         }
     }
 
+    pub fn leia_sender(&self) -> Option<Sender<String>> {
+        self.inner.lock().unwrap().leia.clone()
+    }
+
     pub fn parar(&mut self) {
         self.comando("terminar");
     }

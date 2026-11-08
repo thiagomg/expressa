@@ -1,9 +1,17 @@
 //! Cartesiano and tela_grafica panes for a Freya run.
 
+use std::collections::{HashMap, HashSet};
+
 use expressa::runtime::{EventoGraf, FolhaPronta, TelaGrafica, pintar};
+use freya::winit::window::WindowId;
 
 const CART_LARGURA: u32 = 400;
 const CART_ALTURA_GRAFICO: u32 = 220;
+
+/// Título da janela irmã de `tela_grafica::mostre` (igual ao GTK).
+pub const TITULO_TELA_GRAFICA: &str = "Expressa — tela gráfica";
+/// Título da janela destacada do cartesiano (igual ao GTK).
+pub const TITULO_CARTESIANO: &str = "Gráficos — Expressa";
 
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Graficos {
@@ -13,9 +21,22 @@ pub struct Graficos {
     pub destacado: bool,
 }
 
+/// Janelas OS abertas para telas gráficas e para o cartesiano destacado.
+#[derive(Clone, Debug, Default)]
+pub struct JanelasGraf {
+    pub telas: HashMap<u64, WindowId>,
+    pub abrindo: HashSet<u64>,
+    pub cartesiano: Option<WindowId>,
+    pub cartesiano_abrindo: bool,
+}
+
 impl Graficos {
     pub fn visivel(&self) -> bool {
         !self.folhas.is_empty() || !self.telas.is_empty()
+    }
+
+    pub fn visivel_cartesiano(&self) -> bool {
+        !self.folhas.is_empty()
     }
 
     pub fn limpar(&mut self) {
@@ -193,6 +214,22 @@ mod tests {
         assert!(g.telas.is_empty());
         assert!(g.fechadas.is_empty());
         assert!(g.destacado);
+        assert!(!g.visivel_cartesiano());
+        assert!(!g.visivel());
+    }
+
+    #[test]
+    fn cartesiano_nao_mistura_com_tela() {
+        let mut g = Graficos::default();
+        g.aplicar_tela(TelaGrafica {
+            id: 1,
+            largura: 8,
+            altura: 8,
+            fundo: "branco".into(),
+            ops: vec![],
+        });
+        assert!(g.visivel());
+        assert!(!g.visivel_cartesiano());
     }
 
     #[test]

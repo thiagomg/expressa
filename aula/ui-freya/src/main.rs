@@ -23,6 +23,7 @@ mod prefs;
 mod projeto;
 mod repl;
 mod shell;
+mod terminal_aula;
 mod turma;
 
 use freya::{
@@ -40,19 +41,18 @@ use crate::{
         aplicar_sugestao, abrir_recente, alternar_ponto_em, clicar_arvore, confirmar_apagar, confirmar_descarte, confirmar_nome,
         conectar_servidor, criar_projeto_servidor, descartar_rascunhos, escolher_projeto,
         fechar_dialogo_rascunhos,
-        fechar_aba, clique_tela_graf, destacar_graficos, enviar_repl, fechar_repl, fechar_tela_graf,
-        tecla_tela_graf,
+        fechar_aba, destacar_graficos, enviar_repl, fechar_repl, garantir_janelas_graf,
         ir_para_linha, ir_para_pausa, ir_para_saida, limpar_repl, parar_repl, pasta_selecionada,
         menu_contexto_arvore, pedir_apagar, pedir_nome, recuperar_rascunhos, reiniciar_repl,
         remover_observado,
-        resolver_conflito, responder_leia, restaurar_arquivo, selecionar_aba,
+        resolver_conflito, restaurar_arquivo, selecionar_aba,
     },
     ajuda::{Sugestao, assinatura, catalogo, ficha},
     console::Console,
     debug::Depuracao,
     execucao::Execucao,
     fundo::Fundo,
-    grafico::Graficos,
+    grafico::{Graficos, JanelasGraf},
     repl::Repl,
     documentos::{Abas, Depois, DepoisNome, Dialogo, gravar_rascunhos, sincronizar, titulo_da_janela},
     execucao::caminho_relativo,
@@ -62,8 +62,9 @@ use crate::{
     prefs::Prefs,
     projeto::{Projeto, abrir_raiz, instalar_exemplos, restaurar_inicio},
     shell::{
-        MenuAberto, Paleta, barra_abas, barra_argumentos, barra_busca, barra_ferramentas,
-        LARGURA_ARVORE, LARGURA_DEBUG, alca_vertical, aplicar_arrasto, barra_menus, barra_status,
+        MenuAberto, Paleta, barra_abas, barra_argumentos, barra_busca,
+        ALTURA_CONSOLE, LARGURA_ARVORE, LARGURA_DEBUG, alca_horizontal, alca_vertical, aplicar_arrasto,
+        aplicar_arrasto_v, barra_menus, barra_status,
         MarcasVer,
         linha_gutter,
         FocoCampos,
@@ -119,9 +120,25 @@ fn app() -> impl IntoElement {
     let mut projeto = use_state(Projeto::default);
     let nome_campo = use_state(String::new);
     let mut exec = use_state(Execucao::default);
-    let console = use_state(Console::default);
+    let nucleo_term = use_state(|| {
+        let (ponte, backend) = crate::terminal_aula::criar();
+        let handle = freya::terminal::TerminalHandle::new(
+            freya::terminal::TerminalId::new(),
+            backend,
+            Some(5000),
+        )
+        .ok();
+        (ponte, handle)
+    });
+    let console = use_state({
+        let ponte = nucleo_term.read().0.clone();
+        move || {
+            let mut c = Console::default();
+            c.ponte = ponte;
+            c
+        }
+    });
     let args = use_state(String::new);
-    let leia_entrada = use_state(String::new);
     let ajuda = use_state(|| None::<String>);
     let catalogo_aberto = use_state(|| false);
     let sugestoes = use_state(Vec::<Sugestao>::new);
@@ -131,6 +148,7 @@ fn app() -> impl IntoElement {
     let mut repl = use_state(Repl::default);
     let repl_entrada = use_state(String::new);
     let graficos = use_state(Graficos::default);
+    let janelas = use_state(JanelasGraf::default);
     let turma = use_state(|| {
         let mut t = Turma::default();
         t.url = prefs_iniciais.servidor.clone();
@@ -139,8 +157,10 @@ fn app() -> impl IntoElement {
     let mut indentar_pendente = use_state(|| false);
     let mut largura_arvore = use_state(|| LARGURA_ARVORE);
     let mut largura_debug = use_state(|| LARGURA_DEBUG);
+    let mut altura_console = use_state(|| ALTURA_CONSOLE);
     let mut arrasto_arvore = use_state(|| None::<f32>);
     let mut arrasto_debug = use_state(|| None::<f32>);
+    let mut arrasto_console = use_state(|| None::<f32>);
     let fundo = use_provide_root_context(Fundo::default);
     let foco_campos = use_provide_root_context(FocoCampos::default);
     let scroll_editor = use_scroll_controller(ScrollConfig::default);
@@ -216,6 +236,7 @@ fn app() -> impl IntoElement {
                     assinatura_oculta.set(false);
                 }
             }
+            garantir_janelas_graf(graficos, exec, janelas, Paleta::de(prefs.read().dark));
         }
             }
         }
@@ -272,7 +293,6 @@ fn app() -> impl IntoElement {
     let repl_agora = repl.read().clone();
     let graficos_agora = graficos.read().clone();
     let graficos_dock = graficos_agora.clone();
-    let graficos_float = graficos_agora.clone();
     let n_linhas = editor.read().rope.len_lines().max(1);
     let line_height = (font_size * 1.4).floor();
     let gutter_w = font_size * 5.0;
@@ -322,6 +342,7 @@ fn app() -> impl IntoElement {
     rect()
         .width(Size::fill())
         .height(Size::fill())
+        .content(Content::flex())
         .background(paleta.fundo)
         .color(paleta.texto)
         .child(ContextMenuViewer::new())
@@ -331,7 +352,7 @@ fn app() -> impl IntoElement {
             move |e: Event<KeyboardEventData>| {
                 let em_campo = foco_campos.tem_foco()
                     || dialogo_atalho != Dialogo::Nenhum
-                    || console.read().leia_prompt.is_some();
+                    || console.read().ponte.leia_aberta();
                 if let Some(acao) = acao_de_tecla_com_foco(&e.key, e.modifiers, em_campo) {
                     e.stop_propagation();
                     on_acao(acao);
@@ -339,17 +360,23 @@ fn app() -> impl IntoElement {
             }
         })
         .on_global_pointer_move(move |e: Event<PointerEventData>| {
-            let x = e.data().global_location().x as f32;
+            let loc = e.data().global_location();
+            let x = loc.x as f32;
+            let y = loc.y as f32;
             if let Some(w) = aplicar_arrasto(*arrasto_arvore.read(), x, false) {
                 largura_arvore.set(w);
             }
             if let Some(w) = aplicar_arrasto(*arrasto_debug.read(), x, true) {
                 largura_debug.set(w);
             }
+            if let Some(h) = aplicar_arrasto_v(*arrasto_console.read(), y) {
+                altura_console.set(h);
+            }
         })
         .on_global_pointer_up(move |_| {
             arrasto_arvore.set(None);
             arrasto_debug.set(None);
+            arrasto_console.set(None);
         })
         .child(barra_menus(
             menu,
@@ -366,8 +393,7 @@ fn app() -> impl IntoElement {
                 repl: repl_agora.visivel,
             },
         ))
-        .child(barra_ferramentas(paleta, on_acao))
-        .child(barra_argumentos(paleta, args))
+        .child(barra_argumentos(paleta, args, on_acao))
         .child(barra_abas(
             &abas_agora,
             paleta,
@@ -388,7 +414,7 @@ fn app() -> impl IntoElement {
             rect()
                 .direction(Direction::Horizontal)
                 .width(Size::fill())
-                .height(Size::fill())
+                .height(Size::flex(1.0))
                 .maybe_child(projeto_agora.visivel.then(move || {
                     rect()
                         .direction(Direction::Horizontal)
@@ -429,20 +455,24 @@ fn app() -> impl IntoElement {
                         .direction(Direction::Vertical)
                         .width(Size::fill())
                         .height(Size::fill())
+                        .content(Content::flex())
                         .child(
                             rect()
                                 .direction(Direction::Horizontal)
                                 .width(Size::fill())
-                                .height(Size::fill())
+                                .height(Size::flex(1.0))
+                                .min_height(Size::px(0.0))
+                                .max_height(Size::fill())
+                                .overflow(Overflow::Clip)
                                 .child({
                                     let arquivo = arquivo_gutter.clone();
                                     let pontos = pontos_gutter.clone();
                                     let pausa_arq = pausa_arq.clone();
-                                    let mut col = rect().direction(Direction::Vertical).width(Size::fill());
-                                    for i in 0..n_linhas {
+                                    VirtualScrollView::new(move |item, _| {
+                                        let i = item.index;
                                         let par = par_linhas.is_some_and(|(a, b)| i == a || i == b);
                                         let erro = linha_erro.is_some_and(|l| i + 1 == l as usize);
-                                        col = col.child(linha_gutter(
+                                        linha_gutter(
                                             i,
                                             &arquivo,
                                             &pontos,
@@ -466,44 +496,62 @@ fn app() -> impl IntoElement {
                                                     depuracao,
                                                 )
                                             },
-                                        ));
-                                    }
-                                    ScrollView::new_controlled(scroll_editor)
-                                        .width(Size::px(gutter_w))
-                                        .show_scrollbar(false)
-                                        .child(col)
+                                        )
+                                        .into_element()
+                                    })
+                                    .width(Size::px(gutter_w))
+                                    .height(Size::fill())
+                                    .show_scrollbar(false)
+                                    .scroll_controller(scroll_editor)
+                                    .length(n_linhas)
+                                    .item_size(line_height)
                                 })
                                 .child(
-                                    CodeEditor::new(editor, a11y_id)
-                                        .font_size(font_size)
-                                        .font_family(fonte_familia())
-                                        .gutter(false)
-                                        .read_only(abas_agora.atual().snapshot)
-                                        .scroll_controller(scroll_editor)
-                                        .a11y_auto_focus(true)
-                                        .on_pre_key_down(move |e: Event<KeyboardEventData>| {
-                                            let seguir = tratar_tecla(&e, &mut editor.write());
-                                            if seguir && tecla_pede_indent(&e.key, e.modifiers) {
-                                                indentar_pendente.set(true);
-                                            }
-                                            seguir
-                                        }),
+                                    rect()
+                                        .width(Size::fill())
+                                        .height(Size::fill())
+                                        .child(
+                                            CodeEditor::new(editor, a11y_id)
+                                                .font_size(font_size)
+                                                .font_family(fonte_familia())
+                                                .gutter(false)
+                                                .read_only(abas_agora.atual().snapshot)
+                                                .scroll_controller(scroll_editor)
+                                                .a11y_auto_focus(true)
+                                                .on_pre_key_down(move |e: Event<KeyboardEventData>| {
+                                                    if let Some(acao) = acao_de_tecla_com_foco(
+                                                        &e.key,
+                                                        e.modifiers,
+                                                        false,
+                                                    ) {
+                                                        e.stop_propagation();
+                                                        e.prevent_default();
+                                                        on_acao(acao);
+                                                        return false;
+                                                    }
+                                                    let seguir =
+                                                        tratar_tecla(&e, &mut editor.write());
+                                                    if seguir
+                                                        && tecla_pede_indent(&e.key, e.modifiers)
+                                                    {
+                                                        indentar_pendente.set(true);
+                                                    }
+                                                    seguir
+                                                }),
+                                        ),
                                 ),
                         )
                         .maybe_child(
-                            (graficos_dock.visivel() && !graficos_dock.destacado).then(move || {
-                                painel_graficos(
-                                    graficos_dock.clone(),
-                                    paleta,
-                                    false,
-                                    move || destacar_graficos(graficos),
-                                    move |id| fechar_tela_graf(id, graficos, exec),
-                                    move |id, x, y, w, h| {
-                                        clique_tela_graf(id, x, y, w, h, graficos, exec)
-                                    },
-                                    move |nome| tecla_tela_graf(nome, exec),
-                                )
-                            }),
+                            (graficos_dock.visivel_cartesiano() && !graficos_dock.destacado).then(
+                                move || {
+                                    painel_graficos(
+                                        graficos_dock.clone(),
+                                        paleta,
+                                        false,
+                                        move || destacar_graficos(graficos),
+                                    )
+                                },
+                            ),
                         )
                         .maybe_child(repl_agora.visivel.then(move || {
                             painel_repl(
@@ -517,11 +565,13 @@ fn app() -> impl IntoElement {
                                 move || fechar_repl(repl),
                             )
                         }))
+                        .child(alca_horizontal(paleta, altura_console, arrasto_console))
                         .child(painel_console(
-                            console.read().clone(),
+                            nucleo_term.read().1.clone(),
                             paleta,
-                            leia_entrada,
-                            move || responder_leia(exec, console, leia_entrada),
+                            font_size,
+                            *altura_console.read(),
+                            console.read().ponte.leia_aberta(),
                             move |linha| {
                                 ir_para_saida(
                                     &linha,
@@ -561,19 +611,7 @@ fn app() -> impl IntoElement {
                         ))
                 })),
         )
-        .maybe_child(
-            (graficos_float.visivel() && graficos_float.destacado).then(move || {
-                painel_graficos(
-                    graficos_float.clone(),
-                    paleta,
-                    true,
-                    move || destacar_graficos(graficos),
-                    move |id| fechar_tela_graf(id, graficos, exec),
-                    move |id, x, y, w, h| clique_tela_graf(id, x, y, w, h, graficos, exec),
-                    move |nome| tecla_tela_graf(nome, exec),
-                )
-            }),
-        )
+
         .maybe_child(busca_aberta().then(move || {
             barra_busca(
                 paleta,

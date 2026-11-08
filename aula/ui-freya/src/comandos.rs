@@ -12,7 +12,7 @@ use crate::ajuda::{
 };
 use crate::atalhos::Acao;
 use crate::debug::Depuracao;
-use crate::grafico::Graficos;
+use crate::grafico::{Graficos, JanelasGraf, TITULO_CARTESIANO, TITULO_TELA_GRAFICA};
 use crate::repl::Repl;
 use crate::fundo::{Fundo, ResultadoFundo, spawn_bloqueante, spawn_tokio};
 use crate::documentos::{
@@ -34,7 +34,7 @@ use crate::projeto::{
     Projeto, apagar, abrir_raiz, criar_arquivo, criar_pasta, escolher_pasta, pasta_do_item,
     rel_na_raiz, renomear,
 };
-use crate::shell::{aplicar_tema_editor, tema_freya};
+use crate::shell::{Paleta, aplicar_tema_editor, janela_tela_grafica, painel_graficos, tema_freya};
 
 pub fn aplicar(
     acao: Acao,
@@ -1131,6 +1131,7 @@ pub fn executar(
         status.set("Já está rodando — use Parar".into());
         return;
     }
+    status.set("Rodando…".into());
     let idx_aluno = if abas.read().atual().snapshot {
         abas.read().itens.iter().position(|a| !a.snapshot)
     } else {
@@ -1323,6 +1324,116 @@ pub fn destacar_graficos(mut graficos: State<Graficos>) {
     graficos.write().destacado = v;
 }
 
+pub fn garantir_janelas_graf(
+    mut graficos: State<Graficos>,
+    exec: State<Execucao>,
+    mut janelas: State<JanelasGraf>,
+    paleta: Paleta,
+) {
+    let telas: Vec<(u64, u32, u32)> = graficos
+        .read()
+        .telas
+        .iter()
+        .map(|t| (t.id, t.largura, t.altura))
+        .collect();
+    for (id, largura, altura) in telas {
+        let ja = {
+            let j = janelas.read();
+            j.telas.contains_key(&id) || j.abrindo.contains(&id)
+        };
+        if ja {
+            continue;
+        }
+        janelas.write().abrindo.insert(id);
+        spawn_in_window(async move {
+            let w = largura.max(320) as f64;
+            let h = altura.max(240) as f64;
+            let wid = Platform::get()
+                .launch_window(
+                    WindowConfig::new(move || {
+                        janela_tela_grafica(
+                            id,
+                            graficos,
+                            paleta,
+                            move |id, x, y, w, h| clique_tela_graf(id, x, y, w, h, graficos, exec),
+                            move |nome| tecla_tela_graf(nome, exec),
+                        )
+                    })
+                    .with_title(TITULO_TELA_GRAFICA)
+                    .with_size(w, h)
+                    .with_min_size(120.0, 90.0)
+                    .with_app_id("dev.expressa.aula")
+                    .with_on_close(move |_, _| {
+                        janelas.write().telas.remove(&id);
+                        janelas.write().abrindo.remove(&id);
+                        if graficos.read().telas.iter().any(|t| t.id == id) {
+                            fechar_tela_graf(id, graficos, exec);
+                        }
+                        CloseDecision::Close
+                    }),
+                )
+                .await;
+            janelas.write().abrindo.remove(&id);
+            if graficos.read().telas.iter().any(|t| t.id == id) {
+                janelas.write().telas.insert(id, wid);
+            } else {
+                Platform::get().close_window(wid);
+            }
+        });
+    }
+
+    let abertas: Vec<(u64, freya::winit::window::WindowId)> =
+        janelas.read().telas.iter().map(|(k, v)| (*k, *v)).collect();
+    for (id, wid) in abertas {
+        if graficos.read().telas.iter().all(|t| t.id != id) {
+            janelas.write().telas.remove(&id);
+            Platform::get().close_window(wid);
+        }
+    }
+
+    let quer_cartesiano = graficos.read().destacado;
+    let cartesiano = janelas.read().cartesiano;
+    let cartesiano_abrindo = janelas.read().cartesiano_abrindo;
+    match (quer_cartesiano, cartesiano, cartesiano_abrindo) {
+        (true, None, false) => {
+            janelas.write().cartesiano_abrindo = true;
+            spawn_in_window(async move {
+                let wid = Platform::get()
+                    .launch_window(
+                        WindowConfig::new(move || {
+                            painel_graficos(graficos.read().clone(), paleta, true, move || {
+                                destacar_graficos(graficos)
+                            })
+                        })
+                        .with_title(TITULO_CARTESIANO)
+                        .with_size(800.0, 560.0)
+                        .with_min_size(320.0, 240.0)
+                        .with_app_id("dev.expressa.aula")
+                        .with_on_close(move |_, _| {
+                            janelas.write().cartesiano = None;
+                            janelas.write().cartesiano_abrindo = false;
+                            graficos.write().destacado = false;
+                            CloseDecision::Close
+                        }),
+                    )
+                    .await;
+                janelas.write().cartesiano_abrindo = false;
+                if graficos.read().destacado {
+                    janelas.write().cartesiano = Some(wid);
+                } else {
+                    Platform::get().close_window(wid);
+                }
+            });
+        }
+        (false, Some(wid), _) => {
+            janelas.write().cartesiano = None;
+            janelas.write().cartesiano_abrindo = false;
+            Platform::get().close_window(wid);
+        }
+        _ => {}
+    }
+}
+
 pub fn fechar_tela_graf(
     id: u64,
     mut graficos: State<Graficos>,
@@ -1376,8 +1487,11 @@ pub fn aplicar_eventos(
         match ev {
             EventoExec::Saida { texto, stderr } => console.write().escrever(&texto, stderr),
             EventoExec::Leia(prompt) => {
-                console.write().leia_prompt = Some(prompt);
+                console.write().leia_prompt = Some(prompt.clone());
                 console.write().entrada.clear();
+                if let Some(tx) = exec.read().leia_sender() {
+                    console.write().ponte.pedir_leia(&prompt, tx);
+                }
             }
             EventoExec::Pausado {
                 arquivo,
@@ -1425,6 +1539,8 @@ pub fn aplicar_eventos(
                 linha,
                 pilha,
             } => {
+                console.write().leia_prompt = None;
+                console.write().ponte.cancelar_leia();
                 exec.write().rodando = false;
                 depuracao.write().fim();
                 let tinha = abas.read().idx_snapshot().is_some();
@@ -1631,18 +1747,6 @@ fn salvar_em(
             false
         }
     }
-}
-
-pub fn responder_leia(
-    mut exec: State<Execucao>,
-    mut console: State<Console>,
-    entrada: State<String>,
-) {
-    let linha = entrada.read().clone();
-    exec.write().responder_leia(linha);
-    console.write().leia_prompt = None;
-    let mut entrada = entrada;
-    entrada.set(String::new());
 }
 
 pub fn ir_para_pausa(
