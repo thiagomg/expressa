@@ -6,7 +6,7 @@ use std::path::Path;
 
 use super::folha::cor_rgb;
 use super::fonte8x8;
-use super::imagem::{self, carimbar, carimbar_rgba, Imagem};
+use super::imagem::{self, Imagem, carimbar, carimbar_rgba};
 
 pub const LARGURA_MAX: u32 = 2048;
 pub const ALTURA_MAX: u32 = 2048;

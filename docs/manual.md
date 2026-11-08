@@ -683,7 +683,7 @@ A * B            // produto de matrizes
 
 ## `importe "arquivo"`
 
-Caminhos relativos: pasta do `.lep`, não a pasta de onde você chamou `expressa`. Na Aula, só a pasta do projeto.
+Caminhos relativos: pasta do `.lep`, não a pasta de onde você chamou `expressa`. `~` e `~/pasta` são a pasta pessoal. Na Aula, caminhos relativos ficam na pasta do projeto; `~` pode escrever na casa.
 
 ### `leia_arquivo(caminho)`
 

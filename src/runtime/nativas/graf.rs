@@ -789,10 +789,7 @@ g.fundo(:azul)
 g.apague()
 escreva(g.pixel(0, 0))
 "#);
-        assert_eq!(
-            out,
-            "transparente\nverde\nimagem\ntransparente\nazul\n"
-        );
+        assert_eq!(out, "transparente\nverde\nimagem\ntransparente\nazul\n");
         assert!(run_err("g = nova(8, 8)\ng.fundo(:roxo)\n").contains("cor desconhecida"));
     }
 
@@ -832,7 +829,11 @@ w.mostre()
         .unwrap();
         let rgb = cap.telas[0].rgb32();
         assert_eq!(rgb[0], 0x00CC3333, "canto continua vermelho");
-        assert_eq!(rgb[(3 * 8 + 3) as usize], 0x0022AA44, "célula verde no centro");
+        assert_eq!(
+            rgb[(3 * 8 + 3) as usize],
+            0x0022AA44,
+            "célula verde no centro"
+        );
     }
 
     #[test]

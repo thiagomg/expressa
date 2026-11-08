@@ -298,7 +298,7 @@ execute(["vim", "a.txt"], mapa([:terminal -> verdadeiro]))   // teclado e tela
 para l em linhas_de("tail -f app.log") { se l contem "FIM" { pare } }
 ```
 
-Caminhos relativos: pasta do `.lep`, não a pasta de onde você chamou `expressa`.
+Caminhos relativos: pasta do `.lep`, não a pasta de onde você chamou `expressa`. `~` e `~/pasta` são a pasta pessoal.
 
 ---
 

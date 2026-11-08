@@ -68,7 +68,7 @@ pub(crate) struct Vm<'a, 'c> {
     modules: HashMap<PathBuf, Rc<RefCell<Env>>>,
     pub(crate) native_modules: HashMap<String, Rc<RefCell<Env>>>,
     /// If set, file I/O and `importe` must stay under this directory.
-    workspace_root: Option<PathBuf>,
+    pub(crate) workspace_root: Option<PathBuf>,
     deadline: Option<Instant>,
     pub(crate) leia_host: Option<&'a mut dyn LeiaHost>,
     pub(crate) cartesiano_host: Option<&'c mut dyn CartesianoHost>,
@@ -690,9 +690,18 @@ impl<'a, 'c> Vm<'a, 'c> {
     }
 
     pub(crate) fn confine(&self, path: PathBuf, span: Span) -> Result<PathBuf, EvalError> {
-        let Some(root) = &self.workspace_root else {
-            return Ok(path);
-        };
+        match &self.workspace_root {
+            None => Ok(path),
+            Some(root) => self.confine_in(path, root, span),
+        }
+    }
+
+    pub(crate) fn confine_in(
+        &self,
+        path: PathBuf,
+        root: &Path,
+        span: Span,
+    ) -> Result<PathBuf, EvalError> {
         let full = lexical_normalize(&path);
         if !full.starts_with(root) {
             return Err(self.err(
@@ -2029,7 +2038,7 @@ impl<'a, 'c> Vm<'a, 'c> {
     }
 }
 
-fn lexical_normalize(path: &Path) -> PathBuf {
+pub(crate) fn lexical_normalize(path: &Path) -> PathBuf {
     use std::path::Component;
     let mut out = PathBuf::new();
     for c in path.components() {

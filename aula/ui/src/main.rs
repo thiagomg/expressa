@@ -1204,7 +1204,8 @@ fn install_css() {
         }
         menubar { padding: 2px 8px 0 8px; }
         label.aula-catalogo { font-family: monospace; }
-        label.aula-ajuda-grupo { font-weight: bold; opacity: 0.7; padding-top: 6px; }
+        label.aula-ajuda-grupo { font-weight: bold; opacity: 0.7; padding-top: 8px; }
+        label.aula-ajuda-tema { font-weight: bold; opacity: 0.55; padding-top: 4px; padding-left: 8px; }
         paned.aula-paned > separator:hover {
             background-color: alpha(currentColor, 0.28);
         }

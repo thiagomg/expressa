@@ -56,7 +56,7 @@
           'font-lock-constant-face))))
 
 (defcustom expressa-indent-offset 4
-  "Indentation step for Expressa blocks (`inicio'/`fim' and `{`/`}`)."
+  "Indentation step for Expressa blocks (`inicio'/`fim', `{`/`}`, `[`/`]`, `(`/`)`)."
   :type 'integer
   :group 'expressa)
 
@@ -70,6 +70,10 @@
     (modify-syntax-entry ?\\ "\\" table)
     (modify-syntax-entry ?{ "(}" table)
     (modify-syntax-entry ?} "){" table)
+    (modify-syntax-entry ?[ "(]" table)
+    (modify-syntax-entry ?] ")[" table)
+    (modify-syntax-entry ?( "()" table)
+    (modify-syntax-entry ?) ")(" table)
     table)
   "Syntax table for `expressa-mode'.")
 
@@ -97,21 +101,21 @@
            ((looking-at "\\_<fim\\_>")
             (setq closes (1+ closes))
             (goto-char (match-end 0)))
-           ((eq (char-after) ?{)
+           ((memq (char-after) '(?{ ?[ ?\())
             (setq opens (1+ opens))
             (forward-char 1))
-           ((eq (char-after) ?})
+           ((memq (char-after) '(?} ?] ?\)))
             (setq closes (1+ closes))
             (forward-char 1))
            (t (forward-char 1)))))
       (cons opens closes))))
 
 (defun expressa--line-starts-with-closer ()
-  "Non-nil if this line begins with `fim' or `}' (after whitespace)."
+  "Non-nil if this line begins with `fim', `}', `]' or `)' (after whitespace)."
   (save-excursion
     (beginning-of-line)
     (skip-chars-forward " \t")
-    (or (eq (char-after) ?})
+    (or (memq (char-after) '(?} ?] ?\)))
         (looking-at "\\_<fim\\_>"))))
 
 (defun expressa--calculate-indent ()
@@ -174,7 +178,7 @@
   (setq-local indent-region-function #'expressa-indent-region)
   (setq-local indent-tabs-mode nil)
   (setq-local tab-width expressa-indent-offset)
-  (setq-local electric-indent-chars (append '(?}) electric-indent-chars)))
+  (setq-local electric-indent-chars (append '(?} ?] ?\)) electric-indent-chars)))
 
 ;;;###autoload
 (add-to-list 'auto-mode-alist '("\\.lep\\'" . expressa-mode))

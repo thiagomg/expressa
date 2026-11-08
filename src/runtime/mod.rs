@@ -38,7 +38,8 @@ pub use graf_host::{CapturaGraf, EventoGraf, GrafHost, NullGraf};
 pub use imagem::Imagem;
 pub use leia::{CLEAR_SCREEN, CURSOR_HOME, LEIA_MARKER, LeiaHost};
 pub use nativas::{
-    BuiltinDoc, NATIVAS, Nativa, builtin_docs, lookup_alvo, lookup_builtin_doc, lookup_ficha,
+    BuiltinDoc, NATIVAS, Nativa, builtin_docs, docs_agrupados, lookup_alvo, lookup_builtin_doc,
+    lookup_ficha, tema_de, titulo_modulo,
 };
 pub use numero::{Numero, NumeroAritmetica, default_numero_aritmetica};
 pub use pilha::PROFUNDIDADE_MAXIMA;

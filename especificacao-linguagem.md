@@ -474,7 +474,7 @@ extensao("a.tar.gz")                      // "gz" (sem ponto; sem extensão, "")
 pasta_atual()                             // pasta de onde o programa foi chamado
 ```
 
-Caminhos relativos partem da **pasta do `.lep`**, não de `pasta_atual()`. Um arquivo passado na linha de comando, relativo ao terminal, vira `junte_caminho(pasta_atual(), argumentos[0])`. Falhas (arquivo que não existe, sem permissão) são erros (`se_falhar`). Na Aula, todo caminho tem que ficar na pasta do aluno.
+Caminhos relativos partem da **pasta do `.lep`**, não de `pasta_atual()`. `~` e `~/pasta` são a pasta pessoal (`HOME` / `USERPROFILE`). `~nome` não expande. Um arquivo passado na linha de comando, relativo ao terminal, vira `junte_caminho(pasta_atual(), argumentos[0])`. Falhas (arquivo que não existe, sem permissão) são erros (`se_falhar`). Na Aula, caminhos relativos ficam na pasta do aluno; `~` permanece sob a pasta pessoal.
 
 ---
 

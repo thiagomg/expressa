@@ -463,6 +463,31 @@
       "doc": "Limpa a tela do terminal. Também limpe_tela().\n\nColoca o cursor no canto superior esquerdo. Sem argumentos.\nNo REPL, a linha cls (sem parênteses) também limpa a tela.\nNa Aula, limpa o painel de saída.\nEm uma animação, cls() a cada quadro pisca: use casa() no laço.\n\nExemplo: cls()"
     },
     {
+      "name": "posicao_cursor",
+      "aliases": [
+        "posição_cursor"
+      ],
+      "module": "tela",
+      "kind": "funcao",
+      "signatures": [
+        "posicao_cursor()",
+        "posicao_cursor(pos)"
+      ],
+      "summary": "Consulta ou altera a posição do cursor de saída. Também posição_cursor().",
+      "doc": "Consulta ou altera a posição do cursor de saída. Também posição_cursor().\n\nSem argumentos, devolve um mapa {:linha, :coluna}, com posições a partir de zero.\nCom um mapa, move o cursor sem apagar nem alterar o mapa recebido.\nFunciona na Aula e em terminais compatíveis. A consulta falha em pipes/arquivos\nou quando o terminal não responde. Na Aula, as linhas são as quebras explícitas:\no ajuste visual de uma linha longa não muda a numeração. Rolagem pode invalidar\nposições guardadas. Na Aula, leia() começa na posição escolhida e substitui\no restante daquela linha, preservando as linhas de baixo.\n\nExemplo: pos = posicao_cursor()"
+    },
+    {
+      "name": "apague_linha",
+      "aliases": [],
+      "module": "tela",
+      "kind": "funcao",
+      "signatures": [
+        "apague_linha()"
+      ],
+      "summary": "Apaga a linha atual inteira e deixa o cursor no início dela.",
+      "doc": "Apaga a linha atual inteira e deixa o cursor no início dela.\n\nNão remove a linha nem desloca as linhas de baixo. Sem argumentos.\nFunciona no terminal e no painel de saída da Aula.\n\nExemplo: apague_linha()"
+    },
+    {
       "name": "casa",
       "aliases": [],
       "module": "tela",
@@ -914,7 +939,7 @@
         "leia_arquivo(caminho)"
       ],
       "summary": "Lê o arquivo; cada linha vira um texto (sem quebra de linha).",
-      "doc": "Lê o arquivo; cada linha vira um texto (sem quebra de linha).\n\nArquivo vazio devolve []. Caminhos relativos partem da pasta do .lep.\nFalhas de leitura são erros de execução (se_falhar).\n\nExemplo: leia_arquivo(\"dados.txt\") se_falhar []"
+      "doc": "Lê o arquivo; cada linha vira um texto (sem quebra de linha).\n\nArquivo vazio devolve []. Caminhos relativos partem da pasta do .lep.\n`~` e `~/pasta` são a pasta pessoal. Falhas de leitura são erros (se_falhar).\n\nExemplo: leia_arquivo(\"dados.txt\") se_falhar []"
     },
     {
       "name": "salve_arquivo",
@@ -1005,7 +1030,7 @@
         "crie_pasta(caminho)"
       ],
       "summary": "Cria a pasta e as que faltarem no caminho. Já existir não é erro.",
-      "doc": "Cria a pasta e as que faltarem no caminho. Já existir não é erro.\n\nExemplo: crie_pasta(\"saida/2024\")"
+      "doc": "Cria a pasta e as que faltarem no caminho. Já existir não é erro.\n\n`~` é a pasta pessoal: crie_pasta(\"~/.local/share/tarefas\").\n\nExemplo: crie_pasta(\"saida/2024\")"
     },
     {
       "name": "apague_arquivo",

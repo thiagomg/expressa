@@ -21,7 +21,10 @@ mod referencia;
 mod sistema;
 mod tela;
 
-pub use referencia::{BuiltinDoc, builtin_docs, lookup_alvo, lookup_builtin_doc, lookup_ficha};
+pub use referencia::{
+    BuiltinDoc, builtin_docs, docs_agrupados, lookup_alvo, lookup_builtin_doc, lookup_ficha,
+    tema_de, titulo_modulo,
+};
 
 pub struct Nativa {
     pub names: &'static [&'static str],

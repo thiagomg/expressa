@@ -117,6 +117,15 @@ impl Vm<'_, '_> {
         path: &str,
         span: Span,
     ) -> Result<std::path::PathBuf, EvalError> {
+        if let Some(casa) = expand_tilde(path).map_err(|m| self.err(m, span))? {
+            if self.workspace_root.is_some() {
+                let home = pasta_pessoal().ok_or_else(|| {
+                    self.err("não foi possível usar ~: variável HOME indefinida", span)
+                })?;
+                return self.confine_in(casa, &super::super::eval::lexical_normalize(&home), span);
+            }
+            return Ok(casa);
+        }
         let p = Path::new(path);
         let joined = if p.is_absolute() {
             p.to_path_buf()
@@ -135,7 +144,8 @@ impl Vm<'_, '_> {
 
 /// Files and folders (`existe`, `liste`, `mova`…) and path text
 /// (`junte_caminho`, `extensao`…). Paths go through `resolve_data_path`:
-/// relative to the `.lep`, and confined in the Aula.
+/// `~` / `~/…` is the home folder, relative to the `.lep`, confined in the Aula
+/// (tilde paths stay under home).
 impl Vm<'_, '_> {
     fn caminho_arg(&self, v: &Value, span: Span) -> Result<PathBuf, EvalError> {
         self.resolve_data_path(&self.expect_texto(v, span)?, span)
@@ -357,6 +367,35 @@ impl Vm<'_, '_> {
     }
 }
 
+fn pasta_pessoal() -> Option<PathBuf> {
+    std::env::var_os("HOME")
+        .or_else(|| std::env::var_os("USERPROFILE"))
+        .map(PathBuf::from)
+}
+
+/// `~` and `~/…` (or `~\…`) become the home folder. `~nome` is left as-is.
+fn expand_tilde(path: &str) -> Result<Option<PathBuf>, String> {
+    expand_tilde_with_home(path, pasta_pessoal())
+}
+
+fn expand_tilde_with_home(path: &str, home: Option<PathBuf>) -> Result<Option<PathBuf>, String> {
+    let rest = if path == "~" {
+        ""
+    } else if let Some(r) = path.strip_prefix("~/").or_else(|| path.strip_prefix("~\\")) {
+        r
+    } else {
+        return Ok(None);
+    };
+    let Some(home) = home else {
+        return Err("não foi possível usar ~: variável HOME indefinida".into());
+    };
+    Ok(Some(if rest.is_empty() {
+        home
+    } else {
+        home.join(rest)
+    }))
+}
+
 fn texto_de(s: Option<&std::ffi::OsStr>) -> Value {
     Value::Texto(
         s.map(|s| s.to_string_lossy().into_owned())
@@ -388,8 +427,9 @@ fn casa_padrao(p: &[char], nome: &[char]) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::casa_padrao;
+    use super::{casa_padrao, expand_tilde_with_home, pasta_pessoal};
     use crate::runtime::run_to_string;
+    use std::path::PathBuf;
 
     #[test]
     fn pastas_e_arquivos() {
@@ -439,6 +479,72 @@ mod tests {
             out,
             "z.png x/y verdadeiro gz verdadeiro\nc.txt verdadeiro\n"
         );
+    }
+
+    #[test]
+    fn tilde_expande_para_a_pasta_pessoal() {
+        assert_eq!(
+            expand_tilde_with_home("~", Some(PathBuf::from("/casa"))).unwrap(),
+            Some(PathBuf::from("/casa"))
+        );
+        assert_eq!(
+            expand_tilde_with_home("~/.local/share/tarefas", Some(PathBuf::from("/casa"))).unwrap(),
+            Some(PathBuf::from("/casa/.local/share/tarefas"))
+        );
+        assert_eq!(
+            expand_tilde_with_home("~\\dados", Some(PathBuf::from("/casa"))).unwrap(),
+            Some(PathBuf::from("/casa").join("dados"))
+        );
+        assert_eq!(
+            expand_tilde_with_home("~ana", Some(PathBuf::from("/casa"))).unwrap(),
+            None
+        );
+        assert!(
+            expand_tilde_with_home("~", None)
+                .unwrap_err()
+                .contains("HOME")
+        );
+    }
+
+    #[test]
+    fn crie_pasta_com_tilde() {
+        let home = pasta_pessoal().expect("HOME");
+        let nome = format!("expressa-tilde-{}", std::process::id());
+        let rel = format!("~/.cache/{nome}");
+        let abs = home.join(".cache").join(&nome);
+        let _ = std::fs::remove_dir_all(&abs);
+        let src = format!(
+            "importe \"arquivo\"\n\
+             crie_pasta(\"{rel}\")\n\
+             escreva(existe(\"{rel}\"), eh_pasta(\"{rel}\"))\n"
+        );
+        let out = run_to_string(&src, "t.lep").unwrap();
+        assert_eq!(out, "verdadeiro verdadeiro\n");
+        assert!(abs.is_dir(), "{}", abs.display());
+        let _ = std::fs::remove_dir_all(&abs);
+    }
+
+    #[test]
+    fn tilde_na_aula_escreve_na_casa() {
+        let home = pasta_pessoal().expect("HOME");
+        let nome = format!("expressa-tilde-aula-{}", std::process::id());
+        let rel = format!("~/.cache/{nome}");
+        let abs = home.join(".cache").join(&nome);
+        let _ = std::fs::remove_dir_all(&abs);
+        let dir = std::env::temp_dir().join(format!("expressa-tilde-ws-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let src = format!("importe \"arquivo\"\ncrie_pasta(\"{rel}\")\n");
+        crate::runtime::run_to_string_with(
+            &src,
+            &dir.join("t.lep").to_string_lossy(),
+            "",
+            Some(dir.clone()),
+            None,
+        )
+        .unwrap();
+        assert!(abs.is_dir(), "{}", abs.display());
+        let _ = std::fs::remove_dir_all(&abs);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

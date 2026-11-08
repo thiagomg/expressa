@@ -278,7 +278,7 @@ expressa> leia_arquivo("oi.txt")
 
 Diário (grava e relê): `../exemplos/programas/diario.lep`. Agenda CSV: `../exemplos/programas/contatos.lep`.
 
-No expressa-aula o programa só vê a pasta do projeto.
+No expressa-aula o programa só vê a pasta do projeto; `~` e `~/pasta` são a pasta pessoal.
 
 **Desafio:** execute o diário e abra `exemplos/programas/saida/diario.txt`.
 

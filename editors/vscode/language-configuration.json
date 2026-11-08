@@ -22,8 +22,8 @@
     ["\"", "\""]
   ],
   "indentationRules": {
-    "increaseIndentPattern": "^.*(\\{|(^|[^\\p{L}\\p{N}_])(inicio|início))\\s*(//.*)?$",
-    "decreaseIndentPattern": "^\\s*(\\}|fim(?![\\p{L}\\p{N}_]))"
+    "increaseIndentPattern": "^.*(\\{|\\[|\\(|(^|[^\\p{L}\\p{N}_])(inicio|início))\\s*(//.*)?$",
+    "decreaseIndentPattern": "^\\s*(\\}|\\]|\\)|fim(?![\\p{L}\\p{N}_]))"
   },
   "onEnterRules": [
     {
