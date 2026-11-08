@@ -237,8 +237,9 @@ mod tests {
             .filter(|e| item_bate(e, "data"))
             .map(|e| e.key.as_str())
             .collect();
-        assert!(vis.contains(&"agora"), "{vis:?}");
-        assert!(vis.contains(&"formate_data"), "{vis:?}");
+        assert!(vis.contains(&"crono::agora"), "{vis:?}");
+        assert!(vis.contains(&"crono::formate_data"), "{vis:?}");
+        assert!(vis.contains(&"crono::data"), "{vis:?}");
     }
 
     #[test]

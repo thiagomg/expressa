@@ -608,10 +608,10 @@ mod tests {
         let t = texto_ajuda_funcoes();
         let i_texto = t.find("  Texto\n").expect(&t);
         let i_maiuscula = t.find("maiuscula").expect(&t);
-        let i_data = t.find("  Data\n").expect(&t);
+        let i_crono = t.find("importe \"crono\":").expect(&t);
         let i_agora = t.find("agora()").expect(&t);
         assert!(i_texto < i_maiuscula, "{t}");
-        assert!(i_data < i_agora, "{t}");
+        assert!(i_crono < i_agora, "{t}");
         assert!(t.contains("importe \"cartesiano\":"), "{t}");
         assert!(t.contains("importe \"tela_grafica\":"), "{t}");
         assert!(t.contains("  Pastas e arquivos\n"), "{t}");

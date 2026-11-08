@@ -54,6 +54,7 @@ const TELA: &str = include_str!("../../../docs/nativas/tela.lep");
 const MAT: &str = include_str!("../../../docs/nativas/mat.lep");
 const MATRIZ: &str = include_str!("../../../docs/nativas/matriz.lep");
 const ARQUIVO: &str = include_str!("../../../docs/nativas/arquivo.lep");
+const CRONO: &str = include_str!("../../../docs/nativas/crono.lep");
 const CARTESIANO: &str = include_str!("../../../docs/nativas/cartesiano.lep");
 const TELA_GRAFICA: &str = include_str!("../../../docs/nativas/tela_grafica.lep");
 const IMAGEM: &str = include_str!("../../../docs/nativas/imagem.lep");
@@ -115,7 +116,6 @@ pub fn tema_de(module: Option<&str>, name: &str) -> &'static str {
         (None, "mapa" | "conjunto" | "tamanho" | "primeiro" | "ultimo" | "remova" | "ordene") => {
             "Coleção"
         }
-        (None, "agora" | "formate_data") => "Data",
         (None, "ambiente") => "Sistema",
         (None, "avalie" | "catalogo" | "ajuda" | "tipo" | "tipos") => "Linguagem",
         (
@@ -157,11 +157,12 @@ fn ordem_modulo(module: Option<&str>) -> u8 {
         Some("mat") => 2,
         Some("matriz") => 3,
         Some("arquivo") => 4,
-        Some("cartesiano") => 5,
-        Some("tela_grafica") => 6,
-        Some("imagem") => 7,
-        Some("processo") => 8,
-        _ => 9,
+        Some("crono") => 5,
+        Some("cartesiano") => 6,
+        Some("tela_grafica") => 7,
+        Some("imagem") => 8,
+        Some("processo") => 9,
+        _ => 10,
     }
 }
 
@@ -172,7 +173,6 @@ fn ordem_tema(module: Option<&str>, tema: &str) -> u8 {
             "Número",
             "Texto",
             "Coleção",
-            "Data",
             "Sistema",
             "Linguagem",
         ],
@@ -211,6 +211,7 @@ fn load_all() -> Vec<BuiltinDoc> {
         (MAT, Some("mat")),
         (MATRIZ, Some("matriz")),
         (ARQUIVO, Some("arquivo")),
+        (CRONO, Some("crono")),
         (CARTESIANO, Some("cartesiano")),
         (TELA_GRAFICA, Some("tela_grafica")),
         (IMAGEM, Some("imagem")),
@@ -428,7 +429,7 @@ mod tests {
     }
 
     #[test]
-    fn docs_agrupados_junta_texto_e_data() {
+    fn docs_agrupados_junta_texto() {
         let nucleo: Vec<&str> = docs_agrupados()
             .into_iter()
             .filter(|d| d.module.is_none())
@@ -446,9 +447,17 @@ mod tests {
                 .filter(|n| tema_de(None, n) == "Texto")
                 .count()
         );
-        assert_eq!(
-            fatia_do_tema(&nucleo, None, "Data"),
-            ["agora", "formate_data"]
-        );
+        let crono: Vec<&str> = docs_agrupados()
+            .into_iter()
+            .filter(|d| d.module.as_deref() == Some("crono"))
+            .map(|d| d.name.as_str())
+            .collect();
+        assert!(crono.contains(&"agora"));
+        assert!(crono.contains(&"data"));
+        assert!(crono.contains(&"hoje"));
+        assert!(crono.contains(&"adicione"));
+        assert!(crono.contains(&"dias_entre"));
+        assert!(crono.contains(&"eh_bissexto"));
+        assert!(crono.contains(&"formate_data"));
     }
 }

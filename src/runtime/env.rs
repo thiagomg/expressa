@@ -178,6 +178,21 @@ impl Env {
         parent.and_then(|p| Self::get(&p, name))
     }
 
+    /// Bound in this program (module, block or function), not a núcleo native.
+    pub fn definido_no_programa(env: &Rc<RefCell<Self>>, name: &str) -> bool {
+        let mut current = Some(Rc::clone(env));
+        while let Some(cell) = current {
+            let e = cell.borrow();
+            if e.vars.contains_key(name) {
+                return e.kind != FrameKind::Builtins;
+            }
+            let parent = e.parent.clone();
+            drop(e);
+            current = parent;
+        }
+        false
+    }
+
     /// Assign to an existing binding, or declare in `env` if the name is new.
     ///
     /// Walking past a [`FrameKind::Function`] parent to mutate an outer name
