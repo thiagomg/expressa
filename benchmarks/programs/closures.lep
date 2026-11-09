@@ -1,0 +1,5 @@
+make = funcao(n) { funcao(x) { x + n } }
+add = make(3)
+soma = 0
+para i de 1 ate 100000 { soma += add(i) }
+escreva(soma == 5000350000)

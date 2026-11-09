@@ -4,8 +4,8 @@ use std::cmp::Ordering;
 use std::fmt;
 use std::str::FromStr;
 
-use rust_decimal::Decimal;
 use rust_decimal::prelude::ToPrimitive;
+use rust_decimal::{Decimal, RoundingStrategy};
 
 /// How `+` `-` `*` `/` `%` run. Locale (`formato("pt")`) is independent.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -34,7 +34,7 @@ pub fn default_numero_aritmetica() -> NumeroAritmetica {
         .unwrap_or(NumeroAritmetica::Decimal)
 }
 
-/// Exact decimal (28 digits). Classroom default so money sums print right.
+/// Finite decimal with up to 28 fractional places; arithmetic can round.
 #[derive(Clone, Copy, Debug, Eq)]
 pub struct Numero(Decimal);
 
@@ -68,6 +68,22 @@ impl Numero {
             return None;
         }
         self.0.to_i64()
+    }
+
+    pub fn floor(self) -> Self {
+        Self(self.0.floor())
+    }
+
+    pub fn ceil(self) -> Self {
+        Self(self.0.ceil())
+    }
+
+    /// Nearest integer, with halfway cases away from zero (as f64::round).
+    pub fn round(self) -> Self {
+        Self(
+            self.0
+                .round_dp_with_strategy(0, RoundingStrategy::MidpointAwayFromZero),
+        )
     }
 
     pub fn normalize(self) -> Self {
@@ -185,9 +201,11 @@ impl From<usize> for Numero {
     }
 }
 
-impl From<f64> for Numero {
-    fn from(n: f64) -> Self {
-        Self::from_f64(n).unwrap_or(Self(Decimal::ZERO))
+impl TryFrom<f64> for Numero {
+    type Error = &'static str;
+
+    fn try_from(n: f64) -> Result<Self, Self::Error> {
+        Self::from_f64(n).ok_or("número fora do intervalo")
     }
 }
 

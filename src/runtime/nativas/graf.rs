@@ -59,19 +59,19 @@ impl Vm<'_, '_> {
                 (MapKey::Texto("tipo".into()), Value::Texto("linha".into())),
                 (
                     MapKey::Texto("x1".into()),
-                    Value::Numero((x1 as f64).into()),
+                    Value::Numero((x1 as i64).into()),
                 ),
                 (
                     MapKey::Texto("y1".into()),
-                    Value::Numero((y1 as f64).into()),
+                    Value::Numero((y1 as i64).into()),
                 ),
                 (
                     MapKey::Texto("x2".into()),
-                    Value::Numero((x2 as f64).into()),
+                    Value::Numero((x2 as i64).into()),
                 ),
                 (
                     MapKey::Texto("y2".into()),
-                    Value::Numero((y2 as f64).into()),
+                    Value::Numero((y2 as i64).into()),
                 ),
                 (MapKey::Texto("cor".into()), Value::Texto(cor)),
             ]),
@@ -97,9 +97,9 @@ impl Vm<'_, '_> {
             &mapa,
             Value::mapa(vec![
                 (MapKey::Texto("tipo".into()), Value::Texto("circulo".into())),
-                (MapKey::Texto("x".into()), Value::Numero((x as f64).into())),
-                (MapKey::Texto("y".into()), Value::Numero((y as f64).into())),
-                (MapKey::Texto("r".into()), Value::Numero((r as f64).into())),
+                (MapKey::Texto("x".into()), Value::Numero((x as i64).into())),
+                (MapKey::Texto("y".into()), Value::Numero((y as i64).into())),
+                (MapKey::Texto("r".into()), Value::Numero((r as i64).into())),
                 (MapKey::Texto("cor".into()), Value::Texto(cor)),
             ]),
         );
@@ -116,8 +116,8 @@ impl Vm<'_, '_> {
             &mapa,
             Value::mapa(vec![
                 (MapKey::Texto("tipo".into()), Value::Texto("ponto".into())),
-                (MapKey::Texto("x".into()), Value::Numero((x as f64).into())),
-                (MapKey::Texto("y".into()), Value::Numero((y as f64).into())),
+                (MapKey::Texto("x".into()), Value::Numero((x as i64).into())),
+                (MapKey::Texto("y".into()), Value::Numero((y as i64).into())),
                 (MapKey::Texto("cor".into()), Value::Texto(cor)),
             ]),
         );
@@ -145,19 +145,19 @@ impl Vm<'_, '_> {
                 ),
                 (
                     MapKey::Texto("x1".into()),
-                    Value::Numero((x1 as f64).into()),
+                    Value::Numero((x1 as i64).into()),
                 ),
                 (
                     MapKey::Texto("y1".into()),
-                    Value::Numero((y1 as f64).into()),
+                    Value::Numero((y1 as i64).into()),
                 ),
                 (
                     MapKey::Texto("x2".into()),
-                    Value::Numero((x2 as f64).into()),
+                    Value::Numero((x2 as i64).into()),
                 ),
                 (
                     MapKey::Texto("y2".into()),
-                    Value::Numero((y2 as f64).into()),
+                    Value::Numero((y2 as i64).into()),
                 ),
                 (MapKey::Texto("cor".into()), Value::Texto(cor)),
             ]),
@@ -196,11 +196,11 @@ impl Vm<'_, '_> {
             &mapa,
             Value::mapa(vec![
                 (MapKey::Texto("tipo".into()), Value::Texto("texto".into())),
-                (MapKey::Texto("x".into()), Value::Numero((x as f64).into())),
-                (MapKey::Texto("y".into()), Value::Numero((y as f64).into())),
+                (MapKey::Texto("x".into()), Value::Numero((x as i64).into())),
+                (MapKey::Texto("y".into()), Value::Numero((y as i64).into())),
                 (
                     MapKey::Texto("tamanho".into()),
-                    Value::Numero((tamanho as f64).into()),
+                    Value::Numero((tamanho as i64).into()),
                 ),
                 (MapKey::Texto("cor".into()), Value::Texto(cor)),
                 (MapKey::Texto("texto".into()), Value::Texto(texto)),
@@ -237,9 +237,12 @@ impl Vm<'_, '_> {
             Value::mapa(vec![
                 (MapKey::Texto("tipo".into()), Value::Texto("imagem".into())),
                 (MapKey::Texto("figura".into()), Value::Imagem(figura)),
-                (MapKey::Texto("x".into()), Value::Numero((x as f64).into())),
-                (MapKey::Texto("y".into()), Value::Numero((y as f64).into())),
-                (MapKey::Texto("angulo".into()), Value::Numero(angulo.into())),
+                (MapKey::Texto("x".into()), Value::Numero((x as i64).into())),
+                (MapKey::Texto("y".into()), Value::Numero((y as i64).into())),
+                (
+                    MapKey::Texto("angulo".into()),
+                    self.number_from_f64(angulo, span)?,
+                ),
             ]),
         );
         Ok(args[0].clone())
@@ -686,11 +689,11 @@ fn evento_valor(e: EventoGraf) -> Value {
         (MapKey::Texto("tipo".into()), Value::Texto(e.tipo)),
         (
             MapKey::Texto("x".into()),
-            Value::Numero((e.x as f64).into()),
+            Value::Numero((e.x as i64).into()),
         ),
         (
             MapKey::Texto("y".into()),
-            Value::Numero((e.y as f64).into()),
+            Value::Numero((e.y as i64).into()),
         ),
         (MapKey::Texto("botao".into()), Value::Texto(e.botao)),
         (MapKey::Texto("tecla".into()), Value::Texto(e.tecla)),

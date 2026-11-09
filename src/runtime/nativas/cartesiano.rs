@@ -8,6 +8,7 @@ use crate::runtime::env::Env;
 use crate::runtime::error::EvalError;
 use crate::runtime::eval::Vm;
 use crate::runtime::folha::{CurvaPronta, FolhaPronta, GraficoPronto};
+use crate::runtime::numero::Numero;
 use crate::runtime::value::{ListaRc, MapKey, MapaRc, Value};
 
 use super::tela;
@@ -52,10 +53,10 @@ impl Vm<'_, '_> {
         }
         {
             let mut entries = mapa.borrow_mut();
-            set_num(&mut entries, "xmin", xmin);
-            set_num(&mut entries, "xmax", xmax);
-            set_num(&mut entries, "ymin", ymin);
-            set_num(&mut entries, "ymax", ymax);
+            set_num(&mut entries, "xmin", self.expect_numero(&args[1], span)?);
+            set_num(&mut entries, "xmax", self.expect_numero(&args[2], span)?);
+            set_num(&mut entries, "ymin", self.expect_numero(&args[3], span)?);
+            set_num(&mut entries, "ymax", self.expect_numero(&args[4], span)?);
         }
         Ok(args[0].clone())
     }
@@ -100,15 +101,15 @@ impl Vm<'_, '_> {
         for i in 0..n {
             let t = i as f64 / (n - 1) as f64;
             let x = xmin + t * (xmax - xmin);
-            let xv = Value::Numero(x.into());
+            let xv = self.number_from_f64(x, span)?;
             let yv = self.call_value(func, &[xv], span, "plote", env)?;
             match yv {
-                Value::Numero(n) => {
-                    let y = n.to_f64();
+                Value::Numero(y_numero) => {
+                    let y = y_numero.to_f64();
                     if y.is_finite() {
                         pontos.push(Value::lista(vec![
-                            Value::Numero(x.into()),
-                            Value::Numero(y.into()),
+                            self.number_from_f64(x, span)?,
+                            Value::Numero(y_numero),
                         ]));
                     } else {
                         pontos.push(Value::Nada);
@@ -307,12 +308,12 @@ fn get_texto(mapa: &MapaRc, chave: &str) -> Option<String> {
     }
 }
 
-fn set_num(entries: &mut Vec<(MapKey, Value)>, chave: &str, n: f64) {
+fn set_num(entries: &mut Vec<(MapKey, Value)>, chave: &str, n: Numero) {
     let key = MapKey::Texto(chave.into());
     if let Some((_, v)) = entries.iter_mut().find(|(k, _)| *k == key) {
-        *v = Value::Numero(n.into());
+        *v = Value::Numero(n);
     } else {
-        entries.push((key, Value::Numero(n.into())));
+        entries.push((key, Value::Numero(n)));
     }
 }
 
@@ -550,8 +551,8 @@ c.mostre()
         // Simpler: plot 1/x which is inf at 0? 1/0 errors in expressa.
         // We'll just check the test below with explicit nothing via a condition that
         // still returns a number that's inf... decimal 1/0 is error.
-        // Skip inf: the runtime treats non-finite f64 as hole; from_f64 of inf is 0.
-        // So we can't easily get inf through Numero. Holes from NaN: Numero::from(f64::NAN) is 0.
+        // Nonfinite numbers are rejected by Numero conversion.
+        // Numero cannot represent nonfinite values; conversion must report an error.
         // So holes only if we push Nada... we only push Nada when y is non-finite after to_f64.
         // rust_decimal to_f64 of normal numbers is finite.
         // For this language, holes happen if we later add sqrt negative as nan... raiz errors.

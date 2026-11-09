@@ -81,13 +81,13 @@ impl Vm<'_, '_> {
     ) -> Result<Value, EvalError> {
         self.expect_arity(args, 1, span)?;
         let img = expect_imagem(&args[0], span, self)?;
-        Ok(Value::Numero((img.largura as f64).into()))
+        Ok(Value::Numero((img.largura as i64).into()))
     }
 
     pub(crate) fn bi_img_altura(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
         self.expect_arity(args, 1, span)?;
         let img = expect_imagem(&args[0], span, self)?;
-        Ok(Value::Numero((img.altura as f64).into()))
+        Ok(Value::Numero((img.altura as i64).into()))
     }
 }
 

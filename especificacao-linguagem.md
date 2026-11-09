@@ -11,10 +11,8 @@ Quem **usa** a linguagem: [tutorial](tutorial/basico.md), [avançado](tutorial/a
 Extensao de arquivos: .lep
 ---
 
-yyy1
-
 Linguagem orientada a iniciantes, com palavras em **português brasileiro**, sintaxe simples e consistente.  
-Todo bloco (`inicio`/`fim` ou `{`/`}`) é uma expressão e retorna o valor da última expressão. As duas formas são equivalentes; o par de abertura deve combinar com o de fechamento (`inicio` com `fim`, `{` com `}`).
+Todo bloco (`inicio`/`fim` ou `{`/`}`) é uma expressão; seu resultado é o resultado do último comando. Uma expressão nesse lugar fornece seu valor; atribuições e laços fornecem `nada`. Blocos vazios não são aceitos. Atribuições, laços e importações não são expressões gerais. As duas formas são equivalentes; o par de abertura deve combinar com o de fechamento (`inicio` com `fim`, `{` com `}`).
 
 ---
 
@@ -28,6 +26,8 @@ Todo bloco (`inicio`/`fim` ou `{`/`}`) é uma expressão e retorna o valor da ú
 
 Tipos compostos: **lista**, **par**, **mapa**, **conjunto**, **matriz** e **imagem**.
 
+Os contextos que exigem inteiro (chaves numéricas, elementos numéricos de conjuntos, contadores e índices) usam inteiros com sinal de 64 bits: −9223372036854775808…9223372036854775807. O tipo `numero` aceita valores fora desse intervalo; ser matematicamente inteiro não garante que um valor seja aceito nesses contextos. Dimensões e índices também devem caber no tamanho de endereço da plataforma e nos limites do host. Conversões fora do intervalo numérico produzem erro, nunca substituem o valor por zero.
+
 `tipo(valor)` devolve o nome do tipo como texto (`"numero"`, `"texto"`, `"bool"`, `"lista"`, `"par"`, `"mapa"`, `"conjunto"`, `"matriz"`, `"imagem"`, `"funcao"`, `"modulo"`, `"processo"`, `"nada"`). Os nomes são os mesmos das mensagens de erro (sem acento). `escreva` e funções do aluno são `"funcao"`. `tipos()` lista esses nomes.
 
 ---
@@ -37,7 +37,7 @@ Tipos compostos: **lista**, **par**, **mapa**, **conjunto**, **matriz** e **imag
 - Declaração: apenas `nome = valor`
 - Reatribuição permitida
 - Escopo de bloco: variáveis criadas dentro de `inicio...fim` (ou `{...}`) só existem dentro dele
-- Funções podem **ler** variáveis de fora, mas **não podem modificá-las**
+- Funções podem **ler** nomes de fora, mas **não podem reatribuir esses nomes**. Listas, mapas e matrizes são objetos compartilhados: alterar um elemento desses objetos é permitido, inclusive quando o nome está em um escopo externo.
 
 ```text
 x = 10
@@ -81,13 +81,13 @@ As funções nativas estão documentadas em `docs/nativas/*.lep` (mesmo formato 
 ## 4. Operadores
 
 **Aritméticos:** `+` `-` `*` `/` `%`  
-**Atribuição composta:** `+=` (número, texto, lista), `-=` (número) — `alvo += v` é `alvo = alvo + v`.  
+**Atribuição composta:** `+=` (os mesmos operandos de `+`), `-=` (os mesmos operandos de `-`). `alvo += v` lê o valor do alvo, soma `v` e grava no mesmo destino. O receptor e seus índices são avaliados uma única vez, antes de `v`, na ordem de leitura. A atribuição simples preserva a ordem existente: primeiro o lado direito; em `[i]`, depois o índice e o receptor. A troca de um caractere em texto também mantém o destino escolhido para a regravação.
 **Comparação:** `==` `!=` `>` `<` `>=` `<=`  
 **Lógicos:** `e` `ou` `nao`  
 **Par:** `chave -> valor` produz um valor do tipo `par`. Não encadeia: `a -> b -> c` é erro.  
 **Raiz quadrada:** `importe "mat"` e então `raiz(n)` — erro se `n < 0` (tratável com `se_falhar`)  
 **Ao acaso:** no mesmo módulo, `aleatorio(min, max)` (também `aleatório`) inteiro inclusive; `semente(n)` fixa a sequência.  
-**Trigonometria e análise:** no mesmo módulo, ângulos em **radianos**. `seno`/`sen`, `cosseno`/`cos`, `tangente`/`tan`; inversas `arcoseno`, `arcocosseno`, `arcotangente`, `arcotangente2(y, x)`. `radianos(g)` e `graus(r)` convertem. `pi` é um valor (não `pi()`). Também `exp`, `log` (natural), `log10`, `potencia`, `piso`, `teto`, `arredonde`. Domínio inválido (por exemplo `log(0)`, `arcoseno(2)`) é erro capturável com `se_falhar`. `e` é palavra-chave; use `exp(1)`.  
+**Trigonometria e análise:** no mesmo módulo, ângulos em **radianos**. `seno`/`sen`, `cosseno`/`cos`, `tangente`/`tan`; inversas `arcoseno`, `arcocosseno`, `arcotangente`, `arcotangente2(y, x)`. `radianos(g)` e `graus(r)` convertem. `pi` é um valor (não `pi()`). Também `exp`, `log` (natural), `log10`, `potencia`, `piso`, `teto`, `arredonde`. As três funções de arredondamento operam diretamente sobre o valor decimal; `arredonde` escolhe o inteiro mais próximo e, no meio exato, afasta de zero (`2.5` → `3`, `-2.5` → `-3`). Domínio inválido (por exemplo `log(0)`, `arcoseno(2)`) é erro capturável com `se_falhar`. `e` é palavra-chave; use `exp(1)`.
 **Texto ↔ número:** `numero(t)` (também `número`) lê o padrão atual; `formato("pt")` / `formato("en")` escolhe pt-BR (`1.000,5`) ou en-US (`1,000.5`). Padrão pt-BR. Literais no código usam `.`.  
 **Aritmética:** padrão decimal (`formato("decimal")`). `formato("float")` liga IEEE-754 só nas operações; o padrão de texto (`pt`/`en`) continua independente. Variável de ambiente `EXPRESSA_ARITMETICA`; CLI `--aritmetica decimal|float`.  
 **Acesso:** `mat::soma` (módulo), `pessoa:nome` (chave de mapa), `p:chave` / `p:valor` (par), `xs.tamanho()` (= `tamanho(xs)`).
@@ -100,7 +100,7 @@ nao verdadeiro
 
 ---
 
-## 5. Blocos (tudo é expressão)
+## 5. Blocos como expressões
 
 ```text
 resultado = inicio
@@ -115,7 +115,7 @@ resultado = { 10 + 5 }    // igual
 
 ## 5.1. Matrizes
 
-Retangulares, só números. Vêm do módulo `matriz`. Índices começam em 0: `A[linha, coluna]`. `A[i]` devolve a linha como lista.
+Retangulares, só números. Vêm do módulo `matriz`. A implementação AST atual armazena células como `f64`; a possível diferença de precisão em relação a escalares decimais é uma decisão pendente da tarefa 003. Resultados que não podem voltar ao tipo `numero` são erros, inclusive em operações de matriz. O host limita cada matriz a 1.048.576 células por padrão, com configuração pela API Rust `ExecutionOptions::max_matrix_cells`; esse limite não representa um orçamento total da memória do programa. Índices começam em 0: `A[linha, coluna]`. `A[i]` devolve a linha como lista.
 
 `xy(A, x, y)` (UFCS `A.xy(x, y)`) equivale a `A[y, x]`. `xy(A, x, y, valor)` altera essa mesma célula e devolve a própria matriz, permitindo encadear chamadas. São funções do módulo `matriz`: x é coluna, y é linha, ambos inteiros em base zero, com os mesmos limites e erros da indexação. O valor escrito deve ser numérico; outras referências à matriz observam a alteração.
 
@@ -239,7 +239,7 @@ fim
 
 `retorne` só vale **dentro de uma função**. `retorne` sozinho devolve `nada`. O valor, se houver, fica **na mesma linha**. Não é capturado por `se_falhar`.
 
-`se` usado **como valor** (`x = se …`, argumento, última expressão da função) precisa de `senao`. Como comando, o `senao` é opcional:
+`se` usado **como valor** (`x = se …`, argumento ou valor de `retorne`) precisa de `senao`. Um `se` no fim do corpo da função continua sendo comando: pode omitir `senao` e devolve `nada` se nenhum ramo for executado. Como comando, o `senao` é opcional:
 
 ```text
 se n < 0 { escreva("negativo") }           // ok
@@ -284,6 +284,17 @@ linhas[0][1] = "x"             // se linhas[0] é texto, reescreve o caractere
 ```
 
 ---
+
+### 9.1. Cópias e referências
+
+`a = b` e a passagem de argumentos compartilham listas, mapas e matrizes; alterar um elemento por uma referência aparece nas demais. Texto é um valor: trocar um caractere reatribui o texto e preserva as cópias anteriores. Operações que devolvem uma cópia de coleção (`+`, `remova`, `ordene`) copiam seus elementos superficialmente; objetos mutáveis aninhados continuam compartilhados. Ler uma linha com `A[i]` devolve uma lista independente da matriz. Não confunda uma cópia superficial com uma cópia profunda.
+
+```text
+xs = [[1]]
+ys = xs + []
+ys[0][0] = 2
+escreva(xs[0][0])    // 2: o elemento aninhado é compartilhado
+```
 
 ## 10. Pares e mapas
 
@@ -395,7 +406,7 @@ cat nomes.txt | expressa grep.lep Thiago
 
 `eh_terminal()` (também `é_terminal()`), no módulo `tela`, é `verdadeiro` se a entrada é o teclado, `falso` se é um pipe ou um arquivo.
 
-`argumentos` é a lista dos valores depois do `.lep` na linha de comando (`argumentos[0]` é o primeiro; índices começam em 0). Sem argumentos extras, a lista é `[]`. Não dá para reatribuir `argumentos`.
+`argumentos` é a lista dos valores depois do `.lep` na linha de comando (`argumentos[0]` é o primeiro; índices começam em 0). Sem argumentos extras, a lista é `[]`. Não dá para reatribuir o nome `argumentos`; seus elementos continuam sendo elementos de uma lista mutável.
 
 `avalie(texto)` executa o texto como código Expressa no escopo atual e devolve o último valor. `avalie("2 + 3 * 4")` vale `14`. Erros de sintaxe ou de execução (por exemplo divisão por zero) são capturáveis com `se_falhar`.
 
@@ -480,8 +491,9 @@ Caminhos relativos partem da **pasta do `.lep`**, não de `pasta_atual()`. `~` e
 
 ## 15. Tratamento de Erros
 
-- Qualquer erro causa **crash** (com valores + call stack)
+- Um erro não tratado interrompe a execução e produz um diagnóstico com localização e pilha de chamadas; erros da linguagem não devem causar pânico interno do interpretador.
 - Para tratar, usa-se `se_falhar`
+- `se_falhar` não desfaz atribuições nem outros efeitos que ocorreram antes do erro. Uma importação achatada valida conflitos de todos os nomes antes de publicar qualquer nome; isso não torna os efeitos de inicialização do módulo uma transação.
 
 ```text
 importe "arquivo"

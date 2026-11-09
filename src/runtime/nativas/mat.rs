@@ -11,7 +11,7 @@ impl Vm<'_, '_> {
         if n < 0.0 {
             return Err(self.err("raiz de número negativo", span));
         }
-        Ok(Value::Numero(n.sqrt().into()))
+        self.number_from_f64(n.sqrt(), span)
     }
     pub(crate) fn bi_aleatorio(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
         self.expect_arity(args, 2, span)?;
@@ -121,13 +121,16 @@ impl Vm<'_, '_> {
         self.mat_finite(base.powf(exp), span, "potencia indefinida")
     }
     pub(crate) fn bi_piso(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
-        self.mat_unario(args, span, f64::floor, "piso indefinido")
+        self.expect_arity(args, 1, span)?;
+        Ok(Value::Numero(self.expect_numero(&args[0], span)?.floor()))
     }
     pub(crate) fn bi_teto(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
-        self.mat_unario(args, span, f64::ceil, "teto indefinido")
+        self.expect_arity(args, 1, span)?;
+        Ok(Value::Numero(self.expect_numero(&args[0], span)?.ceil()))
     }
     pub(crate) fn bi_arredonde(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
-        self.mat_unario(args, span, f64::round, "arredonde indefinido")
+        self.expect_arity(args, 1, span)?;
+        Ok(Value::Numero(self.expect_numero(&args[0], span)?.round()))
     }
 
     fn mat_unario(
@@ -160,7 +163,7 @@ impl Vm<'_, '_> {
 
     fn mat_finite(&self, n: f64, span: Span, err: &str) -> Result<Value, EvalError> {
         if n.is_finite() {
-            Ok(Value::Numero(n.into()))
+            self.number_from_f64(n, span)
         } else {
             Err(self.err(err, span))
         }

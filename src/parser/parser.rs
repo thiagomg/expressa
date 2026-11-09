@@ -4,7 +4,7 @@ use crate::lexer::scanner::{Token, tokenize};
 use crate::lexer::{Span, TokenKind};
 use crate::parser::block_types::Block;
 use crate::parser::core_types::{Import, Item, Program};
-use crate::parser::error::ParseError;
+use crate::parser::error::{ParseError, ParseErrorKind};
 use crate::parser::expression_types::{Expr, IfBranch, Param};
 use crate::parser::operator_types::{BinaryOp, UnaryOp};
 use crate::parser::statement_types::{AssignTarget, Stmt};
@@ -53,10 +53,12 @@ impl Parser {
     /// One more level of tree; an error past [`PROFUNDIDADE_MAXIMA`].
     fn descer(&mut self) -> Result<(), ParseError> {
         if self.profundidade >= PROFUNDIDADE_MAXIMA {
-            return Err(self.err(format!(
+            let mut error = self.err(format!(
                 "expressão longa ou aninhada demais (mais de {PROFUNDIDADE_MAXIMA} níveis); \
                  divida em partes com variáveis"
-            )));
+            ));
+            error.kind = ParseErrorKind::DepthLimit;
+            return Err(error);
         }
         self.profundidade += 1;
         Ok(())
@@ -118,6 +120,11 @@ impl Parser {
 
     fn err(&self, message: impl Into<String>) -> ParseError {
         ParseError {
+            kind: if self.at_eof() {
+                ParseErrorKind::UnexpectedEof
+            } else {
+                ParseErrorKind::Syntax
+            },
             message: message.into(),
             span: self.peek().span,
         }
@@ -125,6 +132,11 @@ impl Parser {
 
     fn err_at(&self, message: impl Into<String>, span: Span) -> ParseError {
         ParseError {
+            kind: if span.is_empty() && self.at_eof() && span.start == self.peek().span.start {
+                ParseErrorKind::UnexpectedEof
+            } else {
+                ParseErrorKind::Syntax
+            },
             message: message.into(),
             span,
         }
@@ -269,21 +281,10 @@ impl Parser {
         let target = expr_to_assign_target(lhs).map_err(|span| self.err_at(msg, span))?;
         let rhs = self.parse_expr()?;
         let span = target.span().join(rhs.span());
-        let value = match compound {
-            None => rhs,
-            Some(op) => {
-                let left = assign_target_to_expr(&target);
-                Expr::Binary {
-                    left: Box::new(left),
-                    op,
-                    right: Box::new(rhs),
-                    span,
-                }
-            }
-        };
         Ok(Stmt::Assign {
             target,
-            value,
+            compound,
+            value: rhs,
             span,
             doc: None,
         })
@@ -914,6 +915,7 @@ fn attach_doc(stmt: Stmt, doc: Option<String>) -> Result<Stmt, ParseError> {
         Stmt::Assign {
             target,
             mut value,
+            compound,
             span,
             ..
         } => {
@@ -922,12 +924,14 @@ fn attach_doc(stmt: Stmt, doc: Option<String>) -> Result<Stmt, ParseError> {
             }
             Ok(Stmt::Assign {
                 target,
+                compound,
                 value,
                 span,
                 doc: Some(doc),
             })
         }
         other => Err(ParseError {
+            kind: ParseErrorKind::Syntax,
             message: "documentação só vale antes de uma definição".into(),
             span: other.span(),
         }),
@@ -1091,44 +1095,6 @@ fn is_comparison_op(op: BinaryOp) -> bool {
     )
 }
 
-fn assign_target_to_expr(target: &AssignTarget) -> Expr {
-    match target {
-        AssignTarget::Name { name, span } => Expr::Ident {
-            name: name.clone(),
-            span: *span,
-        },
-        AssignTarget::Index {
-            object,
-            index,
-            span,
-        } => Expr::Index {
-            object: Box::new(object.clone()),
-            index: Box::new(index.clone()),
-            span: *span,
-        },
-        AssignTarget::Index2 {
-            object,
-            row,
-            col,
-            span,
-        } => Expr::Index2 {
-            object: Box::new(object.clone()),
-            row: Box::new(row.clone()),
-            col: Box::new(col.clone()),
-            span: *span,
-        },
-        AssignTarget::MapField {
-            object,
-            field,
-            span,
-        } => Expr::MapField {
-            object: Box::new(object.clone()),
-            field: field.clone(),
-            span: *span,
-        },
-    }
-}
-
 fn expr_to_assign_target(expr: Expr) -> Result<AssignTarget, Span> {
     match expr {
         Expr::Ident { name, span } => Ok(AssignTarget::Name { name, span }),
@@ -1198,30 +1164,17 @@ mod tests {
     }
 
     #[test]
-    fn compound_assign_desugars() {
-        match first_stmt(&parse_ok("i += 1")) {
-            Stmt::Assign { value, .. } => {
-                assert!(matches!(
-                    value,
-                    Expr::Binary {
-                        op: BinaryOp::Add,
-                        ..
-                    }
-                ));
+    fn compound_assign_keeps_operator_and_single_target() {
+        for (source, op) in [("i += 1", BinaryOp::Add), ("i -= 2", BinaryOp::Sub)] {
+            match first_stmt(&parse_ok(source)) {
+                Stmt::Assign {
+                    compound, value, ..
+                } => {
+                    assert_eq!(*compound, Some(op));
+                    assert!(matches!(value, Expr::Number { .. }));
+                }
+                other => panic!("{other:?}"),
             }
-            other => panic!("{other:?}"),
-        }
-        match first_stmt(&parse_ok("i -= 2")) {
-            Stmt::Assign { value, .. } => {
-                assert!(matches!(
-                    value,
-                    Expr::Binary {
-                        op: BinaryOp::Sub,
-                        ..
-                    }
-                ));
-            }
-            other => panic!("{other:?}"),
         }
     }
 

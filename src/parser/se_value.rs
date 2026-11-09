@@ -3,7 +3,7 @@
 use crate::lexer::Span;
 use crate::parser::block_types::Block;
 use crate::parser::core_types::{Item, Program};
-use crate::parser::error::ParseError;
+use crate::parser::error::{ParseError, ParseErrorKind};
 use crate::parser::expression_types::Expr;
 use crate::parser::statement_types::{AssignTarget, Stmt};
 
@@ -25,6 +25,7 @@ pub fn check_se_value(program: &Program) -> Result<(), ParseError> {
 
 fn falta_senao(span: Span) -> ParseError {
     ParseError {
+        kind: ParseErrorKind::MissingElse,
         message: "se usado como valor precisa de 'senao'".into(),
         span,
     }

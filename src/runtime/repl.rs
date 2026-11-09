@@ -77,7 +77,10 @@ impl<'a> ReplSession<'a> {
             span: e.span,
             stack: vec![],
         })?;
-        match self.vm.eval_items_value(&program.items, &self.env) {
+        let result = self.vm.eval_items_value(&program.items, &self.env);
+        // The result is held here, so escaped objects remain external roots.
+        super::value::collect_cycles();
+        match result {
             Ok(v) => Ok(v),
             Err(EvalError::Quit(code)) => {
                 self.exit_code = Some(code);

@@ -1,0 +1,4 @@
+importe "matriz"
+A = uns(80)
+B = A * A
+escreva(B[0,0] == 80 e B[79,79] == 80)

@@ -1,56 +1,9 @@
-use crate::lexer::TokenKind;
-use crate::lexer::scanner::tokenize;
 use crate::parser::parse;
 
-/// Whether the snippet still needs more lines (open `inicio`, `(`, string, …).
+/// Whether appending input may finish an otherwise valid snippet.
+/// Classification is independent of diagnostic wording and parses only once.
 pub fn needs_more_input(source: &str) -> bool {
-    if source.trim().is_empty() {
-        return false;
-    }
-    match tokenize(source) {
-        Err(e) => {
-            e.message.contains("não fechada")
-                || e.message.contains("não fechado")
-                || e.message.contains("incompleto")
-                || e.message.contains("fim do arquivo")
-        }
-        Ok(tokens) => {
-            if !delimiters_ok(&tokens) {
-                return true;
-            }
-            match parse(source) {
-                Ok(_) => false,
-                Err(e) => {
-                    let eof_start = tokens.last().map(|t| t.span.start).unwrap_or(0);
-                    e.span.start >= eof_start
-                }
-            }
-        }
-    }
-}
-
-fn delimiters_ok(tokens: &[crate::lexer::Token]) -> bool {
-    let mut inicio = 0i32;
-    let mut paren = 0i32;
-    let mut brack = 0i32;
-    let mut brace = 0i32;
-    for t in tokens {
-        match t.kind {
-            TokenKind::Inicio => inicio += 1,
-            TokenKind::Fim => inicio -= 1,
-            TokenKind::LParen => paren += 1,
-            TokenKind::RParen => paren -= 1,
-            TokenKind::LBracket => brack += 1,
-            TokenKind::RBracket => brack -= 1,
-            TokenKind::LBrace => brace += 1,
-            TokenKind::RBrace => brace -= 1,
-            _ => {}
-        }
-        if inicio < 0 || paren < 0 || brack < 0 || brace < 0 {
-            return true;
-        }
-    }
-    inicio == 0 && paren == 0 && brack == 0 && brace == 0
+    parse(source).is_err_and(|error| error.is_incomplete())
 }
 
 #[cfg(test)]

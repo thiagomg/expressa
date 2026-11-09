@@ -21,8 +21,9 @@ tokio-stream = "0.1"
 tonic-build = "0.13"
 prost-types = "0.13"
 
-# Design debts tracked in ajustes/03-estrutura-do-interpretador.md (builder
-# instead of the run_* functions, boxed errors). Allowed so CI can deny the rest.
+# Remaining embedding and error-layout debts are tracked in
+# lang-tasks/027-execution-configuration.md and lang-tasks/032-public-api-and-ast-layout.md.
+# Allowed so CI can deny the rest.
 [workspace.lints.clippy]
 too_many_arguments = "allow"
 result_large_err = "allow"

@@ -8,8 +8,27 @@ struct Scanner<'src> {
     col: u32,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LexErrorKind {
+    InvalidToken,
+    InvalidEscape,
+    IncompleteString,
+    IncompleteComment,
+    IncompleteEscape,
+}
+
+impl LexErrorKind {
+    pub fn is_incomplete(self) -> bool {
+        matches!(
+            self,
+            Self::IncompleteString | Self::IncompleteComment | Self::IncompleteEscape
+        )
+    }
+}
+
 #[derive(Debug)]
 pub struct LexError {
+    pub kind: LexErrorKind,
     pub message: String,
     pub span: Span,
 }
@@ -130,6 +149,7 @@ impl<'src> Scanner<'src> {
         macro_rules! lex_err {
             ($($arg:tt)*) => {
                 Err(LexError {
+                    kind: LexErrorKind::InvalidToken,
                     message: format!($($arg)*),
                     span: Span {
                         line,
@@ -345,6 +365,7 @@ impl<'src> Scanner<'src> {
                         match self.peek() {
                             None => {
                                 return Err(LexError {
+                                    kind: LexErrorKind::IncompleteComment,
                                     message: "comentário de bloco não fechado".to_string(),
                                     span: Span {
                                         line,
@@ -413,6 +434,7 @@ impl<'src> Scanner<'src> {
             match self.peek() {
                 None => {
                     return Err(LexError {
+                        kind: LexErrorKind::IncompleteString,
                         message: "string não fechada".to_string(),
                         span: Span {
                             line,
@@ -434,6 +456,7 @@ impl<'src> Scanner<'src> {
 
                     let Some(esc) = self.remove() else {
                         return Err(LexError {
+                            kind: LexErrorKind::IncompleteEscape,
                             message: "escape incompleto no fim do arquivo".to_string(),
                             span: Span {
                                 line,
@@ -455,6 +478,7 @@ impl<'src> Scanner<'src> {
                         }
                         other => {
                             return Err(LexError {
+                                kind: LexErrorKind::InvalidEscape,
                                 message: format!("escape inválido: \\{other}"),
                                 span: Span {
                                     line: esc_line,
@@ -486,6 +510,7 @@ impl<'src> Scanner<'src> {
     ) -> Result<char, LexError> {
         if self.peek() != Some('{') {
             return Err(LexError {
+                kind: LexErrorKind::InvalidEscape,
                 message: "escape \\u deve ser \\u{...}".to_string(),
                 span: Span {
                     line: esc_line,
@@ -506,6 +531,7 @@ impl<'src> Scanner<'src> {
                 self.remove();
             } else {
                 return Err(LexError {
+                    kind: LexErrorKind::InvalidEscape,
                     message: "dígito hexadecimal inválido em \\u{...}".to_string(),
                     span: Span {
                         line: self.line,
@@ -519,6 +545,7 @@ impl<'src> Scanner<'src> {
 
         if self.peek() != Some('}') {
             return Err(LexError {
+                kind: LexErrorKind::IncompleteEscape,
                 message: "\\u{...} não fechado".to_string(),
                 span: Span {
                     line: esc_line,
@@ -533,6 +560,7 @@ impl<'src> Scanner<'src> {
         if hex.is_empty() {
             self.remove(); // }
             return Err(LexError {
+                kind: LexErrorKind::InvalidEscape,
                 message: "\\u{} vazio".to_string(),
                 span: Span {
                     line: esc_line,
@@ -546,6 +574,7 @@ impl<'src> Scanner<'src> {
         self.remove(); // }
 
         let code = u32::from_str_radix(hex, 16).map_err(|_| LexError {
+            kind: LexErrorKind::InvalidEscape,
             message: "código Unicode inválido".to_string(),
             span: Span {
                 line: esc_line,
@@ -556,6 +585,7 @@ impl<'src> Scanner<'src> {
         })?;
 
         char::from_u32(code).ok_or_else(|| LexError {
+            kind: LexErrorKind::InvalidEscape,
             message: "código Unicode inválido".to_string(),
             span: Span {
                 line: esc_line,

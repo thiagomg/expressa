@@ -198,9 +198,25 @@ impl Env {
     /// Walking past a [`FrameKind::Function`] parent to mutate an outer name
     /// is an error (functions may read outer names, not write them).
     pub fn assign(env: &Rc<RefCell<Self>>, name: &str, value: Value) -> Result<(), AssignError> {
+        let destination = Self::assignment_frame(env, name)?;
+        destination
+            .borrow_mut()
+            .vars
+            .insert(name.to_string(), value);
+        Ok(())
+    }
+
+    /// Validate without publishing a binding (used to preflight imports).
+    pub fn check_assign(env: &Rc<RefCell<Self>>, name: &str) -> Result<(), AssignError> {
+        Self::assignment_frame(env, name).map(|_| ())
+    }
+
+    fn assignment_frame(
+        env: &Rc<RefCell<Self>>,
+        name: &str,
+    ) -> Result<Rc<RefCell<Self>>, AssignError> {
         let mut current = Some(Rc::clone(env));
         let mut crossed_function = false;
-
         while let Some(cell) = current {
             let e = cell.borrow();
             if e.vars.contains_key(name) {
@@ -215,20 +231,12 @@ impl Env {
                     });
                 }
                 drop(e);
-                cell.borrow_mut().vars.insert(name.to_string(), value);
-                return Ok(());
+                return Ok(cell);
             }
-            let is_fn = e.kind == FrameKind::Function;
-            let parent = e.parent.clone();
-            drop(e);
-            if is_fn {
-                crossed_function = true;
-            }
-            current = parent;
+            crossed_function |= e.kind == FrameKind::Function;
+            current = e.parent.clone();
         }
-
-        env.borrow_mut().vars.insert(name.to_string(), value);
-        Ok(())
+        Ok(Rc::clone(env))
     }
 
     pub fn bindings_sorted(&self) -> Vec<(String, Value)> {
@@ -493,7 +501,7 @@ mod tests {
     use crate::parser::{Block, Expr, Stmt};
 
     fn num(n: f64) -> Value {
-        Value::Numero(n.into())
+        Value::Numero(n.try_into().unwrap())
     }
 
     fn closao(env: Rc<RefCell<Env>>, ident: &str) -> Value {
@@ -610,7 +618,13 @@ mod tests {
                 _ => panic!("expected number"),
             })
             .collect();
-        assert_eq!(got, [("x".into(), 9.0.into()), ("y".into(), 2.0.into())]);
+        assert_eq!(
+            got,
+            [
+                ("x".into(), 9.0.try_into().unwrap()),
+                ("y".into(), 2.0.try_into().unwrap())
+            ]
+        );
     }
 
     /// A function frame inside `module` holding `g`, a function that
