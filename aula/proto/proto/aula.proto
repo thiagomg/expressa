@@ -18,6 +18,10 @@ service Turma {
   rpc WriteFile(WriteFileRequest) returns (WriteFileResponse);
   // New editors use this method so an old server cannot silently ignore CAS.
   rpc WriteFileChecked(WriteFileRequest) returns (WriteFileResponse);
+  // Byte copies for images and other non-text files. Older servers omit these
+  // methods (UNIMPLEMENTED); they must not be added as fields on ReadFile.
+  rpc ReadFileBytes(ReadFileBytesRequest) returns (ReadFileBytesResponse);
+  rpc WriteFileBytesChecked(WriteFileBytesRequest) returns (WriteFileResponse);
   rpc DeleteFile(DeleteFileRequest) returns (DeleteFileResponse);
   rpc Mkdir(MkdirRequest) returns (MkdirResponse);
   rpc Rename(RenameRequest) returns (RenameResponse);
@@ -85,6 +89,26 @@ message WriteFileResponse {
   string revision = 1;
   // The file was committed; a later flush/cleanup failed.
   string warning = 2;
+}
+
+message ReadFileBytesRequest {
+  string student = 1;
+  string path = 2;
+  string project = 3;
+}
+
+message ReadFileBytesResponse {
+  bytes contents = 1;
+  string revision = 2;
+}
+
+message WriteFileBytesRequest {
+  string student = 1;
+  string path = 2;
+  bytes contents = 3;
+  bool create_new = 4;
+  string project = 5;
+  string expected_revision = 6;
 }
 
 message DeleteFileRequest {

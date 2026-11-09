@@ -1,14 +1,9 @@
-mod paths;
-mod projetos;
-mod service;
-
 use std::net::SocketAddr;
 use std::path::PathBuf;
 
 use expressa_aula_proto::turma_server::TurmaServer;
+use expressa_aula_server::Aula;
 use tonic::transport::Server;
-
-use service::Aula;
 
 fn usage() {
     eprintln!(

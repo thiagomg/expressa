@@ -231,32 +231,19 @@ pub fn same_project_path(a: &str, b: &str) -> bool {
     a.replace('\\', "/") == b.replace('\\', "/")
 }
 
-/// Download text and local binary data, preserving the repository revision.
-/// Binary download from a server remains item 04.
+/// Download text and binary data, preserving the repository revision.
 fn copy_project_file(
     files: &Files,
     project: &str,
     rel: &str,
     dest: &Path,
 ) -> Result<Option<Expected>, String> {
-    if !files.is_remote() {
-        let snapshot = files.read_bytes_snapshot(rel)?;
-        write_bytes(dest, &snapshot.bytes)?;
-        return Ok(Some(Expected::Revision(snapshot.revision)));
-    }
-    match files.current_text(project, rel) {
-        Ok(Some(snapshot)) => {
-            write_file(dest, &snapshot.text)?;
-            Ok(Some(
-                snapshot
-                    .revision
-                    .map(Expected::Revision)
-                    .unwrap_or(Expected::Unversioned),
-            ))
+    match files.current_bytes(project, rel)? {
+        Some(snapshot) => {
+            write_bytes(dest, &snapshot.bytes)?;
+            Ok(Some(Expected::Revision(snapshot.revision)))
         }
-        Ok(None) => Err(format!("arquivo `{rel}` foi removido durante a cópia")),
-        Err(e) if e.to_lowercase().contains("utf-8") => Ok(None),
-        Err(e) => Err(e),
+        None => Err(format!("arquivo `{rel}` foi removido durante a cópia")),
     }
 }
 
@@ -267,6 +254,7 @@ fn write_bytes(path: &Path, bytes: &[u8]) -> Result<(), String> {
     std::fs::write(path, bytes).map_err(|e| format!("{}: {e}", path.display()))
 }
 
+#[cfg(test)]
 fn write_file(path: &Path, source: &str) -> Result<(), String> {
     write_bytes(path, source.as_bytes())
 }
@@ -1018,6 +1006,118 @@ enquanto verdadeiro {
             std::fs::read(ws.dir.join("tela_grafica/casa.png")).unwrap(),
             png
         );
+        let _ = std::fs::remove_dir_all(&cache);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn remote_png_round_trips_through_the_execution_workspace() {
+        use crate::rpc::Rpc;
+        use expressa_aula_proto::turma_server::TurmaServer;
+        use std::sync::Arc;
+
+        let root = std::env::temp_dir().join(format!("expressa-remote-png-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(root.join("ana/tela")).unwrap();
+        std::fs::write(root.join("ana/a.lep"), "escreva(1)\n").unwrap();
+        let png = [0x89, b'P', b'N', b'G', 0x0d, 0x0a, 0x1a, 0x0a, 0xff];
+        std::fs::write(root.join("ana/tela/casa.png"), png).unwrap();
+        let aula = expressa_aula_server::Aula::new(root.clone());
+        let addr = std::net::TcpListener::bind("127.0.0.1:0")
+            .unwrap()
+            .local_addr()
+            .unwrap();
+        let (stop, stopped) = tokio::sync::oneshot::channel::<()>();
+        let server = std::thread::spawn(move || {
+            let rt = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .unwrap();
+            rt.block_on(async {
+                tonic::transport::Server::builder()
+                    .add_service(TurmaServer::new(aula))
+                    .serve_with_shutdown(addr, async {
+                        let _ = stopped.await;
+                    })
+                    .await
+                    .unwrap();
+            });
+        });
+        let url = format!("http://{addr}");
+        let started = std::time::Instant::now();
+        let rpc = loop {
+            match Rpc::connect(&url) {
+                Ok(rpc) => break rpc,
+                Err(e) => {
+                    assert!(
+                        started.elapsed() < std::time::Duration::from_secs(5),
+                        "servidor de teste: {e}"
+                    );
+                    std::thread::sleep(std::time::Duration::from_millis(20));
+                }
+            }
+        };
+        let files = Files::Remote {
+            rpc: Arc::new(rpc),
+            projeto: "principal".into(),
+        };
+        assert_eq!(
+            files.current_text("ana", "tela/casa.png").unwrap_err(),
+            crate::store::ARQUIVO_NAO_E_TEXTO
+        );
+        let cache = root.with_extension("cache");
+        let ws = Workspace::sync_em(&cache, &files, "ana", None).unwrap();
+        ws.arm().unwrap();
+        assert_eq!(
+            std::fs::read(ws.dir.join("a.lep")).unwrap(),
+            b"escreva(1)\n"
+        );
+        assert_eq!(std::fs::read(ws.dir.join("tela/casa.png")).unwrap(), png);
+        let gerado = [0xff, 0xd8, 0x00, 0xff];
+        std::fs::write(ws.dir.join("tela/casa.png"), gerado).unwrap();
+        std::fs::write(ws.dir.join("novo.bin"), [0x00, 0xff]).unwrap();
+        let envio = ws.upload_changes(&files, "ana");
+        assert!(envio.erros.is_empty(), "{}", envio.erros.join("; "));
+        assert!(
+            envio.conflitos.is_empty(),
+            "{}",
+            envio
+                .conflitos
+                .iter()
+                .map(|c| c.path.as_str())
+                .collect::<Vec<_>>()
+                .join(", ")
+        );
+        assert!(
+            envio
+                .enviados
+                .iter()
+                .any(|(path, text)| path == "tela/casa.png" && text.is_none())
+        );
+        assert!(
+            envio
+                .enviados
+                .iter()
+                .any(|(path, text)| path == "novo.bin" && text.is_none())
+        );
+        assert_eq!(
+            files
+                .current_bytes("ana", "tela/casa.png")
+                .unwrap()
+                .unwrap()
+                .bytes,
+            gerado
+        );
+        assert_eq!(
+            files
+                .current_bytes("ana", "novo.bin")
+                .unwrap()
+                .unwrap()
+                .bytes,
+            [0x00, 0xff]
+        );
+        let _ = stop.send(());
+        let _ = server.join();
         let _ = std::fs::remove_dir_all(&cache);
         let _ = std::fs::remove_dir_all(&root);
     }

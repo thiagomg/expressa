@@ -7,7 +7,7 @@
 
 use std::sync::OnceLock;
 
-use expressa::runtime::{builtin_docs, lookup_alvo, NATIVAS};
+use expressa::runtime::{NATIVAS, builtin_docs, lookup_alvo};
 
 /// Reserved words (`src/lexer/tokens.rs`, checked by a test).
 pub const KEYWORDS: &[&str] = &[

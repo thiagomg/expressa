@@ -53,7 +53,7 @@ use gtk::gio::{self, prelude::*};
 use gtk::glib;
 use gtk::prelude::*;
 use gtk::{
-    Application, ApplicationWindow, Box as GtkBox, Button, CellRendererText, Entry, Label,
+    Application, ApplicationWindow, Box as GtkBox, Button, CellRendererText, Entry, FlowBox, Label,
     Orientation, Paned, PolicyType, Revealer, ScrolledWindow, TreeStore, TreeView, TreeViewColumn,
 };
 use sourceview5::prelude::*;
@@ -77,6 +77,72 @@ struct Run {
     stopping: bool,
     debug_cmd: std::sync::mpsc::Sender<String>,
     paused: Option<(String, u32, bool)>,
+}
+
+/// IDE bar shown while a program is running (Rodar or Depurar).
+struct BarraExec {
+    caixa: FlowBox,
+    estado: Label,
+    continuar: Button,
+    proximo: Button,
+    entrar: Button,
+    sair: Button,
+    parar: Button,
+}
+
+fn make_run_bar() -> BarraExec {
+    let caixa = FlowBox::new();
+    caixa.set_selection_mode(gtk::SelectionMode::None);
+    caixa.set_homogeneous(false);
+    caixa.set_min_children_per_line(1);
+    caixa.set_max_children_per_line(24);
+    caixa.set_column_spacing(8);
+    caixa.set_row_spacing(4);
+    caixa.set_hexpand(true);
+    caixa.add_css_class("aula-run-bar");
+    caixa.set_margin_start(8);
+    caixa.set_margin_end(8);
+    caixa.set_visible(false);
+
+    let estado = Label::new(None);
+    estado.add_css_class("aula-run-estado");
+    estado.set_xalign(0.0);
+    estado.set_width_chars(11);
+    caixa.append(&estado);
+
+    let botao = |rotulo: &str, acao: &str, dica: &str| {
+        let b = Button::with_label(rotulo);
+        b.set_tooltip_text(Some(dica));
+        b.set_action_name(Some(acao));
+        b
+    };
+    let continuar = botao(
+        "Continuar",
+        "win.continuar",
+        "Continuar até o próximo ponto (F5)",
+    );
+    let proximo = botao("Próximo", "win.proximo", "Próxima linha (F10)");
+    let entrar = botao("Entrar", "win.entrar", "Entrar na função (F11)");
+    let sair = botao(
+        "Sair da função",
+        "win.sair",
+        "Sair da função atual (Shift+F11)",
+    );
+    let parar = botao("Parar", "win.parar", "Parar o programa");
+    caixa.append(&continuar);
+    caixa.append(&proximo);
+    caixa.append(&entrar);
+    caixa.append(&sair);
+    caixa.append(&parar);
+    BarraExec {
+        caixa,
+        estado,
+        continuar,
+        proximo,
+        entrar,
+        sair,
+        parar,
+    }
 }
 
 struct Ui {
@@ -110,6 +176,10 @@ struct Ui {
     graficos: Rc<cartesiano::Painel>,
     telas_graf: Rc<janela_graf::Painel>,
     args_entry: Entry,
+    /// Visible while a program runs: Continuar / Próximo / Entrar / Sair da
+    /// função / Parar. Lives in the IDE so the tela gráfica window can keep
+    /// focus without hiding the controls.
+    barra_exec: BarraExec,
     search_settings: SearchSettings,
     search_entry: Entry,
     replace_entry: Entry,
@@ -277,6 +347,7 @@ fn build_ui_with_prefs(app: &Application, startup: bool, prefs: Prefs) -> UiRc {
         .placeholder_text("argumentos (ex.: Thiago --ajuda)")
         .hexpand(true)
         .build();
+    let barra_exec = make_run_bar();
     let status = Label::new(Some("escolha uma pasta para o projeto"));
     status.set_xalign(0.0);
     status.set_hexpand(true);
@@ -326,6 +397,7 @@ fn build_ui_with_prefs(app: &Application, startup: bool, prefs: Prefs) -> UiRc {
         graficos,
         telas_graf,
         args_entry,
+        barra_exec,
         search_settings,
         search_entry,
         replace_entry,
@@ -494,6 +566,7 @@ fn build_ui_with_prefs(app: &Application, startup: bool, prefs: Prefs) -> UiRc {
 
     install_menubar(&win, &ui, &file_scroll, &debug_panel);
     root.append(&args_row);
+    root.append(&ui.borrow().barra_exec.caixa);
     root.append(&ui.borrow().search_revealer);
     root.append(&body);
     root.append(&status_row);
@@ -1093,7 +1166,11 @@ fn install_menubar(
     debug.append_item(&menu_item("_Continuar", "win.continuar", Some("F5")));
     debug.append_item(&menu_item("_Próximo", "win.proximo", Some("F10")));
     debug.append_item(&menu_item("E_ntrar", "win.entrar", Some("F11")));
-    debug.append_item(&menu_item("_Sair", "win.sair", Some("<Shift>F11")));
+    debug.append_item(&menu_item(
+        "Sair da _função",
+        "win.sair",
+        Some("<Shift>F11"),
+    ));
     debug.append_item(&menu_item("Pon_to de parada", "win.ponto", Some("F9")));
 
     let ver = gio::Menu::new();
@@ -1202,6 +1279,16 @@ fn install_css() {
             margin: 0;
             background-color: alpha(currentColor, 0.12);
         }
+        flowbox.aula-run-bar { padding: 0; }
+        flowbox.aula-run-bar > flowboxchild { padding: 0; }
+        flowbox.aula-run-bar button:disabled,
+        flowbox.aula-run-bar button:disabled:hover {
+            background-image: none;
+            background-color: alpha(currentColor, 0.08);
+            color: alpha(currentColor, 0.40);
+            border-color: alpha(currentColor, 0.12);
+        }
+        flowbox.aula-run-bar button:disabled label { color: inherit; }
         menubar { padding: 2px 8px 0 8px; }
         label.aula-catalogo { font-family: monospace; }
         label.aula-ajuda-grupo { font-weight: bold; opacity: 0.7; padding-top: 8px; }
@@ -2576,6 +2663,32 @@ fn set_debug_buttons(ui: &UiRc, paused: bool, running: bool) {
     set_action_enabled(&win, "entrar", paused);
     set_action_enabled(&win, "sair", paused);
     set_action_enabled(&win, "parar", running);
+    let barra = &ui.borrow().barra_exec;
+    barra.caixa.set_visible(running);
+    barra.estado.set_text(if !running {
+        ""
+    } else if paused {
+        "pausado"
+    } else {
+        "executando"
+    });
+    // Actions disable the buttons, but the theme paints `button` with a
+    // solid color and the inactive ones would look the same as Parar.
+    let apagado = 0.42;
+    let aceso = 1.0;
+    barra
+        .continuar
+        .set_opacity(if paused { aceso } else { apagado });
+    barra
+        .proximo
+        .set_opacity(if paused { aceso } else { apagado });
+    barra
+        .entrar
+        .set_opacity(if paused { aceso } else { apagado });
+    barra.sair.set_opacity(if paused { aceso } else { apagado });
+    barra
+        .parar
+        .set_opacity(if running { aceso } else { apagado });
 }
 
 fn toggle_breakpoint_here(ui: &UiRc) {
@@ -4862,6 +4975,7 @@ mod debug_ui_tests {
             }
             close_source_viewer(&self.ui);
             self.ui.borrow_mut().run = None;
+            self.ui.borrow().telas_graf.fechar_todas();
             self.ui.borrow().window.destroy();
         }
     }
@@ -4875,6 +4989,60 @@ mod debug_ui_tests {
             glib::MainContext::default().iteration(false);
             std::thread::sleep(std::time::Duration::from_millis(1));
         }
+    }
+
+    #[test]
+    fn ide_run_bar_sends_debug_commands() {
+        gtk_test::run(|| {
+            let fixture = DebugFixture::new("escreva(1)\n");
+            let barra = {
+                let u = fixture.ui.borrow();
+                (
+                    u.barra_exec.caixa.clone(),
+                    u.barra_exec.estado.clone(),
+                    u.barra_exec.continuar.clone(),
+                    u.barra_exec.proximo.clone(),
+                    u.barra_exec.entrar.clone(),
+                    u.barra_exec.sair.clone(),
+                    u.barra_exec.parar.clone(),
+                )
+            };
+            let (caixa, estado, continuar, proximo, entrar, sair, parar) = barra;
+            assert!(
+                caixa.get_visible(),
+                "barra visível enquanto o programa roda"
+            );
+            assert_eq!(estado.text().as_str(), "pausado");
+            assert_eq!(sair.label().as_deref(), Some("Sair da função"));
+            assert!(continuar.get_sensitive());
+            assert!(parar.get_sensitive());
+
+            continuar.emit_clicked();
+            assert_eq!(fixture.commands.try_recv().unwrap(), "continuar");
+            assert_eq!(estado.text().as_str(), "executando");
+            assert!(!continuar.get_sensitive());
+            assert!(parar.get_sensitive());
+            assert!(
+                continuar.opacity() < parar.opacity(),
+                "botão desabilitado deve aparecer apagado (cinza) em relação ao Parar"
+            );
+
+            set_debug_buttons(&fixture.ui, true, true);
+            proximo.emit_clicked();
+            assert_eq!(fixture.commands.try_recv().unwrap(), "proximo");
+            set_debug_buttons(&fixture.ui, true, true);
+            entrar.emit_clicked();
+            assert_eq!(fixture.commands.try_recv().unwrap(), "entrar");
+            set_debug_buttons(&fixture.ui, true, true);
+            sair.emit_clicked();
+            assert_eq!(fixture.commands.try_recv().unwrap(), "sair");
+            set_debug_buttons(&fixture.ui, false, true);
+            parar.emit_clicked();
+            assert_eq!(fixture.commands.try_recv().unwrap(), "terminar");
+
+            set_debug_buttons(&fixture.ui, false, false);
+            assert!(!caixa.get_visible());
+        });
     }
 
     #[test]
@@ -5126,7 +5294,7 @@ mod debug_ui_tests {
 }
 
 #[cfg(test)]
-mod gtk_test {
+pub(crate) mod gtk_test {
     use std::panic::{AssertUnwindSafe, catch_unwind, resume_unwind};
     use std::sync::mpsc::{Sender, channel};
     use std::sync::{Mutex, OnceLock};

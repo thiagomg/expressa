@@ -543,26 +543,20 @@ mod tests {
         );
         assert_eq!(
             want_indent(
-                &[
-                    "tarefas = [",
-                    r#"    nova("Dormir", agora(), falso),"#,
-                ],
+                &["tarefas = [", r#"    nova("Dormir", agora(), falso),"#,],
                 r#"nova("Acordar", agora(), falso),"#,
             ),
             4
         );
         assert_eq!(
-            want_indent(&["f = funcao() {", "    mapa([", "        :a -> 1", "    ])"], "}"),
+            want_indent(
+                &["f = funcao() {", "    mapa([", "        :a -> 1", "    ])"],
+                "}"
+            ),
             0
         );
         assert_eq!(
-            want_indent(
-                &[
-                    "para i de 0 até n {",
-                    "    escreva(i+1, ts[i])",
-                ],
-                "}"
-            ),
+            want_indent(&["para i de 0 até n {", "    escreva(i+1, ts[i])",], "}"),
             0
         );
         assert_eq!(

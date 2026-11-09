@@ -1,7 +1,8 @@
 use expressa_aula_proto::turma_client::TurmaClient;
 use expressa_aula_proto::{
     CreateProjectRequest, DeleteFileRequest, ListFilesRequest, ListProjectsRequest, MkdirRequest,
-    ReadFileRequest, RenameRequest, TreeEntry, WriteFileRequest,
+    ReadFileBytesRequest, ReadFileRequest, RenameRequest, TreeEntry, WriteFileBytesRequest,
+    WriteFileRequest,
 };
 use std::process::Child;
 use std::sync::Mutex;
@@ -244,6 +245,17 @@ fn mensagem(status: tonic::Status) -> String {
     }
 }
 
+fn nao_e_texto(status: &tonic::Status) -> bool {
+    if status.code() != tonic::Code::InvalidArgument {
+        return false;
+    }
+    let m = status.message().to_lowercase();
+    m.contains("não é texto")
+        || m.contains("nao e texto")
+        || m.contains("utf-8")
+        || m.contains("utf8")
+}
+
 async fn cancellable<F: std::future::Future>(
     future: F,
     flag: Option<std::sync::Arc<std::sync::atomic::AtomicBool>>,
@@ -326,6 +338,66 @@ impl Rpc {
                 }))
             }
             Err(e) if e.code() == tonic::Code::NotFound => Ok(None),
+            Err(e) if nao_e_texto(&e) => Err(crate::store::ARQUIVO_NAO_E_TEXTO.into()),
+            Err(e) => Err(mensagem(e)),
+        }
+    }
+
+    /// Whole-file bytes. An older server without this RPC falls back to
+    /// `ReadFile` for UTF-8 files and reports a typed error for the rest.
+    pub fn current_bytes(
+        &self,
+        student: &str,
+        project: &str,
+        path: &str,
+    ) -> Result<Option<expressa_aula_storage::Snapshot>, String> {
+        let mut c = TurmaClient::new(self.channel.clone());
+        match self.wait(c.read_file_bytes(ReadFileBytesRequest {
+            student: student.to_string(),
+            project: project.to_string(),
+            path: path.to_string(),
+        })) {
+            Ok(response) => {
+                let response = response.into_inner();
+                Ok(Some(expressa_aula_storage::Snapshot {
+                    bytes: response.contents,
+                    revision: response.revision,
+                }))
+            }
+            Err(e) if e.code() == tonic::Code::NotFound => Ok(None),
+            Err(e) if e.code() == tonic::Code::Unimplemented => {
+                self.current_bytes_via_text(student, project, path)
+            }
+            Err(e) => Err(mensagem(e)),
+        }
+    }
+
+    fn current_bytes_via_text(
+        &self,
+        student: &str,
+        project: &str,
+        path: &str,
+    ) -> Result<Option<expressa_aula_storage::Snapshot>, String> {
+        let mut c = TurmaClient::new(self.channel.clone());
+        match self.wait(c.read_file(ReadFileRequest {
+            student: student.to_string(),
+            project: project.to_string(),
+            path: path.to_string(),
+        })) {
+            Ok(response) => {
+                let response = response.into_inner();
+                let bytes = response.source.into_bytes();
+                let revision = if response.revision.is_empty() {
+                    expressa_aula_storage::revision(&bytes)
+                } else {
+                    response.revision
+                };
+                Ok(Some(expressa_aula_storage::Snapshot { bytes, revision }))
+            }
+            Err(e) if e.code() == tonic::Code::NotFound => Ok(None),
+            Err(e) if nao_e_texto(&e) => {
+                Err(format!("{} (`{path}`)", crate::store::SERVIDOR_SEM_BINARIO))
+            }
             Err(e) => Err(mensagem(e)),
         }
     }
@@ -365,6 +437,49 @@ impl Rpc {
             .into_inner();
         if response.revision.is_empty() {
             return Err(SaveError::Unsupported);
+        }
+        Ok(Saved {
+            revision: response.revision,
+            warning: (!response.warning.is_empty()).then_some(response.warning),
+        })
+    }
+
+    pub fn write_bytes(
+        &self,
+        student: &str,
+        project: &str,
+        path: &str,
+        contents: &[u8],
+        expected: &expressa_aula_storage::Expected,
+    ) -> Result<expressa_aula_storage::Saved, expressa_aula_storage::SaveError> {
+        use expressa_aula_storage::{Expected, SaveError, Saved};
+        let (create_new, expected_revision) = match expected {
+            Expected::Missing => (true, String::new()),
+            Expected::Revision(revision) => (false, revision.clone()),
+            Expected::Unversioned => return Err(SaveError::Unsupported),
+        };
+        let mut c = TurmaClient::new(self.channel.clone());
+        let response = self
+            .wait(c.write_file_bytes_checked(WriteFileBytesRequest {
+                student: student.to_string(),
+                project: project.to_string(),
+                path: path.to_string(),
+                contents: contents.to_vec(),
+                create_new,
+                expected_revision,
+            }))
+            .map_err(|e| match e.code() {
+                tonic::Code::Aborted => SaveError::Conflict,
+                tonic::Code::AlreadyExists => SaveError::AlreadyExists,
+                tonic::Code::Unimplemented => {
+                    SaveError::Other(crate::store::SERVIDOR_SEM_BINARIO.into())
+                }
+                tonic::Code::FailedPrecondition => SaveError::Unsupported,
+                _ => SaveError::Other(mensagem(e)),
+            })?
+            .into_inner();
+        if response.revision.is_empty() {
+            return Err(SaveError::Other(crate::store::SERVIDOR_SEM_BINARIO.into()));
         }
         Ok(Saved {
             revision: response.revision,

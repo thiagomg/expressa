@@ -126,20 +126,29 @@ impl Files {
             .ok_or_else(|| format!("arquivo `{path}` não existe"))
     }
 
-    /// Remote binary transport remains item 04; local copies carry revisions.
-    pub fn read_bytes_snapshot(&self, path: &str) -> Result<storage::Snapshot, String> {
+    /// Local disk or `ReadFileBytes`. Missing files are `Ok(None)`.
+    pub fn current_bytes(
+        &self,
+        student: &str,
+        path: &str,
+    ) -> Result<Option<storage::Snapshot>, String> {
         match self {
+            Files::None => Err("escolha uma pasta para o projeto".into()),
             Files::Local(root) => {
                 let path = local_file(root, path)?;
-                storage::read(&path).map_err(|e| format!("{}: {e}", path.display()))
+                match storage::read(&path) {
+                    Ok(snapshot) => Ok(Some(snapshot)),
+                    Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
+                    Err(e) => Err(format!("{}: {e}", path.display())),
+                }
             }
-            Files::None => Err("escolha uma pasta para o projeto".into()),
-            Files::Remote { .. } => Err("arquivo binário no servidor não é suportado".into()),
+            Files::Remote { rpc, projeto } => rpc.current_bytes(student, projeto, path),
         }
     }
 
     pub fn write_bytes(
         &self,
+        student: &str,
         path: &str,
         bytes: &[u8],
         expected: &Expected,
@@ -150,9 +159,9 @@ impl Files {
                 storage::save(&path, bytes, expected)
             }
             Files::None => Err(SaveError::Other("escolha uma pasta para o projeto".into())),
-            Files::Remote { .. } => Err(SaveError::Other(
-                "arquivo binário no servidor não é suportado".into(),
-            )),
+            Files::Remote { rpc, projeto } => {
+                rpc.write_bytes(student, projeto, path, bytes, expected)
+            }
         }
     }
 
@@ -167,7 +176,7 @@ impl Files {
             Files::Remote { rpc, projeto } => {
                 rpc.write_file(student, projeto, path, source, expected)
             }
-            _ => self.write_bytes(path, source.as_bytes(), expected),
+            _ => self.write_bytes(student, path, source.as_bytes(), expected),
         }
     }
 
@@ -272,6 +281,11 @@ pub fn pasta_larga(path: &Path) -> bool {
 }
 
 pub const MAX_DOCUMENT_BYTES: usize = 8 * 1024 * 1024;
+/// Shown when a remote file is not UTF-8 and cannot become an editor tab.
+pub const ARQUIVO_NAO_E_TEXTO: &str = "arquivo não é texto UTF-8";
+/// Older classroom servers only speak `ReadFile`/`WriteFileChecked`.
+pub const SERVIDOR_SEM_BINARIO: &str =
+    "o servidor precisa ser atualizado para transferir arquivos binários";
 const MAX_TREE_ENTRIES: usize = 20_000;
 const MAX_TREE_DEPTH: usize = 64;
 

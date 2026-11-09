@@ -610,15 +610,11 @@ impl Journal {
         self.send_with(&identity, |rel, bytes, expected| {
             // A previous response/acknowledgement may have been lost. Matching
             // destination bytes account for output without performing a write.
-            let current = if files.is_remote() {
-                files
-                    .current_text(student, rel)
-                    .ok()
-                    .flatten()
-                    .map(|s| s.text.into_bytes())
-            } else {
-                files.read_bytes_snapshot(rel).ok().map(|s| s.bytes)
-            };
+            let current = files
+                .current_bytes(student, rel)
+                .ok()
+                .flatten()
+                .map(|s| s.bytes);
             if current.as_deref() == Some(bytes) {
                 return Ok(Saved {
                     revision: revision(bytes),
@@ -627,12 +623,8 @@ impl Journal {
             }
             if let Ok(text) = std::str::from_utf8(bytes) {
                 files.write_file(student, rel, text, expected)
-            } else if files.is_remote() {
-                Err(SaveError::Other(
-                    "envio binário ao servidor aguarda o item 04; exporte esta saída".into(),
-                ))
             } else {
-                files.write_bytes(rel, bytes, expected)
+                files.write_bytes(student, rel, bytes, expected)
             }
         })
     }

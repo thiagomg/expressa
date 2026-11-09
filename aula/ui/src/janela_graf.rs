@@ -12,9 +12,14 @@ use gtk::glib;
 use gtk::prelude::*;
 use gtk::{DrawingArea, EventControllerKey, GestureClick, Window};
 
+struct Janela {
+    win: Window,
+    area: DrawingArea,
+}
+
 pub struct Painel {
     telas: Rc<RefCell<HashMap<u64, TelaGrafica>>>,
-    windows: Rc<RefCell<HashMap<u64, Window>>>,
+    windows: Rc<RefCell<HashMap<u64, Janela>>>,
     eventos: Rc<RefCell<Option<Sender<EventoGraf>>>>,
     /// Ids whose window the student closed. `mostre` must not recreate
     /// them until the next run (`limpar`).
@@ -163,13 +168,18 @@ impl Painel {
                 });
             }
             win.present();
-            self.windows.borrow_mut().insert(id, win);
+            self.windows.borrow_mut().insert(
+                id,
+                Janela {
+                    win,
+                    area: area.clone(),
+                },
+            );
         }
-        if let Some(win) = self.windows.borrow().get(&id) {
-            if let Some(child) = win.child() {
-                child.queue_draw();
-            }
-            win.present();
+        // Later `mostre` frames only redraw. `present()` would steal keyboard
+        // focus from the editor on every frame.
+        if let Some(janela) = self.windows.borrow().get(&id) {
+            janela.area.queue_draw();
         }
     }
 
@@ -179,7 +189,12 @@ impl Painel {
 
     pub fn fechar_todas(&self) {
         *self.eventos.borrow_mut() = None;
-        let windows: Vec<Window> = self.windows.borrow_mut().drain().map(|(_, w)| w).collect();
+        let windows: Vec<Window> = self
+            .windows
+            .borrow_mut()
+            .drain()
+            .map(|(_, j)| j.win)
+            .collect();
         self.telas.borrow_mut().clear();
         for w in windows {
             w.close();

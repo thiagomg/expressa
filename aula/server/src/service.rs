@@ -6,8 +6,9 @@ use expressa_aula_proto::turma_server::Turma;
 use expressa_aula_proto::{
     CreateProjectRequest, CreateProjectResponse, DeleteFileRequest, DeleteFileResponse,
     ListFilesRequest, ListFilesResponse, ListProjectsRequest, ListProjectsResponse, MkdirRequest,
-    MkdirResponse, ReadFileRequest, ReadFileResponse, RenameRequest, RenameResponse, TreeEntry,
-    WriteFileRequest, WriteFileResponse,
+    MkdirResponse, ReadFileBytesRequest, ReadFileBytesResponse, ReadFileRequest, ReadFileResponse,
+    RenameRequest, RenameResponse, TreeEntry, WriteFileBytesRequest, WriteFileRequest,
+    WriteFileResponse,
 };
 use expressa_aula_storage::{self as storage, Expected, SaveError};
 use tonic::{Request, Response, Status};
@@ -17,7 +18,11 @@ use crate::{paths, projetos};
 const MAX_DISK_OPERATIONS: usize = 4;
 const MAX_TREE_ENTRIES: usize = 20_000;
 const MAX_TREE_DEPTH: usize = 64;
-const MAX_TEXT_BYTES: usize = 3 * 1024 * 1024;
+const MAX_FILE_BYTES: usize = 3 * 1024 * 1024;
+
+/// Stable message for `ReadFile` on a non-UTF-8 file. Byte methods exist for
+/// those files; matching English `from_utf8` text is not part of the contract.
+const ARQUIVO_NAO_E_TEXTO: &str = "arquivo não é texto UTF-8";
 
 /// The message the editor shows as is.
 fn ja_existe(rel: &str) -> Status {
@@ -29,6 +34,14 @@ fn interno(e: std::io::Error) -> Status {
         Status::resource_exhausted(e.to_string())
     } else {
         Status::internal(e.to_string())
+    }
+}
+
+fn ler_erro(e: std::io::Error) -> Status {
+    if e.kind() == std::io::ErrorKind::NotFound {
+        Status::not_found(e.to_string())
+    } else {
+        interno(e)
     }
 }
 
@@ -105,6 +118,41 @@ impl Aula {
     fn file(&self, student: &str, project: &str, path: &str) -> Result<PathBuf, Status> {
         self.projeto(student, project)?;
         paths::student_file(&self.root, student, project, path).map_err(Status::invalid_argument)
+    }
+
+    fn save_contents(
+        &self,
+        student: &str,
+        project: &str,
+        path: &str,
+        contents: &[u8],
+        create_new: bool,
+        expected_revision: &str,
+    ) -> Result<WriteFileResponse, Status> {
+        if contents.len() > MAX_FILE_BYTES {
+            return Err(Status::resource_exhausted("arquivo grande demais"));
+        }
+        let _vez = self.arquivos.lock().unwrap_or_else(|e| e.into_inner());
+        let dest = self.file(student, project, path)?;
+        let expected = if create_new {
+            Expected::Missing
+        } else {
+            if expected_revision.is_empty() {
+                return Err(Status::failed_precondition(
+                    "atualize o editor: salvar exige a revisão lida anteriormente",
+                ));
+            }
+            Expected::Revision(expected_revision.to_string())
+        };
+        let saved = storage::save(&dest, contents, &expected).map_err(|e| match e {
+            SaveError::Conflict => Status::aborted("o arquivo mudou desde que foi lido"),
+            SaveError::AlreadyExists => ja_existe(path),
+            other => Status::internal(other.to_string()),
+        })?;
+        Ok(WriteFileResponse {
+            revision: saved.revision,
+            warning: saved.warning.unwrap_or_default(),
+        })
     }
 }
 
@@ -243,15 +291,9 @@ impl Turma for Aula {
         self.blocking(move |aula| {
             let req = request.into_inner();
             let path = aula.file(&req.student, &req.project, &req.path)?;
-            let snapshot = storage::read_limited(&path, MAX_TEXT_BYTES).map_err(|e| {
-                if e.kind() == std::io::ErrorKind::NotFound {
-                    Status::not_found(e.to_string())
-                } else {
-                    interno(e)
-                }
-            })?;
+            let snapshot = storage::read_limited(&path, MAX_FILE_BYTES).map_err(ler_erro)?;
             let source = String::from_utf8(snapshot.bytes)
-                .map_err(|e| Status::invalid_argument(e.to_string()))?;
+                .map_err(|_| Status::invalid_argument(ARQUIVO_NAO_E_TEXTO))?;
             Ok(Response::new(ReadFileResponse {
                 source,
                 revision: snapshot.revision,
@@ -266,31 +308,15 @@ impl Turma for Aula {
     ) -> Result<Response<WriteFileResponse>, Status> {
         self.blocking(move |aula| {
             let req = request.into_inner();
-            if req.source.len() > MAX_TEXT_BYTES {
-                return Err(Status::resource_exhausted("arquivo grande demais"));
-            }
-            let _vez = aula.arquivos.lock().unwrap_or_else(|e| e.into_inner());
-            let path = aula.file(&req.student, &req.project, &req.path)?;
-            let expected = if req.create_new {
-                Expected::Missing
-            } else {
-                if req.expected_revision.is_empty() {
-                    return Err(Status::failed_precondition(
-                        "atualize o editor: salvar exige a revisão lida anteriormente",
-                    ));
-                }
-                Expected::Revision(req.expected_revision)
-            };
-            let saved =
-                storage::save(&path, req.source.as_bytes(), &expected).map_err(|e| match e {
-                    SaveError::Conflict => Status::aborted("o arquivo mudou desde que foi lido"),
-                    SaveError::AlreadyExists => ja_existe(&req.path),
-                    other => Status::internal(other.to_string()),
-                })?;
-            Ok(Response::new(WriteFileResponse {
-                revision: saved.revision,
-                warning: saved.warning.unwrap_or_default(),
-            }))
+            let saved = aula.save_contents(
+                &req.student,
+                &req.project,
+                &req.path,
+                req.source.as_bytes(),
+                req.create_new,
+                &req.expected_revision,
+            )?;
+            Ok(Response::new(saved))
         })
         .await
     }
@@ -300,6 +326,41 @@ impl Turma for Aula {
         request: Request<WriteFileRequest>,
     ) -> Result<Response<WriteFileResponse>, Status> {
         self.write_file(request).await
+    }
+
+    async fn read_file_bytes(
+        &self,
+        request: Request<ReadFileBytesRequest>,
+    ) -> Result<Response<ReadFileBytesResponse>, Status> {
+        self.blocking(move |aula| {
+            let req = request.into_inner();
+            let path = aula.file(&req.student, &req.project, &req.path)?;
+            let snapshot = storage::read_limited(&path, MAX_FILE_BYTES).map_err(ler_erro)?;
+            Ok(Response::new(ReadFileBytesResponse {
+                contents: snapshot.bytes,
+                revision: snapshot.revision,
+            }))
+        })
+        .await
+    }
+
+    async fn write_file_bytes_checked(
+        &self,
+        request: Request<WriteFileBytesRequest>,
+    ) -> Result<Response<WriteFileResponse>, Status> {
+        self.blocking(move |aula| {
+            let req = request.into_inner();
+            let saved = aula.save_contents(
+                &req.student,
+                &req.project,
+                &req.path,
+                &req.contents,
+                req.create_new,
+                &req.expected_revision,
+            )?;
+            Ok(Response::new(saved))
+        })
+        .await
     }
 
     async fn delete_file(
@@ -420,12 +481,147 @@ mod tests {
         }))
         .await
         .unwrap();
-        let req = escrever("a.lep", &"x".repeat(MAX_TEXT_BYTES + 1), false);
+        let req = escrever("a.lep", &"x".repeat(MAX_FILE_BYTES + 1), false);
         assert_eq!(
             aula.write_file(req).await.unwrap_err().code(),
             Code::ResourceExhausted
         );
         assert_eq!(ler(&aula, "a.lep"), "original");
+        let _ = fs::remove_dir_all(&aula.root);
+    }
+
+    #[tokio::test]
+    async fn png_round_trip_preserves_bytes_and_empty_files() {
+        let aula = servidor("binario");
+        aula.list_projects(Request::new(ListProjectsRequest {
+            student: "ana".into(),
+        }))
+        .await
+        .unwrap();
+        let png = [0x89, b'P', b'N', b'G', 0x0d, 0x0a, 0x1a, 0x0a, 0xff];
+        let created = aula
+            .write_file_bytes_checked(Request::new(WriteFileBytesRequest {
+                student: "ana".into(),
+                path: "tela/casa.png".into(),
+                contents: png.to_vec(),
+                create_new: true,
+                ..Default::default()
+            }))
+            .await
+            .unwrap()
+            .into_inner();
+        assert_eq!(created.revision, storage::revision(&png));
+        let empty = aula
+            .write_file_bytes_checked(Request::new(WriteFileBytesRequest {
+                student: "ana".into(),
+                path: "vazio.bin".into(),
+                contents: Vec::new(),
+                create_new: true,
+                ..Default::default()
+            }))
+            .await
+            .unwrap()
+            .into_inner();
+        assert_eq!(empty.revision, storage::revision(b""));
+
+        let got = aula
+            .read_file_bytes(Request::new(ReadFileBytesRequest {
+                student: "ana".into(),
+                path: "tela/casa.png".into(),
+                ..Default::default()
+            }))
+            .await
+            .unwrap()
+            .into_inner();
+        assert_eq!(got.contents, png);
+        assert_eq!(got.revision, created.revision);
+        let got_empty = aula
+            .read_file_bytes(Request::new(ReadFileBytesRequest {
+                student: "ana".into(),
+                path: "vazio.bin".into(),
+                ..Default::default()
+            }))
+            .await
+            .unwrap()
+            .into_inner();
+        assert!(got_empty.contents.is_empty());
+
+        let text = aula
+            .read_file(Request::new(ReadFileRequest {
+                student: "ana".into(),
+                path: "tela/casa.png".into(),
+                ..Default::default()
+            }))
+            .await
+            .unwrap_err();
+        assert_eq!(text.code(), Code::InvalidArgument);
+        assert_eq!(text.message(), ARQUIVO_NAO_E_TEXTO);
+        assert_eq!(
+            fs::read(aula.root.join("ana/principal/tela/casa.png")).unwrap(),
+            png
+        );
+        let _ = fs::remove_dir_all(&aula.root);
+    }
+
+    #[tokio::test]
+    async fn oversized_bytes_are_rejected_before_replacing_a_valid_file() {
+        let aula = servidor("bytes-size-limit");
+        aula.list_projects(Request::new(ListProjectsRequest {
+            student: "ana".into(),
+        }))
+        .await
+        .unwrap();
+        aula.write_file_bytes_checked(Request::new(WriteFileBytesRequest {
+            student: "ana".into(),
+            path: "a.lep".into(),
+            contents: b"original".to_vec(),
+            expected_revision: storage::revision(b"original"),
+            ..Default::default()
+        }))
+        .await
+        .unwrap();
+        let err = aula
+            .write_file_bytes_checked(Request::new(WriteFileBytesRequest {
+                student: "ana".into(),
+                path: "a.lep".into(),
+                contents: vec![0xff; MAX_FILE_BYTES + 1],
+                expected_revision: storage::revision(b"original"),
+                ..Default::default()
+            }))
+            .await
+            .unwrap_err();
+        assert_eq!(err.code(), Code::ResourceExhausted);
+        assert_eq!(ler(&aula, "a.lep"), "original");
+        let _ = fs::remove_dir_all(&aula.root);
+    }
+
+    #[tokio::test]
+    async fn byte_writes_with_the_same_revision_cannot_both_replace() {
+        let aula = servidor("bytes-cas");
+        aula.list_projects(Request::new(ListProjectsRequest {
+            student: "ana".into(),
+        }))
+        .await
+        .unwrap();
+        let first = [0xff, 0x01];
+        let second = [0xff, 0x02];
+        let revision = storage::revision(b"original");
+        let req = |contents: &[u8]| {
+            Request::new(WriteFileBytesRequest {
+                student: "ana".into(),
+                path: "a.lep".into(),
+                contents: contents.to_vec(),
+                expected_revision: revision.clone(),
+                ..Default::default()
+            })
+        };
+        let (a, b) = tokio::join!(
+            aula.write_file_bytes_checked(req(&first)),
+            aula.write_file_bytes_checked(req(&second))
+        );
+        assert_eq!(usize::from(a.is_ok()) + usize::from(b.is_ok()), 1);
+        let saved = fs::read(aula.root.join("ana/principal/a.lep")).unwrap();
+        assert!(saved == first || saved == second);
         let _ = fs::remove_dir_all(&aula.root);
     }
 

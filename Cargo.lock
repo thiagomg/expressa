@@ -352,6 +352,7 @@ version = "0.4.3"
 dependencies = [
  "expressa",
  "expressa-aula-proto",
+ "expressa-aula-server",
  "expressa-aula-storage",
  "gdk-pixbuf",
  "gtk4",

@@ -338,6 +338,13 @@ button {
 }
 button:hover { background-color: @aula_hover; }
 button:checked, togglebutton:checked { background-color: @aula_sel; }
+button:disabled, button:disabled:hover {
+  background-image: none;
+  background-color: alpha(@aula_fg, 0.08);
+  color: alpha(@aula_fg, 0.40);
+  border-color: alpha(@aula_fg, 0.12);
+}
+button:disabled label { color: inherit; }
 menubar {
   background-color: @aula_bg;
   color: @aula_fg;
@@ -462,6 +469,13 @@ button {
 }
 button:hover { background-color: @aula_hover; }
 button:checked, togglebutton:checked { background-color: @aula_sel; }
+button:disabled, button:disabled:hover {
+  background-image: none;
+  background-color: alpha(@aula_fg, 0.08);
+  color: alpha(@aula_fg, 0.40);
+  border-color: alpha(@aula_fg, 0.12);
+}
+button:disabled label { color: inherit; }
 menubar {
   background-color: @aula_bg;
   color: @aula_fg;
@@ -614,6 +628,8 @@ mod tests {
         assert!(DARK_CSS.contains("#1e1e24"));
         assert!(LIGHT_CSS.contains("window, dialog"));
         assert!(DARK_CSS.contains("window, dialog"));
+        assert!(LIGHT_CSS.contains("button:disabled"));
+        assert!(DARK_CSS.contains("button:disabled"));
     }
 
     #[test]

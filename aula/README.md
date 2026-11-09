@@ -60,7 +60,7 @@ O instalador (Windows e `.deb`) copia os exemplos para `Documentos/Expressa Aula
 
 **Ajuda → Tutoriais** abre o binário `expressa-tutorial`. A Aula reabre a última pasta e o último arquivo. A barra de baixo mostra `linha:coluna`. **Ver → Ir para linha** (Ctrl+G) salta para um número.
 
-Os comandos ficam no menu do topo (**Arquivo**, **Executar**, **Depurar**, **Ver**, **Ajuda**), cada um com o atalho à direita. **Arquivo → Sair** (Ctrl+Q) fecha o editor (com pergunta se houver alterações). F5 executa a aba atual ou **continua uma depuração pausada**, **F6 inicia a depuração**, F7 mostra/oculta arquivos, F8 o painel do depurador, F9 (ou clique no número da linha) ponto de parada, F10 próximo, F11 entrar, Shift+F11 sair, Ctrl+S salva. O caminho do projeto aparece à direita da barra de baixo. `mostre()` do módulo `cartesiano` abre o painel **Gráficos** (Destacar vira janela irmã e fica assim até Acoplar ou fechar). `mostre()` de `tela_grafica` abre uma janela irmã por `nova()`. Clique e tecla nessa janela voltam em `evento()`. O desenho ocupa o retângulo que o painel ou a janela lhe dão, como o `expressa-grafico`.
+Os comandos ficam no menu do topo (**Arquivo**, **Executar**, **Depurar**, **Ver**, **Ajuda**), cada um com o atalho à direita. **Arquivo → Sair** (Ctrl+Q) fecha o editor (com pergunta se houver alterações). F5 executa a aba atual ou **continua uma depuração pausada**, **F6 inicia a depuração**, F7 mostra/oculta arquivos, F8 o painel do depurador, F9 (ou clique no número da linha) ponto de parada, F10 próximo, F11 entrar, Shift+F11 sair da função, Ctrl+S salva. Enquanto o programa roda, a IDE mostra **Continuar**, **Próximo**, **Entrar**, **Sair da função** e **Parar** (úteis quando a tela gráfica está na frente). O caminho do projeto aparece à direita da barra de baixo. `mostre()` do módulo `cartesiano` abre o painel **Gráficos** (Destacar vira janela irmã e fica assim até Acoplar ou fechar). `mostre()` de `tela_grafica` abre uma janela irmã por `nova()`. Clique e tecla nessa janela voltam em `evento()`. O desenho ocupa o retângulo que o painel ou a janela lhe dão, como o `expressa-grafico`.
 
 A linha **argumentos** vai para `argumentos[1]…` no programa. `escreva_erro` aparece em vermelho. **Parar** encerra Executar e Depurar. Clique na linha `erro: … em arquivo:linha` abre o arquivo na linha. Executar usa o texto de todas as abas abertas, salvas ou não.
 
@@ -78,9 +78,11 @@ Substituir no projeto e os arquivos gerados pela execução também verificam a 
 lida. Uma saída de programa em conflito não sobrescreve o projeto: texto abre em
 uma aba nova com cópia de recuperação; os resultados também permanecem no registro
 de arquivos ainda não salvos. Arquivos binários podem ser exportados pela janela
-de sincronização, em projetos no servidor, ou pelo aviso de falha local. O transporte
-de arquivos binários remotos continua pendente: arquivos binários gerados localmente
-por uma execução de projeto remoto são preservados para exportação.
+de sincronização, em projetos no servidor, ou pelo aviso de falha local. PNG e
+outros arquivos que não são UTF-8 sobem e descem pelo servidor com a mesma
+revisão dos textos. Um servidor antigo (sem os métodos de bytes) recusa o envio
+com uma mensagem para atualizá-lo e preserva a saída para exportar. Clicar num
+PNG na árvore não abre aba de texto.
 
 Atualize editor e servidor juntos. O servidor recusa atualizações sem revisão de
 editores antigos; o editor novo recusa gravar em servidores sem o método de gravação

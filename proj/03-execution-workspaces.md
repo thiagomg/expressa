@@ -107,9 +107,8 @@ process interruption and publication failures, not an OS power cut. Arbitrary
 external writers that ignore ownership locks retain the filesystem race limitations
 from item 02. The lease journal is not a hostile-process security boundary.
 
-Binary RPC download/upload remains item 04: remote binary inputs are still omitted;
-new binary output is retained for export rather than silently skipped. File deletions
-are not propagated to the repository. Legacy cache folders have no persisted baseline
+Binary RPC download/upload is item 04. File deletions are not propagated to
+the repository. Legacy cache folders have no persisted baseline
 or reliable origin; they are left untouched and must be inspected/exported manually.
 Session/unsaved-buffer recovery retains its existing format and locations. Performance
 work on background storage/analysis remains item 06; fresh full copies are intentional
