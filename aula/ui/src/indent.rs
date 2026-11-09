@@ -95,25 +95,21 @@ fn starts_with_closer(code: &str) -> bool {
 }
 
 /// Stack of leading indents of lines that still have an open block.
+///
+/// Each opener is pushed with **this line's** indent, so `se a { se b {` or
+/// `mapa([` still open one visual level. Each closer pops once, so a nested
+/// call like `limpe(nova(t, falso))` cannot close the enclosing `enquanto`.
 fn opener_stack(prev_lines: &[&str]) -> Vec<usize> {
     let mut stack = Vec::new();
     for raw in prev_lines {
         let lead = leading_ws(raw);
         let code = strip_line_code(raw);
-        let evs = events(&code);
-        let mut opened_this_line = false;
-        for ev in evs {
+        for ev in events(&code) {
             match ev {
                 Ev::Close => {
                     stack.pop();
-                    opened_this_line = false;
                 }
-                Ev::Open => {
-                    if !opened_this_line {
-                        stack.push(lead);
-                        opened_this_line = true;
-                    }
-                }
+                Ev::Open => stack.push(lead),
             }
         }
     }
@@ -529,6 +525,61 @@ mod tests {
         assert_eq!(want_indent(&["xs = [", "    [", "        1"], "]"), 4);
         assert_eq!(want_indent(&["escreva("], "1,"), 4);
         assert_eq!(want_indent(&["escreva(", "    1,"], ")"), 0);
+        assert_eq!(want_indent(&["se a { se b {"], "x"), 4);
+    }
+
+    #[test]
+    fn nested_calls_do_not_close_the_enclosing_block() {
+        assert_eq!(
+            want_indent(
+                &[
+                    r#"nova("Dormir", agora(), falso),"#,
+                    r#"nova("Acordar", agora(), falso),"#,
+                ],
+                r#"nova("Trabalhar", agora(), verdadeiro)"#,
+            ),
+            0,
+            "balanced calls at the top level stay at column 0"
+        );
+        assert_eq!(
+            want_indent(
+                &[
+                    "tarefas = [",
+                    r#"    nova("Dormir", agora(), falso),"#,
+                ],
+                r#"nova("Acordar", agora(), falso),"#,
+            ),
+            4
+        );
+        assert_eq!(
+            want_indent(&["f = funcao() {", "    mapa([", "        :a -> 1", "    ])"], "}"),
+            0
+        );
+        assert_eq!(
+            want_indent(
+                &[
+                    "para i de 0 até n {",
+                    "    escreva(i+1, ts[i])",
+                ],
+                "}"
+            ),
+            0
+        );
+        assert_eq!(
+            want_indent(
+                &[
+                    r#"enquanto op != "S" {"#,
+                    r#"    se op == "N" {"#,
+                    "        item = limpe(nova(t, falso))",
+                    "    } ou se op == \"S\" {",
+                    r#"        escreva("Tchau")"#,
+                    "        pare",
+                    "    }",
+                ],
+                "ps::salva(tarefas)",
+            ),
+            4
+        );
     }
 }
 
@@ -673,6 +724,17 @@ mod buffer_tests {
             assert_eq!(
                 text(&b),
                 "tarefas = [\n    nova(\"Dormir\", falso),\n    nova(\"Acordar\", falso),\n    nova(\"Trabalhar\", verdadeiro)\n]\n"
+            );
+
+            // Nested calls inside the loop must not pop `enquanto` (`ps::salva`).
+            b.set_text(
+                "enquanto op != \"S\" {\n    se op == \"N\" {\n        item = limpe(nova(t, falso))\n    }\nps::salva(tarefas)\n}\n",
+            );
+            select(&b, 0, 0, 6, 0);
+            indent_region_or_line(&b);
+            assert_eq!(
+                text(&b),
+                "enquanto op != \"S\" {\n    se op == \"N\" {\n        item = limpe(nova(t, falso))\n    }\n    ps::salva(tarefas)\n}\n"
             );
         });
     }
