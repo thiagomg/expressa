@@ -5,7 +5,7 @@ members = [".", "aula/proto", "aula/storage", "aula/server", "aula/ui", "aula/tu
 exclude = ["fuzz"]
 
 [workspace.package]
-version = "0.4.2"
+version = "0.4.3"
 edition = "2024"
 license = "MIT"
 authors = ["Thiago Massari Guedes"]
