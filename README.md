@@ -37,7 +37,7 @@ expressa debug prog.lep  depurador
 
 No REPL: `2 + 3`, `escreva("oi")`, `ajuda escreva`. `sair` ou Ctrl+D encerra.
 
-Compilar: `cargo build --release` (Rust, edition 2024). Binários em `target/release/`.
+Compilar: `cargo build --release` (Rust, edition 2024). Binários em `target/release/`. Para laboratório (LTO): `cargo build --profile release-lto` → `target/release-lto/`.
 
 Pacote `.deb` (Ubuntu 24.04 e 26.04, via Docker): `./empacotar-deb.sh`. Os arquivos saem em `dist/`.
 

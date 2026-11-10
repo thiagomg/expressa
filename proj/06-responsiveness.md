@@ -59,11 +59,14 @@ Implemented in the working tree; no commit created.
 | Syntax diagnostics, executable-line and highlight indexes | Separate analysis pool; results belong to a monotonic buffer revision; cursor movement queries cached character ranges |
 | Server filesystem requests | Semaphore admission followed by `spawn_blocking`; permits stay with running calls after a client disconnects |
 
-- The I/O pool has four workers and 32 queued jobs. Analysis has two workers and
-  16 queued jobs; persistence has one worker and 32 queued jobs. Queue overflow
+- The I/O pool uses up to four workers (one per CPU, capped at four) and 32
+  queued jobs. Analysis uses two workers on machines with more than two cores,
+  and one worker on dual-core machines so GTK keeps a core; the analysis queue
+  holds 16 jobs. Persistence has one worker and 32 queued jobs. Queue overflow
   returns an error instead of creating more threads. Worker panics become errors
   and do not destroy the pool's remaining capacity. Analysis retries bounded
-  admission failures after its debounce interval.
+  admission failures after its debounce interval. Completion is delivered on
+  the GTK main context (`invoke`) instead of a 16 ms poll.
 - Project epochs reject results after navigation; path operation IDs reject
   superseded opens and invalidated rename/delete results. Save requests capture
   the document's edit and identity epochs. A receipt advances the saved storage

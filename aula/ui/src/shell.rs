@@ -473,6 +473,38 @@ pub(crate) fn data_dir() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("res")
 }
 
+/// GTK 4's GL renderer is often unusable on Intel GMA / Core 2-class GPUs.
+/// Leave `GSK_RENDERER` alone when the user already set it.
+pub(crate) fn prefer_software_renderer_on_old_cpus() {
+    if std::env::var_os("GSK_RENDERER").is_some() {
+        return;
+    }
+    let cores = std::thread::available_parallelism()
+        .map(|n| n.get())
+        .unwrap_or(2);
+    if should_use_cairo_renderer(cores, cpu_has_avx()) {
+        // SAFETY: GTK has not started yet; same pattern as `prepare_runtime_prefix`.
+        unsafe {
+            std::env::set_var("GSK_RENDERER", "cairo");
+        }
+    }
+}
+
+pub(crate) fn should_use_cairo_renderer(cores: usize, has_avx: bool) -> bool {
+    cores <= 2 && !has_avx
+}
+
+fn cpu_has_avx() -> bool {
+    #[cfg(any(target_arch = "x86_64", target_arch = "x86"))]
+    {
+        std::is_x86_feature_detected!("avx")
+    }
+    #[cfg(not(any(target_arch = "x86_64", target_arch = "x86")))]
+    {
+        true
+    }
+}
+
 /// A packaged build keeps GTK data beside the exe. Point GLib, GDK and
 /// fontconfig at that tree before GTK starts. A dev build has no `share/`
 /// next to the binary and keeps using `deps/gtk` from the environment.
@@ -837,5 +869,18 @@ pub(crate) mod win32_foreground {
             }
             1
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn core_two_duo_prefers_cairo() {
+        assert!(should_use_cairo_renderer(2, false));
+        assert!(should_use_cairo_renderer(1, false));
+        assert!(!should_use_cairo_renderer(2, true));
+        assert!(!should_use_cairo_renderer(4, false));
     }
 }

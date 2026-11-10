@@ -16,7 +16,8 @@ $root = $PSScriptRoot
 Set-Location $root
 
 $gtk = Join-Path $root "deps\gtk"
-$release = Join-Path $root "target\release"
+$profile = if ($env:CARGO_PROFILE) { $env:CARGO_PROFILE } else { "release" }
+$release = Join-Path $root "target\$profile"
 $dest = Join-Path $root "dist\expressa-aula"
 $zip = Join-Path $root "dist\expressa-aula-windows.zip"
 
@@ -24,8 +25,8 @@ if (-not (Test-Path (Join-Path $gtk "bin\gtk-4-1.dll"))) {
     Write-Error "Nao achei $gtk\bin\gtk-4-1.dll."
 }
 
-Write-Output "Compilando expressa, expressa-aula, expressa-aula-server e expressa-tutorial (release)..."
-cargo build --release --locked -p expressa -p expressa-aula -p expressa-aula-server -p expressa-tutorial
+Write-Output "Compilando expressa, expressa-aula, expressa-aula-server e expressa-tutorial ($profile)..."
+cargo build --profile $profile --locked -p expressa -p expressa-aula -p expressa-aula-server -p expressa-tutorial
 if ($LASTEXITCODE -ne 0) {
     exit $LASTEXITCODE
 }

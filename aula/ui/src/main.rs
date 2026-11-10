@@ -86,6 +86,7 @@ use store::Files;
 
 fn main() {
     prepare_runtime_prefix();
+    prefer_software_renderer_on_old_cpus();
     rpc::install_signal_handlers();
     let app = Application::builder().application_id(APP_ID).build();
     let prefs = Prefs::load();

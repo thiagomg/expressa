@@ -49,6 +49,7 @@ for ver in "$@"; do
         --network=host \
         -e CARGO_TARGET_DIR=/build/target \
         -e CARGO_HOME=/usr/local/cargo \
+        -e "CARGO_PROFILE=${CARGO_PROFILE:-release}" \
         -e "HOST_UID=$(id -u)" \
         -e "HOST_GID=$(id -g)" \
         -v "$ROOT:/src:ro" \

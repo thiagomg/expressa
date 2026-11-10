@@ -15,6 +15,7 @@ use gtk::{DrawingArea, EventControllerKey, GestureClick, Window};
 struct Janela {
     win: Window,
     area: DrawingArea,
+    frame: Rc<RefCell<Option<ImageSurface>>>,
 }
 
 pub struct Painel {
@@ -63,39 +64,24 @@ impl Painel {
             area.set_hexpand(true);
             area.set_vexpand(true);
             area.set_can_focus(true);
-            let telas = Rc::clone(&self.telas);
-            area.set_draw_func(move |_, cr, w, h| {
-                let telas = telas.borrow();
-                let Some(tela) = telas.get(&id) else { return };
-                if w < 1 || h < 1 {
-                    return;
-                }
-                let pixels = tela.rgb32();
-                let tw = tela.largura.max(1);
-                let th = tela.altura.max(1);
-                let Ok(mut surf) = ImageSurface::create(Format::Rgb24, tw as i32, th as i32) else {
-                    return;
-                };
-                let stride = surf.stride() as usize;
-                if let Ok(mut data) = surf.data() {
-                    for y in 0..th as usize {
-                        for x in 0..tw as usize {
-                            let px = pixels[y * tw as usize + x];
-                            let i = y * stride + x * 4;
-                            if i + 2 < data.len() {
-                                data[i] = (px & 0xff) as u8;
-                                data[i + 1] = ((px >> 8) & 0xff) as u8;
-                                data[i + 2] = ((px >> 16) & 0xff) as u8;
-                            }
-                        }
+            let frame = Rc::new(RefCell::new(None::<ImageSurface>));
+            {
+                let frame = Rc::clone(&frame);
+                area.set_draw_func(move |_, cr, w, h| {
+                    if w < 1 || h < 1 {
+                        return;
                     }
-                }
-                cr.save().ok();
-                cr.scale(w as f64 / tw as f64, h as f64 / th as f64);
-                cr.set_source_surface(&surf, 0.0, 0.0).ok();
-                let _ = cr.paint();
-                cr.restore().ok();
-            });
+                    let frame = frame.borrow();
+                    let Some(surf) = frame.as_ref() else { return };
+                    let tw = surf.width().max(1) as f64;
+                    let th = surf.height().max(1) as f64;
+                    cr.save().ok();
+                    cr.scale(w as f64 / tw, h as f64 / th);
+                    cr.set_source_surface(surf, 0.0, 0.0).ok();
+                    let _ = cr.paint();
+                    cr.restore().ok();
+                });
+            }
 
             let click = GestureClick::new();
             click.set_button(0);
@@ -173,12 +159,13 @@ impl Painel {
                 Janela {
                     win,
                     area: area.clone(),
+                    frame,
                 },
             );
         }
-        // Later `mostre` frames only redraw. `present()` would steal keyboard
-        // focus from the editor on every frame.
+        // Convert pixels once per `mostre`, not on every expose/resize.
         if let Some(janela) = self.windows.borrow().get(&id) {
+            *janela.frame.borrow_mut() = self.telas.borrow().get(&id).and_then(surface_from_tela);
             janela.area.queue_draw();
         }
     }
@@ -203,6 +190,61 @@ impl Painel {
         // run (F5) must be allowed to open windows again.
         self.fechadas.borrow_mut().clear();
     }
+}
+
+/// `rgb32` is 0x00RRGGBB. On little-endian that is already Cairo RGB24
+/// (B, G, R, unused) so the frame can be copied as bytes.
+fn fill_rgb24(pixels: &[u32], width: usize, height: usize, dest: &mut [u8], stride: usize) {
+    if width == 0 || height == 0 {
+        return;
+    }
+    if cfg!(target_endian = "little") {
+        // SAFETY: `u32` is four bytes; little-endian 0x00RRGGBB is B,G,R,pad,
+        // which is Cairo RGB24. The slice length is `pixels.len() * 4`.
+        let src = unsafe {
+            std::slice::from_raw_parts(pixels.as_ptr().cast::<u8>(), pixels.len().saturating_mul(4))
+        };
+        if stride == width.saturating_mul(4) {
+            let n = src.len().min(dest.len());
+            dest[..n].copy_from_slice(&src[..n]);
+            return;
+        }
+        for y in 0..height {
+            let src_off = y.saturating_mul(width).saturating_mul(4);
+            let dst_off = y.saturating_mul(stride);
+            let n = (width * 4)
+                .min(dest.len().saturating_sub(dst_off))
+                .min(src.len().saturating_sub(src_off));
+            dest[dst_off..dst_off + n].copy_from_slice(&src[src_off..src_off + n]);
+        }
+        return;
+    }
+    for y in 0..height {
+        for x in 0..width {
+            let Some(&px) = pixels.get(y * width + x) else {
+                continue;
+            };
+            let i = y * stride + x * 4;
+            if i + 2 < dest.len() {
+                dest[i] = (px & 0xff) as u8;
+                dest[i + 1] = ((px >> 8) & 0xff) as u8;
+                dest[i + 2] = ((px >> 16) & 0xff) as u8;
+            }
+        }
+    }
+}
+
+fn surface_from_tela(tela: &TelaGrafica) -> Option<ImageSurface> {
+    let pixels = tela.rgb32();
+    let tw = tela.largura.max(1) as usize;
+    let th = tela.altura.max(1) as usize;
+    let mut surf = ImageSurface::create(Format::Rgb24, tw as i32, th as i32).ok()?;
+    let stride = surf.stride() as usize;
+    if let Ok(mut data) = surf.data() {
+        fill_rgb24(&pixels, tw, th, &mut data, stride);
+    }
+    surf.mark_dirty();
+    Some(surf)
 }
 
 fn tecla_gdk(key: Key) -> String {
@@ -239,5 +281,27 @@ fn tecla_gdk(key: Key) -> String {
             .name()
             .map(|n| n.as_str().to_string())
             .unwrap_or_default(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn rgb24_copies_little_endian_pixels_as_bytes() {
+        let pixels = [0x00AABBCC, 0x00112233];
+        let mut dest = vec![0u8; 8];
+        fill_rgb24(&pixels, 2, 1, &mut dest, 8);
+        assert_eq!(dest, [0xCC, 0xBB, 0xAA, 0x00, 0x33, 0x22, 0x11, 0x00]);
+    }
+
+    #[test]
+    fn rgb24_respects_cairo_stride() {
+        let pixels = [0x00000001, 0x00000002];
+        let mut dest = vec![0xFFu8; 16];
+        fill_rgb24(&pixels, 2, 1, &mut dest, 16);
+        assert_eq!(&dest[..8], &[1, 0, 0, 0, 2, 0, 0, 0]);
+        assert_eq!(&dest[8..], &[0xFF; 8]);
     }
 }

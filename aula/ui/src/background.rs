@@ -11,10 +11,27 @@ pub fn current_cancellation() -> Option<Arc<AtomicBool>> {
     CANCELLATION.with(|c| c.borrow().clone())
 }
 
-const IO_WORKERS: usize = 4;
+const IO_WORKERS_MAX: usize = 4;
 const IO_QUEUE: usize = 32;
-const ANALYSIS_WORKERS: usize = 2;
+const ANALYSIS_WORKERS_MAX: usize = 2;
 const ANALYSIS_QUEUE: usize = 16;
+
+/// Analysis shares the machine with GTK. On two cores keep a single worker
+/// so typing and redraws are not scheduled behind a second parse.
+pub(crate) fn analysis_workers_for(cores: usize) -> usize {
+    if cores <= 2 { 1 } else { ANALYSIS_WORKERS_MAX }
+}
+
+/// Disk waits, so extra I/O threads help until they match the CPU count.
+pub(crate) fn io_workers_for(cores: usize) -> usize {
+    cores.clamp(1, IO_WORKERS_MAX)
+}
+
+fn available_cores() -> usize {
+    std::thread::available_parallelism()
+        .map(|n| n.get())
+        .unwrap_or(2)
+}
 type Job = Box<dyn FnOnce() + Send>;
 
 pub struct Pool {
@@ -98,11 +115,17 @@ impl Pool {
 
 pub fn io() -> &'static Pool {
     static POOL: OnceLock<Pool> = OnceLock::new();
-    POOL.get_or_init(|| Pool::new(IO_WORKERS, IO_QUEUE, "aula-io"))
+    POOL.get_or_init(|| Pool::new(io_workers_for(available_cores()), IO_QUEUE, "aula-io"))
 }
 pub fn analysis() -> &'static Pool {
     static POOL: OnceLock<Pool> = OnceLock::new();
-    POOL.get_or_init(|| Pool::new(ANALYSIS_WORKERS, ANALYSIS_QUEUE, "aula-analysis"))
+    POOL.get_or_init(|| {
+        Pool::new(
+            analysis_workers_for(available_cores()),
+            ANALYSIS_QUEUE,
+            "aula-analysis",
+        )
+    })
 }
 pub fn persistence() -> &'static Pool {
     static POOL: OnceLock<Pool> = OnceLock::new();
@@ -171,6 +194,15 @@ mod tests {
             }
         }
     }
+    #[test]
+    fn dual_core_keeps_one_analysis_worker_for_the_ui() {
+        assert_eq!(analysis_workers_for(1), 1);
+        assert_eq!(analysis_workers_for(2), 1);
+        assert_eq!(analysis_workers_for(4), 2);
+        assert_eq!(io_workers_for(2), 2);
+        assert_eq!(io_workers_for(8), 4);
+    }
+
     #[test]
     fn stale_replies_are_rejected_and_queued_cancellation_never_runs_work() {
         let pool = Pool::new(1, 1, "test-cancel");
