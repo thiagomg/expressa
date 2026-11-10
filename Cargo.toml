@@ -29,6 +29,14 @@ result_large_err = "allow"
 large_enum_variant = "allow"
 type_complexity = "allow"
 
+# Default `cargo build --release` keeps Cargo's usual settings (faster to
+# compile). For lab PCs: `cargo build --profile release-lto`.
+[profile.release-lto]
+inherits = "release"
+lto = "thin"
+codegen-units = 1
+strip = "debuginfo"
+
 [package]
 name = "expressa"
 version.workspace = true

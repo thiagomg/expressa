@@ -32,14 +32,15 @@ export CARGO_TARGET_DIR="$TARGET"
 export CARGO_HOME="${CARGO_HOME:-/usr/local/cargo}"
 
 cd "$SRC"
-echo "Compilando release…"
-cargo build --release --locked \
+PROFILE="${CARGO_PROFILE:-release}"
+echo "Compilando ${PROFILE}…"
+cargo build --profile "$PROFILE" --locked \
     -p expressa \
     -p expressa-aula \
     -p expressa-aula-server \
     -p expressa-tutorial
 
-BIN="$TARGET/release"
+BIN="$TARGET/$PROFILE"
 for name in expressa expressa-grafico expressa-aula expressa-aula-server expressa-tutorial; do
     if [[ ! -x "$BIN/$name" ]]; then
         echo "erro: faltou $BIN/$name" >&2

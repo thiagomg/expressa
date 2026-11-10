@@ -8,6 +8,8 @@
 #
 # Os pacotes saem em dist/expressa_<versão>-1~ubuntu<YY.MM>_<arch>.deb
 # Cada Ubuntu usa um volume de target próprio (glibc/GTK diferentes).
+# Compila com cargo --release, ou CARGO_PROFILE=release-lto (a pipeline
+# do GitHub usa release-lto).
 set -eu
 
 ROOT="$(CDPATH= cd -- "$(dirname "$0")" && pwd)"
@@ -49,6 +51,7 @@ for ver in "$@"; do
         --network=host \
         -e CARGO_TARGET_DIR=/build/target \
         -e CARGO_HOME=/usr/local/cargo \
+        -e "CARGO_PROFILE=${CARGO_PROFILE:-release}" \
         -e "HOST_UID=$(id -u)" \
         -e "HOST_GID=$(id -g)" \
         -v "$ROOT:/src:ro" \

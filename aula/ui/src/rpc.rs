@@ -173,7 +173,12 @@ impl Rpc {
 
     fn connect_within(url: &str, limit: std::time::Duration) -> Result<Self, String> {
         let normalized = crate::identidade::normalize_endpoint(url)?;
+        let threads = std::thread::available_parallelism()
+            .map(|n| n.get().clamp(1, 2))
+            .unwrap_or(1);
         let rt = tokio::runtime::Builder::new_multi_thread()
+            .worker_threads(threads)
+            .max_blocking_threads(4)
             .enable_all()
             .build()
             .map_err(|e| e.to_string())?;

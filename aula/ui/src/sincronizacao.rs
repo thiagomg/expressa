@@ -55,7 +55,7 @@ pub fn notify(ui: &UiRc) {
             }
             if pending {
                 let message = "Há arquivos ou edições para revisar em Arquivo → Sincronização…";
-                u.console.stderr(&format!("{message}\n"));
+                u.execucao.console.stderr(&format!("{message}\n"));
                 drop(u);
                 set_status(ui, message);
             }

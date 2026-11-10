@@ -32,7 +32,7 @@ fn ui() -> (UiRc, tempfile::TempDir, Application) {
 fn dispose(ui: &UiRc) {
     let u = ui.borrow();
     u.closing.set(true);
-    u.operations.cancel_all();
+    u.execucao.operations.cancel_all();
     sessao::stop_copies(ui);
     u.repl.encerrar();
     u.window.destroy();
@@ -172,10 +172,10 @@ fn cancellation_of_a_read_releases_progress_without_opening_a_tab() {
             },
         );
         spin_until(|| started.load(Ordering::Acquire));
-        ui.borrow().operations.cancel_all();
+        ui.borrow().execucao.operations.cancel_all();
         spin_until(|| completed.get());
         assert!(all_docs(&ui).is_empty());
-        assert!(!ui.borrow().operations.button.is_visible());
+        assert!(!ui.borrow().execucao.operations.button.is_visible());
         release.send(()).unwrap();
         dispose(&ui);
     });

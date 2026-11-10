@@ -37,15 +37,15 @@ expressa debug prog.lep  depurador
 
 No REPL: `2 + 3`, `escreva("oi")`, `ajuda escreva`. `sair` ou Ctrl+D encerra.
 
-Compilar: `cargo build --release` (Rust, edition 2024). Binários em `target/release/`.
+Compilar: `cargo build --release` (Rust, edition 2024). Binários em `target/release/`. A pipeline empacota com `--profile release-lto` (`target/release-lto/`).
 
 Pacote `.deb` (Ubuntu 24.04 e 26.04, via Docker): `./empacotar-deb.sh`. Os arquivos saem em `dist/`.
 
 ### Builds no GitHub
 
 O workflow [Build packages](.github/workflows/build.yml) compila e empacota a cada
-push na `main`, incluindo merges de pull requests. Ele não roda para outras
-branches, pull requests ainda não integrados ou tags.
+push na `main`, incluindo merges de pull requests, com o perfil `release-lto`.
+Ele não roda para outras branches, pull requests ainda não integrados ou tags.
 
 No GitHub, abra **Actions → Build packages → execução → Artifacts** para baixar:
 

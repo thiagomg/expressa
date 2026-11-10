@@ -185,6 +185,7 @@ fn retry(ui: &UiRc, run: PendingRun) {
         return;
     }
     ui.borrow_mut()
+        .execucao
         .execution
         .transition(crate::ExecutionEvent::Prepare)
         .expect("idle before retry");
@@ -199,13 +200,14 @@ fn retry(ui: &UiRc, run: PendingRun) {
         },
         |ui, result| {
             ui.borrow_mut()
+                .execucao
                 .execution
                 .transition(crate::ExecutionEvent::PreparationFailed)
                 .expect("retry finished");
             match result {
                 Ok(delivery) => {
                     let failures = delivery.errors.len() + delivery.conflicts.len();
-                    let console = ui.borrow().console.clone();
+                    let console = ui.borrow().execucao.console.clone();
                     crate::mostrar_envio(
                         ui,
                         &console,
@@ -334,11 +336,13 @@ fn export_unreadable(ui: &UiRc, paths: Vec<std::path::PathBuf>) {
                         Ok(path) => {
                             ok += 1;
                             ui.borrow()
+                                .execucao
                                 .console
                                 .stderr(&format!("cópia exportada em {}\n", path.display()));
                         }
                         Err(e) => ui
                             .borrow()
+                            .execucao
                             .console
                             .stderr(&format!("erro na exportação; original preservado: {e}\n")),
                     }

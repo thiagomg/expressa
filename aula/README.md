@@ -38,6 +38,21 @@ A execução não lê nem grava fora da pasta do projeto (`..`, caminhos absolut
 
 O painel conserva até 5000 linhas e 262144 caracteres, removendo o texto mais antigo. **Limpar** apaga apenas o texto exibido. A fila aceita até 16 avaliações, cada uma com até 64 KiB de código; se estiver cheia, o comando fica na entrada para tentar novamente. Resultados muito longos são abreviados com um aviso. `saia()` encerra a sessão do painel; **Reiniciar** permite começar outra. Se a sessão falhar ou perder a conexão com seu interpretador, o painel informa o problema e oferece o mesmo reinício.
 
+## Computadores antigos
+
+A IDE é usada em laboratórios com PCs fracos (Intel Core 2 Duo e semelhantes). Use um binário de *release*, não o de depuração. O `cargo build --release` é o padrão, mais rápido de compilar. Os pacotes da pipeline (Actions → Build packages) usam `--profile release-lto`. Para gerar o mesmo localmente:
+
+```bash
+cargo build -p expressa-aula --profile release-lto
+CARGO_PROFILE=release-lto ./empacotar-deb.sh
+```
+
+O binário sai em `target/release-lto/`.
+
+Nessas máquinas a Aula escolhe sozinha o desenho em software do GTK (`GSK_RENDERER=cairo`) quando há no máximo dois núcleos e a CPU não tem AVX. Para forçar: `GSK_RENDERER=cairo expressa-aula`. Para o acelerador padrão do GTK: `GSK_RENDERER=ngl expressa-aula`.
+
+A análise do texto usa um worker só em dual-core, para o editor continuar desenhando enquanto o arquivo é verificado.
+
 ## Operações e responsividade
 
 Abrir, salvar, listar arquivos e analisar a sintaxe usam trabalho em segundo plano. **Operações**, na barra inferior, mostra o que está em andamento e permite cancelar leituras, conexões e a preparação de uma execução. A edição continua disponível enquanto você aguarda.
