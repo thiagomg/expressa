@@ -28,9 +28,10 @@ pub use debug::{
 };
 pub use error::{CallFrame, RuntimeError};
 pub use eval::{
-    debug_source, debug_source_args, run_source, run_source_args, run_source_marcador,
-    run_source_marcador_args, run_to_string, run_to_string_with, run_to_strings_with,
-    run_with_hook, run_with_hosts, run_with_leia_host,
+    DEFAULT_MAX_MATRIX_CELLS, ExecutionBackend, ExecutionOptions, ExecutionOutput, debug_source,
+    debug_source_args, run_source, run_source_args, run_source_marcador, run_source_marcador_args,
+    run_to_string, run_to_string_with, run_to_strings_with, run_with_hook, run_with_hosts,
+    run_with_leia_host, run_with_options,
 };
 pub use folha::{CurvaPronta, FolhaPronta, GraficoPronto, pintar};
 pub use graf::{OpGraf, TelaGrafica};

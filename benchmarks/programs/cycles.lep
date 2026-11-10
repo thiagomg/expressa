@@ -1,0 +1,6 @@
+repita 5000 vezes {
+    xs = [0]
+    m = mapa([:back -> xs])
+    xs[0] = m
+}
+escreva(verdadeiro)

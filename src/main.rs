@@ -13,6 +13,24 @@ fn main() {
 
 fn try_main() -> Result<(), Box<dyn std::error::Error>> {
     let mut args: Vec<String> = args().skip(1).collect();
+    // Only global options before the command/file select the backend. Script
+    // arguments named --backend must reach argumentos unchanged.
+    let mut option = 0;
+    while option < args.len() {
+        match args[option].as_str() {
+            "--backend" => {
+                let name = args
+                    .get(option + 1)
+                    .filter(|s| expressa::runtime::ExecutionBackend::from_name(s).is_some())
+                    .ok_or("Uso: expressa --backend ast|bytecode [arquivo.lep]")?
+                    .clone();
+                unsafe { std::env::set_var("EXPRESSA_BACKEND", &name) };
+                args.drain(option..=option + 1);
+            }
+            "--numeros" | "--aritmetica" => option += 2,
+            _ => break,
+        }
+    }
     if let Some(i) = args.iter().position(|a| a == "--numeros") {
         if i + 1 >= args.len() {
             eprintln!("Uso: expressa --numeros pt|en");
@@ -54,6 +72,7 @@ fn try_main() -> Result<(), Box<dyn std::error::Error>> {
              expressa --grafico <arquivo.cart>\n  \
              expressa --ao-vivo\n  \
              expressa --instalar-exemplos\n  \
+             expressa --backend ast|bytecode [arquivo.lep] [args…]\n  \
              expressa --numeros pt|en [arquivo.lep] [args…]\n  \
              expressa --aritmetica decimal|float [arquivo.lep] [args…]"
         );

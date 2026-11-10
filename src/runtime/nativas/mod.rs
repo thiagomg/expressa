@@ -571,8 +571,12 @@ pub fn make_native_modules() -> HashMap<String, Rc<RefCell<Env>>> {
         }
     }
     if let Some(mat) = map.get("mat") {
-        mat.borrow_mut()
-            .define("pi", Value::Numero(std::f64::consts::PI.into()));
+        mat.borrow_mut().define(
+            "pi",
+            Value::Numero(
+                super::numero::Numero::try_from(std::f64::consts::PI).expect("pi fits in decimal"),
+            ),
+        );
     }
     if let Some(tela) = map.get("tela") {
         tela.borrow_mut()

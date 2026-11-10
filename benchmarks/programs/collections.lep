@@ -1,0 +1,4 @@
+xs = [0]
+m = mapa([:sum -> 0])
+repita 100000 vezes { xs[0] += 1 m:sum += xs[0] }
+escreva(xs[0] == 100000 e m:sum == 5000050000)

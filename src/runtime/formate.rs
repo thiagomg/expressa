@@ -237,7 +237,7 @@ mod tests {
         Value::Texto(s.into())
     }
     fn n(x: f64) -> Value {
-        Value::Numero(x.into())
+        Value::Numero(x.try_into().unwrap())
     }
 
     fn f(template: &str, args: &[Value]) -> String {

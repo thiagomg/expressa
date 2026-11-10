@@ -1,6 +1,7 @@
 use crate::lexer::Span;
 use crate::parser::block_types::Block;
 use crate::parser::expression_types::Expr;
+use crate::parser::operator_types::BinaryOp;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Stmt {
@@ -10,6 +11,8 @@ pub enum Stmt {
     /// `alvo = valor`
     Assign {
         target: AssignTarget,
+        /// Preserve +=/-= so the evaluator resolves the destination only once.
+        compound: Option<BinaryOp>,
         value: Expr,
         span: Span,
         /// `///` immediately above this assignment (functions also copy it

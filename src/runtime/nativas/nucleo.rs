@@ -130,7 +130,7 @@ impl Vm<'_, '_> {
         }
         let mut lines = Vec::new();
         loop {
-            self.check_deadline(span)?;
+            self.check_espera(span)?;
             let mut line = String::new();
             let n = self
                 .input
@@ -456,6 +456,7 @@ impl Vm<'_, '_> {
                 let xs = self.expect_lista(v, span)?;
                 let mut map = Vec::new();
                 for item in xs.borrow().iter() {
+                    self.check_espera(span)?;
                     let Value::Par(k, val) = item else {
                         return Err(self.err(
                             format!(
@@ -486,6 +487,7 @@ impl Vm<'_, '_> {
                 let xs = self.expect_lista(v, span)?;
                 let mut out = Vec::new();
                 for item in xs.borrow().iter() {
+                    self.check_espera(span)?;
                     let k = MapKey::from_value(item).ok_or_else(|| {
                         self.err(
                             format!("elemento de conjunto inválido ({})", item.type_name()),
@@ -526,7 +528,7 @@ impl Vm<'_, '_> {
         });
         let prev_file = std::mem::replace(&mut self.file, "<avalie>".into());
         let prev_source = std::mem::replace(&mut self.source, std::rc::Rc::from(src));
-        let result = self.eval_items_value(&program.items, env);
+        let result = self.execute_program_value(program, env);
         self.source = prev_source;
         self.file = prev_file;
         self.stack.pop();

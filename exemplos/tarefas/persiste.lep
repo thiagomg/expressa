@@ -1,0 +1,53 @@
+importe "arquivo"
+importe "crono"
+
+diretorio = "~/.local/share/tarefas"
+arquivo = junte_caminho(diretorio, "tarefas.txt")
+
+cria_dir = funcao() {
+    crie_pasta(diretorio)
+}
+
+salva = funcao(tarefas) {
+    salve_arquivo(arquivo, tarefas)
+}
+
+serialize_data = funcao(dt) {
+    formate_data(dt, "%Y-%m-%d %H:%M:%S")
+}
+
+serialize = funcao(tarefa) {
+    c = se tarefa:completo == verdadeiro { "S" } senão { "N" }
+    //dt = serialize_data(tarefa:data)
+    [c, serialize_data(tarefa:data), tarefa:desc]
+}
+
+// temp --------------
+tarefa_texto = funcao(t) {
+    comp_t = se t:completo { "x" } senao { " " }
+    dt = t:data.formate_data("%Y-%m-%d")
+    formate("[{}] {} - {}", comp_t, dt, t:desc)
+}
+
+nova = funcao(desc, data, completo) {
+    mapa([
+        :desc -> desc,
+        :data -> data,
+        :completo -> completo,
+        :_como_texto -> tarefa_texto
+    ])
+}
+
+tarefas = [
+nova("Dormir", agora(), falso),
+nova("Acordar", agora(), falso),
+nova("Trabalhar", agora(), verdadeiro)
+]
+// -----------------------
+
+// cria_dir()
+// salva(tarefas)
+escreva(serialize(tarefas[0]))
+// serialize(tarefas[0])
+// salva(["1", "2"])
+

@@ -1,0 +1,80 @@
+importe "crono"
+importe "menu"
+ps = importe "persiste"
+
+tarefa_texto = funcao(t) {
+    comp_t = se t:completo { "x" } senao { " " }
+    dt = t:data.formate_data("%Y-%m-%d")
+    formate("[{}] {} - {}", comp_t, dt, t:desc)
+}
+
+mostre = funcao(ts, tudo) {
+    escreva("Lista de tarefas")
+    escreva("----------------")
+    para i de 0 até ts.tamanho() - 1 {
+        se ts[i]:completo == verdadeiro e tudo == falso {
+            continua
+        }
+        escreva(i+1, ts[i])
+    }
+    escreva()
+}
+
+nova = funcao(desc, data, completo) {
+    mapa([
+        :desc -> desc,
+        :data -> data,
+        :completo -> completo,
+        :_como_texto -> tarefa_texto
+    ])
+}
+
+// ------------------------
+
+tarefas = [
+    nova("Dormir", agora(), falso),
+    nova("Acordar", agora(), falso),
+    nova("Trabalhar", agora(), verdadeiro)
+]
+
+op = ""
+todos_itens = falso
+
+enquanto op != "S" {
+    cls()
+    
+    opções = [
+        "Novo", "Completar", "Remover", 
+        se todos_itens == verdadeiro { "Mostrar não completos" } senao { "Mostrar tudo" }, 
+        "Sair"
+    ]
+    
+    tarefas.mostre(todos_itens)
+    op = le_opção(opções)
+    escreva()
+    
+    se op == "N" {
+        t = le_novo()
+        item = limpe(nova(t, falso))
+        se item.tamanho() > 0 {
+            tarefas += [ item ]
+        }
+    } ou se op == "C" {
+        idx = le_completa(1, tarefas.tamanho())
+        se idx != falso {
+            tarefas[idx-1]:completo = se tarefas[idx-1]:completo == verdadeiro { falso } senão { verdadeiro }
+        }
+    } ou se op == "R" {
+        idx = le_remova(1, tarefas.tamanho())
+        se idx != falso {
+            tarefas = tarefas.remova(idx-1)
+        }
+    } ou se op == "M" {
+        todos_itens = se todos_itens == verdadeiro { falso } senão { verdadeiro }
+    } ou se op == "S" {
+        escreva("Tchau")
+        pare
+    }
+    
+    ps::salva(tarefas)
+}

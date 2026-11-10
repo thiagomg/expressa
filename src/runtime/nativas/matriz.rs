@@ -45,9 +45,13 @@ impl Vm<'_, '_> {
         let rows = m.borrow();
         let h = rows.len();
         let w = rows.first().map(|r| r.len()).unwrap_or(0);
-        let mut out = vec![vec![0.0; h]; w];
+        let mut out = self.allocate_matrix(w, h, 0.0, span)?;
         for i in 0..h {
+            self.check_espera(span)?;
             for j in 0..w {
+                if j.is_multiple_of(1024) {
+                    self.check_espera(span)?;
+                }
                 out[j][i] = rows[i][j];
             }
         }
@@ -55,12 +59,8 @@ impl Vm<'_, '_> {
     }
     pub(crate) fn bi_identidade(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
         self.expect_arity(args, 1, span)?;
-        let n = self.expect_int(&args[0], span)?;
-        if n < 1 {
-            return Err(self.err("identidade() espera um inteiro >= 1", span));
-        }
-        let n = n as usize;
-        let mut out = vec![vec![0.0; n]; n];
+        let n = self.expect_dim(&args[0], span, "identidade")?;
+        let mut out = self.allocate_matrix(n, n, 0.0, span)?;
         for (i, row) in out.iter_mut().enumerate() {
             row[i] = 1.0;
         }
@@ -71,7 +71,8 @@ impl Vm<'_, '_> {
         if n < 1 {
             return Err(self.err(format!("{nome}() espera um inteiro >= 1"), span));
         }
-        Ok(n as usize)
+        usize::try_from(n)
+            .map_err(|_| self.err(format!("{nome}() dimensão fora do intervalo"), span))
     }
     pub(crate) fn dims_1_or_2(
         &self,
@@ -99,18 +100,18 @@ impl Vm<'_, '_> {
     }
     pub(crate) fn bi_zeros(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
         let (h, w) = self.dims_1_or_2(args, span, "zeros")?;
-        Ok(Value::matriz(vec![vec![0.0; w]; h]))
+        Ok(Value::matriz(self.allocate_matrix(h, w, 0.0, span)?))
     }
     pub(crate) fn bi_uns(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
         let (h, w) = self.dims_1_or_2(args, span, "uns")?;
-        Ok(Value::matriz(vec![vec![1.0; w]; h]))
+        Ok(Value::matriz(self.allocate_matrix(h, w, 1.0, span)?))
     }
     pub(crate) fn bi_cheia(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
         self.expect_arity(args, 3, span)?;
         let h = self.expect_dim(&args[0], span, "cheia")?;
         let w = self.expect_dim(&args[1], span, "cheia")?;
         let v = self.expect_f64(&args[2], span)?;
-        Ok(Value::matriz(vec![vec![v; w]; h]))
+        Ok(Value::matriz(self.allocate_matrix(h, w, v, span)?))
     }
     pub(crate) fn bi_nlinhas(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
         self.expect_arity(args, 1, span)?;
@@ -143,7 +144,7 @@ impl Vm<'_, '_> {
                 return Err(self.err("det() só para matrizes 1×1, 2×2 ou 3×3", span));
             }
         };
-        Ok(Value::Numero(d.into()))
+        self.number_from_f64(d, span)
     }
     pub(crate) fn bi_matriz(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
         self.expect_arity(args, 1, span)?;

@@ -1,14 +1,3 @@
-// 7. Suggested order of work (one PR/session each)
-//
-// 1. Span + Token + TokenKind (minimal) + tokenize returning Eof only
-// 2. Whitespace + // comments
-// 3. Numbers (with _ and .)
-// 4. Idents + keyword table
-// 5. Single-char ops, then multi-char
-// 6. Strings + escapes
-// 7. /* */
-// 8. Print helper + tests from the spec examples (sections 2–8)
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TokenKind {
     // ── Literals & names ──────────────────────────────────────────

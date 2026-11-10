@@ -1,5 +1,4 @@
 use std::cell::RefCell;
-use std::cmp::Ordering;
 use std::rc::Rc;
 
 use crate::lexer::Span;
@@ -51,12 +50,14 @@ impl Vm<'_, '_> {
                 span,
             ));
         }
+        self.check_espera(span)?;
         let itens = self.expect_lista(&args[0], span)?.borrow().clone();
         let chaves = match args.get(1) {
             None => itens.clone(),
             Some(f @ (Value::Funcao(_) | Value::Builtin(_))) => {
                 let mut ks = Vec::with_capacity(itens.len());
                 for x in &itens {
+                    self.check_espera(span)?;
                     ks.push(self.call_value(f, std::slice::from_ref(x), span, "chave", env)?);
                 }
                 ks
@@ -73,6 +74,7 @@ impl Vm<'_, '_> {
         };
         let tipo = chaves.first().map(Value::type_name);
         for k in &chaves {
+            self.check_espera(span)?;
             if !matches!(k, Value::Numero(_) | Value::Texto(_)) || Some(k.type_name()) != tipo {
                 return Err(self.err(
                     format!(
@@ -86,11 +88,41 @@ impl Vm<'_, '_> {
             }
         }
         let mut ordem: Vec<usize> = (0..itens.len()).collect();
-        ordem.sort_by(|&a, &b| match (&chaves[a], &chaves[b]) {
-            (Value::Numero(x), Value::Numero(y)) => x.partial_cmp(y).unwrap_or(Ordering::Equal),
-            (Value::Texto(x), Value::Texto(y)) => x.cmp(y),
-            _ => Ordering::Equal,
-        });
+        // Bottom-up stable merge sort permits cancellation without a comparator
+        // changing its ordering halfway through a standard-library sort.
+        let mut scratch = vec![0usize; ordem.len()];
+        let mut width = 1usize;
+        let mut work = 0usize;
+        while width < ordem.len() {
+            for start in (0..ordem.len()).step_by(width.saturating_mul(2)) {
+                let mid = start.saturating_add(width).min(ordem.len());
+                let end = mid.saturating_add(width).min(ordem.len());
+                let (mut left, mut right) = (start, mid);
+                for slot in &mut scratch[start..end] {
+                    if work.is_multiple_of(1024) {
+                        self.check_espera(span)?;
+                    }
+                    work = work.wrapping_add(1);
+                    let take_left = right == end
+                        || (left < mid
+                            && match (&chaves[ordem[left]], &chaves[ordem[right]]) {
+                                (Value::Numero(x), Value::Numero(y)) => x <= y,
+                                (Value::Texto(x), Value::Texto(y)) => x <= y,
+                                _ => unreachable!("key types validated above"),
+                            });
+                    if take_left {
+                        *slot = ordem[left];
+                        left += 1;
+                    } else {
+                        *slot = ordem[right];
+                        right += 1;
+                    }
+                }
+            }
+            std::mem::swap(&mut ordem, &mut scratch);
+            width = width.saturating_mul(2);
+        }
+        self.check_espera(span)?;
         Ok(Value::lista(
             ordem.into_iter().map(|i| itens[i].clone()).collect(),
         ))

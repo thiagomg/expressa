@@ -1,3 +1,6 @@
+mod cycles;
+pub(crate) use cycles::{collect_cycles, collect_cycles_if_due};
+
 use std::cell::RefCell;
 use std::collections::HashSet;
 use std::fmt;
@@ -103,9 +106,14 @@ pub enum MapKey {
     Bool(bool),
 }
 
+pub enum FunctionBody {
+    Ast(Rc<Block>),
+    Bytecode(Rc<super::eval::bytecode::Chunk>),
+}
+
 pub struct Closure {
     pub params: Vec<Param>,
-    pub body: Rc<Block>,
+    pub body: FunctionBody,
     pub env: Rc<RefCell<Env>>,
     pub span: Span,
     /// File that defined the function and its text (errors, debugger).
@@ -127,11 +135,15 @@ impl Closure {
 
 impl Value {
     pub fn lista(items: Vec<Value>) -> Self {
-        Value::Lista(Rc::new(ItensLista(RefCell::new(items))))
+        let items = Rc::new(ItensLista(RefCell::new(items)));
+        cycles::track_list(&items);
+        Value::Lista(items)
     }
 
     pub fn mapa(entries: Vec<(MapKey, Value)>) -> Self {
-        Value::Mapa(Rc::new(ItensMapa(RefCell::new(entries))))
+        let entries = Rc::new(ItensMapa(RefCell::new(entries)));
+        cycles::track_map(&entries);
+        Value::Mapa(entries)
     }
 
     pub fn conjunto(items: Vec<MapKey>) -> Self {
@@ -460,7 +472,15 @@ fn format_matriz(rows: &[Vec<f64>], loc: NumeroLocale) -> String {
     }
     let cells: Vec<Vec<String>> = rows
         .iter()
-        .map(|r| r.iter().map(|n| loc.format(Numero::from(*n))).collect())
+        .map(|r| {
+            r.iter()
+                .map(|n| {
+                    Numero::try_from(*n)
+                        .map(|n| loc.format(n))
+                        .unwrap_or_else(|_| "<número fora do intervalo>".into())
+                })
+                .collect()
+        })
         .collect();
     let cols = cells[0].len();
     let mut widths = vec![0; cols];
@@ -612,14 +632,14 @@ mod tests {
     #[test]
     fn type_names_are_portuguese() {
         assert_eq!(Value::Nada.type_name(), "nada");
-        assert_eq!(Value::Numero(1.0.into()).type_name(), "numero");
+        assert_eq!(Value::Numero(1.0.try_into().unwrap()).type_name(), "numero");
         assert_eq!(Value::Texto("x".into()).type_name(), "texto");
         assert_eq!(Value::Bool(true).type_name(), "bool");
         assert_eq!(Value::lista(vec![]).type_name(), "lista");
         assert_eq!(
             Value::Par(
                 MapKey::Texto("n".into()),
-                Box::new(Value::Numero(1.0.into()))
+                Box::new(Value::Numero(1.0.try_into().unwrap()))
             )
             .type_name(),
             "par"
@@ -633,7 +653,7 @@ mod tests {
         assert_eq!(Value::Builtin("escreva").type_name(), "funcao");
         for v in [
             Value::Nada,
-            Value::Numero(1.0.into()),
+            Value::Numero(1.0.try_into().unwrap()),
             Value::Texto("x".into()),
             Value::Bool(true),
             Value::lista(vec![]),
@@ -652,25 +672,33 @@ mod tests {
     #[test]
     fn display_matches_what_escreva_prints() {
         assert_eq!(Value::Nada.to_string(), "nada");
-        assert_eq!(Value::Numero(10.0.into()).to_string(), "10");
-        assert_eq!(Value::Numero(7.5.into()).to_string(), "7.5");
+        assert_eq!(Value::Numero(10.0.try_into().unwrap()).to_string(), "10");
+        assert_eq!(Value::Numero(7.5.try_into().unwrap()).to_string(), "7.5");
         assert_eq!(Value::Bool(true).to_string(), "verdadeiro");
         assert_eq!(Value::Bool(false).to_string(), "falso");
         assert_eq!(Value::Texto("oi".into()).to_string(), "oi");
         assert_eq!(
-            Value::lista(vec![Value::Numero(1.0.into()), Value::Texto("a".into())]).to_string(),
+            Value::lista(vec![
+                Value::Numero(1.0.try_into().unwrap()),
+                Value::Texto("a".into())
+            ])
+            .to_string(),
             "[1, \"a\"]"
         );
         assert_eq!(
             Value::Par(
                 MapKey::Texto("n".into()),
-                Box::new(Value::Numero(1.0.into()))
+                Box::new(Value::Numero(1.0.try_into().unwrap()))
             )
             .to_string(),
             "\"n\" -> 1"
         );
         assert_eq!(
-            Value::mapa(vec![(MapKey::Texto("n".into()), Value::Numero(1.0.into()))]).to_string(),
+            Value::mapa(vec![(
+                MapKey::Texto("n".into()),
+                Value::Numero(1.0.try_into().unwrap())
+            )])
+            .to_string(),
             "mapa{\"n\": 1}"
         );
         assert_eq!(Value::Builtin("leia").to_string(), "<funcao leia>");
@@ -713,22 +741,28 @@ mod tests {
 
     #[test]
     fn equality_is_by_content_for_lists_and_identity_for_functions() {
-        let a = Value::lista(vec![Value::Numero(1.0.into())]);
-        let b = Value::lista(vec![Value::Numero(1.0.into())]);
+        let a = Value::lista(vec![Value::Numero(1.0.try_into().unwrap())]);
+        let b = Value::lista(vec![Value::Numero(1.0.try_into().unwrap())]);
         assert_eq!(a, b);
 
-        assert_eq!(Value::Numero(1.0.into()), Value::Numero(1.0.into()));
-        assert_ne!(Value::Numero(1.0.into()), Value::Texto("1".into()));
+        assert_eq!(
+            Value::Numero(1.0.try_into().unwrap()),
+            Value::Numero(1.0.try_into().unwrap())
+        );
+        assert_ne!(
+            Value::Numero(1.0.try_into().unwrap()),
+            Value::Texto("1".into())
+        );
         assert_eq!(Value::Builtin("escreva"), Value::Builtin("escreva"));
         assert_ne!(Value::Builtin("escreva"), Value::Builtin("leia"));
     }
 
     #[test]
     fn list_clone_shares_storage() {
-        let a = Value::lista(vec![Value::Numero(1.0.into())]);
+        let a = Value::lista(vec![Value::Numero(1.0.try_into().unwrap())]);
         let b = a.clone();
         if let Value::Lista(xs) = &a {
-            xs.borrow_mut()[0] = Value::Numero(9.0.into());
+            xs.borrow_mut()[0] = Value::Numero(9.0.try_into().unwrap());
         }
         assert_eq!(a, b);
         assert_eq!(b.to_string(), "[9]");
@@ -741,10 +775,13 @@ mod tests {
             Some(MapKey::Texto("n".into()))
         );
         assert_eq!(
-            MapKey::from_value(&Value::Numero(3.0.into())),
+            MapKey::from_value(&Value::Numero(3.0.try_into().unwrap())),
             Some(MapKey::Numero(3))
         );
-        assert_eq!(MapKey::from_value(&Value::Numero(1.5.into())), None);
+        assert_eq!(
+            MapKey::from_value(&Value::Numero(1.5.try_into().unwrap())),
+            None
+        );
         assert_eq!(MapKey::from_value(&Value::lista(vec![])), None);
         assert_eq!(
             MapKey::from_value(&Value::Bool(true)),
