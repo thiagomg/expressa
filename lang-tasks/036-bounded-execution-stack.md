@@ -1,6 +1,6 @@
 # 036 — Migrate to a shared bytecode interpreter with bounded execution
 
-Status: Bytecode interpreter direction agreed; implementation and detailed design pending individual review. No JIT is planned.
+Status: Desktop bytecode interpreter implemented for review; Pico portability, whole-runtime memory bounds, and remaining native/parser stack growth are still pending. No JIT is included.
 
 Priority/type: Pico 2 · foundational.
 
@@ -8,9 +8,13 @@ Priority/type: Pico 2 · foundational.
 
 The evaluator reserves 256 KiB of host stack and allocates 4 MiB stack segments; value traversal and parser validation also use stacker. These sizes exceed the board memory budget. The existing call-depth limit is 10,000.
 
-## Review gate
+## Review gate and implementation record
 
-Do not begin bytecode implementation until the user reviews the AST changes in [AST-REVIEW.md](AST-REVIEW.md) and explicitly agrees to proceed. Preserve the approved AST reference and follow [the CPU/memory comparison protocol](../benchmarks/README.md). Comparison measurements follow a working, semantically equivalent bytecode implementation; none are claimed in this phase.
+The user committed the AST phase as `bd654b5` and then explicitly approved starting bytecode implementation. The AST reference was preserved before edits. See [BYTECODE-REVIEW.md](BYTECODE-REVIEW.md) and [the measured CPU/RSS comparison](../benchmarks/AST-VS-BYTECODE.md).
+
+Implemented: source-to-bytecode compilation, explicit value/call/control stacks, compiled closures without retained AST bodies, runtime compilation for `avalie`, dynamic names and escaping closures, all statement/expression forms, imports/native callbacks, process cleanup, and debugger statement/source mapping. The default backend is bytecode; AST remains selectable for conformance and comparison. Checkpoint tests assert that bytecode execution does not fall back to AST evaluation.
+
+The first implementation deliberately retains dynamic name-based environments, the existing numeric/value model, and desktop host services. Local-slot optimization, no_std separation, global heap budgets, compiler/parser stack bounds, and synchronous native callback reentrancy remain embedded prerequisites. Ordinary Expressa calls use VM frames, but this does not mean every native/compiler path is ready for Pico.
 
 ## Proposed direction
 

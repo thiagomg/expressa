@@ -1,0 +1,4 @@
+f = funcao(n) {
+    se n == 0 { 0 } senao { f(n - 1) + 1 }
+}
+escreva(f(2000) == 2000)

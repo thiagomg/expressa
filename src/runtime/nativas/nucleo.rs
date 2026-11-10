@@ -528,7 +528,7 @@ impl Vm<'_, '_> {
         });
         let prev_file = std::mem::replace(&mut self.file, "<avalie>".into());
         let prev_source = std::mem::replace(&mut self.source, std::rc::Rc::from(src));
-        let result = self.eval_items_value(&program.items, env);
+        let result = self.execute_program_value(program, env);
         self.source = prev_source;
         self.file = prev_file;
         self.stack.pop();

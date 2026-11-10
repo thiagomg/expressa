@@ -211,7 +211,7 @@ impl Env {
         Self::assignment_frame(env, name).map(|_| ())
     }
 
-    fn assignment_frame(
+    pub(crate) fn assignment_frame(
         env: &Rc<RefCell<Self>>,
         name: &str,
     ) -> Result<Rc<RefCell<Self>>, AssignError> {
@@ -507,7 +507,7 @@ mod tests {
     fn closao(env: Rc<RefCell<Env>>, ident: &str) -> Value {
         Value::Funcao(Rc::new(Closure {
             params: vec![],
-            body: Rc::new(Block {
+            body: super::super::value::FunctionBody::Ast(Rc::new(Block {
                 stmts: vec![Stmt::Expr {
                     expr: Expr::Ident {
                         name: ident.into(),
@@ -516,7 +516,7 @@ mod tests {
                     span: Span::default(),
                 }],
                 span: Span::default(),
-            }),
+            })),
             env,
             span: Span::default(),
             file: String::new(),

@@ -1,6 +1,8 @@
-# AST baseline and later bytecode comparison
+# AST and bytecode performance comparison
 
-The bytecode backend is **not implemented in this phase**. The user must review and explicitly agree to the AST changes before VM implementation begins. CPU and memory comparisons happen after the bytecode backend implements the same reviewed semantics. No speedup or memory-saving claim is established by this benchmark harness.
+The desktop bytecode backend is implemented following the user's approval of the AST phase (commit `bd654b5`) and subsequent instruction to proceed. Bytecode is the default; `--backend ast|bytecode` or `ExecutionOptions::backend` selects the temporary reference backend. There is no JIT. See [the implementation review](../lang-tasks/BYTECODE-REVIEW.md) and [the measured comparison](AST-VS-BYTECODE.md). Pico firmware and its resource validation remain separate pending work.
+
+Subsequent optimization experiments are recorded separately in [BYTECODE-OPTIMIZATIONS.md](BYTECODE-OPTIMIZATIONS.md), including rejected changes, per-step patches, binary/source manifests and repeated measurements. Historical result files are preserved. Each new candidate is compared with the preceding accepted VM binary in the same run; the AST remains an additional reference. CPU affinity is fixed for the later experiments and recorded in the raw results.
 
 ## Phase 1: reviewable AST changes
 
@@ -11,28 +13,28 @@ cargo build -p expressa --release --bin expressa --offline --locked
 python3 benchmarks/run.py --engine ast=target/release/expressa --repeat 7 --warmup 2 --output benchmarks/results/ast-review.json
 ```
 
-These workloads have deterministic correctness checks and cover startup, arithmetic, calls/closures, collections, dynamic evaluation, matrices, and allocation/cycles. Every sample must print exactly `verdadeiro` and exit successfully. Failed samples abort the run rather than entering the statistics.
+These workloads have deterministic correctness checks and cover startup, arithmetic, calls/closures, collections, dynamic evaluation, matrices, allocation/cycles, and deep recursion. Every sample must print exactly `verdadeiro` and exit successfully. Failed samples abort the run rather than entering the statistics.
 
 The JSON includes raw samples, medians, workload hashes, binary hashes/sizes, the source fingerprint including uncommitted Rust files, Git revision, compiler version, platform/CPU, and CPU affinity. Run while the machine is otherwise idle. Repeat longer workloads if startup dominates; very short startup results are descriptive, not reliable speedup evidence. A small native helper records the interpreter child's CPU usage, monotonic wall time, and peak RSS. Python only drives scheduling and timeouts; its polling interval does not enter the reported wall time. Measuring RSS directly from a Python-launched child can inherit the large launcher's pre-exec RSS high-water mark, so the helper starts through an additional exec boundary before spawning the measured interpreter. Check the helper against `/usr/bin/time -v` when validating a new host.
 
-## Phase 2: explicit review gate
+## Phase 2: explicit review gate (satisfied for this migration)
 
 1. The user reviews the AST fixes, documented semantic boundaries, tests, and any baseline results.
 2. The user explicitly agrees to proceed with bytecode implementation.
 3. Preserve the approved AST binary and its source snapshot/fingerprint before replacing execution internals. Do not silently compare against a rebuilt AST with different semantics or build settings.
 4. Implement one shared bytecode interpreter, without a JIT, preserving `avalie`, diagnostics, scope, and the reviewed numeric model. Keep the AST backend available as a temporary reference until parity and comparison are complete.
 
-Creating this harness or accepting the architecture does not waive this review gate. No commits are created automatically.
+The user committed the AST changes and then explicitly asked to proceed with bytecode implementation. The approved AST binary and complete source archive were preserved under `target/ast-reference-bd654b5/` before changing the engine. The tracked reference manifest is [references/ast-bd654b5.json](references/ast-bd654b5.json). No new commits are created automatically.
 
 ## Phase 3: measured comparison
 
 Build the AST reference and bytecode candidate with the same compiler, release options, numeric configuration, library features, and target architecture. On the same machine, interleave both binaries in one run:
 
 ```sh
-python3 benchmarks/run.py --engine ast=/path/to/approved/expressa-ast --engine bytecode=/path/to/expressa-bytecode --repeat 15 --warmup 3 --output benchmarks/results/ast-vs-bytecode.json
+python3 benchmarks/run.py --engine ast=target/ast-reference-bd654b5/expressa-ast --engine bytecode=target/release/expressa --backend ast=ast --backend bytecode=bytecode --repeat 15 --warmup 3 --output benchmarks/results/ast-vs-bytecode.json
 ```
 
-The runner randomizes workload/engine order per round with a recorded seed. Each binary must accept the same `binary file.lep` command. Engine names are labels, not proof of backend identity: record each binary's build command and source snapshot alongside the JSON. An optional precompiled-bytecode execution result must be reported separately from source-to-result execution.
+The runner randomizes workload/engine order per round with a recorded seed. Each binary must accept the same `binary file.lep` command. The runner records and explicitly sets `EXPRESSA_BACKEND` for each engine (`--backend NAME=ast|bytecode`). Without an override the label `ast` selects AST and other labels select bytecode. The preserved pre-migration binary only implements AST and ignores this new setting. Engine names alone are not proof of backend identity: record each binary's build command and source snapshot alongside the JSON. An optional precompiled-bytecode execution result must be reported separately from source-to-result execution.
 
 Report per workload:
 
@@ -57,4 +59,4 @@ Desktop results do not prove Pico suitability. Once firmware exists, measure on 
 
 The current provisional measurement is summarized in [AST-BASELINE.md](AST-BASELINE.md), with raw samples in [results/ast-review.json](results/ast-review.json).
 
-`results/ast-review.json`, if present, is an unapproved working-tree AST snapshot only. It must be regenerated or explicitly accepted after review. Bytecode performance remains unmeasured until phase 3. Do not use the previous broken evaluator as the performance reference for a candidate that performs additional correctness checks without disclosing the difference.
+`results/ast-review.json`, if present, is an unapproved working-tree AST snapshot only. It must be regenerated or explicitly accepted after review. The desktop comparison is recorded separately in [AST-VS-BYTECODE.md](AST-VS-BYTECODE.md); the older AST-only result is historical, not the comparison denominator. Execution-only, heap-allocation and Pico measurements remain unmeasured. Do not use the previous broken evaluator as the performance reference for a candidate that performs additional correctness checks without disclosing the difference.

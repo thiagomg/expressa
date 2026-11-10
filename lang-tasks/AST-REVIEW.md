@@ -1,6 +1,6 @@
 # AST improvements for review before bytecode migration
 
-Status: implemented AST changes awaiting user review. No commits, bytecode backend, JIT, or Pico firmware are included.
+Historical AST-phase record: the user committed these changes as `bd654b5` and subsequently approved the bytecode migration. The validation and provisional baseline below describe the AST phase, not the new backend. See [BYTECODE-REVIEW.md](BYTECODE-REVIEW.md) for current work. No JIT or Pico firmware is included.
 
 The user requested AST improvements first, followed by review and explicit agreement. Only after that agreement will we implement the shared bytecode interpreter and compare its CPU and memory consumption against the approved AST reference. The agreed architecture does not bypass this gate. See [the benchmark protocol](../benchmarks/README.md).
 

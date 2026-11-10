@@ -2,7 +2,7 @@
 """Measure real CPU time and peak RSS of fresh interpreter processes (Linux/macOS).
 
 One engine records a baseline. Multiple engines are interleaved in randomized
-order on identical workloads. No bytecode implementation is provided here.
+order on identical workloads. Backends are selected explicitly for each engine.
 """
 import argparse
 import hashlib
@@ -35,9 +35,9 @@ def source_digest():
     return checksum.hexdigest()
 
 
-def measure(helper, binary, program, timeout):
+def measure(helper, binary, program, timeout, backend):
     env = os.environ.copy()
-    env.update(EXPRESSA_ARITMETICA="decimal", EXPRESSA_NUMEROS="en")
+    env.update(EXPRESSA_ARITMETICA="decimal", EXPRESSA_NUMEROS="en", EXPRESSA_BACKEND=backend)
     with tempfile.TemporaryDirectory(prefix="expressa-bench-") as temporary, \
             tempfile.TemporaryFile() as stdout, tempfile.TemporaryFile() as stderr:
         stats = Path(temporary) / "usage.json"
@@ -75,6 +75,7 @@ def measure(helper, binary, program, timeout):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--engine", action="append", required=True, metavar="NAME=BINARY")
+    parser.add_argument("--backend", action="append", default=[], metavar="NAME=ast|bytecode")
     parser.add_argument("--repeat", type=int, default=7)
     parser.add_argument("--warmup", type=int, default=2)
     parser.add_argument("--timeout", type=float, default=30)
@@ -94,6 +95,12 @@ def main():
         if not path.is_file() or not os.access(path, os.X_OK):
             parser.error(f"not an executable: {path}")
         engines[name] = path
+    backends = {name: "ast" if name == "ast" else "bytecode" for name in engines}
+    for specification in args.backend:
+        name, separator, backend = specification.partition("=")
+        if not separator or name not in engines or backend not in {"ast", "bytecode"}:
+            parser.error("backend must be NAME=ast|bytecode for a declared engine")
+        backends[name] = backend
     helper = ROOT / "target/benchmarks/measure"
     helper.parent.mkdir(parents=True, exist_ok=True)
     subprocess.run(["cc", "-O2", "-std=c11", "-Wall", "-Wextra", "-Werror",
@@ -105,7 +112,7 @@ def main():
         jobs = [(name, p) for name in engines for p in programs]
         rng.shuffle(jobs)
         for name, program in jobs:
-            sample = measure(helper, engines[name], program, args.timeout)
+            sample = measure(helper, engines[name], program, args.timeout, backends[name])
             if round_number >= args.warmup:
                 results[name][program.stem].append(sample)
     cpu_model = platform.processor()
@@ -124,6 +131,7 @@ def main():
         "measurement_helper_source_sha256": digest(ROOT / "benchmarks/measure.c"),
         "measurement_helper_binary_sha256": digest(helper),
         "cc": subprocess.check_output(["cc", "--version"], text=True).splitlines()[0],
+        "backends": backends,
         "arithmetic": "decimal", "locale": "en", "mode": "fresh-process end-to-end",
         "repeat": args.repeat, "warmup": args.warmup, "seed": args.seed,
         "binaries": {name: {"path": str(p), "sha256": digest(p), "bytes": p.stat().st_size} for name, p in engines.items()},

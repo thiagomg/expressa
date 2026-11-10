@@ -1,0 +1,12 @@
+--- a/src/runtime/eval/bytecode/execute.rs
++++ b/src/runtime/eval/bytecode/execute.rs
+@@ -74,6 +74,9 @@
+ }
+ 
+ impl Machine {
++    // Keep dispatch in the run loop so instruction results need not cross a
++    // Rust call boundary. Benchmarked independently from other VM changes.
++    #[inline(always)]
+     fn step(&mut self, vm: &mut Vm<'_, '_>) -> Result<Step, EvalError> {
+         let frame = self.frames.last_mut().expect("frame");
+         let instruction = frame.code.instructions[frame.ip];

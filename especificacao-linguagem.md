@@ -12,7 +12,7 @@ Extensao de arquivos: .lep
 ---
 
 Linguagem orientada a iniciantes, com palavras em **português brasileiro**, sintaxe simples e consistente.  
-Todo bloco (`inicio`/`fim` ou `{`/`}`) é uma expressão; seu resultado é o resultado do último comando. Uma expressão nesse lugar fornece seu valor; atribuições e laços fornecem `nada`. Blocos vazios não são aceitos. Atribuições, laços e importações não são expressões gerais. As duas formas são equivalentes; o par de abertura deve combinar com o de fechamento (`inicio` com `fim`, `{` com `}`).
+Todo bloco (`inicio`/`fim` ou `{`/`}`) é uma expressão; seu resultado é o valor da última expressão executada na sequência de comandos do bloco. Atribuições e laços não substituem esse resultado; sem expressão, o resultado é `nada`. Blocos vazios não são aceitos. Atribuições, laços e importações não são expressões gerais. As duas formas são equivalentes; o par de abertura deve combinar com o de fechamento (`inicio` com `fim`, `{` com `}`).
 
 ---
 

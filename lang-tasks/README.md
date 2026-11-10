@@ -2,7 +2,7 @@
 
 The original interpreter review is preserved as tasks **001–033**, one finding per file and in the original order. Tasks **034–043** add the Raspberry Pi Pico 2 work. Numbers identify findings; they are not a mandatory implementation sequence.
 
-The language-preserving AST improvements are now implemented for review as described in [AST-REVIEW.md](AST-REVIEW.md). Individual task statuses distinguish implemented work, partial work, and pending decisions. The shared bytecode-interpreter direction is agreed, but VM implementation must wait for the user to review and explicitly agree to these AST changes. No bytecode backend, JIT, or firmware is implemented in this phase; no commits are created. The later CPU and memory comparison is specified in [the benchmark plan](../benchmarks/README.md).
+The AST phase was committed by the user as `bd654b5`; its historical review is [AST-REVIEW.md](AST-REVIEW.md). The user then approved proceeding with bytecode. The desktop VM is now implemented for review in [BYTECODE-REVIEW.md](BYTECODE-REVIEW.md), with [measured CPU/RSS comparison](../benchmarks/AST-VS-BYTECODE.md). No JIT or Pico firmware is included, and no new commits are created automatically. Individual task statuses still distinguish completed desktop work, partial work, and pending semantic/embedded decisions.
 
 ## Review baseline
 
@@ -31,8 +31,8 @@ Task 036 owns the VM migration; 034–035, 037, and 039–043 define its target 
 
 ## Review and migration sequence
 
-1. Review the AST changes and verification in [AST-REVIEW.md](AST-REVIEW.md), including the remaining scope/semantic decisions. Review and resolve remaining pre-migration prerequisites explicitly; partial tasks are not silently complete.
-2. The user explicitly agrees to proceed with bytecode implementation. Architecture preference alone is not this approval.
+1. AST changes were reviewed and committed as `bd654b5`; see [AST-REVIEW.md](AST-REVIEW.md). Review and resolve remaining pre-migration prerequisites explicitly; partial tasks are not silently complete.
+2. The user explicitly approved bytecode implementation after the AST commit. This gate is satisfied.
 3. Preserve the approved AST source and binary as the comparison reference. The benchmark harness can record a baseline now, but a working-tree sample is not an approved release.
 4. Implement one shared bytecode interpreter (036) with the portable boundary, measured numeric representation, and bounded memory/execution architecture (034–039). Preserve reviewed semantics, including `avalie`.
 5. Establish semantic parity, then compare actual CPU consumption and memory use against the preserved AST reference using [the documented protocol](../benchmarks/README.md). Keep compilation/startup and execution-only results separate.

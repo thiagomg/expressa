@@ -1,0 +1,30 @@
+{
+  "00-baseline": {
+    "source_sha256": "515715d1b3d044cf8f1ec35b7b8423d0c23f06499bcde97be546e307ebca2047",
+    "binary_sha256": "d8e25a0712d8084c6b57bbfb51c9982eee6658d71b62912f155a4b0d019b7f3f",
+    "build": "cargo build -p expressa --release --bin expressa --offline --locked",
+    "archive_sha256": "b8edd7ca9c01f139baa8742c6eeffae8bb537ae8712a53f45569b2ab3fe536d5",
+    "local_artifacts": "target/bytecode-steps/00-baseline",
+    "decision": "initial-reference"
+  },
+  "01-inline-root": {
+    "source_sha256": "5aad53bb661bdd774ca4877ee4b11424a664807b0a83dcf7a4f03307eb677eb1",
+    "binary_sha256": "7c668d8b5938c6deefe83a4249838d0c956f25a5fbd49101d82cf8ef93bee966",
+    "build": "cargo build -p expressa --release --bin expressa --offline --locked",
+    "archive_sha256": "245996bd922210d6beb2a978c436f91962e5d57411263d2afde77fff1424d0b9",
+    "local_artifacts": "target/bytecode-steps/01-inline-root",
+    "decision": "rejected",
+    "patch": "benchmarks/bytecode-steps/01-inline-root.patch",
+    "patch_sha256": "cf3c8316b769a0ad6b6e224b3b2d5e639f75d04ed7e4a0b24e5f3f3dc58b9336"
+  },
+  "02-inline-dispatch": {
+    "source_sha256": "cc8d38a92f0f01acccbf8f056f52186ab25ca60a7dd4af591c627a762d361bd7",
+    "binary_sha256": "ce7bdd7284356f6472e134afb5084370911178cc733f0640d25ed7f98b214864",
+    "build": "cargo build -p expressa --release --bin expressa --offline --locked",
+    "archive_sha256": "45baddb0c6a2ba01c38221b42708721315d0a57b66326c8f9686639de696dc55",
+    "local_artifacts": "target/bytecode-steps/02-inline-dispatch",
+    "decision": "retained-for-review",
+    "patch": "benchmarks/bytecode-steps/02-inline-dispatch.patch",
+    "patch_sha256": "328ac0833b75f2505143b1102ccffc3590913f3a279a2c1aece0801f49ff91c8"
+  }
+}

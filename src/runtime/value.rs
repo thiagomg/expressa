@@ -106,9 +106,14 @@ pub enum MapKey {
     Bool(bool),
 }
 
+pub enum FunctionBody {
+    Ast(Rc<Block>),
+    Bytecode(Rc<super::eval::bytecode::Chunk>),
+}
+
 pub struct Closure {
     pub params: Vec<Param>,
-    pub body: Rc<Block>,
+    pub body: FunctionBody,
     pub env: Rc<RefCell<Env>>,
     pub span: Span,
     /// File that defined the function and its text (errors, debugger).

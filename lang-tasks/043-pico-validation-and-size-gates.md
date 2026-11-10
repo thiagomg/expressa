@@ -1,6 +1,6 @@
 # 043 — Add Pico 2 conformance, resource, and hardware validation
 
-Status: Proposed; awaiting individual review.
+Status: Desktop conformance and CPU/RSS comparison implemented for review; Pico hardware and firmware validation pending.
 
 Priority/type: Pico 2 · validation.
 
@@ -10,7 +10,7 @@ Desktop tests do not establish bare-metal compatibility, memory fit, latency, or
 
 ## Review gate
 
-Do not begin bytecode implementation until the user reviews the AST changes in [AST-REVIEW.md](AST-REVIEW.md) and explicitly agrees to proceed. Preserve the approved AST reference and follow [the CPU/memory comparison protocol](../benchmarks/README.md). Comparison measurements follow a working, semantically equivalent bytecode implementation; none are claimed in this phase.
+The user approved the bytecode migration after committing the AST improvements as `bd654b5`. Desktop conformance and performance results are documented in [BYTECODE-REVIEW.md](BYTECODE-REVIEW.md) and [the comparison report](../benchmarks/AST-VS-BYTECODE.md). No Pico SRAM, flash, latency, or firmware result is inferred from desktop RSS.
 
 ## Proposed direction
 

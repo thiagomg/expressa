@@ -88,7 +88,7 @@ impl Vm<'_, '_> {
         }
     }
 
-    fn index_destination(
+    pub(super) fn index_destination(
         object: Value,
         owner: Destination,
         index: Value,
@@ -109,7 +109,7 @@ impl Vm<'_, '_> {
         }
     }
 
-    fn map_destination(
+    pub(super) fn map_destination(
         &self,
         object: Value,
         field: &str,

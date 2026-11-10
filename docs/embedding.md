@@ -1,17 +1,18 @@
-# Embedding the AST interpreter
+# Embedding Expressa
 
-The current implementation executes the AST. A bytecode backend is planned but is gated on explicit user review and agreement; it is not included in these changes. See [the review record](../lang-tasks/AST-REVIEW.md) and [the later comparison protocol](../benchmarks/README.md).
+Execution defaults to bytecode after the reviewed AST phase. Use `ExecutionOptions::backend = ExecutionBackend::Ast` for the temporary reference interpreter, or select `--backend ast|bytecode` in the CLI (`EXPRESSA_BACKEND` sets the default for CLI/REPL/hosts). Both backends use the same native services and scope rules. See [the current review](../lang-tasks/BYTECODE-REVIEW.md) and [comparison protocol](../benchmarks/README.md).
 
 ## Captured execution with explicit options
 
 Use the re-exported types and functions in `expressa::runtime` rather than depending on the internal evaluator layout:
 
 ```rust
-use expressa::runtime::{ExecutionOptions, run_with_options};
+use expressa::runtime::{ExecutionBackend, ExecutionOptions, run_with_options};
 use std::time::Duration;
 
 fn main() -> Result<(), expressa::runtime::RuntimeError> {
     let options = ExecutionOptions {
+        backend: ExecutionBackend::Bytecode,
         time_limit: Some(Duration::from_secs(2)),
         max_matrix_cells: 4096,
         ..ExecutionOptions::default()
@@ -43,3 +44,9 @@ AST types remain re-exported from `expressa::parser`, while compatibility module
 The existing environment/closure collector is supplemented by conservative collection-only cycle reclamation. Collections are tracked by thread-local weak references; external Rust handles, active evaluator temporaries, and references from environments count as roots. Registry scans are amortized over allocations, and collection runs at execution checkpoints, REPL boundaries, and VM cleanup. Borrowed or oversized graphs are deferred conservatively; this is not the final bounded heap/GC architecture for Pico.
 
 Values containing cycles that outlive an execution remain the host's responsibility until another collection checkpoint runs. The AST runtime still uses dynamically growing host stacks and is not Pico firmware. Task 036 replaces that execution architecture only after review.
+
+## Bytecode representation and current limits
+
+The compiler emits a private in-memory instruction format with constant/name pools, interned source spans, and nested function prototypes. Bytecode closures retain compiled code rather than AST blocks. There is no serialized bytecode file ABI or JIT. `ExecutionOptions` gains the `backend` field; use `..ExecutionOptions::default()` for forwards-compatible option construction. Internally a closure body is now tagged as AST or bytecode.
+
+Ordinary Expressa calls and direct `avalie` calls use explicit VM frames. Binding lookup stays dynamic so evaluation can introduce names visible to already compiled code. The existing call-depth limit remains enforced. Parser/compiler recursion and synchronous native callbacks can still use growing host stacks; portable host separation, a bounded heap, and Pico compilation/hardware tests remain pending. The new engine is not yet a flashable Pico runtime.

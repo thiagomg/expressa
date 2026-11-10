@@ -1,4 +1,6 @@
 mod assignment;
+pub(crate) mod bytecode;
+pub use bytecode::ExecutionBackend;
 mod matrix;
 
 use std::cell::RefCell;
@@ -25,7 +27,8 @@ use super::numero::{Numero, NumeroAritmetica, default_numero_aritmetica, parse_n
 use super::pilha::{PILHA_RESERVA, PILHA_SEGMENTO, PROFUNDIDADE_MAXIMA};
 use super::rng::Rng;
 use super::value::{
-    Closure, ListaRc, MapKey, NumeroLocale, Value, default_numero_locale, format_numero,
+    Closure, FunctionBody, ListaRc, MapKey, NumeroLocale, Value, default_numero_locale,
+    format_numero,
 };
 
 /// Source of lines for `leia()`. Implemented for any [`BufRead`] (tests)
@@ -74,6 +77,7 @@ pub(crate) struct Vm<'a, 'c> {
     pub(crate) workspace_root: Option<PathBuf>,
     deadline: Option<Instant>,
     pub(crate) max_matrix_cells: usize,
+    backend: ExecutionBackend,
     pub(crate) leia_host: Option<&'a mut dyn LeiaHost>,
     pub(crate) cartesiano_host: Option<&'c mut dyn CartesianoHost>,
     pub(crate) cli_cart: CliCartesianoHost,
@@ -118,6 +122,7 @@ pub const DEFAULT_MAX_MATRIX_CELLS: usize = 1_048_576;
 /// Host policy for captured execution. Limits do not change Expressa's numeric types.
 #[derive(Debug, Clone)]
 pub struct ExecutionOptions {
+    pub backend: ExecutionBackend,
     pub workspace_root: Option<PathBuf>,
     /// Cooperative evaluation deadline; parsing and blocking host I/O are not preempted.
     pub time_limit: Option<Duration>,
@@ -128,6 +133,7 @@ pub struct ExecutionOptions {
 impl Default for ExecutionOptions {
     fn default() -> Self {
         Self {
+            backend: bytecode::default_backend(),
             workspace_root: None,
             time_limit: None,
             max_matrix_cells: DEFAULT_MAX_MATRIX_CELLS,
@@ -492,7 +498,8 @@ fn run_configured_with_io<'a, 'c>(
         script_args,
     );
     vm.max_matrix_cells = options.max_matrix_cells;
-    match vm.run(&program) {
+    vm.backend = options.backend;
+    match vm.run(program) {
         Ok(()) => Ok(0),
         Err(EvalError::Quit(code)) => Ok(code),
         Err(EvalError::Return { span, .. }) => Err(RuntimeError {
@@ -556,6 +563,7 @@ impl<'a, 'c> Vm<'a, 'c> {
             workspace_root,
             deadline: time_limit.and_then(|d| Instant::now().checked_add(d)),
             max_matrix_cells: DEFAULT_MAX_MATRIX_CELLS,
+            backend: bytecode::default_backend(),
             leia_host,
             cartesiano_host,
             cli_cart: CliCartesianoHost::new(),
@@ -573,7 +581,7 @@ impl<'a, 'c> Vm<'a, 'c> {
         }
     }
 
-    fn run(&mut self, program: &Program) -> Result<(), EvalError> {
+    fn run(&mut self, program: Program) -> Result<(), EvalError> {
         let env = Env::child(&self.builtins, FrameKind::Module);
         let result = self.eval_program(program, &env);
         drop(env);
@@ -617,18 +625,22 @@ impl<'a, 'c> Vm<'a, 'c> {
         }
     }
 
-    fn eval_program(&mut self, program: &Program, env: &Rc<RefCell<Env>>) -> Result<(), EvalError> {
+    fn eval_program(&mut self, program: Program, env: &Rc<RefCell<Env>>) -> Result<(), EvalError> {
         self.stack.push(CallFrame {
             name: "<modulo>".into(),
             file: self.file.clone(),
             span: program.span,
         });
-        let result = (|| {
-            for item in &program.items {
-                self.eval_item(item, env)?;
-            }
-            Ok(())
-        })();
+        let result = if self.backend == ExecutionBackend::Bytecode {
+            self.execute_module(program, env).map(|_| ())
+        } else {
+            (|| {
+                for item in &program.items {
+                    self.eval_item(item, env)?;
+                }
+                Ok(())
+            })()
+        };
         self.stack.pop();
         self.retorne_so_em_funcao(result)
     }
@@ -659,6 +671,9 @@ impl<'a, 'c> Vm<'a, 'c> {
         items: &[Item],
         env: &Rc<RefCell<Env>>,
     ) -> Result<Value, EvalError> {
+        if self.backend == ExecutionBackend::Bytecode {
+            return self.execute_items(items, env);
+        }
         let mut last = Value::Nada;
         for item in items {
             last = match self.eval_item_value(item, env) {
@@ -744,7 +759,7 @@ impl<'a, 'c> Vm<'a, 'c> {
             self.base_dir = base_dir_of(&self.file);
 
             let module_env = Env::child(&self.builtins, FrameKind::Module);
-            let result = self.eval_program(&program, &module_env);
+            let result = self.eval_program(program, &module_env);
 
             self.file = saved_file;
             self.source = saved_source;
@@ -838,7 +853,13 @@ impl<'a, 'c> Vm<'a, 'c> {
     }
 
     fn report_runtime_error(&mut self, result: &Result<Value, EvalError>, env: &Rc<RefCell<Env>>) {
-        if let Err(EvalError::Runtime(e)) = result {
+        if let Err(error) = result {
+            self.report_eval_error(error, env);
+        }
+    }
+
+    fn report_eval_error(&mut self, error: &EvalError, env: &Rc<RefCell<Env>>) {
+        if let EvalError::Runtime(e) = error {
             // The innermost statement sees the error first, with its
             // variables still in scope: let the debugger show them.
             if self.protected == 0 && !self.error_reported {
@@ -1050,6 +1071,12 @@ impl<'a, 'c> Vm<'a, 'c> {
     /// passes through here, so this is where the Rust stack is grown before
     /// it can overflow — on any thread, in debug or release.
     fn eval_expr(&mut self, expr: &Expr, env: &Rc<RefCell<Env>>) -> Result<Value, EvalError> {
+        #[cfg(test)]
+        assert_eq!(
+            self.backend,
+            ExecutionBackend::Ast,
+            "bytecode must not fall back to AST execution"
+        );
         stacker::maybe_grow(PILHA_RESERVA, PILHA_SEGMENTO, || {
             self.eval_expr_inner(expr, env)
         })
@@ -1090,7 +1117,7 @@ impl<'a, 'c> Vm<'a, 'c> {
                 self.marcar_funcao(env);
                 Ok(Value::Funcao(Rc::new(Closure {
                     params: params.clone(),
-                    body: Rc::clone(body),
+                    body: FunctionBody::Ast(Rc::clone(body)),
                     env: Rc::clone(env),
                     span: *span,
                     file: self.file.clone(),
@@ -1467,7 +1494,12 @@ impl<'a, 'c> Vm<'a, 'c> {
                 // resolve from the running program's folder.
                 let saved_file = std::mem::replace(&mut self.file, closure.file.clone());
                 let saved_source = std::mem::replace(&mut self.source, Rc::clone(&closure.source));
-                let result = self.eval_stmts(&closure.body.stmts, &call_env);
+                let result = match &closure.body {
+                    FunctionBody::Ast(body) => self.eval_stmts(&body.stmts, &call_env),
+                    FunctionBody::Bytecode(code) => {
+                        self.execute_function(Rc::clone(code), &call_env)
+                    }
+                };
                 // Build invalid-control errors before restoring the caller's source.
                 let result = match result {
                     Err(EvalError::Break { span }) => {

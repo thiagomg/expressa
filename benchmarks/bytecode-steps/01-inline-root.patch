@@ -1,0 +1,58 @@
+--- a/src/runtime/eval/bytecode/execute.rs
++++ b/src/runtime/eval/bytecode/execute.rs
+@@ -36,10 +36,36 @@
+         }
+     }
+ }
++// Every frame has one initial scope. Keep it inline so calls without nested
++// blocks do not allocate a separate scope vector.
++struct Scopes {
++    root: Option<Rc<RefCell<Env>>>,
++    nested: Vec<Rc<RefCell<Env>>>,
++}
++impl Scopes {
++    fn new(root: Rc<RefCell<Env>>) -> Self {
++        Self {
++            root: Some(root),
++            nested: vec![],
++        }
++    }
++    fn last(&self) -> Option<&Rc<RefCell<Env>>> {
++        self.nested.last().or(self.root.as_ref())
++    }
++    fn len(&self) -> usize {
++        usize::from(self.root.is_some()) + self.nested.len()
++    }
++    fn push(&mut self, env: Rc<RefCell<Env>>) {
++        self.nested.push(env);
++    }
++    fn pop(&mut self) -> Option<Rc<RefCell<Env>>> {
++        self.nested.pop().or_else(|| self.root.take())
++    }
++}
+ struct Frame {
+     code: Rc<Chunk>,
+     ip: usize,
+-    envs: Vec<Rc<RefCell<Env>>>,
++    envs: Scopes,
+     handlers: Vec<Handler>,
+     loops: Vec<Loop>,
+     kind: FrameKindCode,
+@@ -470,7 +496,7 @@
+         self.frames.push(Frame {
+             code,
+             ip: 0,
+-            envs: vec![env],
++            envs: Scopes::new(env),
+             handlers: vec![],
+             loops: vec![],
+             kind,
+@@ -682,7 +708,7 @@
+             frames: vec![Frame {
+                 code,
+                 ip: 0,
+-                envs: vec![Rc::clone(env)],
++                envs: Scopes::new(Rc::clone(env)),
+                 handlers: vec![],
+                 loops: vec![],
+                 kind,
