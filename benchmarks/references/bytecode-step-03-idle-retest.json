@@ -1,0 +1,61 @@
+{
+  "current": {
+    "commit": "24b11fb1b394b3e06ca3515e51e340db1340f45e",
+    "source_sha256": "25491b28290986bdd5bd2dfd42163be4c196bbcb132ba7383fde12b36217b5e3",
+    "binary_sha256": "7398cae8503a7a2888fff795c9085bc9008ca3338a6a04e02acc0ec45516f6c1",
+    "archive_sha256": "abc9b245a3c47ed2f11c6c1a8a113a0a65140ff8e26d30a7af4c744e5b663322",
+    "local_artifacts": "target/bytecode-steps/03-idle-retest-current",
+    "build": "cargo build -p expressa --release --bin expressa --offline --locked"
+  },
+  "references": {
+    "02-inline-dispatch": {
+      "source_sha256": "cc8d38a92f0f01acccbf8f056f52186ab25ca60a7dd4af591c627a762d361bd7",
+      "binary_sha256": "ce7bdd7284356f6472e134afb5084370911178cc733f0640d25ed7f98b214864",
+      "build": "cargo build -p expressa --release --bin expressa --offline --locked",
+      "archive_sha256": "45baddb0c6a2ba01c38221b42708721315d0a57b66326c8f9686639de696dc55",
+      "local_artifacts": "target/bytecode-steps/02-inline-dispatch",
+      "decision": "retained-for-review",
+      "patch": "benchmarks/bytecode-steps/02-inline-dispatch.patch",
+      "patch_sha256": "328ac0833b75f2505143b1102ccffc3590913f3a279a2c1aece0801f49ff91c8"
+    },
+    "03c-stack-call-path": {
+      "source_sha256": "81ce50ece89ffefc13955e6a3eb7ed657b912341142c08fe0f07b5e0ca71a523",
+      "binary_sha256": "4a9982dfdc42e928dbe4f42103f3c34b9624116c265de8a68af778b0d883e313",
+      "build": "cargo build -p expressa --release --bin expressa --offline --locked",
+      "base_commit": "ed58045523affd7acd32730d58d19a5facf63b89",
+      "archive_sha256": "c1f2b8f17b5e8712a26300132bf7af498e1317ef6641b59573ef94399b1ae271",
+      "local_artifacts": "target/bytecode-steps/03c-stack-call-path",
+      "patch": "benchmarks/bytecode-steps/03c-stack-call-path.patch",
+      "patch_sha256": "73ac671f0ecc9ba2f076ae15012038b35bcf37ba1860557a4ca4f6c3edc61e33",
+      "decision": "retained-for-review",
+      "previous_reference": "02-inline-dispatch"
+    }
+  },
+  "protocol": {
+    "samples": 51,
+    "warmup": 5,
+    "seeds": [
+      10,
+      11
+    ],
+    "cpu_affinity": [
+      0
+    ],
+    "engines": {
+      "vm02": "before argument optimization",
+      "vm03c": "argument optimization, original parser",
+      "current": "argument optimization plus parser fix"
+    },
+    "user_context": "User stated laptop would remain unused during measurement; no other agent compilation/tests run concurrently."
+  },
+  "load_average_before": [
+    2.59130859375,
+    2.384765625,
+    1.76171875
+  ],
+  "load_average_after": [
+    2.43896484375,
+    2.1064453125,
+    1.78076171875
+  ]
+}
