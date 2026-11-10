@@ -11,6 +11,7 @@ mod graf_host;
 mod graf_proto;
 mod imagem;
 mod leia;
+mod letterbox;
 mod nativas;
 mod numero;
 mod pilha;
@@ -34,10 +35,11 @@ pub use eval::{
     run_with_leia_host, run_with_options,
 };
 pub use folha::{CurvaPronta, FolhaPronta, GraficoPronto, pintar};
-pub use graf::{OpGraf, TelaGrafica};
+pub use graf::{OpGraf, TelaGrafica, cor_tela_rgb32};
 pub use graf_host::{CapturaGraf, EventoGraf, GrafHost, NullGraf};
 pub use imagem::Imagem;
 pub use leia::{CLEAR_SCREEN, CURSOR_HOME, LEIA_MARKER, LeiaHost};
+pub use letterbox::{Letterbox, blit_letterbox, letterbox};
 pub use nativas::{
     BuiltinDoc, NATIVAS, Nativa, builtin_docs, docs_agrupados, lookup_alvo, lookup_builtin_doc,
     lookup_ficha, tema_de, titulo_modulo,

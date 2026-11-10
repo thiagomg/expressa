@@ -5,8 +5,8 @@ use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 use std::sync::mpsc::Sender;
 
-use expressa::runtime::{EventoGraf, TelaGrafica};
-use gtk::cairo::{Format, ImageSurface};
+use expressa::runtime::{EventoGraf, TelaGrafica, cor_tela_rgb32, letterbox};
+use gtk::cairo::{Filter, Format, ImageSurface, SurfacePattern};
 use gtk::gdk::Key;
 use gtk::glib;
 use gtk::prelude::*;
@@ -67,17 +67,35 @@ impl Painel {
             let frame = Rc::new(RefCell::new(None::<ImageSurface>));
             {
                 let frame = Rc::clone(&frame);
+                let telas = Rc::clone(&self.telas);
                 area.set_draw_func(move |_, cr, w, h| {
                     if w < 1 || h < 1 {
                         return;
                     }
+                    let paper = telas
+                        .borrow()
+                        .get(&id)
+                        .map(|t| cor_tela_rgb32(&t.fundo))
+                        .unwrap_or(0x00FFFFFF);
+                    cr.set_source_rgb(
+                        ((paper >> 16) & 0xff) as f64 / 255.0,
+                        ((paper >> 8) & 0xff) as f64 / 255.0,
+                        (paper & 0xff) as f64 / 255.0,
+                    );
+                    let _ = cr.paint();
                     let frame = frame.borrow();
                     let Some(surf) = frame.as_ref() else { return };
                     let tw = surf.width().max(1) as f64;
                     let th = surf.height().max(1) as f64;
+                    let lb = letterbox(w as f64, h as f64, tw, th);
                     cr.save().ok();
-                    cr.scale(w as f64 / tw, h as f64 / th);
-                    cr.set_source_surface(surf, 0.0, 0.0).ok();
+                    cr.rectangle(lb.x, lb.y, lb.width, lb.height);
+                    cr.clip();
+                    cr.translate(lb.x, lb.y);
+                    cr.scale(lb.width / tw, lb.height / th);
+                    let pattern = SurfacePattern::create(surf);
+                    pattern.set_filter(Filter::Nearest);
+                    cr.set_source(pattern).ok();
                     let _ = cr.paint();
                     cr.restore().ok();
                 });
@@ -101,18 +119,16 @@ impl Painel {
                     if w < 1.0 || h < 1.0 {
                         return;
                     }
-                    let px = (x / w * tw).floor() as i32;
-                    let py = (y / h * th).floor() as i32;
+                    let lb = letterbox(w, h, tw, th);
+                    let Some((px, py)) = lb.canvas_pixel(x, y, tw, th) else {
+                        return;
+                    };
                     let botao = match g.current_button() {
                         3 => "direito",
                         2 => "meio",
                         _ => "esquerdo",
                     };
-                    painel.emita(EventoGraf::clique(
-                        px.clamp(0, tw as i32 - 1),
-                        py.clamp(0, th as i32 - 1),
-                        botao,
-                    ));
+                    painel.emita(EventoGraf::clique(px, py, botao));
                 });
             }
             area.add_controller(click);

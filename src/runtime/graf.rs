@@ -318,6 +318,10 @@ pub fn cor_graf_conhecida(nome: &str) -> bool {
     )
 }
 
+pub fn cor_tela_rgb32(nome: &str) -> u32 {
+    rgb32_de_nome(nome)
+}
+
 fn rgb32_de_nome(nome: &str) -> u32 {
     match nome {
         "branco" | "transparente" => 0x00FFFFFF,
