@@ -40,13 +40,14 @@ O painel conserva até 5000 linhas e 262144 caracteres, removendo o texto mais a
 
 ## Computadores antigos
 
-A IDE é usada em laboratórios com PCs fracos (Intel Core 2 Duo e semelhantes). Use um binário de *release*, não o de depuração. O `cargo build --release` (e o `.deb`) é o padrão, mais rápido de compilar. Para extrair mais desempenho nessas máquinas:
+A IDE é usada em laboratórios com PCs fracos (Intel Core 2 Duo e semelhantes). Use um binário de *release*, não o de depuração. O `cargo build --release` é o padrão, mais rápido de compilar. Os pacotes da pipeline (Actions → Build packages) usam `--profile release-lto`. Para gerar o mesmo localmente:
 
 ```bash
 cargo build -p expressa-aula --profile release-lto
+CARGO_PROFILE=release-lto ./empacotar-deb.sh
 ```
 
-O binário sai em `target/release-lto/`. No `.deb`: `CARGO_PROFILE=release-lto ./empacotar-deb.sh`.
+O binário sai em `target/release-lto/`.
 
 Nessas máquinas a Aula escolhe sozinha o desenho em software do GTK (`GSK_RENDERER=cairo`) quando há no máximo dois núcleos e a CPU não tem AVX. Para forçar: `GSK_RENDERER=cairo expressa-aula`. Para o acelerador padrão do GTK: `GSK_RENDERER=ngl expressa-aula`.
 

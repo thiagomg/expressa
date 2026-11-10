@@ -8,6 +8,8 @@
 #
 # Os pacotes saem em dist/expressa_<versão>-1~ubuntu<YY.MM>_<arch>.deb
 # Cada Ubuntu usa um volume de target próprio (glibc/GTK diferentes).
+# Compila com cargo --release, ou CARGO_PROFILE=release-lto (a pipeline
+# do GitHub usa release-lto).
 set -eu
 
 ROOT="$(CDPATH= cd -- "$(dirname "$0")" && pwd)"
