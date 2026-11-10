@@ -26,5 +26,41 @@
     "decision": "retained-for-review",
     "patch": "benchmarks/bytecode-steps/02-inline-dispatch.patch",
     "patch_sha256": "328ac0833b75f2505143b1102ccffc3590913f3a279a2c1aece0801f49ff91c8"
+  },
+  "03-stack-arguments": {
+    "source_sha256": "c558d7ccd210f156cd63a9da7cd63c0613093db60e3b4dea249d65e994136719",
+    "binary_sha256": "fef1542bb7ec1728a32650987495adb34c8b00376e9eeea45fafb7426d59c5e6",
+    "build": "cargo build -p expressa --release --bin expressa --offline --locked",
+    "base_commit": "ed58045523affd7acd32730d58d19a5facf63b89",
+    "archive_sha256": "3bc7707593d11b6badb86402e9fdc91afd70346e59b7372371a49cb858dc69c5",
+    "local_artifacts": "target/bytecode-steps/03-stack-arguments",
+    "patch": "benchmarks/bytecode-steps/03-stack-arguments.patch",
+    "patch_sha256": "7b59d8ee140569cf84233226c6804f9d9a1632ec51b37d9b6280e95754a59aea",
+    "decision": "rejected",
+    "previous_reference": "02-inline-dispatch"
+  },
+  "03b-stack-arguments-no-shift": {
+    "source_sha256": "c1755a45864bc12b24fea4ba6e9f4d41fc55cdc7ac89b2f41e8cc323ec4350dd",
+    "binary_sha256": "b92f56eaa4c3dd02a10980a95f5fcde1a8db8388c73d5bba9ba79e8155b6a31a",
+    "build": "cargo build -p expressa --release --bin expressa --offline --locked",
+    "base_commit": "ed58045523affd7acd32730d58d19a5facf63b89",
+    "archive_sha256": "7874f17c86f34707cbe82ecd9d22040328caf995988097e7651bdb1dbe5fab3d",
+    "local_artifacts": "target/bytecode-steps/03b-stack-arguments-no-shift",
+    "patch": "benchmarks/bytecode-steps/03b-stack-arguments-no-shift.patch",
+    "patch_sha256": "024833068d08edce52940d0b71b61d9a2b65f90a1a8eaa9c8999c4fed3d6d6e5",
+    "decision": "rejected",
+    "previous_reference": "02-inline-dispatch"
+  },
+  "03c-stack-call-path": {
+    "source_sha256": "81ce50ece89ffefc13955e6a3eb7ed657b912341142c08fe0f07b5e0ca71a523",
+    "binary_sha256": "4a9982dfdc42e928dbe4f42103f3c34b9624116c265de8a68af778b0d883e313",
+    "build": "cargo build -p expressa --release --bin expressa --offline --locked",
+    "base_commit": "ed58045523affd7acd32730d58d19a5facf63b89",
+    "archive_sha256": "c1f2b8f17b5e8712a26300132bf7af498e1317ef6641b59573ef94399b1ae271",
+    "local_artifacts": "target/bytecode-steps/03c-stack-call-path",
+    "patch": "benchmarks/bytecode-steps/03c-stack-call-path.patch",
+    "patch_sha256": "73ac671f0ecc9ba2f076ae15012038b35bcf37ba1860557a4ca4f6c3edc61e33",
+    "decision": "retained-for-review",
+    "previous_reference": "02-inline-dispatch"
   }
 }

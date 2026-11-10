@@ -1,0 +1,36 @@
+// Programa de lista de coisas para fazer
+importe "tela"
+importe "menu"
+
+como_texto = funcao(t) {
+    comp = se t:completo == verdadeiro { "X" } senao { " " }
+    formate("[{}] {}", comp, t:desc)
+}
+
+nova = função(desc, completo) {
+    mapa([
+        :desc -> desc,
+        :completo -> completo,
+        :_como_texto -> como_texto,
+    ])
+}
+
+mostre = função(ts) {
+    escreva("Tarefas")
+    escreva("=======")
+    para t em ts {
+        escreva(t)
+    }
+}
+
+tarefas = [
+nova("Dormir", falso),
+nova("Acordar", falso),
+nova("Trabalhar", verdadeiro)
+]
+
+mostre(tarefas)
+op = le_opção()
+
+
+// TODO: Seria legal ter algo que eu poderia selecionar opções

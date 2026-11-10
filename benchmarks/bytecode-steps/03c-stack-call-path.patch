@@ -1,0 +1,224 @@
+diff --git a/src/runtime/eval/bytecode/execute.rs b/src/runtime/eval/bytecode/execute.rs
+index 05e4c6f..1f88fce 100644
+--- a/src/runtime/eval/bytecode/execute.rs
++++ b/src/runtime/eval/bytecode/execute.rs
+@@ -70,6 +70,7 @@ struct Machine {
+ enum Step {
+     Next,
+     Call(Value, Vec<Value>, String, Span),
++    CallStack(usize, String, Span),
+     Finish(Value),
+ }
+ 
+@@ -214,7 +215,14 @@ impl Machine {
+                 })));
+             }
+             Op::Call { argc, name } => {
+-                let args = self.values.split_off(self.values.len() - argc as usize);
++                let argc = argc as usize;
++                let callee = self.values.len() - argc - 1;
++                if matches!(&self.values[callee], Value::Funcao(closure)
++                    if matches!(closure.body, FunctionBody::Bytecode(_)))
++                {
++                    return Ok(Step::CallStack(argc, name!(name).clone(), span));
++                }
++                let args = self.values.split_off(self.values.len() - argc);
+                 let function = pop!();
+                 return Ok(Step::Call(function, args, name!(name).clone(), span));
+             }
+@@ -495,6 +503,57 @@ impl Machine {
+             vm.stack.pop();
+         }
+     }
++    fn call_stack(
++        &mut self,
++        vm: &mut Vm<'_, '_>,
++        argc: usize,
++        name: String,
++        span: Span,
++    ) -> Result<(), EvalError> {
++        let args_start = self.values.len() - argc;
++        let stack_base = args_start - 1;
++        // Keep a placeholder until arguments have been drained, avoiding a move
++        // of every argument merely to remove the callee below them.
++        let Value::Funcao(closure) = std::mem::replace(&mut self.values[stack_base], Value::Nada)
++        else {
++            unreachable!("bytecode call dispatch")
++        };
++        if argc != closure.params.len() {
++            let error = vm.err(
++                format!(
++                    "`{name}` espera {} argumento(s), recebeu {}",
++                    closure.params.len(),
++                    argc
++                ),
++                span,
++            );
++            self.values.truncate(stack_base);
++            return Err(error);
++        }
++        if let Err(error) = vm.check_profundidade(span) {
++            self.values.truncate(stack_base);
++            return Err(error);
++        }
++        let env = Env::child(&closure.env, FrameKind::Function);
++        for (param, arg) in closure.params.iter().zip(self.values.drain(args_start..)) {
++            env.borrow_mut().define(param.name.clone(), arg);
++        }
++        self.values.truncate(stack_base);
++        let FunctionBody::Bytecode(code) = &closure.body else {
++            unreachable!("bytecode call dispatch")
++        };
++        self.push(
++            vm,
++            Rc::clone(code),
++            env,
++            FrameKindCode::Function,
++            closure.file.clone(),
++            Rc::clone(&closure.source),
++            name,
++            span,
++        );
++        Ok(())
++    }
+     fn call(
+         &mut self,
+         vm: &mut Vm<'_, '_>,
+@@ -504,36 +563,6 @@ impl Machine {
+         span: Span,
+     ) -> Result<(), EvalError> {
+         match &function {
+-            Value::Funcao(closure) if matches!(closure.body, FunctionBody::Bytecode(_)) => {
+-                if args.len() != closure.params.len() {
+-                    return Err(vm.err(
+-                        format!(
+-                            "`{name}` espera {} argumento(s), recebeu {}",
+-                            closure.params.len(),
+-                            args.len()
+-                        ),
+-                        span,
+-                    ));
+-                }
+-                vm.check_profundidade(span)?;
+-                let env = Env::child(&closure.env, FrameKind::Function);
+-                for (param, arg) in closure.params.iter().zip(args) {
+-                    env.borrow_mut().define(param.name.clone(), arg);
+-                }
+-                let FunctionBody::Bytecode(code) = &closure.body else {
+-                    unreachable!()
+-                };
+-                self.push(
+-                    vm,
+-                    Rc::clone(code),
+-                    env,
+-                    FrameKindCode::Function,
+-                    closure.file.clone(),
+-                    Rc::clone(&closure.source),
+-                    name,
+-                    span,
+-                );
+-            }
+             Value::Builtin("avalie") => {
+                 vm.expect_arity(&args, 1, span)?;
+                 let source = vm.expect_texto(&args[0], span)?;
+@@ -643,6 +672,11 @@ impl Machine {
+             let step = self.step(vm);
+             match step {
+                 Ok(Step::Next) => {}
++                Ok(Step::CallStack(argc, name, span)) => {
++                    if let Err(error) = self.call_stack(vm, argc, name, span) {
++                        self.signal(vm, error)?;
++                    }
++                }
+                 Ok(Step::Call(function, args, name, span)) => {
+                     if let Err(error) = self.call(vm, function, args, name, span) {
+                         self.signal(vm, error)?;
+diff --git a/tests/bytecode_conformance.rs b/tests/bytecode_conformance.rs
+index c59eb11..339262a 100644
+--- a/tests/bytecode_conformance.rs
++++ b/tests/bytecode_conformance.rs
+@@ -39,6 +39,28 @@ fn equivalent(source: &str) {
+     }
+ }
+ 
++#[test]
++fn stack_arguments_preserve_order_results_and_error_recovery() {
++    for source in [
++        "f = funcao() { 7 }\nescreva(10 + f())",
++        "f = funcao(a, b, c) { [a, b, c] }\nescreva(f(1, 2, 3))",
++        "f = funcao(a, b) { a * 10 + b }\nescreva(100 + f(f(1, 2), f(3, 4)))",
++        "make = funcao(n) { funcao(a, b) { n + a + b } }\nescreva(make(10)(2, 3))",
++        "f = funcao(a, b) { [a, b] }\nescreva(f({ escreva(1) 10 }, { escreva(2) 20 }))",
++        "f = funcao(a, b) { a + b }\nescreva(f({ escreva(1) 1 / 0 }, { escreva(2) 2 }) se_falhar 9)\nescreva(f(3, 4))",
++        "f = funcao(a) { a }\nescreva(f({ escreva(1) 1 }, { escreva(2) 2 }) se_falhar 9)\nescreva(f(3))",
++        "f = funcao(a) { a }\nescreva(f() se_falhar 9)\nescreva(f(3))",
++        "f = funcao(a) { 1 / 0 }\nescreva(10 + (f([1, 2]) se_falhar 3))",
++        "f = funcao(a) { a }\nescreva(f(avalie(\"2 + 3\")))\nescreva(avalie(\"f(7)\"))",
++        "escreva(42(1, 2) se_falhar 9)",
++        "f = funcao(a, b) { a }\nf(1)",
++        "f = funcao(a) { a }\nf(1, 2)",
++        "f = funcao(a) { a }\nxs = [1]\nescreva(f(xs) == xs)",
++    ] {
++        equivalent(source);
++    }
++}
++
+ #[test]
+ fn expression_and_statement_value_rules_match() {
+     for source in [
+@@ -133,6 +155,55 @@ fn recursion_uses_vm_frames_and_still_obeys_the_language_limit() {
+     )
+     .unwrap();
+     assert_eq!(result.stdout, "depth\n");
++    let result = outcome(
++        "f = funcao(n) { f(n) }\nescreva(f(1) se_falhar \"depth\")",
++        ExecutionBackend::Bytecode,
++    )
++    .unwrap();
++    assert_eq!(result.stdout, "depth\n");
++}
++
++#[cfg(unix)]
++#[test]
++fn stack_arguments_release_processes_on_return_and_arity_error() {
++    struct Temp(std::path::PathBuf);
++    impl Drop for Temp {
++        fn drop(&mut self) {
++            let _ = std::fs::remove_dir_all(&self.0);
++        }
++    }
++    let temp = Temp(std::env::temp_dir().join(format!(
++        "expressa-bytecode-argument-cleanup-{}",
++        std::process::id()
++    )));
++    std::fs::create_dir_all(&temp.0).unwrap();
++    for backend in [ExecutionBackend::Ast, ExecutionBackend::Bytecode] {
++        for (index, (body, expected)) in [
++            ("f = funcao(p) { 0 }\nf(ARG)", false),
++            ("f = funcao() { 0 }\nf(ARG) se_falhar 0", false),
++            ("f = funcao(p) { funcao() { p } }\ng = f(ARG)", true),
++        ]
++        .into_iter()
++        .enumerate()
++        {
++            let marker = temp.0.join(format!("{backend:?}-{index}"));
++            let argument = format!(
++                "proc::linhas_de([\"sh\", \"-c\", \"sleep 0.05; touch \\\"$1\\\"\", \"sh\", {:?}])",
++                marker.to_str().unwrap()
++            );
++            let body = body.replace("ARG", &argument);
++            let source = format!(
++                "proc = importe \"processo\"\na = importe \"arquivo\"\n{body}\ndurma(0.2)\nescreva(a::existe({:?}))",
++                marker.to_str().unwrap()
++            );
++            let output = outcome(&source, backend).unwrap();
++            assert_eq!(
++                output.stdout,
++                if expected { "verdadeiro\n" } else { "falso\n" },
++                "{backend:?}: {source}"
++            );
++        }
++    }
+ }
+ 
+ #[test]

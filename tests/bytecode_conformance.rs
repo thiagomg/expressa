@@ -40,6 +40,52 @@ fn equivalent(source: &str) {
 }
 
 #[test]
+fn list_after_assignment_is_a_separate_block_result() {
+    let source = r#"
+serialize_data = funcao(dt) { dt }
+serialize = funcao(tarefa) {
+    c = se tarefa:completo { "S" } senao { "N" }
+    dt = serialize_data(tarefa:data)
+    [c, dt, tarefa:desc]
+}
+tarefa = mapa([:completo -> verdadeiro, :data -> "2026-11-09", :desc -> "Dormir"])
+escreva(serialize(tarefa))
+escreva(serialize(tarefa)[
+    0
+])
+"#;
+    for backend in [ExecutionBackend::Ast, ExecutionBackend::Bytecode] {
+        assert_eq!(
+            outcome(source, backend).unwrap().stdout,
+            "[\"S\", \"2026-11-09\", \"Dormir\"]\nS\n",
+            "{backend:?}"
+        );
+    }
+}
+
+#[test]
+fn stack_arguments_preserve_order_results_and_error_recovery() {
+    for source in [
+        "f = funcao() { 7 }\nescreva(10 + f())",
+        "f = funcao(a, b, c) { [a, b, c] }\nescreva(f(1, 2, 3))",
+        "f = funcao(a, b) { a * 10 + b }\nescreva(100 + f(f(1, 2), f(3, 4)))",
+        "make = funcao(n) { funcao(a, b) { n + a + b } }\nescreva(make(10)(2, 3))",
+        "f = funcao(a, b) { [a, b] }\nescreva(f({ escreva(1) 10 }, { escreva(2) 20 }))",
+        "f = funcao(a, b) { a + b }\nescreva(f({ escreva(1) 1 / 0 }, { escreva(2) 2 }) se_falhar 9)\nescreva(f(3, 4))",
+        "f = funcao(a) { a }\nescreva(f({ escreva(1) 1 }, { escreva(2) 2 }) se_falhar 9)\nescreva(f(3))",
+        "f = funcao(a) { a }\nescreva(f() se_falhar 9)\nescreva(f(3))",
+        "f = funcao(a) { 1 / 0 }\nescreva(10 + (f([1, 2]) se_falhar 3))",
+        "f = funcao(a) { a }\nescreva(f(avalie(\"2 + 3\")))\nescreva(avalie(\"f(7)\"))",
+        "escreva(42(1, 2) se_falhar 9)",
+        "f = funcao(a, b) { a }\nf(1)",
+        "f = funcao(a) { a }\nf(1, 2)",
+        "f = funcao(a) { a }\nxs = [1]\nescreva(f(xs) == xs)",
+    ] {
+        equivalent(source);
+    }
+}
+
+#[test]
 fn expression_and_statement_value_rules_match() {
     for source in [
         "f = funcao() { 10 x = 2 }\nescreva(f())",
@@ -133,6 +179,55 @@ fn recursion_uses_vm_frames_and_still_obeys_the_language_limit() {
     )
     .unwrap();
     assert_eq!(result.stdout, "depth\n");
+    let result = outcome(
+        "f = funcao(n) { f(n) }\nescreva(f(1) se_falhar \"depth\")",
+        ExecutionBackend::Bytecode,
+    )
+    .unwrap();
+    assert_eq!(result.stdout, "depth\n");
+}
+
+#[cfg(unix)]
+#[test]
+fn stack_arguments_release_processes_on_return_and_arity_error() {
+    struct Temp(std::path::PathBuf);
+    impl Drop for Temp {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+    let temp = Temp(std::env::temp_dir().join(format!(
+        "expressa-bytecode-argument-cleanup-{}",
+        std::process::id()
+    )));
+    std::fs::create_dir_all(&temp.0).unwrap();
+    for backend in [ExecutionBackend::Ast, ExecutionBackend::Bytecode] {
+        for (index, (body, expected)) in [
+            ("f = funcao(p) { 0 }\nf(ARG)", false),
+            ("f = funcao() { 0 }\nf(ARG) se_falhar 0", false),
+            ("f = funcao(p) { funcao() { p } }\ng = f(ARG)", true),
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            let marker = temp.0.join(format!("{backend:?}-{index}"));
+            let argument = format!(
+                "proc::linhas_de([\"sh\", \"-c\", \"sleep 0.05; touch \\\"$1\\\"\", \"sh\", {:?}])",
+                marker.to_str().unwrap()
+            );
+            let body = body.replace("ARG", &argument);
+            let source = format!(
+                "proc = importe \"processo\"\na = importe \"arquivo\"\n{body}\ndurma(0.2)\nescreva(a::existe({:?}))",
+                marker.to_str().unwrap()
+            );
+            let output = outcome(&source, backend).unwrap();
+            assert_eq!(
+                output.stdout,
+                if expected { "verdadeiro\n" } else { "falso\n" },
+                "{backend:?}: {source}"
+            );
+        }
+    }
 }
 
 #[test]

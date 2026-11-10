@@ -1,0 +1,66 @@
+importe "tela"
+
+fmt_opcao = funcao(op) {
+    formate("{}{}", op[0].pinte(:ciano).negrito(), op[1..])
+}
+
+linha_opcoes = funcao(opcoes) {
+    ops = []
+    para opcao em opcoes {
+        ops += [ fmt_opcao(opcao) ]
+    }
+    ops.junte(", ")
+}
+
+le_opção = funcao(opcoes) {    
+    escreva(linha_opcoes(opcoes))
+    enquanto verdadeiro {
+        pos = posicao_cursor()
+        op = leia("Opção: ").maiuscula()
+        para opcao em opcoes {
+            se op == opcao[0] {
+                retorne op
+            }
+        }
+        escreva("Opção inválida. Tente novamente".pinte(:vermelho))
+        posicao_cursor(pos)
+        apague_linha()
+    }
+    op
+}
+
+le_novo = funcao() {
+    escreva("Digite a nova tarefa ou pressione enter para voltar")
+    leia("Tarefa: ")
+}
+
+le_posicao = função(min, max) {
+    enquanto verdadeiro {
+        pos = posicao_cursor()
+        op = leia("Posição: ")
+        se op.tamanho() == 0 {
+            retorne falso
+        }
+        
+        idx = op.numero() se_falhar falso
+        se idx == falso {
+            escreva("Posição inválida. Tente novamente".pinte(:vermelho))
+        } ou se idx >= min e idx <= max { 
+            retorne idx
+        } senão {
+            escreva(formate("Posição inválida. O valor deve ser entre {} e {}", min, max).pinte(:vermelho))
+        }
+        posicao_cursor(pos)
+        apague_linha()            
+    }
+}
+
+le_completa = funcao(min, max) {
+    escreva("Qual posição você quer completar? Enter para voltar")
+    le_posicao(min, max)
+}
+
+le_remova = funcao(min, max) {
+    escreva("Qual posição você quer remover? Enter para voltar")
+    le_posicao(min, max)
+}

@@ -12,7 +12,7 @@ use crate::parser::statement_types::{AssignTarget, Stmt};
 /// Parse Expressa source into a [`Program`] AST.
 pub fn parse(source: &str) -> Result<Program, ParseError> {
     let tokens = tokenize(source)?;
-    let mut parser = Parser::new(tokens);
+    let mut parser = Parser::new(tokens, source);
     let program = parser.parse_program()?;
     crate::parser::se_value::check_se_value(&program)?;
     Ok(program)
@@ -27,7 +27,8 @@ const PROFUNDIDADE_MAXIMA: usize = 1000;
 const PILHA_RESERVA: usize = 128 * 1024;
 const PILHA_SEGMENTO: usize = 2 * 1024 * 1024;
 
-struct Parser {
+struct Parser<'a> {
+    source: &'a str,
     tokens: Vec<Token>,
     pos: usize,
     /// `obj:campo` postfix, only when `:` is on the same line.
@@ -38,9 +39,10 @@ struct Parser {
     profundidade: usize,
 }
 
-impl Parser {
-    fn new(tokens: Vec<Token>) -> Self {
+impl<'a> Parser<'a> {
+    fn new(tokens: Vec<Token>, source: &'a str) -> Self {
         Self {
+            source,
             tokens,
             pos: 0,
             allow_colon_field: true,
@@ -87,12 +89,13 @@ impl Parser {
         &self.peek().kind
     }
 
-    /// `pessoa:nome` only when `:` sits on the same line as the previous token.
-    fn colon_on_same_line(&self) -> bool {
+    /// Whether a postfix opener sits on the same line as the previous token.
+    fn on_same_line_as_previous(&self) -> bool {
         if self.pos == 0 {
             return true;
         }
-        self.peek().span.line == self.tokens[self.pos - 1].span.line
+        let previous_end = self.tokens[self.pos - 1].span.end;
+        !self.source.as_bytes()[previous_end..self.peek().span.start].contains(&b'\n')
     }
 
     fn at_eof(&self) -> bool {
@@ -564,6 +567,12 @@ impl Parser {
     fn parse_postfix_inner(&mut self) -> Result<Expr, ParseError> {
         let mut lhs = self.parse_primary()?;
         loop {
+            // A list on the next line starts another expression, rather than
+            // indexing the previous statement's result. Bracket contents may
+            // still span multiple lines once the opener has been consumed.
+            if matches!(self.peek_kind(), TokenKind::LBracket) && !self.on_same_line_as_previous() {
+                break;
+            }
             if matches!(
                 self.peek_kind(),
                 TokenKind::LParen
@@ -580,7 +589,7 @@ impl Parser {
                 TokenKind::ColonColon => lhs = self.finish_module_field(lhs)?,
                 TokenKind::Colon
                     if self.allow_colon_field
-                        && self.colon_on_same_line()
+                        && self.on_same_line_as_previous()
                         && map_field_receiver(&lhs) =>
                 {
                     lhs = self.finish_map_field(lhs)?;
@@ -1291,6 +1300,76 @@ mod tests {
         assert!(err.message.contains("fim"), "{err}");
         let err = parse("{ 1 fim").unwrap_err();
         assert!(err.message.contains("'}'"), "{err}");
+    }
+
+    #[test]
+    fn list_on_next_line_does_not_index_previous_expression() {
+        for source in [
+            "dt = format_date(tarefa:data)\n[c, dt, tarefa:desc]",
+            "dt = format_date(tarefa:data) // comment\n[c, dt, tarefa:desc]",
+            "dt = format_date(tarefa:data)\n/* comment */ [c, dt, tarefa:desc]",
+            "dt = format_date(tarefa:data) /*\ncomment */ [c, dt, tarefa:desc]",
+        ] {
+            let program = parse_ok(source);
+            assert_eq!(program.items.len(), 2, "{source}");
+            assert!(matches!(
+                &program.items[0],
+                Item::Stmt(Stmt::Assign {
+                    value: Expr::Call { .. },
+                    ..
+                })
+            ));
+            assert!(matches!(
+                &program.items[1],
+                Item::Stmt(Stmt::Expr { expr: Expr::List { elements, .. }, .. })
+                    if elements.len() == 3
+            ));
+        }
+        for source in [
+            "1\n[2]",
+            "xs[0]\n[]",
+            "[1]\n[2]",
+            "f()\n[1, 2]",
+            "f()\r\n[1, 2]",
+        ] {
+            assert_eq!(parse_ok(source).items.len(), 2, "{source}");
+        }
+    }
+
+    #[test]
+    fn same_line_indexing_keeps_multiline_contents_and_chaining() {
+        for source in [
+            "f()[0]",
+            "f()[\n0\n]",
+            "f(/* comment */)[0]",
+            "xs /* comment */ [0]",
+            "\"a\nb\"[0]",
+        ] {
+            assert!(
+                matches!(expr_stmt(&parse_ok(source)), Expr::Index { .. }),
+                "{source}"
+            );
+        }
+        assert!(matches!(
+            expr_stmt(&parse_ok("xs[\n0,\n1\n]")),
+            Expr::Index2 { .. }
+        ));
+        assert!(matches!(
+            expr_stmt(&parse_ok("xs[\n0..\n]")),
+            Expr::Slice { .. }
+        ));
+        assert!(matches!(
+            expr_stmt(&parse_ok("f(\n[1,\n2]\n)[0]")),
+            Expr::Index { .. }
+        ));
+        assert!(matches!(
+            expr_stmt(&parse_ok("xs\n.tamanho()")),
+            Expr::Call { .. }
+        ));
+        assert!(matches!(
+            expr_stmt(&parse_ok("1 +\n2")),
+            Expr::Binary { .. }
+        ));
     }
 
     #[test]

@@ -70,6 +70,7 @@ struct Machine {
 enum Step {
     Next,
     Call(Value, Vec<Value>, String, Span),
+    CallStack(usize, String, Span),
     Finish(Value),
 }
 
@@ -214,7 +215,14 @@ impl Machine {
                 })));
             }
             Op::Call { argc, name } => {
-                let args = self.values.split_off(self.values.len() - argc as usize);
+                let argc = argc as usize;
+                let callee = self.values.len() - argc - 1;
+                if matches!(&self.values[callee], Value::Funcao(closure)
+                    if matches!(closure.body, FunctionBody::Bytecode(_)))
+                {
+                    return Ok(Step::CallStack(argc, name!(name).clone(), span));
+                }
+                let args = self.values.split_off(self.values.len() - argc);
                 let function = pop!();
                 return Ok(Step::Call(function, args, name!(name).clone(), span));
             }
@@ -495,6 +503,57 @@ impl Machine {
             vm.stack.pop();
         }
     }
+    fn call_stack(
+        &mut self,
+        vm: &mut Vm<'_, '_>,
+        argc: usize,
+        name: String,
+        span: Span,
+    ) -> Result<(), EvalError> {
+        let args_start = self.values.len() - argc;
+        let stack_base = args_start - 1;
+        // Keep a placeholder until arguments have been drained, avoiding a move
+        // of every argument merely to remove the callee below them.
+        let Value::Funcao(closure) = std::mem::replace(&mut self.values[stack_base], Value::Nada)
+        else {
+            unreachable!("bytecode call dispatch")
+        };
+        if argc != closure.params.len() {
+            let error = vm.err(
+                format!(
+                    "`{name}` espera {} argumento(s), recebeu {}",
+                    closure.params.len(),
+                    argc
+                ),
+                span,
+            );
+            self.values.truncate(stack_base);
+            return Err(error);
+        }
+        if let Err(error) = vm.check_profundidade(span) {
+            self.values.truncate(stack_base);
+            return Err(error);
+        }
+        let env = Env::child(&closure.env, FrameKind::Function);
+        for (param, arg) in closure.params.iter().zip(self.values.drain(args_start..)) {
+            env.borrow_mut().define(param.name.clone(), arg);
+        }
+        self.values.truncate(stack_base);
+        let FunctionBody::Bytecode(code) = &closure.body else {
+            unreachable!("bytecode call dispatch")
+        };
+        self.push(
+            vm,
+            Rc::clone(code),
+            env,
+            FrameKindCode::Function,
+            closure.file.clone(),
+            Rc::clone(&closure.source),
+            name,
+            span,
+        );
+        Ok(())
+    }
     fn call(
         &mut self,
         vm: &mut Vm<'_, '_>,
@@ -504,36 +563,6 @@ impl Machine {
         span: Span,
     ) -> Result<(), EvalError> {
         match &function {
-            Value::Funcao(closure) if matches!(closure.body, FunctionBody::Bytecode(_)) => {
-                if args.len() != closure.params.len() {
-                    return Err(vm.err(
-                        format!(
-                            "`{name}` espera {} argumento(s), recebeu {}",
-                            closure.params.len(),
-                            args.len()
-                        ),
-                        span,
-                    ));
-                }
-                vm.check_profundidade(span)?;
-                let env = Env::child(&closure.env, FrameKind::Function);
-                for (param, arg) in closure.params.iter().zip(args) {
-                    env.borrow_mut().define(param.name.clone(), arg);
-                }
-                let FunctionBody::Bytecode(code) = &closure.body else {
-                    unreachable!()
-                };
-                self.push(
-                    vm,
-                    Rc::clone(code),
-                    env,
-                    FrameKindCode::Function,
-                    closure.file.clone(),
-                    Rc::clone(&closure.source),
-                    name,
-                    span,
-                );
-            }
             Value::Builtin("avalie") => {
                 vm.expect_arity(&args, 1, span)?;
                 let source = vm.expect_texto(&args[0], span)?;
@@ -643,6 +672,11 @@ impl Machine {
             let step = self.step(vm);
             match step {
                 Ok(Step::Next) => {}
+                Ok(Step::CallStack(argc, name, span)) => {
+                    if let Err(error) = self.call_stack(vm, argc, name, span) {
+                        self.signal(vm, error)?;
+                    }
+                }
                 Ok(Step::Call(function, args, name, span)) => {
                     if let Err(error) = self.call(vm, function, args, name, span) {
                         self.signal(vm, error)?;

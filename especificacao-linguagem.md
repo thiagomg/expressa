@@ -254,6 +254,8 @@ x = se n >= 7 { "ok" } senao { "não" }     // ok
 - Indexação começa em **0**
 - Criação: `[1, 2, 3]`
 
+O `[` de indexação ou fatia deve começar na mesma linha em que termina o receptor: `numeros[0]` ou `obtenha_lista()[0]`. Um `[` em outra linha inicia uma nova lista, não uma indexação da expressão anterior. O conteúdo entre colchetes pode ocupar várias linhas, como `numeros[` seguido pelo índice e pelo fechamento nas linhas seguintes. A regra também vale para textos e indexação de matrizes.
+
 ```text
 numeros = [10, 20, 30, 40]
 

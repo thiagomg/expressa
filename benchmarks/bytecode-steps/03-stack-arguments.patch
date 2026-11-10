@@ -1,0 +1,172 @@
+diff --git a/src/runtime/eval/bytecode/execute.rs b/src/runtime/eval/bytecode/execute.rs
+index 05e4c6f..66a8175 100644
+--- a/src/runtime/eval/bytecode/execute.rs
++++ b/src/runtime/eval/bytecode/execute.rs
+@@ -69,7 +69,7 @@ struct Machine {
+ }
+ enum Step {
+     Next,
+-    Call(Value, Vec<Value>, String, Span),
++    Call(Value, usize, String, Span),
+     Finish(Value),
+ }
+ 
+@@ -214,9 +214,11 @@ impl Machine {
+                 })));
+             }
+             Op::Call { argc, name } => {
+-                let args = self.values.split_off(self.values.len() - argc as usize);
+-                let function = pop!();
+-                return Ok(Step::Call(function, args, name!(name).clone(), span));
++                let argc = argc as usize;
++                // Keep arguments on the value stack until the call is dispatched.
++                // Removing the callee shifts them without allocating a buffer.
++                let function = self.values.remove(self.values.len() - argc - 1);
++                return Ok(Step::Call(function, argc, name!(name).clone(), span));
+             }
+             Op::Return => {
+                 return Err(EvalError::Return {
+@@ -499,25 +501,31 @@ impl Machine {
+         &mut self,
+         vm: &mut Vm<'_, '_>,
+         function: Value,
+-        args: Vec<Value>,
++        argc: usize,
+         name: String,
+         span: Span,
+     ) -> Result<(), EvalError> {
++        let args_start = self.values.len() - argc;
+         match &function {
+             Value::Funcao(closure) if matches!(closure.body, FunctionBody::Bytecode(_)) => {
+-                if args.len() != closure.params.len() {
+-                    return Err(vm.err(
++                if argc != closure.params.len() {
++                    let error = vm.err(
+                         format!(
+                             "`{name}` espera {} argumento(s), recebeu {}",
+                             closure.params.len(),
+-                            args.len()
++                            argc
+                         ),
+                         span,
+-                    ));
++                    );
++                    self.values.truncate(args_start);
++                    return Err(error);
++                }
++                if let Err(error) = vm.check_profundidade(span) {
++                    self.values.truncate(args_start);
++                    return Err(error);
+                 }
+-                vm.check_profundidade(span)?;
+                 let env = Env::child(&closure.env, FrameKind::Function);
+-                for (param, arg) in closure.params.iter().zip(args) {
++                for (param, arg) in closure.params.iter().zip(self.values.drain(args_start..)) {
+                     env.borrow_mut().define(param.name.clone(), arg);
+                 }
+                 let FunctionBody::Bytecode(code) = &closure.body else {
+@@ -535,6 +543,7 @@ impl Machine {
+                 );
+             }
+             Value::Builtin("avalie") => {
++                let args = self.values.split_off(args_start);
+                 vm.expect_arity(&args, 1, span)?;
+                 let source = vm.expect_texto(&args[0], span)?;
+                 let program =
+@@ -557,6 +566,7 @@ impl Machine {
+                 );
+             }
+             _ => {
++                let args = self.values.split_off(args_start);
+                 let env = self.frames.last().expect("frame").env();
+                 let value = stacker::maybe_grow(PILHA_RESERVA, PILHA_SEGMENTO, || {
+                     vm.call_value(&function, &args, span, &name, env)
+diff --git a/tests/bytecode_conformance.rs b/tests/bytecode_conformance.rs
+index c59eb11..339262a 100644
+--- a/tests/bytecode_conformance.rs
++++ b/tests/bytecode_conformance.rs
+@@ -39,6 +39,28 @@ fn equivalent(source: &str) {
+     }
+ }
+ 
++#[test]
++fn stack_arguments_preserve_order_results_and_error_recovery() {
++    for source in [
++        "f = funcao() { 7 }\nescreva(10 + f())",
++        "f = funcao(a, b, c) { [a, b, c] }\nescreva(f(1, 2, 3))",
++        "f = funcao(a, b) { a * 10 + b }\nescreva(100 + f(f(1, 2), f(3, 4)))",
++        "make = funcao(n) { funcao(a, b) { n + a + b } }\nescreva(make(10)(2, 3))",
++        "f = funcao(a, b) { [a, b] }\nescreva(f({ escreva(1) 10 }, { escreva(2) 20 }))",
++        "f = funcao(a, b) { a + b }\nescreva(f({ escreva(1) 1 / 0 }, { escreva(2) 2 }) se_falhar 9)\nescreva(f(3, 4))",
++        "f = funcao(a) { a }\nescreva(f({ escreva(1) 1 }, { escreva(2) 2 }) se_falhar 9)\nescreva(f(3))",
++        "f = funcao(a) { a }\nescreva(f() se_falhar 9)\nescreva(f(3))",
++        "f = funcao(a) { 1 / 0 }\nescreva(10 + (f([1, 2]) se_falhar 3))",
++        "f = funcao(a) { a }\nescreva(f(avalie(\"2 + 3\")))\nescreva(avalie(\"f(7)\"))",
++        "escreva(42(1, 2) se_falhar 9)",
++        "f = funcao(a, b) { a }\nf(1)",
++        "f = funcao(a) { a }\nf(1, 2)",
++        "f = funcao(a) { a }\nxs = [1]\nescreva(f(xs) == xs)",
++    ] {
++        equivalent(source);
++    }
++}
++
+ #[test]
+ fn expression_and_statement_value_rules_match() {
+     for source in [
+@@ -133,6 +155,55 @@ fn recursion_uses_vm_frames_and_still_obeys_the_language_limit() {
+     )
+     .unwrap();
+     assert_eq!(result.stdout, "depth\n");
++    let result = outcome(
++        "f = funcao(n) { f(n) }\nescreva(f(1) se_falhar \"depth\")",
++        ExecutionBackend::Bytecode,
++    )
++    .unwrap();
++    assert_eq!(result.stdout, "depth\n");
++}
++
++#[cfg(unix)]
++#[test]
++fn stack_arguments_release_processes_on_return_and_arity_error() {
++    struct Temp(std::path::PathBuf);
++    impl Drop for Temp {
++        fn drop(&mut self) {
++            let _ = std::fs::remove_dir_all(&self.0);
++        }
++    }
++    let temp = Temp(std::env::temp_dir().join(format!(
++        "expressa-bytecode-argument-cleanup-{}",
++        std::process::id()
++    )));
++    std::fs::create_dir_all(&temp.0).unwrap();
++    for backend in [ExecutionBackend::Ast, ExecutionBackend::Bytecode] {
++        for (index, (body, expected)) in [
++            ("f = funcao(p) { 0 }\nf(ARG)", false),
++            ("f = funcao() { 0 }\nf(ARG) se_falhar 0", false),
++            ("f = funcao(p) { funcao() { p } }\ng = f(ARG)", true),
++        ]
++        .into_iter()
++        .enumerate()
++        {
++            let marker = temp.0.join(format!("{backend:?}-{index}"));
++            let argument = format!(
++                "proc::linhas_de([\"sh\", \"-c\", \"sleep 0.05; touch \\\"$1\\\"\", \"sh\", {:?}])",
++                marker.to_str().unwrap()
++            );
++            let body = body.replace("ARG", &argument);
++            let source = format!(
++                "proc = importe \"processo\"\na = importe \"arquivo\"\n{body}\ndurma(0.2)\nescreva(a::existe({:?}))",
++                marker.to_str().unwrap()
++            );
++            let output = outcome(&source, backend).unwrap();
++            assert_eq!(
++                output.stdout,
++                if expected { "verdadeiro\n" } else { "falso\n" },
++                "{backend:?}: {source}"
++            );
++        }
++    }
+ }
+ 
+ #[test]

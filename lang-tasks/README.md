@@ -60,7 +60,7 @@ Task 036 owns the VM migration; 034–035, 037, and 039–043 define its target 
 | 016 | [Define loop scope and captured iteration bindings](016-iteration-scope.md) | Decision · existing tests confirm behavior |
 | 017 | [Resolve conflicting trailing-conditional rules](017-trailing-conditionals.md) | Decision · specification conflict |
 | 018 | [Describe expression forms and decide empty-block behavior](018-expression-and-empty-block-contract.md) | Decision · grammar mismatch |
-| 019 | [Define consistent statement continuation across newlines](019-newline-continuation.md) | High · reproduced surprise / design decision |
+| 019 | [Define consistent statement continuation across newlines](019-newline-continuation.md) | High · indexing fixed for review; broader continuation pending |
 | 020 | [Define what float arithmetic mode promises](020-float-mode-contract.md) | Decision · reproduced limitation |
 | 021 | [Remove ambiguity between locale input and source numbers](021-locale-number-parsing.md) | Decision · code finding |
 | 022 | [Specify supported integer ranges in restricted contexts](022-integer-context-limits.md) | Decision · code finding |

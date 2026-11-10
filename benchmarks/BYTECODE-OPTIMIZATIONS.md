@@ -116,9 +116,12 @@ Validação da alteração mantida:
 Não houve alteração de dependências, sintaxe, semântica numérica, `avalie` ou backend AST. Em relação ao snapshot `00-baseline`, o único arquivo Rust alterado é `execute.rs`, com o atributo de inlining e seu comentário. Nenhum commit foi criado.
 
 
+## Etapa 03: passagem de argumentos
+
+A experiência seguinte é documentada separadamente em [BYTECODE-STEP-03.md](BYTECODE-STEP-03.md), com alterações, testes, medições e decisão. Sua referência é `02-inline-dispatch`.
+
 ## Próximas hipóteses
 
-- Evitar o vetor temporário de argumentos em chamadas entre funções de bytecode, preservando a ordem de avaliação e a liberação de valores em erros.
 - Investigar resolução de variáveis por posições locais, com tratamento explícito de closures, referências a nomes definidos depois e `avalie`. Não assumir que uma resolução estática simples preserva a linguagem.
 - Avaliar separadamente a representação compacta das instruções e suas tabelas; medir economia de memória e custo de decodificação.
 
