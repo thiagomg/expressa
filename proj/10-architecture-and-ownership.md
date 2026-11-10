@@ -54,3 +54,28 @@ existing coupling into message handlers.
 - Closing or switching projects cancels or safely detaches outstanding work.
 - Existing shortcuts, unsaved-tab execution, imports, and debugger behavior are retained.
 - Each extraction is independently reviewable and passes relevant regression checks.
+
+## Implementation (first extraction after step 00)
+
+The GTK handlers that lived in `aula/ui/src/main.rs` (~5500 lines) are split by
+domain. Behavior is unchanged: callbacks still borrow `UiRc`; this slice does
+not introduce a second copy of run/project state.
+
+| Module | Owns |
+| --- | --- |
+| `app.rs` | `Ui`, `Run`, `BarraExec` |
+| `shell.rs` | menubar, shortcuts, CSS, status, dialogs, Windows foreground |
+| `editor.rs` | tabs, open/save/close, theme, in-file search |
+| `depuracao.rs` | debug panel, run-bar, breakpoints, paused-source viewer |
+| `execucao.rs` | F5/F6, output streaming, upload after run |
+| `projeto.rs` | identity, file tree, local/remote open, tree actions |
+| `main.rs` | `main`, `build_ui_with_prefs`, GTK tests |
+
+Second slice (Aula-only, no interpreter changes):
+
+- `Ui` now holds `depuracao: Depuracao` (watches, stacks, run bar) and
+  `execucao: Execucao` (run handle, console, graphics, source snapshot).
+- `gtk_test.rs` and `debug_ui_tests.rs` live beside `main.rs`.
+
+Still open: nest project/editor/shell fields the same way; drop glob
+`pub(crate) use`; `main.rs` still builds the window.

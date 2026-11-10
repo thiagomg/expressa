@@ -31,7 +31,8 @@ verification. Each document includes its own acceptance criteria.
 - 06 implemented in the working tree, ready for review; no commit created. See its storage inventory and recorded responsiveness measurements.
 - 09 implemented in the working tree, ready for review; no commit created.
 - 04 implemented in the working tree, ready for review; no commit created.
-- 07–08 and the remainder of 10 remain separate planned work; 11 supplies cross-cutting verification practices.
+- 10 first extraction: `main.rs` split into `app` / `shell` / `editor` / `depuracao` / `execucao` / `projeto`. `Ui` now nests `Depuracao` and `Execucao`; project/editor/shell fields and glob re-exports remain.
+- 07–08 and the rest of 10 remain planned work; 11 supplies cross-cutting verification practices.
 
 The earlier items still have manual desktop walkthroughs and native Windows
 verification outstanding. Those checks are not blockers for implementing 03;

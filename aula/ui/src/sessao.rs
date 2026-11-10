@@ -506,7 +506,7 @@ fn mostrar_copias(ui: &UiRc, key: &str, store: RecoveryStore, scan: recuperacao:
                                     Ok(recovered) => {
                                         recovered.doc.resumo_da_copia.set(Some(hash));
                                         switch_to(ui, &recovered.doc);
-                                        if let Some(warning) = recovered.warning { ui.borrow().console.stderr(&format!("aviso: `{}` recuperado em uma nova aba: {warning}\n", sem_prefixo(&copy.backup.name))); }
+                                        if let Some(warning) = recovered.warning { ui.borrow().execucao.console.stderr(&format!("aviso: `{}` recuperado em uma nova aba: {warning}\n", sem_prefixo(&copy.backup.name))); }
                                         restored += 1;
                                     }
                                     Err(e) => errors.push(e),
@@ -769,6 +769,7 @@ fn copy_async(ui: &UiRc, done: Option<Box<dyn FnOnce(&UiRc, bool)>>) {
                                     "não foi possível guardar uma cópia de segurança; salve ou exporte a aba",
                                 );
                                 ui.borrow()
+                                    .execucao
                                     .console
                                     .stderr(&format!("erro na cópia de recuperação: {e}\n"));
                             }
