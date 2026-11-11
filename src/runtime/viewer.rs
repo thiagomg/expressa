@@ -9,9 +9,10 @@ use std::thread;
 use std::time::{Duration, Instant, SystemTime};
 
 use super::folha::{FolhaPronta, pintar};
-use super::graf::png_to_rgb32;
+use super::graf::{cor_tela_rgb32, png_to_rgb32};
 use super::graf_proto::{self, Msg, TIPO_CLIQUE, TIPO_NADA, TIPO_SAIR, TIPO_TECLA, write_msg};
 use super::imagem::Imagem;
+use super::letterbox::{blit_letterbox, letterbox};
 
 pub fn run_viewer(path: &Path) -> Result<(), String> {
     let png = path
@@ -83,7 +84,7 @@ fn run_png_viewer(path: &Path) -> Result<(), String> {
     )
     .map_err(|e| format!("não abriu a janela: {e}"))?;
     window.set_target_fps(30);
-    let mut buffer = scale_rgb32(&pixels, iw, ih, width as u32, height as u32);
+    let mut buffer = blit_letterbox(&pixels, iw, ih, width as u32, height as u32, 0x00FFFFFF);
     while window.is_open() {
         let (w, h) = window.get_size();
         let new_mtime = file_mtime(path);
@@ -102,7 +103,7 @@ fn run_png_viewer(path: &Path) -> Result<(), String> {
         if changed || resized || buffer.len() != w * h.max(1) {
             width = w.max(1);
             height = h.max(1);
-            buffer = scale_rgb32(&pixels, iw, ih, width as u32, height as u32);
+            buffer = blit_letterbox(&pixels, iw, ih, width as u32, height as u32, 0x00FFFFFF);
         }
         if let Err(e) = window.update_with_buffer(&buffer, width, height) {
             return Err(e.to_string());
@@ -211,7 +212,14 @@ pub fn run_live_viewer() -> Result<(), String> {
             if !pixels_ok || buf_w != ww || buf_h != wh {
                 if let Some(t) = tela.as_ref() {
                     let pixels = t.rgb32();
-                    buffer = scale_rgb32(&pixels, t.largura, t.altura, ww as u32, wh as u32);
+                    buffer = blit_letterbox(
+                        &pixels,
+                        t.largura,
+                        t.altura,
+                        ww as u32,
+                        wh as u32,
+                        cor_tela_rgb32(&t.fundo),
+                    );
                 } else if buffer.len() != ww * wh {
                     buffer = vec![0x00FFFFFF; ww * wh];
                 }
@@ -427,11 +435,14 @@ fn amostra_mouse(
     mouse_dir: &mut bool,
     mouse_meio: &mut bool,
 ) -> (i32, i32, u8) {
-    let (x, y) = mouse_px(win, largura, altura, ww, wh);
+    let pixel = mouse_px(win, largura, altura, ww, wh);
     let esq = win.get_mouse_down(minifb::MouseButton::Left);
     let dir = win.get_mouse_down(minifb::MouseButton::Right);
     let meio = win.get_mouse_down(minifb::MouseButton::Middle);
-    let botao = if esq && !*mouse_esq {
+    let no_quadro = pixel.is_some();
+    let botao = if !no_quadro {
+        0
+    } else if esq && !*mouse_esq {
         1u8
     } else if dir && !*mouse_dir {
         2
@@ -443,21 +454,25 @@ fn amostra_mouse(
     *mouse_esq = esq;
     *mouse_dir = dir;
     *mouse_meio = meio;
+    let (x, y) = pixel.unwrap_or((0, 0));
     (x, y, botao)
 }
 
-fn mouse_px(win: &minifb::Window, largura: u32, altura: u32, ww: usize, wh: usize) -> (i32, i32) {
-    match win.get_mouse_pos(minifb::MouseMode::Clamp) {
-        Some((mx, my)) => {
-            let x = (mx / ww.max(1) as f32 * largura as f32).floor() as i32;
-            let y = (my / wh.max(1) as f32 * altura as f32).floor() as i32;
-            (
-                x.clamp(0, largura.saturating_sub(1) as i32),
-                y.clamp(0, altura.saturating_sub(1) as i32),
-            )
-        }
-        None => (0, 0),
-    }
+fn mouse_px(
+    win: &minifb::Window,
+    largura: u32,
+    altura: u32,
+    ww: usize,
+    wh: usize,
+) -> Option<(i32, i32)> {
+    let (mx, my) = win.get_mouse_pos(minifb::MouseMode::Clamp)?;
+    let lb = letterbox(
+        ww.max(1) as f64,
+        wh.max(1) as f64,
+        largura.max(1) as f64,
+        altura.max(1) as f64,
+    );
+    lb.canvas_pixel(mx as f64, my as f64, largura as f64, altura as f64)
 }
 
 fn tecla_minifb(k: minifb::Key) -> String {
@@ -510,20 +525,4 @@ fn tecla_minifb(k: minifb::Key) -> String {
         Right => "Direita".into(),
         other => format!("{other:?}"),
     }
-}
-
-fn scale_rgb32(src: &[u32], sw: u32, sh: u32, dw: u32, dh: u32) -> Vec<u32> {
-    let dw = dw.max(1);
-    let dh = dh.max(1);
-    let sw = sw.max(1);
-    let sh = sh.max(1);
-    let mut out = vec![0u32; (dw * dh) as usize];
-    for y in 0..dh {
-        let sy = y * sh / dh;
-        for x in 0..dw {
-            let sx = x * sw / dw;
-            out[(y * dw + x) as usize] = src[(sy * sw + sx) as usize];
-        }
-    }
-    out
 }

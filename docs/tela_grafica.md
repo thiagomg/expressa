@@ -41,7 +41,7 @@ Mapa devolvido:
 | chave | valores |
 |---|---|
 | `:tipo` | `clique`, `tecla`, `sair`, `nada` (`solte` / `mova` depois) |
-| `:x`, `:y` | pixel, y para baixo, 0-based (já convertidos da janela, que escala) |
+| `:x`, `:y` | pixel, y para baixo, 0-based (janela em letterbox: um fator, faixas nas sobras; clique nas faixas não gera evento) |
 | `:botao` | `esquerdo`, `direito`, `meio`, `nenhum` |
 | `:tecla` | `"q"`, `"Enter"`, `"Esc"`, `" "`, `"Cima"`, … |
 
