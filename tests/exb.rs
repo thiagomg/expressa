@@ -81,7 +81,15 @@ fn cli_compiles_without_executing_and_runs_without_the_lep() {
         .output()
         .unwrap();
     assert!(!rejected.status.success());
-    assert!(String::from_utf8_lossy(&rejected.stderr).contains("backend bytecode"));
+    let message = String::from_utf8_lossy(&rejected.stderr);
+    assert!(
+        message.contains(if cfg!(feature = "ast") {
+            "backend bytecode"
+        } else {
+            "backend AST indisponível"
+        }),
+        "{message}"
+    );
 }
 #[test]
 fn cli_compilation_is_atomic_and_does_not_replace_source() {
@@ -223,17 +231,20 @@ fn cli_marker_and_debug_use_embedded_source() {
     assert!(output.status.success());
     assert_eq!(output.stdout, b"Ana\n");
     assert!(String::from_utf8_lossy(&output.stderr).contains("<<<EXPRESSA-LEIA>>>"));
-    std::fs::write(&file, compile_exb("escreva(42)", "missing.lep").unwrap()).unwrap();
-    let mut child = cli()
-        .arg("debug")
-        .arg(&file)
-        .stdin(std::process::Stdio::piped())
-        .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::piped())
-        .spawn()
-        .unwrap();
-    child.stdin.take().unwrap().write_all(b"c\n").unwrap();
-    let output = child.wait_with_output().unwrap();
-    assert!(output.status.success(), "{:?}", output);
-    assert!(String::from_utf8_lossy(&output.stdout).contains("42"));
+    #[cfg(feature = "terminal")]
+    {
+        std::fs::write(&file, compile_exb("escreva(42)", "missing.lep").unwrap()).unwrap();
+        let mut child = cli()
+            .arg("debug")
+            .arg(&file)
+            .stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .spawn()
+            .unwrap();
+        child.stdin.take().unwrap().write_all(b"c\n").unwrap();
+        let output = child.wait_with_output().unwrap();
+        assert!(output.status.success(), "{:?}", output);
+        assert!(String::from_utf8_lossy(&output.stdout).contains("42"));
+    }
 }

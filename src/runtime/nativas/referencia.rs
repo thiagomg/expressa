@@ -50,14 +50,19 @@ impl BuiltinDoc {
 }
 
 const NUCLEO: &str = include_str!("../../../docs/nativas/nucleo.lep");
+#[cfg(feature = "terminal")]
 const TELA: &str = include_str!("../../../docs/nativas/tela.lep");
 const MAT: &str = include_str!("../../../docs/nativas/mat.lep");
 const MATRIZ: &str = include_str!("../../../docs/nativas/matriz.lep");
 const ARQUIVO: &str = include_str!("../../../docs/nativas/arquivo.lep");
 const CRONO: &str = include_str!("../../../docs/nativas/crono.lep");
+#[cfg(feature = "graphics")]
 const CARTESIANO: &str = include_str!("../../../docs/nativas/cartesiano.lep");
+#[cfg(feature = "graphics")]
 const TELA_GRAFICA: &str = include_str!("../../../docs/nativas/tela_grafica.lep");
+#[cfg(feature = "graphics")]
 const IMAGEM: &str = include_str!("../../../docs/nativas/imagem.lep");
+#[cfg(feature = "process")]
 const PROCESSO: &str = include_str!("../../../docs/nativas/processo.lep");
 
 pub fn builtin_docs() -> &'static [BuiltinDoc] {
@@ -207,14 +212,19 @@ fn load_all() -> Vec<BuiltinDoc> {
     let mut out = Vec::new();
     for (src, module) in [
         (NUCLEO, None),
+        #[cfg(feature = "terminal")]
         (TELA, Some("tela")),
         (MAT, Some("mat")),
         (MATRIZ, Some("matriz")),
         (ARQUIVO, Some("arquivo")),
         (CRONO, Some("crono")),
+        #[cfg(feature = "graphics")]
         (CARTESIANO, Some("cartesiano")),
+        #[cfg(feature = "graphics")]
         (TELA_GRAFICA, Some("tela_grafica")),
+        #[cfg(feature = "graphics")]
         (IMAGEM, Some("imagem")),
+        #[cfg(feature = "process")]
         (PROCESSO, Some("processo")),
     ] {
         out.extend(extract(src, module).unwrap_or_else(|e| {
@@ -354,10 +364,13 @@ fn summary_and_example(doc: &str) -> (String, String) {
 
 #[cfg(test)]
 mod tests {
-    use super::{builtin_docs, docs_agrupados, lookup_alvo, lookup_ficha, tema_de};
+    #[cfg(feature = "terminal")]
+    use super::lookup_ficha;
+    use super::{builtin_docs, docs_agrupados, lookup_alvo, tema_de};
     use crate::runtime::nativas::NATIVAS;
 
     #[test]
+    #[cfg(feature = "terminal")]
     fn every_nativa_has_doc() {
         for n in NATIVAS {
             assert!(
@@ -375,6 +388,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "graphics")]
     fn ficha_modulo_nome() {
         let t = lookup_ficha("matriz::zeros").expect("zeros");
         assert!(t.contains("zeros(n)"));

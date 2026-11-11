@@ -1,5 +1,7 @@
 use std::collections::HashSet;
-use std::io::{self, BufRead, Write};
+#[cfg(feature = "terminal")]
+use std::io::BufRead;
+use std::io::{self, Write};
 use std::rc::Rc;
 
 use crate::lexer::Span;
@@ -256,12 +258,14 @@ impl DebugSession {
     }
 }
 
+#[cfg(feature = "terminal")]
 pub struct CliDebugger {
     session: DebugSession,
     last_line: String,
     out: Box<dyn Write>,
 }
 
+#[cfg(feature = "terminal")]
 impl CliDebugger {
     pub fn new() -> Self {
         Self::with_out(Box::new(io::stderr()))
@@ -423,12 +427,14 @@ impl CliDebugger {
     }
 }
 
+#[cfg(feature = "terminal")]
 impl Default for CliDebugger {
     fn default() -> Self {
         Self::new()
     }
 }
 
+#[cfg(feature = "terminal")]
 impl DebugHook for CliDebugger {
     fn before_stmt(&mut self, ctx: &DebugCtx<'_>) -> DebugAction {
         if self.session.consume_pause_on_start() {
@@ -665,6 +671,7 @@ mod tests {
         }
     }
 
+    #[cfg(feature = "terminal")]
     fn debugger() -> CliDebugger {
         CliDebugger::with_out(Box::new(io::sink()))
     }
@@ -680,6 +687,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "terminal")]
     fn ponto_and_remover_take_file_and_line() {
         let e = env();
         let c = ctx("/p/main.lep", "", Span::new(1, 1, 0, 1), &e, &[]);
@@ -712,6 +720,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "terminal")]
     fn commands_change_step_mode() {
         let env = env();
         let span = Span::new(1, 1, 0, 5);
@@ -759,6 +768,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "terminal")]
     fn ponto_and_remover_use_current_file() {
         let env = env();
         let span = Span::new(3, 1, 0, 1);
@@ -776,6 +786,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "terminal")]
     fn continue_only_pauses_on_breakpoints() {
         let env = env();
         let span3 = Span::new(3, 1, 0, 4);
@@ -796,6 +807,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "terminal")]
     fn step_in_pauses_on_every_statement() {
         let env = env();
         let span = Span::new(1, 1, 0, 1);
@@ -805,6 +817,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "terminal")]
     fn step_over_skips_statements_nested_in_the_current_span() {
         let env = env();
         let outer = Span::new(1, 1, 0, 20);
@@ -837,6 +850,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "terminal")]
     fn step_out_pauses_when_the_call_stack_shrinks() {
         let env = env();
         let span = Span::new(1, 1, 0, 1);

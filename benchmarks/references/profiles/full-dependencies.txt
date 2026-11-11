@@ -1,0 +1,91 @@
+expressa v0.4.3 (/home/thiago/src/expressa)
+├── libc v0.2.189
+├── minifb v0.28.0
+│   ├── dlib v0.5.3
+│   │   └── libloading v0.8.9
+│   │       └── cfg-if v1.0.4
+│   ├── lazy_static v1.5.1
+│   ├── libc v0.2.189
+│   ├── raw-window-handle v0.6.2
+│   ├── tempfile v3.27.0
+│   │   ├── fastrand v2.5.0
+│   │   ├── getrandom v0.4.3
+│   │   │   ├── cfg-if v1.0.4
+│   │   │   └── libc v0.2.189
+│   │   ├── once_cell v1.21.4
+│   │   └── rustix v1.1.4
+│   │       ├── bitflags v2.13.2
+│   │       └── linux-raw-sys v0.12.1
+│   ├── wayland-client v0.29.5
+│   │   ├── bitflags v1.3.2
+│   │   ├── downcast-rs v1.2.1
+│   │   ├── libc v0.2.189
+│   │   ├── nix v0.24.3
+│   │   │   ├── bitflags v1.3.2
+│   │   │   ├── cfg-if v1.0.4
+│   │   │   ├── libc v0.2.189
+│   │   │   └── memoffset v0.6.5
+│   │   ├── scoped-tls v1.0.1
+│   │   ├── wayland-commons v0.29.5
+│   │   │   ├── nix v0.24.3 (*)
+│   │   │   ├── once_cell v1.21.4
+│   │   │   ├── smallvec v1.16.1
+│   │   │   └── wayland-sys v0.29.5
+│   │   │       ├── dlib v0.5.3 (*)
+│   │   │       └── lazy_static v1.5.1
+│   │   └── wayland-sys v0.29.5 (*)
+│   ├── wayland-cursor v0.29.5
+│   │   ├── nix v0.24.3 (*)
+│   │   ├── wayland-client v0.29.5 (*)
+│   │   └── xcursor v0.3.11
+│   ├── wayland-protocols v0.29.5
+│   │   ├── bitflags v1.3.2
+│   │   ├── wayland-client v0.29.5 (*)
+│   │   └── wayland-commons v0.29.5 (*)
+│   └── x11-dl v2.21.0
+│       ├── libc v0.2.189
+│       └── once_cell v1.21.4
+├── png v0.17.16
+│   ├── bitflags v1.3.2
+│   ├── crc32fast v1.5.3
+│   │   └── cfg-if v1.0.4
+│   ├── fdeflate v0.3.7
+│   │   └── simd-adler32 v0.3.10
+│   ├── flate2 v1.1.10
+│   │   ├── crc32fast v1.5.3 (*)
+│   │   └── miniz_oxide v0.9.1
+│   │       ├── adler2 v2.0.1
+│   │       └── simd-adler32 v0.3.10
+│   └── miniz_oxide v0.8.9
+│       ├── adler2 v2.0.1
+│       └── simd-adler32 v0.3.10
+├── rust_decimal v1.43.0
+│   ├── arrayvec v0.7.8
+│   ├── num-traits v0.2.19
+│   └── serde v1.0.229
+│       └── serde_core v1.0.229
+├── rustyline v15.0.0
+│   ├── bitflags v2.13.2
+│   ├── cfg-if v1.0.4
+│   ├── fd-lock v4.0.4
+│   │   ├── cfg-if v1.0.4
+│   │   └── rustix v1.1.4 (*)
+│   ├── home v0.5.12
+│   ├── libc v0.2.189
+│   ├── log v0.4.34
+│   ├── memchr v2.8.3
+│   ├── nix v0.29.0
+│   │   ├── bitflags v2.13.2
+│   │   ├── cfg-if v1.0.4
+│   │   └── libc v0.2.189
+│   ├── radix_trie v0.2.1
+│   │   ├── endian-type v0.1.2
+│   │   └── nibble_vec v0.1.0
+│   │       └── smallvec v1.16.1
+│   ├── unicode-segmentation v1.13.3
+│   ├── unicode-width v0.2.2
+│   └── utf8parse v0.2.2
+└── stacker v0.1.25
+    ├── cfg-if v1.0.4
+    ├── libc v0.2.189
+    └── psm v0.1.32

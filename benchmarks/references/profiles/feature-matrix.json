@@ -1,0 +1,93 @@
+[
+  {
+    "features": [],
+    "clippy_all_targets": "pass",
+    "profile_tests": 5
+  },
+  {
+    "features": [
+      "terminal"
+    ],
+    "clippy_all_targets": "pass",
+    "profile_tests": 5
+  },
+  {
+    "features": [
+      "graphics"
+    ],
+    "clippy_all_targets": "pass",
+    "profile_tests": 5
+  },
+  {
+    "features": [
+      "process"
+    ],
+    "clippy_all_targets": "pass",
+    "profile_tests": 5
+  },
+  {
+    "features": [
+      "process",
+      "terminal"
+    ],
+    "clippy_all_targets": "pass",
+    "profile_tests": 5
+  },
+  {
+    "features": [
+      "process",
+      "graphics"
+    ],
+    "clippy_all_targets": "pass",
+    "profile_tests": 5
+  },
+  {
+    "features": [
+      "ast"
+    ],
+    "clippy_all_targets": "pass",
+    "profile_tests": 5
+  },
+  {
+    "features": [
+      "ast",
+      "terminal"
+    ],
+    "clippy_all_targets": "pass",
+    "profile_tests": 5
+  },
+  {
+    "features": [
+      "ast",
+      "graphics"
+    ],
+    "clippy_all_targets": "pass",
+    "profile_tests": 5
+  },
+  {
+    "features": [
+      "ast",
+      "process"
+    ],
+    "clippy_all_targets": "pass",
+    "profile_tests": 5
+  },
+  {
+    "features": [
+      "ast",
+      "process",
+      "terminal"
+    ],
+    "clippy_all_targets": "pass",
+    "profile_tests": 5
+  },
+  {
+    "features": [
+      "ast",
+      "process",
+      "graphics"
+    ],
+    "clippy_all_targets": "pass",
+    "profile_tests": 5
+  }
+]

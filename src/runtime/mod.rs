@@ -9,6 +9,7 @@ mod fonte8x8;
 mod formate;
 mod graf;
 mod graf_host;
+#[cfg(feature = "graphics")]
 mod graf_proto;
 mod imagem;
 mod leia;
@@ -16,17 +17,25 @@ mod letterbox;
 mod nativas;
 mod numero;
 mod pilha;
+#[cfg(feature = "process")]
 mod processo;
+#[cfg(feature = "terminal")]
 mod repl;
 mod rng;
+#[cfg(feature = "terminal")]
 mod terminal;
 mod value;
+#[cfg(feature = "graphics")]
 mod viewer;
 
-pub use cartesiano_host::{CapturaCartesiano, CartesianoHost, CliCartesianoHost, NullCartesiano};
+#[cfg(feature = "graphics")]
+pub use cartesiano_host::CliCartesianoHost;
+pub use cartesiano_host::{CapturaCartesiano, CartesianoHost, NullCartesiano};
+#[cfg(feature = "terminal")]
+pub use debug::CliDebugger;
 pub use debug::{
-    ChannelDebugger, CliDebugger, DebugAction, DebugBinding, DebugCtx, DebugFrameInfo, DebugHook,
-    DebugPaused, DebugSession, NoopHook, StopHook, collect_stack, collect_vars, snapshot,
+    ChannelDebugger, DebugAction, DebugBinding, DebugCtx, DebugFrameInfo, DebugHook, DebugPaused,
+    DebugSession, NoopHook, StopHook, collect_stack, collect_vars, snapshot,
 };
 pub use error::{CallFrame, RuntimeError};
 pub use eval::{
@@ -49,11 +58,13 @@ pub use nativas::{
 };
 pub use numero::{Numero, NumeroAritmetica, default_numero_aritmetica};
 pub use pilha::PROFUNDIDADE_MAXIMA;
+#[cfg(feature = "terminal")]
 pub use repl::{
     CanalRepl, ConteudoRepl, EventoRepl, FimRepl, FluxoRepl, IdAvaliacao, IdSessao,
     REPL_MAX_CODIGO, TextoRepl, run_repl,
 };
 pub use value::{NumeroLocale, Value, default_numero_locale};
+#[cfg(feature = "graphics")]
 pub use viewer::{run_live_viewer, run_viewer};
 
 #[cfg(test)]

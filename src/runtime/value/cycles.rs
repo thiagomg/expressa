@@ -316,6 +316,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "terminal")]
     fn values_returned_to_a_host_survive_repl_collection_and_shutdown() {
         let mut input = std::io::Cursor::new("");
         let (mut out, mut err) = (Vec::new(), Vec::new());

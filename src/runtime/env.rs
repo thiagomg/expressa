@@ -330,6 +330,8 @@ enum Objeto {
 impl Objeto {
     fn de_valor(v: &Value) -> Option<Self> {
         match v {
+            #[cfg(feature = "process")]
+            Value::Processo(_) => None,
             Value::Lista(xs) => Some(Self::Lista(Rc::clone(xs))),
             Value::Mapa(m) => Some(Self::Mapa(Rc::clone(m))),
             Value::Funcao(c) => Some(Self::Funcao(Rc::clone(c))),
@@ -344,7 +346,6 @@ impl Objeto {
             | Value::Conjunto(_)
             | Value::Matriz(_)
             | Value::Imagem(_)
-            | Value::Processo(_)
             | Value::Builtin(_) => None,
         }
     }
@@ -498,7 +499,7 @@ mod tests {
     use super::super::value::Closure;
     use super::*;
     use crate::lexer::Span;
-    use crate::parser::{Block, Expr, Stmt};
+    use crate::parser::{Expr, Item, Stmt};
 
     fn num(n: f64) -> Value {
         Value::Numero(n.try_into().unwrap())
@@ -507,16 +508,13 @@ mod tests {
     fn closao(env: Rc<RefCell<Env>>, ident: &str) -> Value {
         Value::Funcao(Rc::new(Closure {
             params: vec![],
-            body: super::super::value::FunctionBody::Ast(Rc::new(Block {
-                stmts: vec![Stmt::Expr {
-                    expr: Expr::Ident {
-                        name: ident.into(),
-                        span: Span::default(),
-                    },
+            body: super::super::eval::bytecode::test_function_body(&[Item::Stmt(Stmt::Expr {
+                expr: Expr::Ident {
+                    name: ident.into(),
                     span: Span::default(),
-                }],
+                },
                 span: Span::default(),
-            })),
+            })]),
             env,
             span: Span::default(),
             file: String::new(),

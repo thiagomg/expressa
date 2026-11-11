@@ -1,6 +1,6 @@
 # Embedding Expressa
 
-Execution defaults to bytecode after the reviewed AST phase. Use `ExecutionOptions::backend = ExecutionBackend::Ast` for the temporary reference interpreter, or select `--backend ast|bytecode` in the CLI (`EXPRESSA_BACKEND` sets the default for CLI/REPL/hosts). Both backends use the same native services and scope rules. See [the current review](../lang-tasks/BYTECODE-REVIEW.md) and [comparison protocol](../benchmarks/README.md).
+Execution defaults to bytecode after the reviewed AST phase. The default build includes all desktop features; see [runtime profiles](runtime-profiles.md) for optional executors/services and reduced builds. `ExecutionBackend::is_available()` reports whether an executor was compiled in. Use `ExecutionOptions::backend = ExecutionBackend::Ast` for the temporary reference interpreter, or select `--backend ast|bytecode` in the CLI (`EXPRESSA_BACKEND` sets the default for CLI/REPL/hosts). Both backends use the same native services and scope rules. See [the current review](../lang-tasks/BYTECODE-REVIEW.md) and [comparison protocol](../benchmarks/README.md).
 
 ## Captured execution with explicit options
 

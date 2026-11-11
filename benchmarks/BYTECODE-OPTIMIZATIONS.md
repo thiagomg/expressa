@@ -138,3 +138,7 @@ Cache de `avalie` e firmware Pico continuam pendentes. O AST permanece disponív
 ## Etapa 06: formato EXB v1
 
 Implementados compilação offline, carregamento validado e execução desktop de `.exb`, preservando a representação em memória anterior à etapa 05. [Contrato](../docs/exb.md), [tarefa](../lang-tasks/047-exb-file-format-and-loader.md) e [comparação antes/depois e fonte/EXB](EXB-V1-REVIEW.md). A serialização não implementa execução direta da flash nem reduz por si só a SRAM da VM.
+
+## Etapa 07: perfil mínimo desktop
+
+[Features e limites](../docs/runtime-profiles.md) e [comparação de tamanho/CPU/RSS](MINIMAL-PROFILE.md). O mesmo código gera um executável completo e outro sem executor AST, gráficos, processos e terminal interativo. O frontend e `avalie` são mantidos. A referência é a etapa 06 aceita, sem restauração da compactação da etapa 05.

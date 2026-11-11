@@ -1,6 +1,6 @@
 # 035 — Separate a portable language core from desktop hosts
 
-Status: Proposed; awaiting individual review.
+Status: first desktop feature profile implemented for review (task 048); portable core/host extraction remains pending.
 
 Priority/type: Pico 2 · foundational.
 
@@ -29,3 +29,7 @@ Extends 026, 027, 029, and 032. Do not assume that disabling window creation rem
 ## Scope
 
 This task records a finding or proposal, not an approved implementation. Resolve open semantic choices during individual review. Keep implementation changes and commits separate from this planning document.
+
+## First implementation slice
+
+[Task 048](048-minimal-desktop-runtime-profile.md) adds a minimal desktop build without the AST executor, graphics, processes or interactive terminal, while retaining parser/compiler and `avalie`. See [profiles](../docs/runtime-profiles.md) and [measurements](../benchmarks/MINIMAL-PROFILE.md). This is still `std`; it does not satisfy the final embedded-core acceptance criterion above.

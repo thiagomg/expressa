@@ -10,7 +10,9 @@ mod matrix;
 
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
-use std::io::{self, BufRead, IsTerminal, Write};
+#[cfg(feature = "terminal")]
+use std::io::IsTerminal;
+use std::io::{self, BufRead, Write};
 use std::path::{Path, PathBuf};
 use std::rc::{Rc, Weak};
 use std::thread;
@@ -21,11 +23,15 @@ use crate::parser::{
     AssignTarget, BinaryOp, Block, Expr, Import, Item, Param, Program, Stmt, UnaryOp, parse,
 };
 
-use super::cartesiano_host::{CartesianoHost, CliCartesianoHost};
+use super::cartesiano_host::CartesianoHost;
+#[cfg(feature = "graphics")]
+use super::cartesiano_host::CliCartesianoHost;
 use super::debug::{DebugAction, DebugCtx, DebugHook, NoopHook};
 use super::env::{AssignError, Env, FrameKind};
 use super::error::{CallFrame, EvalError, RuntimeError};
-use super::graf_host::{CliGrafHost, GrafHost};
+#[cfg(feature = "graphics")]
+use super::graf_host::CliGrafHost;
+use super::graf_host::GrafHost;
 use super::leia::LeiaHost;
 use super::nativas;
 use super::numero::{Numero, NumeroAritmetica, default_numero_aritmetica, parse_numero};
@@ -41,6 +47,7 @@ use super::value::{
 /// debugger can still prompt on the same terminal).
 pub(crate) trait LineInput {
     fn read_line(&mut self, buf: &mut String) -> io::Result<usize>;
+    #[cfg(feature = "terminal")]
     fn is_terminal(&self) -> bool {
         false
     }
@@ -59,12 +66,14 @@ impl LineInput for ConsoleInput {
         io::stdin().read_line(buf)
     }
 
+    #[cfg(feature = "terminal")]
     fn is_terminal(&self) -> bool {
         io::stdin().is_terminal()
     }
 }
 
 pub(crate) struct Vm<'a, 'c> {
+    host_lifetime: std::marker::PhantomData<&'c ()>,
     pub(crate) out: &'a mut dyn Write,
     pub(crate) err: &'a mut dyn Write,
     pub(crate) input: &'a mut dyn LineInput,
@@ -84,10 +93,15 @@ pub(crate) struct Vm<'a, 'c> {
     pub(crate) max_matrix_cells: usize,
     backend: ExecutionBackend,
     pub(crate) leia_host: Option<&'a mut dyn LeiaHost>,
+    #[cfg(feature = "graphics")]
     pub(crate) cartesiano_host: Option<&'c mut dyn CartesianoHost>,
+    #[cfg(feature = "graphics")]
     pub(crate) cli_cart: CliCartesianoHost,
+    #[cfg(feature = "graphics")]
     pub(crate) graf_host: Option<&'c mut dyn GrafHost>,
+    #[cfg(feature = "graphics")]
     pub(crate) cli_graf: CliGrafHost,
+    #[cfg(feature = "graphics")]
     pub(crate) abrir_cartesiano: bool,
     pub(crate) numero_locale: NumeroLocale,
     pub(crate) numero_aritmetica: NumeroAritmetica,
@@ -256,24 +270,37 @@ pub fn debug_source(source: &str, file: &str) -> Result<i32, RuntimeError> {
 }
 
 pub fn debug_source_args(source: &str, file: &str, args: &[String]) -> Result<i32, RuntimeError> {
-    let mut input = ConsoleInput;
-    let mut stdout = io::stdout();
-    let mut stderr = io::stderr();
-    run_with_io(
-        source,
-        file,
-        Box::new(super::debug::CliDebugger::new()),
-        &mut input,
-        &mut stdout,
-        &mut stderr,
-        None,
-        None,
-        None,
-        None,
-        true,
-        None,
-        args,
-    )
+    #[cfg(not(feature = "terminal"))]
+    {
+        let _ = (source, args);
+        Err(RuntimeError {
+            message: "depurador de terminal indisponível neste build".into(),
+            file: file.into(),
+            span: Span::default(),
+            stack: vec![],
+        })
+    }
+    #[cfg(feature = "terminal")]
+    {
+        let mut input = ConsoleInput;
+        let mut stdout = io::stdout();
+        let mut stderr = io::stderr();
+        run_with_io(
+            source,
+            file,
+            Box::new(super::debug::CliDebugger::new()),
+            &mut input,
+            &mut stdout,
+            &mut stderr,
+            None,
+            None,
+            None,
+            None,
+            true,
+            None,
+            args,
+        )
+    }
 }
 
 pub fn run_to_string(source: &str, file: &str) -> Result<String, RuntimeError> {
@@ -470,6 +497,23 @@ fn run_configured_with_io<'a, 'c>(
     graf_host: Option<&'c mut dyn GrafHost>,
     script_args: &[String],
 ) -> Result<i32, RuntimeError> {
+    #[cfg(not(feature = "graphics"))]
+    if cartesiano_host.is_some() || graf_host.is_some() {
+        return Err(RuntimeError {
+            message: "gráficos indisponíveis neste build".into(),
+            file: file.into(),
+            span: Span::default(),
+            stack: vec![],
+        });
+    }
+    if !options.backend.is_available() {
+        return Err(RuntimeError {
+            message: "backend AST indisponível neste build".into(),
+            file: file.into(),
+            span: Span::default(),
+            stack: vec![],
+        });
+    }
     if options
         .time_limit
         .is_some_and(|limit| Instant::now().checked_add(limit).is_none())
@@ -552,7 +596,10 @@ impl<'a, 'c> Vm<'a, 'c> {
             .borrow_mut()
             .define("argumentos", script_args_value(script_args));
         let workspace_root = workspace_root.map(|p| lexical_normalize(&p));
+        #[cfg(not(feature = "graphics"))]
+        let _ = (cartesiano_host, graf_host, abrir_cartesiano);
         Self {
+            host_lifetime: std::marker::PhantomData,
             out,
             err,
             input,
@@ -570,10 +617,15 @@ impl<'a, 'c> Vm<'a, 'c> {
             max_matrix_cells: DEFAULT_MAX_MATRIX_CELLS,
             backend: bytecode::default_backend(),
             leia_host,
+            #[cfg(feature = "graphics")]
             cartesiano_host,
+            #[cfg(feature = "graphics")]
             cli_cart: CliCartesianoHost::new(),
+            #[cfg(feature = "graphics")]
             graf_host,
+            #[cfg(feature = "graphics")]
             cli_graf: CliGrafHost::default(),
+            #[cfg(feature = "graphics")]
             abrir_cartesiano,
             numero_locale: default_numero_locale(),
             numero_aritmetica: default_numero_aritmetica(),
@@ -639,21 +691,30 @@ impl<'a, 'c> Vm<'a, 'c> {
         let result = if self.backend == ExecutionBackend::Bytecode {
             self.execute_module(program, env).map(|_| ())
         } else {
-            (|| {
-                for item in &program.items {
-                    self.eval_item(item, env)?;
-                }
-                Ok(())
-            })()
+            #[cfg(feature = "ast")]
+            {
+                (|| {
+                    for item in &program.items {
+                        self.eval_item(item, env)?;
+                    }
+                    Ok(())
+                })()
+            }
+            #[cfg(not(feature = "ast"))]
+            {
+                Err(self.err("backend AST indisponível neste build", program.span))
+            }
         };
         self.stack.pop();
         self.retorne_so_em_funcao(result)
     }
 
+    #[cfg(feature = "ast")]
     fn eval_item(&mut self, item: &Item, env: &Rc<RefCell<Env>>) -> Result<(), EvalError> {
         self.eval_item_value(item, env).map(|_| ())
     }
 
+    #[cfg(feature = "ast")]
     fn eval_item_value(&mut self, item: &Item, env: &Rc<RefCell<Env>>) -> Result<Value, EvalError> {
         match item {
             Item::Import(import) => {
@@ -671,6 +732,7 @@ impl<'a, 'c> Vm<'a, 'c> {
         }
     }
 
+    #[cfg(feature = "ast")]
     pub(crate) fn eval_items_value(
         &mut self,
         items: &[Item],
@@ -679,26 +741,36 @@ impl<'a, 'c> Vm<'a, 'c> {
         if self.backend == ExecutionBackend::Bytecode {
             return self.execute_items(items, env);
         }
-        let mut last = Value::Nada;
-        for item in items {
-            last = match self.eval_item_value(item, env) {
-                Ok(v) => v,
-                Err(e) => return self.retorne_so_em_funcao(Err(e)),
-            };
+        #[cfg(feature = "ast")]
+        {
+            let mut last = Value::Nada;
+            for item in items {
+                last = match self.eval_item_value(item, env) {
+                    Ok(v) => v,
+                    Err(e) => return self.retorne_so_em_funcao(Err(e)),
+                };
+            }
+            Ok(last)
         }
-        Ok(last)
+        #[cfg(not(feature = "ast"))]
+        {
+            Err(self.err("backend AST indisponível neste build", Span::default()))
+        }
     }
 
+    #[cfg(feature = "terminal")]
     pub(crate) fn builtins_env(&self) -> Rc<RefCell<Env>> {
         Rc::clone(&self.builtins)
     }
 
+    #[cfg(feature = "terminal")]
     pub(crate) fn set_source(&mut self, file: &str, source: &str) {
         self.file = file.to_string();
         self.source = Rc::from(source);
         self.base_dir = base_dir_of(file);
     }
 
+    #[cfg(feature = "terminal")]
     pub(crate) fn enter_repl(&mut self) {
         self.stack.push(CallFrame {
             name: "<repl>".into(),
@@ -721,6 +793,11 @@ impl<'a, 'c> Vm<'a, 'c> {
                     ));
             }
             return self.bind_imported(import, env, native);
+        }
+        if is_bare_module_spec(&import.path)
+            && let Some(feature) = nativas::unavailable_module(&import.path)
+        {
+            return Err(self.err(format!("módulo nativo '{}' indisponível neste build (requer feature '{feature}'); para um arquivo local, use './{}'", import.path, import.path), import.span));
         }
         let path = self.resolve_import_path(&import.path, import.span)?;
         let key = std::fs::canonicalize(&path).unwrap_or_else(|_| path.clone());
@@ -876,6 +953,7 @@ impl<'a, 'c> Vm<'a, 'c> {
         Ok(full)
     }
 
+    #[cfg(feature = "ast")]
     fn eval_stmt(&mut self, stmt: &Stmt, env: &Rc<RefCell<Env>>) -> Result<Value, EvalError> {
         self.pause(stmt.span(), env)?;
         let result = self.eval_stmt_inner(stmt, env);
@@ -909,6 +987,7 @@ impl<'a, 'c> Vm<'a, 'c> {
         }
     }
 
+    #[cfg(feature = "ast")]
     fn eval_stmt_inner(&mut self, stmt: &Stmt, env: &Rc<RefCell<Env>>) -> Result<Value, EvalError> {
         match stmt {
             Stmt::Expr { expr, .. } => self.eval_expr(expr, env),
@@ -981,6 +1060,7 @@ impl<'a, 'c> Vm<'a, 'c> {
                 var, iter, body, ..
             } => {
                 let seq = self.eval_expr(iter, env)?;
+                #[cfg(feature = "process")]
                 if let Value::Processo(p) = &seq {
                     // Lines as they arrive; leaving the loop stops the command.
                     let p = Rc::clone(p);
@@ -1040,6 +1120,7 @@ impl<'a, 'c> Vm<'a, 'c> {
     }
 
     /// `true` = `pare` left the loop.
+    #[cfg(feature = "ast")]
     fn eval_loop_body(
         &mut self,
         stmts: &[Stmt],
@@ -1067,6 +1148,7 @@ impl<'a, 'c> Vm<'a, 'c> {
         }
     }
 
+    #[cfg(feature = "ast")]
     fn eval_stmts(&mut self, stmts: &[Stmt], env: &Rc<RefCell<Env>>) -> Result<Value, EvalError> {
         let mut last = Value::Nada;
         for stmt in stmts {
@@ -1078,6 +1160,7 @@ impl<'a, 'c> Vm<'a, 'c> {
         Ok(last)
     }
 
+    #[cfg(feature = "ast")]
     fn eval_block(&mut self, block: &Block, env: &Rc<RefCell<Env>>) -> Result<Value, EvalError> {
         self.eval_in_child(env, FrameKind::Block, |vm, child| {
             vm.eval_stmts(&block.stmts, child)
@@ -1086,6 +1169,7 @@ impl<'a, 'c> Vm<'a, 'c> {
 
     /// Runs `f` in a fresh frame and breaks `Rc` cycles before the frame
     /// is dropped (`g = funcao() { … }` inside a function or block).
+    #[cfg(feature = "ast")]
     fn eval_in_child(
         &mut self,
         parent: &Rc<RefCell<Env>>,
@@ -1101,6 +1185,7 @@ impl<'a, 'c> Vm<'a, 'c> {
     /// Every recursion in the evaluator (calls, nested expressions, blocks)
     /// passes through here, so this is where the Rust stack is grown before
     /// it can overflow — on any thread, in debug or release.
+    #[cfg(feature = "ast")]
     fn eval_expr(&mut self, expr: &Expr, env: &Rc<RefCell<Env>>) -> Result<Value, EvalError> {
         #[cfg(test)]
         assert_eq!(
@@ -1113,6 +1198,7 @@ impl<'a, 'c> Vm<'a, 'c> {
         })
     }
 
+    #[cfg(feature = "ast")]
     fn eval_expr_inner(&mut self, expr: &Expr, env: &Rc<RefCell<Env>>) -> Result<Value, EvalError> {
         match expr {
             Expr::Number { raw, span } => {
@@ -1304,6 +1390,7 @@ impl<'a, 'c> Vm<'a, 'c> {
         }
     }
 
+    #[cfg(feature = "ast")]
     fn eval_binary(
         &mut self,
         left: &Expr,
@@ -1510,13 +1597,17 @@ impl<'a, 'c> Vm<'a, 'c> {
                 }
                 self.check_profundidade(span)?;
                 let call_env = Env::child(&closure.env, FrameKind::Function);
-                if let FunctionBody::Bytecode(code) = &closure.body {
-                    code.bind_parameters(&mut call_env.borrow_mut(), args.iter().cloned());
-                } else {
-                    for (param, arg) in closure.params.iter().zip(args) {
-                        call_env
-                            .borrow_mut()
-                            .define(param.name.clone(), arg.clone());
+                match &closure.body {
+                    FunctionBody::Bytecode(code) => {
+                        code.bind_parameters(&mut call_env.borrow_mut(), args.iter().cloned())
+                    }
+                    #[cfg(feature = "ast")]
+                    FunctionBody::Ast(_) => {
+                        for (param, arg) in closure.params.iter().zip(args) {
+                            call_env
+                                .borrow_mut()
+                                .define(param.name.clone(), arg.clone());
+                        }
                     }
                 }
                 self.stack.push(CallFrame {
@@ -1530,6 +1621,7 @@ impl<'a, 'c> Vm<'a, 'c> {
                 let saved_file = std::mem::replace(&mut self.file, closure.file.clone());
                 let saved_source = std::mem::replace(&mut self.source, Rc::clone(&closure.source));
                 let result = match &closure.body {
+                    #[cfg(feature = "ast")]
                     FunctionBody::Ast(body) => self.eval_stmts(&body.stmts, &call_env),
                     FunctionBody::Bytecode(code) => {
                         self.execute_function(Rc::clone(code), &call_env)
@@ -1777,6 +1869,7 @@ impl<'a, 'c> Vm<'a, 'c> {
         }
     }
 
+    #[cfg(feature = "graphics")]
     pub(crate) fn interrupted(&mut self) -> bool {
         self.hook.interrupted()
     }
@@ -1798,6 +1891,7 @@ impl<'a, 'c> Vm<'a, 'c> {
 
     /// Child processes (`importe "processo"`) would escape the folder a
     /// confined program (Aula, fuzz) must stay in, so they are off there.
+    #[cfg(feature = "process")]
     pub(crate) fn processos_permitidos(&self) -> bool {
         self.workspace_root.is_none()
     }

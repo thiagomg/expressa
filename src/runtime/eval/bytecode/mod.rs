@@ -15,6 +15,14 @@ pub enum ExecutionBackend {
 }
 
 impl ExecutionBackend {
+    /// Whether this build includes the selected executor. The parser is always present.
+    pub const fn is_available(self) -> bool {
+        match self {
+            Self::Ast => cfg!(feature = "ast"),
+            Self::Bytecode => true,
+        }
+    }
+
     pub fn from_name(name: &str) -> Option<Self> {
         match name {
             "ast" => Some(Self::Ast),
@@ -134,4 +142,9 @@ struct LoopSpec {
     second_span: Span,
     exit: u32,
     next: u32,
+}
+
+#[cfg(test)]
+pub(crate) fn test_function_body(items: &[Item]) -> FunctionBody {
+    FunctionBody::Bytecode(compiler::items(items))
 }

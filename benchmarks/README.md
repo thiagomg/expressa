@@ -66,3 +66,7 @@ The current provisional measurement is summarized in [AST-BASELINE.md](AST-BASEL
 `--exb NAME=DIRECTORY` selects `DIRECTORY/<workload>.exb` for a bytecode engine. Every case must exist. Other engines keep the `.lep` inputs. The runner records each engine's input format, hashes and sizes. Generate artifacts before sampling with the same frozen candidate binary. Offline compilation is excluded from EXB samples; reading, decoding and verification are included. Source samples include parsing and compilation. These are process end-to-end measurements, not isolated VM execution.
 
 The [EXB v1 review](EXB-V1-REVIEW.md) compares the preceding accepted binary on source, the new binary on source, and the new binary on EXB. It retains both interleaved rounds and identifies any regressions.
+
+## Desktop feature profiles
+
+[Minimal-profile review](MINIMAL-PROFILE.md) compares the previous accepted full build with the new full and `--no-default-features` builds on the same source workloads. Parser/compiler and `avalie` remain included in every engine. Feature sets are recorded separately from the source fingerprint, which is identical between the two new builds.

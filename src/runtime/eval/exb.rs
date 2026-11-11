@@ -68,7 +68,19 @@ pub fn run_exb_file_args(
 ) -> Result<i32, RuntimeError> {
     let program = format::read_exb(Path::new(path)).map_err(|e| load_error(e, path))?;
     let hook: Box<dyn DebugHook> = if mode == ExbRunMode::Debug {
-        Box::new(super::super::debug::CliDebugger::new())
+        #[cfg(feature = "terminal")]
+        {
+            Box::new(super::super::debug::CliDebugger::new())
+        }
+        #[cfg(not(feature = "terminal"))]
+        {
+            return Err(RuntimeError {
+                message: "depurador de terminal indisponível neste build".into(),
+                file: path.into(),
+                span: Span::default(),
+                stack: vec![],
+            });
+        }
     } else {
         Box::new(NoopHook)
     };

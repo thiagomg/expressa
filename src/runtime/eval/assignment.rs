@@ -31,6 +31,7 @@ pub(super) enum Destination {
 }
 
 impl Vm<'_, '_> {
+    #[cfg(feature = "ast")]
     pub(super) fn resolve_target(
         &mut self,
         target: &AssignTarget,
@@ -139,6 +140,7 @@ impl Vm<'_, '_> {
 
     /// Evaluate a receiver and retain a writeback path only when its value needs one.
     /// Lists/maps/matrices mutate their storage; text values need their owner's slot.
+    #[cfg(feature = "ast")]
     fn resolve_receiver(
         &mut self,
         expr: &Expr,
@@ -149,6 +151,7 @@ impl Vm<'_, '_> {
         })
     }
 
+    #[cfg(feature = "ast")]
     fn resolve_receiver_inner(
         &mut self,
         expr: &Expr,

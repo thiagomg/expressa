@@ -1,0 +1,105 @@
+{
+  "before": {
+    "source_sha256": "5f71b20376b9397549d8e50949bfe424d45361224a93cee6ae2cbc4318496ed6",
+    "binary_sha256": "c71c0b3d88d933cc12406aa49ffd576c041303e792ca76eb742668736fe6ea75",
+    "archive_sha256": "c8145dd566fc2681fab067ec69ecc09fc7d14173c5da204651c7b8790accdf08",
+    "local_artifacts": "target/bytecode-steps/07-before-minimal-profile",
+    "build": "cargo build -p expressa --release --bin expressa --offline --locked",
+    "git_head": "1760c1967095bdd3e581709143f7a5365ba02ea4",
+    "features": [
+      "all desktop services (before optional features)"
+    ],
+    "default_features": true,
+    "binary_bytes": 4358720
+  },
+  "full": {
+    "source_sha256": "3b7329a5e49b6d42f4d66beaf3e006ca2e0ef77c18476159bb7851c63cc3fd02",
+    "binary_sha256": "bcb028e9af686799f1e724960f49d27f535dd19fce189e9eea59bc844e9bcafa",
+    "archive_sha256": "80adc0773cc24dcb38a13cb8c1027863ad0505b0865d26fea1235f76e477b785",
+    "local_artifacts": "target/bytecode-steps/07-full-profile",
+    "build": "cargo build -p expressa --release --bin expressa --offline --locked",
+    "git_head": "1760c1967095bdd3e581709143f7a5365ba02ea4",
+    "features": [
+      "ast",
+      "graphics",
+      "process",
+      "terminal"
+    ],
+    "default_features": true,
+    "binary_bytes": 4368280
+  },
+  "minimal": {
+    "source_sha256": "3b7329a5e49b6d42f4d66beaf3e006ca2e0ef77c18476159bb7851c63cc3fd02",
+    "binary_sha256": "2b0a5d0196803588564043d24c926f04bf14318694b7fab8dc1660f104e43a01",
+    "archive_sha256": "80adc0773cc24dcb38a13cb8c1027863ad0505b0865d26fea1235f76e477b785",
+    "local_artifacts": "target/bytecode-steps/07-minimal-profile",
+    "build": "cargo build -p expressa --release --bin expressa --no-default-features --offline --locked",
+    "git_head": "1760c1967095bdd3e581709143f7a5365ba02ea4",
+    "features": [],
+    "default_features": false,
+    "binary_bytes": 1736400
+  },
+  "implementation_patch": {
+    "path": "benchmarks/bytecode-steps/07-minimal-profile.patch",
+    "sha256": "bb60d3b0f48f932f430573f80ecf07de31c204debe5b8b7354e75d822652706d",
+    "verified": "git apply --check/apply on before.source.tar; resulting Cargo/src/tests/docs-nativas match candidate"
+  },
+  "feature_validation": {
+    "path": "benchmarks/references/profiles/feature-matrix.json",
+    "combinations": 12,
+    "tests_per_combination": 5,
+    "clippy": "all targets, -D warnings",
+    "sha256": "a7dad79d4f000530364d6ca1ae0711c2d0d8bd79474ca39d4edc80f8a6e4bad2"
+  },
+  "dependency_reports": {
+    "full": {
+      "path": "benchmarks/references/profiles/full-dependencies.txt",
+      "sha256": "b6370716fe9d5f7caf56ae74cf32769568ff2a380c95a649ceaa39c7dd5e1738"
+    },
+    "minimal": {
+      "path": "benchmarks/references/profiles/minimal-dependencies.txt",
+      "sha256": "822fd46187470b7242fdf73a78e2d6c37a709d629e6eaf96e5cebbb04787d90a"
+    }
+  },
+  "protocol": {
+    "repeat": 51,
+    "warmup": 5,
+    "seeds": [
+      50,
+      51
+    ],
+    "cpu_affinity": [
+      0
+    ],
+    "backends": {
+      "before": "bytecode",
+      "full": "bytecode",
+      "minimal": "bytecode"
+    },
+    "inputs": "identical .lep source files, including parsing and compilation",
+    "mode": "fresh-process end-to-end",
+    "rust_build_settings": "release; no LTO override or stripping; same toolchain and target"
+  },
+  "shared_library_reports": {
+    "full": {
+      "path": "benchmarks/references/profiles/full-shared-libraries.txt",
+      "sha256": "81c538e587d47d6a0b32cd58e4f316abfb31540e1e090ad478eaad43219ebc1b",
+      "note": "ldd output is host-specific; addresses vary with ASLR"
+    },
+    "minimal": {
+      "path": "benchmarks/references/profiles/minimal-shared-libraries.txt",
+      "sha256": "fdd028c74ade29ada3b9c6b7bd8b06b6428912ab61c819d1de90ad03a2089475",
+      "note": "ldd output is host-specific; addresses vary with ASLR"
+    }
+  },
+  "results": {
+    "50": {
+      "path": "benchmarks/results/minimal-profile-50.json",
+      "sha256": "f86ca3cc19963647fd166eaab76f16daf1cd9970352ed2014986cea511b6e3f5"
+    },
+    "51": {
+      "path": "benchmarks/results/minimal-profile-51.json",
+      "sha256": "53f1c6379d72bb2ad3a5c4344fb394c8d5659ae87ae0590434656ee9872dbc7a"
+    }
+  }
+}

@@ -15,6 +15,7 @@ pub(crate) const NOVA_LINHA: &str = if cfg!(windows) { "\r\n" } else { "\n" };
 
 const RESET: &str = "\x1b[0m";
 
+#[cfg(feature = "graphics")]
 pub(crate) fn cor_conhecida(nome: &str) -> bool {
     sgr_cor(nome, false).is_some()
 }

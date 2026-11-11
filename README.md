@@ -45,6 +45,8 @@ O backend padrão executa bytecode, sem JIT. Para comparar com o interpretador A
 
 O formato [EXB v1](docs/exb.md) inclui fonte para diagnósticos, valida instruções no carregamento e dispensa o `.lep` original. Veja [a medição de CPU e memória](benchmarks/EXB-V1-REVIEW.md).
 
+Um [perfil mínimo de compilação](docs/runtime-profiles.md) mantém bytecode, EXB e `avalie`, excluindo o executor AST, gráficos, processos e terminal interativo com `--no-default-features`. O build padrão continua completo.
+
 Pacote `.deb` (Ubuntu 24.04 e 26.04, via Docker): `./empacotar-deb.sh`. Os arquivos saem em `dist/`.
 
 ### Builds no GitHub

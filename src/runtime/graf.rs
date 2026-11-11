@@ -1,14 +1,20 @@
 //! Bitmap canvas after drawing commands. Shared by tests, PNG save,
 //! `expressa-grafico`, and the Aula window.
 
+#[cfg(feature = "graphics")]
 use std::io::Cursor;
+#[cfg(feature = "graphics")]
 use std::path::Path;
 
 use super::folha::cor_rgb;
 use super::fonte8x8;
-use super::imagem::{self, Imagem, carimbar, carimbar_rgba};
+#[cfg(feature = "graphics")]
+use super::imagem;
+use super::imagem::{Imagem, carimbar, carimbar_rgba};
 
+#[cfg(feature = "graphics")]
 pub const LARGURA_MAX: u32 = 2048;
+#[cfg(feature = "graphics")]
 pub const ALTURA_MAX: u32 = 2048;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -214,10 +220,12 @@ impl TelaGrafica {
         }
     }
 
+    #[cfg(feature = "graphics")]
     pub fn png_bytes(&self) -> Result<Vec<u8>, String> {
         imagem::encode_png_rgba(&self.como_imagem())
     }
 
+    #[cfg(feature = "graphics")]
     pub fn write_png(&self, path: &Path) -> Result<(), String> {
         std::fs::write(path, self.png_bytes()?).map_err(|e| e.to_string())
     }
@@ -244,15 +252,18 @@ impl Raster {
             .collect()
     }
 
+    #[cfg(feature = "graphics")]
     pub fn png_bytes(&self) -> Result<Vec<u8>, String> {
         encode_png(self.largura, self.altura, &self.rgb32())
     }
 
+    #[cfg(feature = "graphics")]
     pub fn write_png(&self, path: &Path) -> Result<(), String> {
         std::fs::write(path, self.png_bytes()?).map_err(|e| e.to_string())
     }
 }
 
+#[cfg(feature = "graphics")]
 fn encode_png(w: u32, h: u32, rgb32: &[u32]) -> Result<Vec<u8>, String> {
     let mut raw = Vec::with_capacity((w * h * 3) as usize);
     for px in rgb32 {
@@ -271,6 +282,7 @@ fn encode_png(w: u32, h: u32, rgb32: &[u32]) -> Result<Vec<u8>, String> {
     Ok(out)
 }
 
+#[cfg(feature = "graphics")]
 pub fn png_to_rgb32(bytes: &[u8]) -> Result<(u32, u32, Vec<u32>), String> {
     let mut dec = png::Decoder::new(Cursor::new(bytes));
     dec.set_transformations(png::Transformations::EXPAND | png::Transformations::STRIP_16);
@@ -302,6 +314,7 @@ pub fn png_to_rgb32(bytes: &[u8]) -> Result<(u32, u32, Vec<u32>), String> {
     Ok((w, h, out))
 }
 
+#[cfg(feature = "graphics")]
 pub fn cor_graf_conhecida(nome: &str) -> bool {
     matches!(
         nome,
@@ -463,7 +476,7 @@ fn texto_idx(idx: &mut [u8], w: u32, h: u32, x: i32, y: i32, tamanho: i32, texto
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "graphics"))]
 #[allow(clippy::identity_op)] // `1 * 4`: pixel 1, 4 bytes each
 mod tests {
     use super::*;

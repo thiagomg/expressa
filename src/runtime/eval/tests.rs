@@ -61,6 +61,7 @@ fn media_example() {
 }
 
 #[test]
+#[cfg(feature = "graphics")]
 fn example_programs_run() {
     let examples = [
         (
@@ -176,6 +177,7 @@ fn calc_fracoes_prints_with_como_texto() {
     assert!(out.contains("1/4 + 1/4 = 1/2"), "{out}");
 }
 
+#[cfg(feature = "graphics")]
 #[test]
 fn tartaruga_anda_para_cima_e_pinta() {
     let src = r#"
@@ -195,6 +197,7 @@ escreva(t:y)
     assert_eq!(out, "azul\nazul\nbranco\n10\n5\n");
 }
 
+#[cfg(feature = "graphics")]
 #[test]
 fn tartaruga_subir_nao_pinta_e_olhe_direita() {
     let src = r#"
@@ -219,6 +222,7 @@ escreva(g.tela_grafica::pixel(10, 9))
 }
 
 #[test]
+#[cfg(feature = "graphics")]
 fn tartaruga_catalogo_esconde_imports_internos() {
     let src = r#"
 ache = funcao(lista, nome)
@@ -243,6 +247,7 @@ escreva(ache(membros, "_ande"))
     assert_eq!(out, "verdadeiro\nverdadeiro\nfalso\nfalso\n");
 }
 
+#[cfg(feature = "graphics")]
 #[test]
 fn tartaruga_devagar_termina_no_mesmo_ponto() {
     let src = r#"
@@ -786,6 +791,7 @@ escreva(separa_args([], []):pos)
 }
 
 #[test]
+#[cfg(feature = "terminal")]
 fn migrated_games_accept_first_and_last_letters() {
     let termo = include_str!("../../../exemplos/jogos/termo.lep")
         .split("// Para trocar a palavra secreta")
@@ -1127,6 +1133,7 @@ escreva(soma(4, 5))
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+#[cfg(feature = "graphics")]
 #[test]
 fn importe_achatado_nao_cobre_nome_existente() {
     let err = run_err(
@@ -1441,6 +1448,7 @@ fn frames_vivos(src: &str) -> (usize, usize) {
 
 /// `exemplos/jogos/conway_jogo_da_vida.lep` without its endless main
 /// loop, running `geracoes` generations of the glider pattern.
+#[cfg(feature = "terminal")]
 fn conway(geracoes: usize) -> String {
     let src = include_str!("../../../exemplos/jogos/conway_jogo_da_vida.lep");
     let funcoes = src.split("// Rotina principal do jogo").next().unwrap();
@@ -1451,6 +1459,7 @@ fn conway(geracoes: usize) -> String {
 }
 
 #[test]
+#[cfg(feature = "terminal")]
 fn funcoes_locais_que_nao_escapam_nao_acumulam_frames() {
     // `vizinhos` defines `pos_lin`/`pos_col`, which close over its frame.
     // Each call must free that frame, or every generation strands one
@@ -2054,7 +2063,7 @@ fim
     );
 }
 
-#[cfg(unix)]
+#[cfg(all(unix, feature = "process"))]
 mod process_lifetime {
     use super::*;
     use std::os::unix::net::{UnixListener, UnixStream};
@@ -2194,7 +2203,10 @@ mod process_lifetime {
 
     #[test]
     fn discarded_process_values_keep_the_ast_cleanup_timing() {
-        for backend in [ExecutionBackend::Ast, ExecutionBackend::Bytecode] {
+        for backend in [ExecutionBackend::Ast, ExecutionBackend::Bytecode]
+            .into_iter()
+            .filter(|backend| backend.is_available())
+        {
             check("ARG\nobserve = 0", false, backend);
             check("repita 1 vezes {\nARG\nobserve = 0\n}", true, backend);
         }
@@ -2202,7 +2214,10 @@ mod process_lifetime {
 
     #[test]
     fn stack_arguments_release_processes_on_return_and_arity_error() {
-        for backend in [ExecutionBackend::Ast, ExecutionBackend::Bytecode] {
+        for backend in [ExecutionBackend::Ast, ExecutionBackend::Bytecode]
+            .into_iter()
+            .filter(|backend| backend.is_available())
+        {
             check("f = funcao(p) { 0 }\nf(ARG)\nobserve = 0", false, backend);
             check(
                 "f = funcao() { 0 }\nf(ARG) se_falhar 0\nobserve = 0",
@@ -2242,7 +2257,10 @@ fn parameter_slots_are_visible_to_debugger_and_collector() {
             DebugAction::Continue
         }
     }
-    for backend in [ExecutionBackend::Ast, ExecutionBackend::Bytecode] {
+    for backend in [ExecutionBackend::Ast, ExecutionBackend::Bytecode]
+        .into_iter()
+        .filter(|backend| backend.is_available())
+    {
         let values = Rc::new(RefCell::new(Vec::new()));
         let before = super::super::env::ENVS_VIVOS.with(|n| n.get());
         let source = "f = funcao(arg) {\navalie(\"arg = 7\")\nobserve = 0\ng = funcao() { arg }\narg = g\n0\n}\nf(1)";

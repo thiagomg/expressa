@@ -29,3 +29,7 @@ Extends 028, 029, and 031. No Wi-Fi requirement is assumed for a plain Pico 2.
 ## Scope
 
 This task records a finding or proposal, not an approved implementation. Resolve open semantic choices during individual review. Keep implementation changes and commits separate from this planning document.
+
+## Desktop precursor
+
+[Task 048](048-minimal-desktop-runtime-profile.md) implements optional desktop capabilities and capability-aware registration/help/import errors. Board peripherals, embedded host traits and a firmware library profile remain pending.

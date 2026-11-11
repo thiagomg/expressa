@@ -1,3 +1,4 @@
+#![cfg(feature = "ast")]
 //! Compare backends through the same public API, including complete diagnostics.
 use expressa::runtime::{
     ExecutionBackend, ExecutionOptions, ExecutionOutput, RuntimeError, run_with_options,

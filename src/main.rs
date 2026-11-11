@@ -2,7 +2,7 @@ use std::env::args;
 use std::process;
 
 use expressa::parser::parse;
-use expressa::runtime::{debug_source_args, run_repl, run_source_args, run_source_marcador_args};
+use expressa::runtime::{debug_source_args, run_source_args, run_source_marcador_args};
 
 fn main() {
     if let Err(e) = try_main() {
@@ -24,6 +24,9 @@ fn try_main() -> Result<(), Box<dyn std::error::Error>> {
                     .filter(|s| expressa::runtime::ExecutionBackend::from_name(s).is_some())
                     .ok_or("Uso: expressa --backend ast|bytecode [arquivo.lep]")?
                     .clone();
+                if name == "ast" && !cfg!(feature = "ast") {
+                    return Err("backend AST indisponível neste build".into());
+                }
                 unsafe { std::env::set_var("EXPRESSA_BACKEND", &name) };
                 args.drain(option..=option + 1);
             }
@@ -58,25 +61,40 @@ fn try_main() -> Result<(), Box<dyn std::error::Error>> {
         args.drain(i..=i + 1);
     }
     if args.is_empty() {
-        run_repl()?;
+        if !expressa::runtime::ExecutionOptions::default()
+            .backend
+            .is_available()
+        {
+            return Err("backend AST indisponível neste build".into());
+        }
+        #[cfg(feature = "terminal")]
+        expressa::runtime::run_repl()?;
+        #[cfg(not(feature = "terminal"))]
+        return Err("REPL indisponível neste build; informe um arquivo .lep ou .exb".into());
+        #[cfg(feature = "terminal")]
         return Ok(());
     }
     if args[0] == "--help" || args[0] == "-h" {
-        eprintln!(
-            "Uso:\n  \
-             expressa                         REPL\n  \
-             expressa <arquivo.lep|arquivo.exb> [args…]\n  \
-             expressa debug <arquivo.lep|arquivo.exb> [args…]\n  \
-             expressa --ast <arquivo.lep>\n  \
-             expressa compilar <arquivo.lep> [-o arquivo.exb]\n  \
-             expressa --marcador-leia <arquivo.lep|arquivo.exb> [args…]\n  \
-             expressa --grafico <arquivo.cart>\n  \
-             expressa --ao-vivo\n  \
-             expressa --instalar-exemplos\n  \
-             expressa --backend ast|bytecode [arquivo.lep] [args…]\n  \
-             expressa --numeros pt|en [arquivo.lep] [args…]\n  \
-             expressa --aritmetica decimal|float [arquivo.lep] [args…]"
-        );
+        eprintln!("Uso:");
+        #[cfg(feature = "terminal")]
+        eprintln!("  expressa                         REPL");
+        eprintln!("  expressa <arquivo.lep|arquivo.exb> [args…]");
+        #[cfg(feature = "terminal")]
+        eprintln!("  expressa debug <arquivo.lep|arquivo.exb> [args…]");
+        eprintln!("  expressa --ast <arquivo.lep>     imprime a árvore sintática");
+        eprintln!("  expressa compilar <arquivo.lep> [-o arquivo.exb]");
+        eprintln!("  expressa --marcador-leia <arquivo.lep|arquivo.exb> [args…]");
+        #[cfg(feature = "graphics")]
+        eprintln!("  expressa --grafico <arquivo.cart>\n  expressa --ao-vivo");
+        eprintln!("  expressa --instalar-exemplos");
+        let backends = if cfg!(feature = "ast") {
+            "ast|bytecode"
+        } else {
+            "bytecode"
+        };
+        eprintln!("  expressa --backend {backends} [arquivo.lep] [args…]");
+        eprintln!("  expressa --numeros pt|en [arquivo.lep] [args…]");
+        eprintln!("  expressa --aritmetica decimal|float [arquivo.lep] [args…]");
         return Ok(());
     }
     if args[0] == "--instalar-exemplos" {
@@ -89,11 +107,19 @@ fn try_main() -> Result<(), Box<dyn std::error::Error>> {
             eprintln!("Uso: expressa --grafico <arquivo.cart>");
             return Ok(());
         }
+        #[cfg(feature = "graphics")]
         expressa::runtime::run_viewer(std::path::Path::new(&args[1]))?;
+        #[cfg(not(feature = "graphics"))]
+        return Err("gráficos indisponíveis neste build".into());
+        #[cfg(feature = "graphics")]
         return Ok(());
     }
     if args[0] == "--ao-vivo" {
+        #[cfg(feature = "graphics")]
         expressa::runtime::run_live_viewer()?;
+        #[cfg(not(feature = "graphics"))]
+        return Err("gráficos indisponíveis neste build".into());
+        #[cfg(feature = "graphics")]
         return Ok(());
     }
 
@@ -133,6 +159,9 @@ fn try_main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     let (mode, file, script_args) = if args[0] == "debug" {
+        if !cfg!(feature = "terminal") {
+            return Err("depurador de terminal indisponível neste build".into());
+        }
         if args.len() < 2 {
             eprintln!("Uso: expressa debug <arquivo.lep|arquivo.exb> [args…]");
             return Ok(());

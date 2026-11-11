@@ -24,11 +24,16 @@ struct Loop {
 }
 enum Iteration {
     Repeat(i64),
-    Range { next: Option<i64>, end: i64 },
+    Range {
+        next: Option<i64>,
+        end: i64,
+    },
     Items(std::vec::IntoIter<Value>),
+    #[cfg(feature = "process")]
     Process(Rc<RefCell<super::super::super::processo::Processo>>),
     While,
 }
+#[cfg(feature = "process")]
 impl Drop for Loop {
     fn drop(&mut self) {
         if let Iteration::Process(p) = &self.state {
@@ -311,6 +316,7 @@ impl Machine {
                     LoopKind::Items => {
                         let seq = pop!();
                         match seq {
+                            #[cfg(feature = "process")]
                             Value::Processo(p) => Iteration::Process(p),
                             other => Iteration::Items(
                                 vm.iter_items(&other, spec.first_span)?.into_iter(),
@@ -352,6 +358,7 @@ impl Machine {
                         Value::Numero(n.into())
                     }),
                     Iteration::Items(items) => items.next(),
+                    #[cfg(feature = "process")]
                     Iteration::Process(p) => vm
                         .processo_proxima(p, spec.first_span, &env)?
                         .map(Value::Texto),
@@ -542,9 +549,12 @@ impl Machine {
             return Err(error);
         }
         let env = Env::child(&closure.env, FrameKind::Function);
+        #[cfg(feature = "ast")]
         let FunctionBody::Bytecode(code) = &closure.body else {
             unreachable!("bytecode call dispatch")
         };
+        #[cfg(not(feature = "ast"))]
+        let FunctionBody::Bytecode(code) = &closure.body;
         code.bind_parameters(&mut env.borrow_mut(), self.values.drain(args_start..));
         self.values.truncate(stack_base);
         self.push(
@@ -758,6 +768,10 @@ impl Vm<'_, '_> {
         program: Program,
         env: &Rc<RefCell<Env>>,
     ) -> Result<Value, EvalError> {
+        if !self.backend.is_available() {
+            return Err(self.err("backend AST indisponível neste build", program.span));
+        }
+        #[cfg(feature = "ast")]
         if self.backend == ExecutionBackend::Ast {
             return self.eval_items_value(&program.items, env);
         }
@@ -766,6 +780,7 @@ impl Vm<'_, '_> {
         let result = self.execute_code(code, env, FrameKindCode::Plain);
         self.retorne_so_em_funcao(result)
     }
+    #[cfg(feature = "ast")]
     pub(in crate::runtime::eval) fn execute_items(
         &mut self,
         items: &[Item],
