@@ -2053,3 +2053,222 @@ fim
         "Thiago Silva\nThiago\n"
     );
 }
+
+#[cfg(unix)]
+mod process_lifetime {
+    use super::*;
+    use std::os::unix::net::{UnixListener, UnixStream};
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    const WAIT: Duration = Duration::from_secs(10);
+    const CHILD: &str = "runtime::eval::tests::process_lifetime::probe_child";
+
+    // Invoked explicitly by the lifetime tests in a separate test executable.
+    #[test]
+    #[ignore = "subprocess helper, invoked explicitly by the lifetime tests"]
+    fn probe_child() {
+        use std::io::Read;
+        let path = std::env::var_os("EXPRESSA_TEST_PROBE").expect("probe socket");
+        let mut stream = UnixStream::connect(path).unwrap();
+        // The controller owns the deadline. A child timer could make a leaked
+        // process look like a successful kill. If the controller disappears,
+        // its socket closes and read_exact fails instead of leaving an orphan.
+        stream.write_all(b"R").unwrap();
+        let mut command = [0];
+        stream.read_exact(&mut command).unwrap();
+        assert_eq!(&command, b"G");
+        stream.write_all(b"A").unwrap();
+    }
+
+    struct Probe {
+        listener: UnixListener,
+        stream: Option<UnixStream>,
+        alive: bool,
+        checked: Rc<std::cell::Cell<bool>>,
+    }
+    impl DebugHook for Probe {
+        fn before_stmt(&mut self, ctx: &DebugCtx<'_>) -> DebugAction {
+            use std::io::Read;
+            let line = ctx
+                .source
+                .lines()
+                .nth(ctx.span.line as usize - 1)
+                .unwrap()
+                .trim();
+            if line == "retorne child" {
+                assert!(self.stream.is_none(), "duplicate readiness checkpoint");
+                let deadline = Instant::now() + WAIT;
+                let (mut stream, _) = loop {
+                    match self.listener.accept() {
+                        Ok(pair) => break pair,
+                        Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
+                            assert!(Instant::now() < deadline, "child never connected");
+                            thread::sleep(Duration::from_millis(1));
+                        }
+                        Err(e) => panic!("probe accept: {e}"),
+                    }
+                };
+                stream.set_read_timeout(Some(WAIT)).unwrap();
+                stream.set_write_timeout(Some(WAIT)).unwrap();
+                let mut ready = [0];
+                stream.read_exact(&mut ready).unwrap();
+                assert_eq!(&ready, b"R");
+                self.stream = Some(stream);
+            } else if line == "observe = 0" {
+                let stream = self.stream.as_mut().expect("readiness handshake");
+                let mut answer = [0];
+                if self.alive {
+                    stream.write_all(b"G").expect("retained child was killed");
+                    stream
+                        .read_exact(&mut answer)
+                        .expect("retained child did not acknowledge");
+                    assert_eq!(&answer, b"A");
+                } else {
+                    // A leaked child stays blocked awaiting G: timeout is failure.
+                    assert_eq!(
+                        stream.read(&mut answer).expect("child did not terminate"),
+                        0
+                    );
+                }
+                self.checked.set(true);
+            }
+            DebugAction::Continue
+        }
+    }
+
+    struct Temp(PathBuf);
+    impl Drop for Temp {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    fn check(body: &str, alive: bool, backend: ExecutionBackend) {
+        static NEXT: AtomicU64 = AtomicU64::new(0);
+        let temp = Temp(std::env::temp_dir().join(format!(
+            "exp-probe-{}-{}",
+            std::process::id(),
+            NEXT.fetch_add(1, Ordering::Relaxed)
+        )));
+        std::fs::create_dir_all(&temp.0).unwrap();
+        let path = temp.0.join("socket");
+        let listener = UnixListener::bind(&path).unwrap();
+        listener.set_nonblocking(true).unwrap();
+        let command = format!(
+            "proc::linhas_de([\"env\", {:?}, {:?}, \"--exact\", {:?}, \"--ignored\", \"--nocapture\"])",
+            format!("EXPRESSA_TEST_PROBE={}", path.display()),
+            std::env::current_exe().unwrap().to_str().unwrap(),
+            CHILD,
+        );
+        let source = format!(
+            "proc = importe \"processo\"\nmake = funcao() {{\nchild = {command}\nretorne child\n}}\n{}",
+            body.replace("ARG", "make()")
+        );
+        let checked = Rc::new(std::cell::Cell::new(false));
+        let hook = Probe {
+            listener,
+            stream: None,
+            alive,
+            checked: Rc::clone(&checked),
+        };
+        run_configured_with_io(
+            &source,
+            "lifetime.lep",
+            Box::new(hook),
+            &mut io::Cursor::new(""),
+            &mut Vec::new(),
+            &mut Vec::new(),
+            ExecutionOptions {
+                backend,
+                ..ExecutionOptions::default()
+            },
+            None,
+            None,
+            false,
+            None,
+            &[],
+        )
+        .unwrap();
+        assert!(checked.get(), "observation checkpoint not reached");
+    }
+
+    #[test]
+    fn discarded_process_values_keep_the_ast_cleanup_timing() {
+        for backend in [ExecutionBackend::Ast, ExecutionBackend::Bytecode] {
+            check("ARG\nobserve = 0", false, backend);
+            check("repita 1 vezes {\nARG\nobserve = 0\n}", true, backend);
+        }
+    }
+
+    #[test]
+    fn stack_arguments_release_processes_on_return_and_arity_error() {
+        for backend in [ExecutionBackend::Ast, ExecutionBackend::Bytecode] {
+            check("f = funcao(p) { 0 }\nf(ARG)\nobserve = 0", false, backend);
+            check(
+                "f = funcao() { 0 }\nf(ARG) se_falhar 0\nobserve = 0",
+                false,
+                backend,
+            );
+            check(
+                "f = funcao(p) { funcao() { p } }\ng = f(ARG)\nobserve = 0",
+                true,
+                backend,
+            );
+        }
+    }
+}
+
+#[test]
+fn parameter_slots_are_visible_to_debugger_and_collector() {
+    struct Hook(Rc<RefCell<Vec<String>>>);
+    impl DebugHook for Hook {
+        fn before_stmt(&mut self, ctx: &DebugCtx<'_>) -> DebugAction {
+            if ctx
+                .source
+                .lines()
+                .nth(ctx.span.line as usize - 1)
+                .unwrap()
+                .trim()
+                == "observe = 0"
+            {
+                let bindings = super::super::debug::collect_vars(ctx);
+                self.0.borrow_mut().extend(
+                    bindings
+                        .into_iter()
+                        .filter(|b| b.name == "arg")
+                        .map(|b| b.value),
+                );
+            }
+            DebugAction::Continue
+        }
+    }
+    for backend in [ExecutionBackend::Ast, ExecutionBackend::Bytecode] {
+        let values = Rc::new(RefCell::new(Vec::new()));
+        let before = super::super::env::ENVS_VIVOS.with(|n| n.get());
+        let source = "f = funcao(arg) {\navalie(\"arg = 7\")\nobserve = 0\ng = funcao() { arg }\narg = g\n0\n}\nf(1)";
+        run_configured_with_io(
+            source,
+            "slots.lep",
+            Box::new(Hook(Rc::clone(&values))),
+            &mut io::Cursor::new(""),
+            &mut Vec::new(),
+            &mut Vec::new(),
+            ExecutionOptions {
+                backend,
+                ..ExecutionOptions::default()
+            },
+            None,
+            None,
+            false,
+            None,
+            &[],
+        )
+        .unwrap();
+        assert_eq!(&*values.borrow(), &["7"]);
+        assert_eq!(
+            super::super::env::ENVS_VIVOS.with(|n| n.get()),
+            before,
+            "{backend:?}: parameter cycle leaked"
+        );
+    }
+}

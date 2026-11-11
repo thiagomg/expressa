@@ -120,7 +120,7 @@ pub enum FrameKind {
 }
 
 pub struct Env {
-    pub vars: HashMap<String, Value>,
+    pub vars: super::bindings::Bindings,
     pub parent: Option<Rc<RefCell<Env>>>,
     pub kind: FrameKind,
     /// A function was defined here or in a block inside (see
@@ -153,7 +153,7 @@ impl Env {
         #[cfg(test)]
         ENVS_VIVOS.with(|n| n.set(n.get() + 1));
         Rc::new(RefCell::new(Self {
-            vars: HashMap::new(),
+            vars: super::bindings::Bindings::default(),
             parent,
             kind,
             criou_funcao: false,

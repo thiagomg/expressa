@@ -118,6 +118,13 @@ impl Machine {
                     bindings.define(name.clone(), value);
                 }
             }
+            Op::LoadLocal(index) => self
+                .values
+                .push(frame.env().borrow().vars.parameter(index).clone()),
+            Op::StoreLocal(index) => {
+                let value = pop!();
+                *frame.env().borrow_mut().vars.parameter_mut(index) = value;
+            }
             Op::Drop => {
                 pop!();
             }
@@ -535,13 +542,11 @@ impl Machine {
             return Err(error);
         }
         let env = Env::child(&closure.env, FrameKind::Function);
-        for (param, arg) in closure.params.iter().zip(self.values.drain(args_start..)) {
-            env.borrow_mut().define(param.name.clone(), arg);
-        }
-        self.values.truncate(stack_base);
         let FunctionBody::Bytecode(code) = &closure.body else {
             unreachable!("bytecode call dispatch")
         };
+        code.bind_parameters(&mut env.borrow_mut(), self.values.drain(args_start..));
+        self.values.truncate(stack_base);
         self.push(
             vm,
             Rc::clone(code),

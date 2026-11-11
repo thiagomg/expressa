@@ -120,9 +120,13 @@ Não houve alteração de dependências, sintaxe, semântica numérica, `avalie`
 
 A experiência seguinte é documentada separadamente em [BYTECODE-STEP-03.md](BYTECODE-STEP-03.md), com alterações, testes, medições e decisão. Sua referência é `02-inline-dispatch`.
 
+## Etapa 04: parâmetros por posição
+
+[Implementação, regressões, comparação CPU/RSS e validação](BYTECODE-STEP-04.md). Os testes de processos foram estabilizados em uma mudança separada antes desta medição.
+
 ## Próximas hipóteses
 
-- Investigar resolução de variáveis por posições locais, com tratamento explícito de closures, referências a nomes definidos depois e `avalie`. Não assumir que uma resolução estática simples preserva a linguagem.
+- Expandir a resolução por posições além dos parâmetros no escopo principal, com análise explícita de sombreamento, closures e avaliação dinâmica. Essa expansão ainda não está implementada.
 - Avaliar separadamente a representação compacta das instruções e suas tabelas; medir economia de memória e custo de decodificação.
 
 Estas hipóteses não estão implementadas. Cache de `avalie`, serialização de bytecode e firmware Pico não fazem parte destas experiências. O AST permanece disponível como referência.

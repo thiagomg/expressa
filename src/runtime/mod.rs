@@ -1,3 +1,4 @@
+mod bindings;
 mod cartesiano_host;
 mod debug;
 mod env;

@@ -1,0 +1,457 @@
+--- /dev/null
++++ b/src/runtime/bindings.rs
+@@ -0,0 +1,91 @@
++//! Canonical storage for named bindings and compiled function parameters.
++//! Parameter names are shared by all calls; their values belong to each Env.
++use std::collections::HashMap;
++use std::rc::Rc;
++
++use super::value::Value;
++
++#[derive(Default)]
++pub struct Bindings {
++    named: HashMap<String, Value>,
++    parameters: Option<Parameters>,
++}
++struct Parameters {
++    names: Rc<HashMap<String, u32>>,
++    values: Vec<Value>,
++}
++impl Bindings {
++    pub(crate) fn bind_parameters(&mut self, names: Rc<HashMap<String, u32>>, values: Vec<Value>) {
++        debug_assert!(self.is_empty());
++        debug_assert_eq!(names.len(), values.len());
++        self.parameters = Some(Parameters { names, values });
++    }
++    pub(crate) fn parameter(&self, index: u32) -> &Value {
++        &self
++            .parameters
++            .as_ref()
++            .expect("compiled parameters")
++            .values[index as usize]
++    }
++    pub(crate) fn parameter_mut(&mut self, index: u32) -> &mut Value {
++        &mut self
++            .parameters
++            .as_mut()
++            .expect("compiled parameters")
++            .values[index as usize]
++    }
++    pub fn get(&self, name: &str) -> Option<&Value> {
++        if let Some(params) = &self.parameters
++            && let Some(index) = params.names.get(name)
++        {
++            return Some(&params.values[*index as usize]);
++        }
++        self.named.get(name)
++    }
++    pub fn get_mut(&mut self, name: &str) -> Option<&mut Value> {
++        if let Some(params) = &mut self.parameters
++            && let Some(index) = params.names.get(name)
++        {
++            return Some(&mut params.values[*index as usize]);
++        }
++        self.named.get_mut(name)
++    }
++    pub fn contains_key(&self, name: &str) -> bool {
++        self.get(name).is_some()
++    }
++    pub fn insert(&mut self, name: String, value: Value) -> Option<Value> {
++        if let Some(params) = &mut self.parameters
++            && let Some(index) = params.names.get(&name)
++        {
++            return Some(std::mem::replace(
++                &mut params.values[*index as usize],
++                value,
++            ));
++        }
++        self.named.insert(name, value)
++    }
++    pub fn iter(&self) -> impl Iterator<Item = (&String, &Value)> {
++        self.named
++            .iter()
++            .chain(self.parameters.iter().flat_map(|p| {
++                p.names
++                    .iter()
++                    .map(|(name, index)| (name, &p.values[*index as usize]))
++            }))
++    }
++    pub fn values(&self) -> impl Iterator<Item = &Value> {
++        self.named
++            .values()
++            .chain(self.parameters.iter().flat_map(|p| p.values.iter()))
++    }
++    pub fn len(&self) -> usize {
++        self.named.len() + self.parameters.as_ref().map_or(0, |p| p.values.len())
++    }
++    pub fn is_empty(&self) -> bool {
++        self.len() == 0
++    }
++    pub fn clear(&mut self) {
++        self.named.clear();
++        self.parameters = None;
++    }
++}
+--- a/src/runtime/env.rs
++++ b/src/runtime/env.rs
+@@ -120,7 +120,7 @@
+ }
+ 
+ pub struct Env {
+-    pub vars: HashMap<String, Value>,
++    pub vars: super::bindings::Bindings,
+     pub parent: Option<Rc<RefCell<Env>>>,
+     pub kind: FrameKind,
+     /// A function was defined here or in a block inside (see
+@@ -153,7 +153,7 @@
+         #[cfg(test)]
+         ENVS_VIVOS.with(|n| n.set(n.get() + 1));
+         Rc::new(RefCell::new(Self {
+-            vars: HashMap::new(),
++            vars: super::bindings::Bindings::default(),
+             parent,
+             kind,
+             criou_funcao: false,
+--- a/src/runtime/eval/bytecode/compiler.rs
++++ b/src/runtime/eval/bytecode/compiler.rs
+@@ -4,12 +4,14 @@
+     code: Chunk,
+     names: HashMap<String, u32>,
+     spans: HashMap<Span, u32>,
++    locals: bool,
+ }
+ 
+ impl Compiler {
+     fn new() -> Self {
+         Self {
+             code: Chunk {
++                parameter_slots: Rc::new(HashMap::new()),
+                 instructions: vec![],
+                 spans: vec![],
+                 names: vec![],
+@@ -20,6 +22,7 @@
+             },
+             names: HashMap::new(),
+             spans: HashMap::new(),
++            locals: true,
+         }
+     }
+     fn name(&mut self, name: &str) -> u32 {
+@@ -89,9 +92,11 @@
+         }
+     }
+     fn block(&mut self, block: &Block) {
++        let locals = std::mem::replace(&mut self.locals, false);
+         self.emit(Op::EnterScope, block.span);
+         self.stmts(&block.stmts);
+         self.emit(Op::LeaveScope, block.span);
++        self.locals = locals;
+     }
+     fn stmt(&mut self, stmt: &Stmt) {
+         stacker::maybe_grow(PILHA_RESERVA, PILHA_SEGMENTO, || self.stmt_inner(stmt));
+@@ -112,6 +117,19 @@
+                     span: target_span,
+                 } = target
+                 {
++                    if self.locals
++                        && let Some(&slot) = self.code.parameter_slots.get(name)
++                    {
++                        if let Some(op) = compound {
++                            self.emit(Op::LoadLocal(slot), *target_span);
++                            self.expr(value);
++                            self.emit(Op::Binary(*op), span);
++                        } else {
++                            self.expr(value);
++                        }
++                        self.emit(Op::StoreLocal(slot), *target_span);
++                        return;
++                    }
+                     let id = self.name(name);
+                     if let Some(op) = compound {
+                         self.emit(Op::Load(id), *target_span);
+@@ -191,6 +209,7 @@
+         body: &Block,
+         cond: Option<&Expr>,
+     ) {
++        let locals = std::mem::replace(&mut self.locals, false);
+         let var = var.map(|v| self.name(v));
+         let id = self.code.loops.len() as u32;
+         self.code.loops.push(LoopSpec {
+@@ -236,6 +255,7 @@
+         self.emit(Op::LoopEnd, body.span);
+         self.code.loops[id as usize].next = next;
+         self.code.loops[id as usize].exit = exit;
++        self.locals = locals;
+     }
+     fn expr(&mut self, expr: &Expr) {
+         stacker::maybe_grow(PILHA_RESERVA, PILHA_SEGMENTO, || self.expr_inner(expr));
+@@ -262,6 +282,12 @@
+                 self.emit(Op::Bool(*value), span);
+             }
+             Expr::Ident { name, .. } => {
++                if self.locals
++                    && let Some(&slot) = self.code.parameter_slots.get(name)
++                {
++                    self.emit(Op::LoadLocal(slot), span);
++                    return;
++                }
+                 let id = self.name(name);
+                 self.emit(Op::Load(id), span);
+             }
+@@ -280,6 +306,13 @@
+                 params, body, doc, ..
+             } => {
+                 let mut compiler = Self::new();
++                compiler.code.parameter_slots = Rc::new(
++                    params
++                        .iter()
++                        .enumerate()
++                        .map(|(index, param)| (param.name.clone(), index as u32))
++                        .collect(),
++                );
+                 compiler.stmts(&body.stmts);
+                 compiler.emit(Op::Finish, body.span);
+                 let id = self.code.functions.len() as u32;
+@@ -508,3 +541,30 @@
+     compiler.emit(Op::Finish, Span::default());
+     Rc::new(compiler.code)
+ }
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++
++    #[test]
++    fn parameters_use_slots_only_in_the_function_scope() {
++        let program = parse("f = funcao(x) { x += 1 { x } x }").unwrap();
++        let code = items(&program.items);
++        let body = &code.functions[0].code;
++        assert!(
++            body.instructions
++                .iter()
++                .any(|i| matches!(i.op, Op::LoadLocal(0)))
++        );
++        assert!(
++            body.instructions
++                .iter()
++                .any(|i| matches!(i.op, Op::StoreLocal(0)))
++        );
++        assert!(
++            body.instructions
++                .iter()
++                .any(|i| matches!(i.op, Op::Load(_)))
++        );
++    }
++}
+--- a/src/runtime/eval/bytecode/execute.rs
++++ b/src/runtime/eval/bytecode/execute.rs
+@@ -117,6 +117,13 @@
+                 } else {
+                     bindings.define(name.clone(), value);
+                 }
++            }
++            Op::LoadLocal(index) => self
++                .values
++                .push(frame.env().borrow().vars.parameter(index).clone()),
++            Op::StoreLocal(index) => {
++                let value = pop!();
++                *frame.env().borrow_mut().vars.parameter_mut(index) = value;
+             }
+             Op::Drop => {
+                 pop!();
+@@ -535,13 +542,11 @@
+             return Err(error);
+         }
+         let env = Env::child(&closure.env, FrameKind::Function);
+-        for (param, arg) in closure.params.iter().zip(self.values.drain(args_start..)) {
+-            env.borrow_mut().define(param.name.clone(), arg);
+-        }
+-        self.values.truncate(stack_base);
+         let FunctionBody::Bytecode(code) = &closure.body else {
+             unreachable!("bytecode call dispatch")
+         };
++        code.bind_parameters(&mut env.borrow_mut(), self.values.drain(args_start..));
++        self.values.truncate(stack_base);
+         self.push(
+             vm,
+             Rc::clone(code),
+--- a/src/runtime/eval/bytecode/mod.rs
++++ b/src/runtime/eval/bytecode/mod.rs
+@@ -38,6 +38,8 @@
+     BadNumber(u32),
+     Load(u32),
+     Store(u32),
++    LoadLocal(u32),
++    StoreLocal(u32),
+     Drop,
+     SetLast,
+     List(u32),
+@@ -92,6 +94,7 @@
+ }
+ 
+ pub struct Chunk {
++    parameter_slots: Rc<HashMap<String, u32>>,
+     instructions: Vec<Instruction>,
+     spans: Vec<Span>,
+     names: Vec<String>,
+@@ -99,6 +102,15 @@
+     functions: Vec<Prototype>,
+     imports: Vec<Import>,
+     loops: Vec<LoopSpec>,
++}
++
++impl Chunk {
++    pub(super) fn bind_parameters(&self, env: &mut Env, args: impl Iterator<Item = Value>) {
++        if !self.parameter_slots.is_empty() {
++            env.vars
++                .bind_parameters(Rc::clone(&self.parameter_slots), args.collect());
++        }
++    }
+ }
+ 
+ struct Prototype {
+--- a/src/runtime/eval/tests.rs
++++ b/src/runtime/eval/tests.rs
+@@ -2217,3 +2217,58 @@
+         }
+     }
+ }
++
++#[test]
++fn parameter_slots_are_visible_to_debugger_and_collector() {
++    struct Hook(Rc<RefCell<Vec<String>>>);
++    impl DebugHook for Hook {
++        fn before_stmt(&mut self, ctx: &DebugCtx<'_>) -> DebugAction {
++            if ctx
++                .source
++                .lines()
++                .nth(ctx.span.line as usize - 1)
++                .unwrap()
++                .trim()
++                == "observe = 0"
++            {
++                let bindings = super::super::debug::collect_vars(ctx);
++                self.0.borrow_mut().extend(
++                    bindings
++                        .into_iter()
++                        .filter(|b| b.name == "arg")
++                        .map(|b| b.value),
++                );
++            }
++            DebugAction::Continue
++        }
++    }
++    for backend in [ExecutionBackend::Ast, ExecutionBackend::Bytecode] {
++        let values = Rc::new(RefCell::new(Vec::new()));
++        let before = super::super::env::ENVS_VIVOS.with(|n| n.get());
++        let source = "f = funcao(arg) {\navalie(\"arg = 7\")\nobserve = 0\ng = funcao() { arg }\narg = g\n0\n}\nf(1)";
++        run_configured_with_io(
++            source,
++            "slots.lep",
++            Box::new(Hook(Rc::clone(&values))),
++            &mut io::Cursor::new(""),
++            &mut Vec::new(),
++            &mut Vec::new(),
++            ExecutionOptions {
++                backend,
++                ..ExecutionOptions::default()
++            },
++            None,
++            None,
++            false,
++            None,
++            &[],
++        )
++        .unwrap();
++        assert_eq!(&*values.borrow(), &["7"]);
++        assert_eq!(
++            super::super::env::ENVS_VIVOS.with(|n| n.get()),
++            before,
++            "{backend:?}: parameter cycle leaked"
++        );
++    }
++}
+--- a/src/runtime/eval.rs
++++ b/src/runtime/eval.rs
+@@ -1479,10 +1479,14 @@
+                 }
+                 self.check_profundidade(span)?;
+                 let call_env = Env::child(&closure.env, FrameKind::Function);
+-                for (param, arg) in closure.params.iter().zip(args) {
+-                    call_env
+-                        .borrow_mut()
+-                        .define(param.name.clone(), arg.clone());
++                if let FunctionBody::Bytecode(code) = &closure.body {
++                    code.bind_parameters(&mut call_env.borrow_mut(), args.iter().cloned());
++                } else {
++                    for (param, arg) in closure.params.iter().zip(args) {
++                        call_env
++                            .borrow_mut()
++                            .define(param.name.clone(), arg.clone());
++                    }
+                 }
+                 self.stack.push(CallFrame {
+                     name: name.to_string(),
+--- a/src/runtime/mod.rs
++++ b/src/runtime/mod.rs
+@@ -1,3 +1,4 @@
++mod bindings;
+ mod cartesiano_host;
+ mod debug;
+ mod env;
+--- a/tests/bytecode_conformance.rs
++++ b/tests/bytecode_conformance.rs
+@@ -40,6 +40,53 @@
+ }
+ 
+ #[test]
++fn indexed_parameters_share_storage_with_eval_and_closures() {
++    for (source, expected) in [
++        (
++            "f = funcao(a) { a += 1 avalie(\"a = a + 2\") a }\nescreva(f(3))",
++            "6\n",
++        ),
++        ("f = funcao(a) { { a = 8 } a }\nescreva(f(1))", "8\n"),
++        (
++            "f = funcao(a) { para a de 1 ate 3 { escreva(a) } a }\nescreva(f(9))",
++            "1\n2\n3\n9\n",
++        ),
++        (
++            "f = funcao(a) { g = funcao() { a } avalie(\"a = 7\") g }\ng = f(1)\nescreva(g())",
++            "7\n",
++        ),
++        (
++            "f = funcao(a) { g = funcao() { a = 7 } g() se_falhar 0 a }\nescreva(f(1))",
++            "1\n",
++        ),
++        (
++            "f = funcao(a) { g = funcao(a) { a += 1 a } a + g(2) }\nescreva(f(10))",
++            "13\n",
++        ),
++        (
++            "importe \"arquivo\"\nf = funcao(a) { avalie(\"late = 5\") a + late }\nescreva(f(2))",
++            "7\n",
++        ),
++        (
++            "escreva(ordene([3, 1, 2], funcao(x) { -x }))",
++            "[3, 2, 1]\n",
++        ),
++        (
++            "f = funcao(a) { a[0] += 1 a }\nxs = [1]\nescreva(f(xs))\nescreva(xs)",
++            "[2]\n[2]\n",
++        ),
++    ] {
++        for backend in [ExecutionBackend::Ast, ExecutionBackend::Bytecode] {
++            assert_eq!(
++                outcome(source, backend).unwrap().stdout,
++                expected,
++                "{backend:?}: {source}"
++            );
++        }
++    }
++}
++
++#[test]
+ fn list_after_assignment_is_a_separate_block_result() {
+     let source = r#"
+ serialize_data = funcao(dt) { dt }

@@ -38,6 +38,8 @@ enum Op {
     BadNumber(u32),
     Load(u32),
     Store(u32),
+    LoadLocal(u32),
+    StoreLocal(u32),
     Drop,
     SetLast,
     List(u32),
@@ -92,6 +94,7 @@ struct Instruction {
 }
 
 pub struct Chunk {
+    parameter_slots: Rc<HashMap<String, u32>>,
     instructions: Vec<Instruction>,
     spans: Vec<Span>,
     names: Vec<String>,
@@ -99,6 +102,15 @@ pub struct Chunk {
     functions: Vec<Prototype>,
     imports: Vec<Import>,
     loops: Vec<LoopSpec>,
+}
+
+impl Chunk {
+    pub(super) fn bind_parameters(&self, env: &mut Env, args: impl Iterator<Item = Value>) {
+        if !self.parameter_slots.is_empty() {
+            env.vars
+                .bind_parameters(Rc::clone(&self.parameter_slots), args.collect());
+        }
+    }
 }
 
 struct Prototype {

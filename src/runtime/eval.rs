@@ -1479,10 +1479,14 @@ impl<'a, 'c> Vm<'a, 'c> {
                 }
                 self.check_profundidade(span)?;
                 let call_env = Env::child(&closure.env, FrameKind::Function);
-                for (param, arg) in closure.params.iter().zip(args) {
-                    call_env
-                        .borrow_mut()
-                        .define(param.name.clone(), arg.clone());
+                if let FunctionBody::Bytecode(code) = &closure.body {
+                    code.bind_parameters(&mut call_env.borrow_mut(), args.iter().cloned());
+                } else {
+                    for (param, arg) in closure.params.iter().zip(args) {
+                        call_env
+                            .borrow_mut()
+                            .define(param.name.clone(), arg.clone());
+                    }
                 }
                 self.stack.push(CallFrame {
                     name: name.to_string(),
