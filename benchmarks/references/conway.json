@@ -1,0 +1,94 @@
+{
+  "captured_at_utc": "2026-11-11T07:43:46.233117+00:00",
+  "git_head": "c2de421fb0598a24dd5300de81e7420d8cdd579e",
+  "source_sha256": "3b7329a5e49b6d42f4d66beaf3e006ca2e0ef77c18476159bb7851c63cc3fd02",
+  "archive": {
+    "path": "target/benchmarks/conway-baseline-c2de421/source.tar",
+    "sha256": "9a66c16c52bde700463a676f0f6182841d4c49597cd06aaf6bbf9aa49106068f"
+  },
+  "binary": {
+    "path": "target/benchmarks/conway-baseline-c2de421/expressa",
+    "sha256": "83eadefe14c54dd6497aee7de27c5b27a438eede0b088e6361458cce31be03ce",
+    "bytes": 3273496,
+    "stripped": true,
+    "provenance": "Exact SHA-256 match after strip of documented 07-full-profile release; same ELF BuildID, source fingerprint and toolchain. Both backends use this same stripped executable.",
+    "unstripped_reference_sha256": "bcb028e9af686799f1e724960f49d27f535dd19fce189e9eea59bc844e9bcafa",
+    "unstripped_reference_bytes": 4368280
+  },
+  "build": "cargo build -p expressa --release --bin expressa --offline --locked",
+  "features": "default: ast, graphics, process, terminal",
+  "program": {
+    "path": "target/benchmarks/conway-baseline-c2de421/conway.lep",
+    "sha256": "6f43ad41cc2d0301639b0d578c481fd6d565ab1688113af2d9b59182537ef26d",
+    "original": "benchmarks/programs/conway/conway.lep"
+  },
+  "helper": {
+    "path": "target/benchmarks/conway-baseline-c2de421/measure",
+    "sha256": "30e35bff4b172a085c29cfa91365d9902cf2b6f144909f3ab24577a83fc160f2",
+    "source_sha256": "530470fe318106f53355e4e91940ee24065574088fdc3b4a524ad1fc1431cb05",
+    "build": "cc -O2 -std=c11 -Wall -Wextra -Werror measure.c -o measure",
+    "compiler": "cc (Ubuntu 15.3.0-4ubuntu1) 15.3.0"
+  },
+  "runner": {
+    "path": "benchmarks/conway.py",
+    "sha256": "9b2a2ece00160a80ea29a9ae25b07219e67037eb34d144da684369b264da7ac7"
+  },
+  "planned_protocol": {
+    "repeat": 15,
+    "process_warmup": 3,
+    "seeds": [
+      60,
+      61
+    ],
+    "cpu_affinity": [
+      0
+    ],
+    "destination": "raster",
+    "cases": [
+      [
+        32,
+        100,
+        10
+      ],
+      [
+        64,
+        25,
+        3
+      ],
+      [
+        128,
+        6,
+        1
+      ]
+    ],
+    "modes": [
+      "simulacao",
+      "desenho",
+      "completo"
+    ],
+    "scope": "whole-process, same binary for AST/bytecode; not frame timings or pure drawing phase"
+  },
+  "results": {
+    "60": {
+      "path": "benchmarks/results/conway-60.json",
+      "sha256": "3fe6c05a506988050e10a026dc60c270b5056ecc988796928e2e2b9984cf9c0d",
+      "measured_samples": 270,
+      "process_warmups": 54
+    },
+    "61": {
+      "path": "benchmarks/results/conway-61.json",
+      "sha256": "4dea015d2265f43cd1747abee8d245c76a32cf4e67279cd58ab325ff939e6f64",
+      "measured_samples": 270,
+      "process_warmups": 54
+    }
+  },
+  "build_postprocessing": "strip applied to a copy of the documented full release; exact resulting binary SHA-256 verified before sampling",
+  "validation": {
+    "measured_samples": 540,
+    "process_warmups": 108,
+    "smoke_combinations": 18,
+    "all_stdout_verified_against_independent_reference": true,
+    "sample_counts_medians_and_artifact_hashes_verified": true,
+    "no_production_rust_changes": true
+  }
+}

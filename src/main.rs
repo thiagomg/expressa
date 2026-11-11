@@ -2,7 +2,7 @@ use std::env::args;
 use std::process;
 
 use expressa::parser::parse;
-use expressa::runtime::{debug_source_args, run_repl, run_source_args, run_source_marcador_args};
+use expressa::runtime::{debug_source_args, run_source_args, run_source_marcador_args};
 
 fn main() {
     if let Err(e) = try_main() {
@@ -24,6 +24,9 @@ fn try_main() -> Result<(), Box<dyn std::error::Error>> {
                     .filter(|s| expressa::runtime::ExecutionBackend::from_name(s).is_some())
                     .ok_or("Uso: expressa --backend ast|bytecode [arquivo.lep]")?
                     .clone();
+                if name == "ast" && !cfg!(feature = "ast") {
+                    return Err("backend AST indisponível neste build".into());
+                }
                 unsafe { std::env::set_var("EXPRESSA_BACKEND", &name) };
                 args.drain(option..=option + 1);
             }
@@ -58,24 +61,40 @@ fn try_main() -> Result<(), Box<dyn std::error::Error>> {
         args.drain(i..=i + 1);
     }
     if args.is_empty() {
-        run_repl()?;
+        if !expressa::runtime::ExecutionOptions::default()
+            .backend
+            .is_available()
+        {
+            return Err("backend AST indisponível neste build".into());
+        }
+        #[cfg(feature = "terminal")]
+        expressa::runtime::run_repl()?;
+        #[cfg(not(feature = "terminal"))]
+        return Err("REPL indisponível neste build; informe um arquivo .lep ou .exb".into());
+        #[cfg(feature = "terminal")]
         return Ok(());
     }
     if args[0] == "--help" || args[0] == "-h" {
-        eprintln!(
-            "Uso:\n  \
-             expressa                         REPL\n  \
-             expressa <arquivo.lep> [args…]\n  \
-             expressa debug <arquivo.lep> [args…]\n  \
-             expressa --ast <arquivo.lep>\n  \
-             expressa --marcador-leia <arquivo.lep> [args…]\n  \
-             expressa --grafico <arquivo.cart>\n  \
-             expressa --ao-vivo\n  \
-             expressa --instalar-exemplos\n  \
-             expressa --backend ast|bytecode [arquivo.lep] [args…]\n  \
-             expressa --numeros pt|en [arquivo.lep] [args…]\n  \
-             expressa --aritmetica decimal|float [arquivo.lep] [args…]"
-        );
+        eprintln!("Uso:");
+        #[cfg(feature = "terminal")]
+        eprintln!("  expressa                         REPL");
+        eprintln!("  expressa <arquivo.lep|arquivo.exb> [args…]");
+        #[cfg(feature = "terminal")]
+        eprintln!("  expressa debug <arquivo.lep|arquivo.exb> [args…]");
+        eprintln!("  expressa --ast <arquivo.lep>     imprime a árvore sintática");
+        eprintln!("  expressa compilar <arquivo.lep> [-o arquivo.exb]");
+        eprintln!("  expressa --marcador-leia <arquivo.lep|arquivo.exb> [args…]");
+        #[cfg(feature = "graphics")]
+        eprintln!("  expressa --grafico <arquivo.cart>\n  expressa --ao-vivo");
+        eprintln!("  expressa --instalar-exemplos");
+        let backends = if cfg!(feature = "ast") {
+            "ast|bytecode"
+        } else {
+            "bytecode"
+        };
+        eprintln!("  expressa --backend {backends} [arquivo.lep] [args…]");
+        eprintln!("  expressa --numeros pt|en [arquivo.lep] [args…]");
+        eprintln!("  expressa --aritmetica decimal|float [arquivo.lep] [args…]");
         return Ok(());
     }
     if args[0] == "--instalar-exemplos" {
@@ -88,17 +107,63 @@ fn try_main() -> Result<(), Box<dyn std::error::Error>> {
             eprintln!("Uso: expressa --grafico <arquivo.cart>");
             return Ok(());
         }
+        #[cfg(feature = "graphics")]
         expressa::runtime::run_viewer(std::path::Path::new(&args[1]))?;
+        #[cfg(not(feature = "graphics"))]
+        return Err("gráficos indisponíveis neste build".into());
+        #[cfg(feature = "graphics")]
         return Ok(());
     }
     if args[0] == "--ao-vivo" {
+        #[cfg(feature = "graphics")]
         expressa::runtime::run_live_viewer()?;
+        #[cfg(not(feature = "graphics"))]
+        return Err("gráficos indisponíveis neste build".into());
+        #[cfg(feature = "graphics")]
+        return Ok(());
+    }
+
+    if args[0] == "compilar" {
+        if !(args.len() == 2 || (args.len() == 4 && args[2] == "-o")) {
+            return Err("Uso: expressa compilar <arquivo.lep> [-o arquivo.exb]".into());
+        }
+        let input = std::path::Path::new(&args[1]);
+        let output = if args.len() == 4 {
+            std::path::PathBuf::from(&args[3])
+        } else {
+            input.with_extension("exb")
+        };
+        if input == output
+            || std::fs::canonicalize(input)
+                .ok()
+                .zip(std::fs::canonicalize(&output).ok())
+                .is_some_and(|(a, b)| a == b)
+        {
+            return Err("a saída compilada não pode substituir o arquivo fonte".into());
+        }
+        if !output
+            .extension()
+            .and_then(|s| s.to_str())
+            .is_some_and(|s| s.eq_ignore_ascii_case("exb"))
+        {
+            return Err("a saída compilada deve ter extensão .exb".into());
+        }
+        use std::io::Read;
+        let mut source = String::new();
+        std::fs::File::open(input)?
+            .take(expressa::runtime::EXB_MAX_BYTES as u64 + 1)
+            .read_to_string(&mut source)?;
+        let bytes = expressa::runtime::compile_exb(&source, &args[1])?;
+        write_exb_output(&output, &bytes)?;
         return Ok(());
     }
 
     let (mode, file, script_args) = if args[0] == "debug" {
+        if !cfg!(feature = "terminal") {
+            return Err("depurador de terminal indisponível neste build".into());
+        }
         if args.len() < 2 {
-            eprintln!("Uso: expressa debug <arquivo.lep> [args…]");
+            eprintln!("Uso: expressa debug <arquivo.lep|arquivo.exb> [args…]");
             return Ok(());
         }
         ("debug", args[1].as_str(), &args[2..])
@@ -110,7 +175,7 @@ fn try_main() -> Result<(), Box<dyn std::error::Error>> {
         ("ast", args[1].as_str(), &args[2..])
     } else if args[0] == "--marcador-leia" {
         if args.len() < 2 {
-            eprintln!("Uso: expressa --marcador-leia <arquivo.lep> [args…]");
+            eprintln!("Uso: expressa --marcador-leia <arquivo.lep|arquivo.exb> [args…]");
             return Ok(());
         }
         ("marcador-leia", args[1].as_str(), &args[2..])
@@ -118,6 +183,28 @@ fn try_main() -> Result<(), Box<dyn std::error::Error>> {
         ("run", args[0].as_str(), &args[1..])
     };
 
+    if std::path::Path::new(file)
+        .extension()
+        .and_then(|s| s.to_str())
+        .is_some_and(|s| s.eq_ignore_ascii_case("exb"))
+    {
+        let mode = match mode {
+            "ast" => {
+                return Err(
+                    "--ast requer o fonte .lep; o arquivo .exb não armazena uma AST".into(),
+                );
+            }
+            "debug" => expressa::runtime::ExbRunMode::Debug,
+            "marcador-leia" => expressa::runtime::ExbRunMode::Marker,
+            _ => expressa::runtime::ExbRunMode::Run,
+        };
+        exit_if_nonzero(expressa::runtime::run_exb_file_args(
+            file,
+            script_args,
+            mode,
+        )?)?;
+        return Ok(());
+    }
     let source = std::fs::read_to_string(file)?;
     match mode {
         "ast" => match parse(&source) {
@@ -139,4 +226,42 @@ fn exit_if_nonzero(code: i32) -> Result<(), Box<dyn std::error::Error>> {
         process::exit(code);
     }
     Ok(())
+}
+
+fn write_exb_output(path: &std::path::Path, bytes: &[u8]) -> std::io::Result<()> {
+    use std::io::Write;
+    struct Temp(std::path::PathBuf);
+    impl Drop for Temp {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_file(&self.0);
+        }
+    }
+    let _name = path
+        .file_name()
+        .ok_or_else(|| std::io::Error::other("nome de saída inválido"))?;
+    for nonce in 0..100 {
+        let tmp = path.with_file_name(format!(
+            ".expressa-exb.tmp.{}.{}",
+            std::process::id(),
+            nonce
+        ));
+        match std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&tmp)
+        {
+            Ok(mut file) => {
+                let temp = Temp(tmp);
+                let written = file.write_all(bytes).and_then(|()| file.sync_all());
+                drop(file);
+                written?;
+                return std::fs::rename(&temp.0, path);
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {}
+            Err(e) => return Err(e),
+        }
+    }
+    Err(std::io::Error::other(
+        "não foi possível criar saída temporária",
+    ))
 }

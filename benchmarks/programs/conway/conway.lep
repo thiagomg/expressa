@@ -1,0 +1,123 @@
+// Conway determinístico, com bordas conectadas (toro).
+// Uso e limites: README.md nesta pasta.
+// argumentos: modo lado geracoes aquecimento saida
+// modos: simulacao | desenho | completo; saida: janela | raster
+importe "matriz"
+
+modo = se tamanho(argumentos) > 0 { argumentos[0] } senao { "simulacao" }
+lado = se tamanho(argumentos) > 1 { numero(argumentos[1]) } senao { 32 }
+geracoes = se tamanho(argumentos) > 2 { numero(argumentos[2]) } senao { 1000 }
+aquecimento = se tamanho(argumentos) > 3 { numero(argumentos[3]) } senao { 100 }
+saida = se tamanho(argumentos) > 4 { argumentos[4] } senao { "janela" }
+se tamanho(argumentos) > 5 ou (modo != "simulacao" e modo != "desenho" e modo != "completo") {
+    escreva_erro("uso: conway.lep [simulacao|desenho|completo] [32|64|128] [1..1000 geracoes] [0..1000 aquecimento] [janela|raster]")
+    saia(1)
+}
+se (lado != 32 e lado != 64 e lado != 128) ou geracoes < 1 ou geracoes > 1000 ou geracoes % 1 != 0 ou aquecimento < 0 ou aquecimento > 1000 ou aquecimento % 1 != 0 ou (saida != "janela" e saida != "raster") {
+    escreva_erro("configuracao invalida; consulte README.md")
+    saia(1)
+}
+
+inicial = funcao(n) {
+    m = zeros(n, n)
+    // Blocos de 16x16 repetidos: bloco estável, oscilador e planador.
+    para y de 0 ate n - 1 {
+        para x de 0 ate n - 1 {
+            a = y % 16
+            b = x % 16
+            se ((a == 2 ou a == 3) e (b == 2 ou b == 3)) ou (a == 3 e b >= 9 e b <= 11) ou (a == 9 e b == 3) ou (a == 10 e b == 4) ou (a == 11 e b >= 2 e b <= 4) {
+                m[y, x] = 1
+            }
+        }
+    }
+    m
+}
+
+proxima = funcao(m, n) {
+    nova = zeros(n, n)
+    para y de 0 ate n - 1 {
+        acima = (y + n - 1) % n
+        abaixo = (y + 1) % n
+        para x de 0 ate n - 1 {
+            esquerda = (x + n - 1) % n
+            direita = (x + 1) % n
+            vizinhos = m[acima, esquerda] + m[acima, x] + m[acima, direita] + m[y, esquerda] + m[y, direita] + m[abaixo, esquerda] + m[abaixo, x] + m[abaixo, direita]
+            nova[y, x] = se vizinhos == 3 ou (m[y, x] == 1 e vizinhos == 2) { 1 } senao { 0 }
+        }
+    }
+    nova
+}
+
+resumo = funcao(m, n) {
+    vivas = 0
+    checksum = 0
+    para y de 0 ate n - 1 {
+        para x de 0 ate n - 1 {
+            vivas += m[y, x]
+            checksum = (checksum * 31 + m[y, x]) % 1000000007
+        }
+    }
+    [vivas, checksum]
+}
+
+recursos = mapa()
+
+// Import condicional: simulacao também funciona no perfil mínimo.
+se modo != "simulacao" {
+    graf = avalie("g = importe \"tela_grafica\"\ng")
+    // A função captura o módulo, sem adicionar um import gráfico à simulação.
+    desenhar = funcao(g, m, n, destino) {
+        graf::apague(g)
+        para y de 0 ate n - 1 {
+            para x de 0 ate n - 1 {
+                se m[y, x] == 1 {
+                    graf::retangulo(g, x * 4, y * 4, x * 4 + 3, y * 4 + 3)
+                }
+            }
+        }
+        se destino == "janela" { graf::mostre(g) }
+        senao { graf::como_imagem(g) }
+        0
+    }
+    // O mapa compartilha o estado com o bloco externo, sem rebinding externo.
+    recursos:desenhar = desenhar
+    recursos:tela = graf::nova(lado * 4, lado * 4)
+    graf::fundo(recursos:tela, :preto)
+    graf::cor(recursos:tela, :verde)
+}
+
+m = inicial(lado)
+escreva("fase", "aquecimento")
+repita aquecimento vezes {
+    m = proxima(m, lado)
+    se modo != "simulacao" {
+        recursos:desenhar(recursos:tela, m, lado, saida)
+    }
+}
+
+quadros = []
+se modo == "desenho" {
+    escreva("fase", "preparacao")
+    repita geracoes vezes {
+        m = proxima(m, lado)
+        // Cada geração é uma matriz nova: os quadros não compartilham células.
+        quadros += [m]
+    }
+}
+
+escreva("fase", "execucao")
+se modo == "desenho" {
+    para quadro em quadros {
+        recursos:desenhar(recursos:tela, quadro, lado, saida)
+    }
+} senao {
+    repita geracoes vezes {
+        m = proxima(m, lado)
+        se modo == "completo" {
+            recursos:desenhar(recursos:tela, m, lado, saida)
+        }
+    }
+}
+
+// Mesmo estado final para os três modos, com a mesma configuração.
+escreva("resultado", modo, lado, geracoes, aquecimento, resumo(m, lado))

@@ -1,6 +1,8 @@
 //! RGBA image values: load, save, rotate, scale, stamp onto a canvas.
 
+#[cfg(feature = "graphics")]
 use std::io::Cursor;
+#[cfg(feature = "graphics")]
 use std::path::Path;
 use std::sync::Arc;
 
@@ -54,11 +56,13 @@ fn check_dim(largura: u32, altura: u32) -> Result<(), String> {
     Ok(())
 }
 
+#[cfg(feature = "graphics")]
 pub fn leia_png(path: &Path) -> Result<Imagem, String> {
     let bytes = std::fs::read(path).map_err(|e| e.to_string())?;
     decode_png(&bytes)
 }
 
+#[cfg(feature = "graphics")]
 pub fn decode_png(bytes: &[u8]) -> Result<Imagem, String> {
     let mut dec = png::Decoder::new(Cursor::new(bytes));
     dec.set_transformations(png::Transformations::EXPAND | png::Transformations::STRIP_16);
@@ -90,6 +94,7 @@ pub fn decode_png(bytes: &[u8]) -> Result<Imagem, String> {
     Imagem::nova(info.width, info.height, px)
 }
 
+#[cfg(feature = "graphics")]
 pub fn encode_png_rgba(img: &Imagem) -> Result<Vec<u8>, String> {
     let mut out = Vec::new();
     {
@@ -104,11 +109,13 @@ pub fn encode_png_rgba(img: &Imagem) -> Result<Vec<u8>, String> {
     Ok(out)
 }
 
+#[cfg(feature = "graphics")]
 pub fn salve_png(img: &Imagem, path: &Path) -> Result<(), String> {
     std::fs::write(path, encode_png_rgba(img)?).map_err(|e| e.to_string())
 }
 
 /// Clockwise degrees. 0 keeps the top of the image pointing up.
+#[cfg(feature = "graphics")]
 pub fn rotacione(img: &Imagem, graus: f64) -> Result<Imagem, String> {
     if !graus.is_finite() {
         return Err("ângulo da imagem deve ser um número finito".into());
@@ -132,6 +139,7 @@ pub fn rotacione(img: &Imagem, graus: f64) -> Result<Imagem, String> {
     rotacione_geral(img, a)
 }
 
+#[cfg(feature = "graphics")]
 fn rotacione_90(src: &Imagem) -> Imagem {
     let w = src.largura;
     let h = src.altura;
@@ -150,6 +158,7 @@ fn rotacione_90(src: &Imagem) -> Imagem {
     }
 }
 
+#[cfg(feature = "graphics")]
 fn rotacione_180(src: &Imagem) -> Imagem {
     let w = src.largura;
     let h = src.altura;
@@ -166,6 +175,7 @@ fn rotacione_180(src: &Imagem) -> Imagem {
     }
 }
 
+#[cfg(feature = "graphics")]
 fn rotacione_270(src: &Imagem) -> Imagem {
     let w = src.largura;
     let h = src.altura;
@@ -182,12 +192,14 @@ fn rotacione_270(src: &Imagem) -> Imagem {
     }
 }
 
+#[cfg(feature = "graphics")]
 fn copy_px(src: &Imagem, sx: u32, sy: u32, dest: &mut [u8], dx: u32, dy: u32, dest_w: u32) {
     let si = ((sy * src.largura + sx) as usize) * 4;
     let di = ((dy * dest_w + dx) as usize) * 4;
     dest[di..di + 4].copy_from_slice(&src.px[si..si + 4]);
 }
 
+#[cfg(feature = "graphics")]
 fn rotacione_geral(src: &Imagem, graus: f64) -> Result<Imagem, String> {
     let rad = graus.to_radians();
     let (cos, sin) = (rad.cos(), rad.sin());
@@ -220,6 +232,7 @@ fn rotacione_geral(src: &Imagem, graus: f64) -> Result<Imagem, String> {
     Imagem::nova(nw, nh, px)
 }
 
+#[cfg(feature = "graphics")]
 pub fn escala(img: &Imagem, fx: f64, fy: f64) -> Result<Imagem, String> {
     if !fx.is_finite() || !fy.is_finite() || fx <= 0.0 || fy <= 0.0 {
         return Err("escala deve ser um número maior que 0".into());
@@ -360,7 +373,7 @@ pub fn carimbar_rgba(
     });
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "graphics"))]
 #[allow(clippy::identity_op)] // `1 * 4`: pixel 1, 4 bytes each
 mod tests {
     use super::*;

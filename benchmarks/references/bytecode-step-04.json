@@ -1,0 +1,64 @@
+{
+  "references": {
+    "04-before-parameter-slots": {
+      "source_sha256": "4b49c54cafaaa35ff9b926a55c3a7ec4347dc8e42f5d30168446cac79f6c6f80",
+      "binary_sha256": "7398cae8503a7a2888fff795c9085bc9008ca3338a6a04e02acc0ec45516f6c1",
+      "archive_sha256": "cd382278024682629e008c1a3034ce167196c704efaf04b6cd0ed9100e9ab9f5",
+      "local_artifacts": "target/bytecode-steps/04-before-parameter-slots",
+      "build": "cargo build -p expressa --release --bin expressa --offline --locked",
+      "git_head": "b5d9f99ded92155e6750cf7697bbf57bdf212f5c"
+    },
+    "04-parameter-slots": {
+      "source_sha256": "2ac620c9e96ecb798fb6f89709f8de149cac03fc8fadb651b6d42eb11f147b64",
+      "binary_sha256": "b1866984ad399910c8d290e751dd6845fa3f148c31035ee07a89072ef5f23c93",
+      "archive_sha256": "63536c99baeffde73060e255b66443e1394075fc6be70adc2f0d0b908f1b97a5",
+      "local_artifacts": "target/bytecode-steps/04-parameter-slots",
+      "build": "cargo build -p expressa --release --bin expressa --offline --locked",
+      "git_head": "b5d9f99ded92155e6750cf7697bbf57bdf212f5c"
+    },
+    "04-parameter-slots-reviewed-tests": {
+      "source_sha256": "4fe10c9fc91ada29d6db3a8f6451c113f66f33449658ea815213e345596fcfd0",
+      "binary_sha256": "b1866984ad399910c8d290e751dd6845fa3f148c31035ee07a89072ef5f23c93",
+      "archive_sha256": "e2b0f047e53bfd0b66aa6bfba3a97e333e03bdc8004ecbb0d3667898044cbfa1",
+      "local_artifacts": "target/bytecode-steps/04-parameter-slots-reviewed-tests",
+      "build": "cargo build -p expressa --release --bin expressa --offline --locked",
+      "git_head": "b5d9f99ded92155e6750cf7697bbf57bdf212f5c"
+    }
+  },
+  "changes": {
+    "benchmarks/bytecode-steps/04-parameter-slots.patch": "2811f2ceebc8af82718287f8ba658e79629c78cc3557283ead94bb7d52de2fc5",
+    "benchmarks/bytecode-steps/04-process-handshake.patch": "1653c0ecef79e0787139cceb6d04977e29d1fc60ca5c6ffd2f9c7226e4cc6e71"
+  },
+  "protocol": {
+    "repeat": 51,
+    "warmup": 5,
+    "seeds": [
+      20,
+      21
+    ],
+    "cpu_affinity": [
+      0
+    ],
+    "backends": {
+      "before": "bytecode",
+      "slots": "bytecode"
+    },
+    "ast_impact": {
+      "repeat": 31,
+      "warmup": 3,
+      "seed": 22,
+      "backends": {
+        "ast_before": "ast",
+        "ast_after": "ast"
+      },
+      "note": "exploratory before/after AST pair, not comparable with bytecode CPU across separate runs"
+    }
+  },
+  "decision": "retained-for-review; CPU improvements in calls, arithmetic regression, RSS inconclusive",
+  "test_fixture_refinement": "After measurement the child read timer was removed so timeout cannot masquerade as successful process cleanup. Controller deadlines remain. This is cfg(test) only; release binary hash is identical. The final sources/tests are archived separately.",
+  "results_source_snapshots": {
+    "bytecode-step-04-20.json": "04-parameter-slots",
+    "bytecode-step-04-21.json": "04-parameter-slots",
+    "bytecode-step-04-ast-impact.json": "04-parameter-slots-reviewed-tests"
+  }
+}

@@ -60,3 +60,19 @@ Desktop results do not prove Pico suitability. Once firmware exists, measure on 
 The current provisional measurement is summarized in [AST-BASELINE.md](AST-BASELINE.md), with raw samples in [results/ast-review.json](results/ast-review.json).
 
 `results/ast-review.json`, if present, is an unapproved working-tree AST snapshot only. It must be regenerated or explicitly accepted after review. The desktop comparison is recorded separately in [AST-VS-BYTECODE.md](AST-VS-BYTECODE.md); the older AST-only result is historical, not the comparison denominator. Execution-only, heap-allocation and Pico measurements remain unmeasured. Do not use the previous broken evaluator as the performance reference for a candidate that performs additional correctness checks without disclosing the difference.
+
+## Precompiled EXB inputs
+
+`--exb NAME=DIRECTORY` selects `DIRECTORY/<workload>.exb` for a bytecode engine. Every case must exist. Other engines keep the `.lep` inputs. The runner records each engine's input format, hashes and sizes. Generate artifacts before sampling with the same frozen candidate binary. Offline compilation is excluded from EXB samples; reading, decoding and verification are included. Source samples include parsing and compilation. These are process end-to-end measurements, not isolated VM execution.
+
+The [EXB v1 review](EXB-V1-REVIEW.md) compares the preceding accepted binary on source, the new binary on source, and the new binary on EXB. It retains both interleaved rounds and identifies any regressions.
+
+## Desktop feature profiles
+
+[Minimal-profile review](MINIMAL-PROFILE.md) compares the previous accepted full build with the new full and `--no-default-features` builds on the same source workloads. Parser/compiler and `avalie` remain included in every engine. Feature sets are recorded separately from the source fingerprint, which is identical between the two new builds.
+
+## Conway gráfico (execução explícita)
+
+O [exemplo Conway](programs/conway/README.md) fica em uma subpasta para não entrar automaticamente nos workloads curtos. Oferece simulação, desenho pré-calculado e execução completa, com destino janela ou rasterização sem janela. Ainda não fornece métricas por frame nem confirmação de apresentação do viewer; seu README distingue preparação, execução e custos de memória.
+
+A [comparação Conway AST × bytecode](CONWAY.md) registra CPU, tempo e RSS do processo completo, com rasterização sem janela e verificações independentes de correção. O runner dedicado é `benchmarks/conway.py`; ele não altera a seleção nem as saídas esperadas dos benchmarks curtos.

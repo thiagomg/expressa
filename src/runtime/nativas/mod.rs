@@ -10,16 +10,21 @@ use super::eval::Vm;
 use super::value::{Value, format_numero};
 
 mod arquivo;
+#[cfg(feature = "graphics")]
 mod cartesiano;
 mod crono;
+#[cfg(feature = "graphics")]
 mod graf;
+#[cfg(feature = "graphics")]
 mod imagem;
 mod mat;
 mod matriz;
 mod nucleo;
+#[cfg(feature = "process")]
 mod processo;
 mod referencia;
 mod sistema;
+#[cfg(feature = "terminal")]
 mod tela;
 
 pub use referencia::{
@@ -161,54 +166,67 @@ pub const NATIVAS: &[Nativa] = &[
         names: &["termina_com"],
         module: None,
     },
+    #[cfg(feature = "terminal")]
     Nativa {
         names: &["cls", "limpe_tela"],
         module: Some("tela"),
     },
+    #[cfg(feature = "terminal")]
     Nativa {
         names: &["posicao_cursor", "posição_cursor"],
         module: Some("tela"),
     },
+    #[cfg(feature = "terminal")]
     Nativa {
         names: &["apague_linha"],
         module: Some("tela"),
     },
+    #[cfg(feature = "terminal")]
     Nativa {
         names: &["casa"],
         module: Some("tela"),
     },
+    #[cfg(feature = "terminal")]
     Nativa {
         names: &["eh_terminal", "é_terminal"],
         module: Some("tela"),
     },
+    #[cfg(feature = "terminal")]
     Nativa {
         names: &["pinte"],
         module: Some("tela"),
     },
+    #[cfg(feature = "terminal")]
     Nativa {
         names: &["fundo"],
         module: Some("tela"),
     },
+    #[cfg(feature = "terminal")]
     Nativa {
         names: &["negrito"],
         module: Some("tela"),
     },
+    #[cfg(feature = "terminal")]
     Nativa {
         names: &["colunas"],
         module: Some("tela"),
     },
+    #[cfg(feature = "terminal")]
     Nativa {
         names: &["linhas"],
         module: Some("tela"),
     },
+    #[cfg(feature = "terminal")]
     Nativa {
         names: &["quadro"],
         module: Some("tela"),
     },
+    #[cfg(feature = "terminal")]
     Nativa {
         names: &["bloco"],
         module: Some("tela"),
     },
+    #[cfg(feature = "terminal")]
     Nativa {
         names: &["escreva_em"],
         module: Some("tela"),
@@ -401,34 +419,42 @@ pub const NATIVAS: &[Nativa] = &[
         names: &["pasta_atual"],
         module: Some("arquivo"),
     },
+    #[cfg(feature = "process")]
     Nativa {
         names: &["execute"],
         module: Some("processo"),
     },
+    #[cfg(feature = "process")]
     Nativa {
         names: &["linhas_de"],
         module: Some("processo"),
     },
+    #[cfg(feature = "graphics")]
     Nativa {
         names: &["documento"],
         module: Some("cartesiano"),
     },
+    #[cfg(feature = "graphics")]
     Nativa {
         names: &["grafico"],
         module: Some("cartesiano"),
     },
+    #[cfg(feature = "graphics")]
     Nativa {
         names: &["eixos"],
         module: Some("cartesiano"),
     },
+    #[cfg(feature = "graphics")]
     Nativa {
         names: &["plote"],
         module: Some("cartesiano"),
     },
+    #[cfg(feature = "graphics")]
     Nativa {
         names: &["adicione"],
         module: Some("cartesiano"),
     },
+    #[cfg(feature = "graphics")]
     Nativa {
         names: &["mostre"],
         module: Some("cartesiano"),
@@ -461,91 +487,122 @@ pub const NATIVAS: &[Nativa] = &[
         names: &["formate_data"],
         module: Some("crono"),
     },
+    #[cfg(feature = "graphics")]
     Nativa {
         names: &["nova"],
         module: Some("tela_grafica"),
     },
+    #[cfg(feature = "graphics")]
     Nativa {
         names: &["cor"],
         module: Some("tela_grafica"),
     },
+    #[cfg(feature = "graphics")]
     Nativa {
         names: &["fundo"],
         module: Some("tela_grafica"),
     },
+    #[cfg(feature = "graphics")]
     Nativa {
         names: &["linha"],
         module: Some("tela_grafica"),
     },
+    #[cfg(feature = "graphics")]
     Nativa {
         names: &["circulo", "círculo"],
         module: Some("tela_grafica"),
     },
+    #[cfg(feature = "graphics")]
     Nativa {
         names: &["ponto"],
         module: Some("tela_grafica"),
     },
+    #[cfg(feature = "graphics")]
     Nativa {
         names: &["retangulo", "retângulo"],
         module: Some("tela_grafica"),
     },
+    #[cfg(feature = "graphics")]
     Nativa {
         names: &["texto"],
         module: Some("tela_grafica"),
     },
+    #[cfg(feature = "graphics")]
     Nativa {
         names: &["imagem"],
         module: Some("tela_grafica"),
     },
+    #[cfg(feature = "graphics")]
     Nativa {
         names: &["apague"],
         module: Some("tela_grafica"),
     },
+    #[cfg(feature = "graphics")]
     Nativa {
         names: &["pixel"],
         module: Some("tela_grafica"),
     },
+    #[cfg(feature = "graphics")]
     Nativa {
         names: &["como_imagem"],
         module: Some("tela_grafica"),
     },
+    #[cfg(feature = "graphics")]
     Nativa {
         names: &["salve"],
         module: Some("tela_grafica"),
     },
+    #[cfg(feature = "graphics")]
     Nativa {
         names: &["mostre"],
         module: Some("tela_grafica"),
     },
+    #[cfg(feature = "graphics")]
     Nativa {
         names: &["evento"],
         module: Some("tela_grafica"),
     },
+    #[cfg(feature = "graphics")]
     Nativa {
         names: &["carregue"],
         module: Some("imagem"),
     },
+    #[cfg(feature = "graphics")]
     Nativa {
         names: &["salve"],
         module: Some("imagem"),
     },
+    #[cfg(feature = "graphics")]
     Nativa {
         names: &["rotacione"],
         module: Some("imagem"),
     },
+    #[cfg(feature = "graphics")]
     Nativa {
         names: &["redimensione"],
         module: Some("imagem"),
     },
+    #[cfg(feature = "graphics")]
     Nativa {
         names: &["largura"],
         module: Some("imagem"),
     },
+    #[cfg(feature = "graphics")]
     Nativa {
         names: &["altura"],
         module: Some("imagem"),
     },
 ];
+
+/// Recognize omitted native modules without silently treating them as files.
+pub(crate) fn unavailable_module(name: &str) -> Option<&'static str> {
+    match name {
+        "tela" if !cfg!(feature = "terminal") => Some("terminal"),
+        "cartesiano" | "tela_grafica" | "imagem" if !cfg!(feature = "graphics") => Some("graphics"),
+        "processo" if !cfg!(feature = "process") => Some("process"),
+        _ => None,
+    }
+}
 
 pub fn bind_nucleo(env: &Rc<RefCell<Env>>) {
     for n in NATIVAS {
@@ -578,6 +635,7 @@ pub fn make_native_modules() -> HashMap<String, Rc<RefCell<Env>>> {
             ),
         );
     }
+    #[cfg(feature = "terminal")]
     if let Some(tela) = map.get("tela") {
         tela.borrow_mut()
             .define("nova_linha", Value::Texto(tela::NOVA_LINHA.into()));
@@ -597,27 +655,40 @@ impl Vm<'_, '_> {
             "escreva" => self.bi_escreva(args, span, env),
             "escreva_erro" => self.bi_escreva_erro(args, span, env),
             "saia" => self.bi_saia(args, span),
+            #[cfg(feature = "terminal")]
             "cls" | "limpe_tela" => self.bi_cls(args, span),
+            #[cfg(feature = "terminal")]
             "casa" => self.bi_casa(args, span),
+            #[cfg(feature = "terminal")]
             "posicao_cursor" | "posição_cursor" => self.bi_posicao_cursor(args, span),
+            #[cfg(feature = "terminal")]
             "apague_linha" => self.bi_apague_linha(args, span),
             "durma" => self.bi_durma(args, span),
             "leia" => self.bi_leia(args, span),
             "leia_linhas" => self.bi_leia_linhas(args, span),
+            #[cfg(feature = "terminal")]
             "eh_terminal" | "é_terminal" => self.bi_eh_terminal(args, span),
+            #[cfg(feature = "terminal")]
             "pinte" => self.bi_pinte(args, span),
+            #[cfg(feature = "terminal")]
             "fundo" => {
+                #[cfg(feature = "graphics")]
                 if !args.is_empty() && graf::is_graf(&args[0]) {
-                    self.bi_graf_fundo(args, span)
-                } else {
-                    self.bi_fundo(args, span)
+                    return self.bi_graf_fundo(args, span);
                 }
+                self.bi_fundo(args, span)
             }
+            #[cfg(feature = "terminal")]
             "negrito" => self.bi_negrito(args, span),
+            #[cfg(feature = "terminal")]
             "colunas" => self.bi_colunas(args, span),
+            #[cfg(feature = "terminal")]
             "linhas" => self.bi_linhas(args, span),
+            #[cfg(feature = "terminal")]
             "quadro" => self.bi_quadro(args, span),
+            #[cfg(feature = "terminal")]
             "bloco" => self.bi_bloco(args, span),
+            #[cfg(feature = "terminal")]
             "escreva_em" => self.bi_escreva_em(args, span),
             "raiz" => self.bi_raiz(args, span),
             "aleatorio" | "aleatório" => self.bi_aleatorio(args, span),
@@ -668,7 +739,9 @@ impl Vm<'_, '_> {
             "separe" => self.bi_separe(args, span),
             "junte" => self.bi_junte(args, span, env),
             "limpe" => self.bi_limpe(args, span),
+            #[cfg(feature = "graphics")]
             "apague" => self.bi_graf_limpe(args, span),
+            #[cfg(feature = "graphics")]
             "evento" => self.bi_graf_evento(args, span),
             "leia_arquivo" => self.bi_leia_arquivo(args, span),
             "salve_arquivo" => self.bi_salve_arquivo(args, span),
@@ -698,11 +771,17 @@ impl Vm<'_, '_> {
             "pasta_de" => self.bi_pasta_de(args, span),
             "extensao" | "extensão" => self.bi_extensao(args, span),
             "pasta_atual" => self.bi_pasta_atual(args, span),
+            #[cfg(feature = "process")]
             "execute" => self.bi_execute(args, span, env),
+            #[cfg(feature = "process")]
             "linhas_de" => self.bi_linhas_de(args, span),
+            #[cfg(feature = "graphics")]
             "documento" => self.bi_documento(args, span),
+            #[cfg(feature = "graphics")]
             "grafico" => self.bi_grafico(args, span),
+            #[cfg(feature = "graphics")]
             "eixos" => self.bi_eixos(args, span),
+            #[cfg(feature = "graphics")]
             "plote" => self.bi_plote(args, span, env),
             "adicione" => {
                 if args.len() == 3 {
@@ -713,24 +792,47 @@ impl Vm<'_, '_> {
                         span,
                     ))
                 } else {
-                    self.bi_adicione(args, span)
+                    #[cfg(feature = "graphics")]
+                    {
+                        self.bi_adicione(args, span)
+                    }
+                    #[cfg(not(feature = "graphics"))]
+                    {
+                        Err(self.err("adicione espera 3 argumentos: data, n, unidade", span))
+                    }
                 }
             }
+            #[cfg(feature = "graphics")]
             "nova" => self.bi_graf_nova(args, span),
+            #[cfg(feature = "graphics")]
             "cor" => self.bi_graf_cor(args, span),
+            #[cfg(feature = "graphics")]
             "linha" => self.bi_graf_linha(args, span),
+            #[cfg(feature = "graphics")]
             "circulo" | "círculo" => self.bi_graf_circulo(args, span),
+            #[cfg(feature = "graphics")]
             "ponto" => self.bi_graf_ponto(args, span),
+            #[cfg(feature = "graphics")]
             "retangulo" | "retângulo" => self.bi_graf_retangulo(args, span),
+            #[cfg(feature = "graphics")]
             "texto" => self.bi_graf_texto(args, span),
+            #[cfg(feature = "graphics")]
             "imagem" => self.bi_graf_imagem(args, span),
+            #[cfg(feature = "graphics")]
             "pixel" => self.bi_graf_pixel(args, span),
+            #[cfg(feature = "graphics")]
             "como_imagem" => self.bi_graf_como_imagem(args, span),
+            #[cfg(feature = "graphics")]
             "carregue" => self.bi_img_carregue(args, span),
+            #[cfg(feature = "graphics")]
             "rotacione" => self.bi_img_rotacione(args, span),
+            #[cfg(feature = "graphics")]
             "redimensione" => self.bi_img_redimensione(args, span),
+            #[cfg(feature = "graphics")]
             "largura" => self.bi_img_largura(args, span),
+            #[cfg(feature = "graphics")]
             "altura" => self.bi_img_altura(args, span),
+            #[cfg(feature = "graphics")]
             "salve" => {
                 if !args.is_empty() && matches!(&args[0], Value::Imagem(_)) {
                     self.bi_img_salve(args, span)
@@ -738,6 +840,7 @@ impl Vm<'_, '_> {
                     self.bi_graf_salve(args, span)
                 }
             }
+            #[cfg(feature = "graphics")]
             "mostre" => {
                 if !args.is_empty() && graf::is_graf(&args[0]) {
                     self.bi_graf_mostre(args, span)
@@ -847,14 +950,17 @@ mod tests {
     use std::path::{Path, PathBuf};
     use std::time::{SystemTime, UNIX_EPOCH};
 
+    #[cfg(feature = "graphics")]
     use super::{NATIVAS, builtin_docs, lookup_builtin_doc};
     use crate::runtime::run_to_string;
 
-    const PRELUDE: &str =
-        "importe \"matriz\"\nimporte \"arquivo\"\nimporte \"tela\"\nimporte \"mat\"\n";
-
     fn with_mods(src: &str) -> String {
-        format!("{PRELUDE}{src}")
+        let terminal = if cfg!(feature = "terminal") {
+            "importe \"tela\"\n"
+        } else {
+            ""
+        };
+        format!("importe \"matriz\"\nimporte \"arquivo\"\nimporte \"mat\"\n{terminal}{src}")
     }
 
     fn run(src: &str) -> String {
@@ -888,6 +994,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "graphics")]
     fn builtins_are_registered() {
         let names: Vec<_> = NATIVAS
             .iter()
@@ -985,7 +1092,11 @@ escreva(tipo(f))"#),
         assert_eq!(run(r#"escreva(10.tipo())"#), "numero\n");
         assert_eq!(
             run(r#"escreva(tipos())"#),
-            "[\"numero\", \"texto\", \"bool\", \"lista\", \"par\", \"mapa\", \"conjunto\", \"matriz\", \"imagem\", \"funcao\", \"modulo\", \"processo\", \"nada\"]\n"
+            if cfg!(feature = "process") {
+                "[\"numero\", \"texto\", \"bool\", \"lista\", \"par\", \"mapa\", \"conjunto\", \"matriz\", \"imagem\", \"funcao\", \"modulo\", \"processo\", \"nada\"]\n"
+            } else {
+                "[\"numero\", \"texto\", \"bool\", \"lista\", \"par\", \"mapa\", \"conjunto\", \"matriz\", \"imagem\", \"funcao\", \"modulo\", \"nada\"]\n"
+            }
         );
         assert_eq!(run(r#"escreva(tipos() contem "numero")"#), "verdadeiro\n");
         assert!(run_err("tipos(1)").contains("argumento"));
@@ -1252,6 +1363,7 @@ escreva(p:nome)
     }
 
     #[test]
+    #[cfg(feature = "terminal")]
     fn cls_writes_ansi_clear() {
         use crate::runtime::CLEAR_SCREEN;
         assert_eq!(run("cls()"), CLEAR_SCREEN);
@@ -1269,6 +1381,7 @@ escreva("b")
     }
 
     #[test]
+    #[cfg(feature = "terminal")]
     fn cursor_movement_and_line_erasure() {
         assert_eq!(
             run("posicao_cursor(bloco(2, 4))\napague_linha()"),
@@ -1284,6 +1397,7 @@ escreva("b")
     }
 
     #[test]
+    #[cfg(feature = "terminal")]
     fn casa_writes_cursor_home() {
         use crate::runtime::CURSOR_HOME;
         assert_eq!(run("casa()"), CURSOR_HOME);
@@ -1299,6 +1413,7 @@ escreva("b")
     }
 
     #[test]
+    #[cfg(feature = "terminal")]
     fn pinte_wraps_ansi_and_reset() {
         assert_eq!(
             run(r#"escreva(pinte("HP", :verde))"#),
@@ -1332,6 +1447,7 @@ escreva("b")
     }
 
     #[test]
+    #[cfg(feature = "terminal")]
     fn tela_quadro_bloco_escreva_em() {
         assert_eq!(run("escreva(colunas() >= 1)"), "verdadeiro\n");
         assert_eq!(run("escreva(linhas() >= 1)"), "verdadeiro\n");
@@ -1395,6 +1511,7 @@ escreva(b:linha)
     }
 
     #[test]
+    #[cfg(feature = "terminal")]
     fn eh_terminal_is_false_on_captured_stdin() {
         assert_eq!(run("escreva(eh_terminal())"), "falso\n");
         assert_eq!(run("escreva(é_terminal())"), "falso\n");
@@ -1585,6 +1702,7 @@ escreva(A == cheia(2, 3, 7))
     }
 
     #[test]
+    #[cfg(feature = "terminal")]
     fn catalogo_lists_natives_user_functions_and_modules() {
         assert_eq!(
             run(r#"

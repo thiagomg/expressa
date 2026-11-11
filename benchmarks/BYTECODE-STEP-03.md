@@ -4,6 +4,8 @@ Esta etapa parte da VM `02-inline-dispatch`, aprovada pelo usuário no commit `e
 
 Nota posterior: a correção de parsing da [tarefa 019](../lang-tasks/019-newline-continuation.md), para listas iniciadas na linha seguinte, não faz parte dos binários medidos nesta etapa. Os resultados e snapshots abaixo continuam históricos e não foram sobrescritos.
 
+Reteste posterior solicitado com o laptop sem uso: [duas novas rodadas e validação funcional](BYTECODE-STEP-03-RETEST.md). Os resultados abaixo permanecem históricos.
+
 ## Alteração isolada
 
 Antes, toda instrução `Call` separava os argumentos com `Vec::split_off` e passava esse vetor ao despachante de chamadas. Nos caminhos para bytecode das três variantes avaliadas, a chamada retira o valor da função, mantém os argumentos na própria pilha e passa apenas sua quantidade. Para funções de bytecode, `drain` transfere os valores diretamente para os parâmetros no ambiente da função, sem criar um vetor temporário.

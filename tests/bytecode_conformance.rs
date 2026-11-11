@@ -1,3 +1,4 @@
+#![cfg(feature = "ast")]
 //! Compare backends through the same public API, including complete diagnostics.
 use expressa::runtime::{
     ExecutionBackend, ExecutionOptions, ExecutionOutput, RuntimeError, run_with_options,
@@ -15,27 +16,87 @@ fn outcome(source: &str, backend: ExecutionBackend) -> Result<ExecutionOutput, R
     )
 }
 fn equivalent(source: &str) {
-    match (
-        outcome(source, ExecutionBackend::Ast),
-        outcome(source, ExecutionBackend::Bytecode),
-    ) {
-        (Ok(ast), Ok(bytecode)) => assert_eq!(ast, bytecode, "{source}"),
-        (Err(ast), Err(bytecode)) => {
-            assert_eq!(
-                (&ast.message, &ast.file, ast.span),
-                (&bytecode.message, &bytecode.file, bytecode.span),
-                "{source}"
-            );
-            let frames = |error: &RuntimeError| {
-                error
-                    .stack
-                    .iter()
-                    .map(|frame| (frame.name.clone(), frame.file.clone(), frame.span))
-                    .collect::<Vec<_>>()
-            };
-            assert_eq!(frames(&ast), frames(&bytecode), "{source}");
+    let expected = outcome(source, ExecutionBackend::Ast);
+    let mut actual = vec![outcome(source, ExecutionBackend::Bytecode)];
+    if expressa::parser::parse(source).is_ok() {
+        let bytes = expressa::runtime::compile_exb(source, "conformance.lep").unwrap();
+        actual.push(expressa::runtime::run_exb_with_options(
+            &bytes,
+            "conformance.lep",
+            "Ana\n",
+            ExecutionOptions {
+                backend: ExecutionBackend::Bytecode,
+                ..ExecutionOptions::default()
+            },
+        ));
+    }
+    for actual in actual {
+        match (&expected, &actual) {
+            (Ok(ast), Ok(bytecode)) => assert_eq!(ast, bytecode, "{source}"),
+            (Err(ast), Err(bytecode)) => {
+                assert_eq!(
+                    (&ast.message, &ast.file, ast.span),
+                    (&bytecode.message, &bytecode.file, bytecode.span),
+                    "{source}"
+                );
+                let frames = |error: &RuntimeError| {
+                    error
+                        .stack
+                        .iter()
+                        .map(|frame| (frame.name.clone(), frame.file.clone(), frame.span))
+                        .collect::<Vec<_>>()
+                };
+                assert_eq!(frames(ast), frames(bytecode), "{source}");
+            }
+            _ => panic!("{source}\nAST: {expected:?}\nBytecode: {actual:?}"),
         }
-        (ast, bytecode) => panic!("{source}\nAST: {ast:?}\nBytecode: {bytecode:?}"),
+    }
+}
+
+#[test]
+fn indexed_parameters_share_storage_with_eval_and_closures() {
+    for (source, expected) in [
+        (
+            "f = funcao(a) { a += 1 avalie(\"a = a + 2\") a }\nescreva(f(3))",
+            "6\n",
+        ),
+        ("f = funcao(a) { { a = 8 } a }\nescreva(f(1))", "8\n"),
+        (
+            "f = funcao(a) { para a de 1 ate 3 { escreva(a) } a }\nescreva(f(9))",
+            "1\n2\n3\n9\n",
+        ),
+        (
+            "f = funcao(a) { g = funcao() { a } avalie(\"a = 7\") g }\ng = f(1)\nescreva(g())",
+            "7\n",
+        ),
+        (
+            "f = funcao(a) { g = funcao() { a = 7 } g() se_falhar 0 a }\nescreva(f(1))",
+            "1\n",
+        ),
+        (
+            "f = funcao(a) { g = funcao(a) { a += 1 a } a + g(2) }\nescreva(f(10))",
+            "13\n",
+        ),
+        (
+            "importe \"arquivo\"\nf = funcao(a) { avalie(\"late = 5\") a + late }\nescreva(f(2))",
+            "7\n",
+        ),
+        (
+            "escreva(ordene([3, 1, 2], funcao(x) { -x }))",
+            "[3, 2, 1]\n",
+        ),
+        (
+            "f = funcao(a) { a[0] += 1 a }\nxs = [1]\nescreva(f(xs))\nescreva(xs)",
+            "[2]\n[2]\n",
+        ),
+    ] {
+        for backend in [ExecutionBackend::Ast, ExecutionBackend::Bytecode] {
+            assert_eq!(
+                outcome(source, backend).unwrap().stdout,
+                expected,
+                "{backend:?}: {source}"
+            );
+        }
     }
 }
 
@@ -187,49 +248,6 @@ fn recursion_uses_vm_frames_and_still_obeys_the_language_limit() {
     assert_eq!(result.stdout, "depth\n");
 }
 
-#[cfg(unix)]
-#[test]
-fn stack_arguments_release_processes_on_return_and_arity_error() {
-    struct Temp(std::path::PathBuf);
-    impl Drop for Temp {
-        fn drop(&mut self) {
-            let _ = std::fs::remove_dir_all(&self.0);
-        }
-    }
-    let temp = Temp(std::env::temp_dir().join(format!(
-        "expressa-bytecode-argument-cleanup-{}",
-        std::process::id()
-    )));
-    std::fs::create_dir_all(&temp.0).unwrap();
-    for backend in [ExecutionBackend::Ast, ExecutionBackend::Bytecode] {
-        for (index, (body, expected)) in [
-            ("f = funcao(p) { 0 }\nf(ARG)", false),
-            ("f = funcao() { 0 }\nf(ARG) se_falhar 0", false),
-            ("f = funcao(p) { funcao() { p } }\ng = f(ARG)", true),
-        ]
-        .into_iter()
-        .enumerate()
-        {
-            let marker = temp.0.join(format!("{backend:?}-{index}"));
-            let argument = format!(
-                "proc::linhas_de([\"sh\", \"-c\", \"sleep 0.05; touch \\\"$1\\\"\", \"sh\", {:?}])",
-                marker.to_str().unwrap()
-            );
-            let body = body.replace("ARG", &argument);
-            let source = format!(
-                "proc = importe \"processo\"\na = importe \"arquivo\"\n{body}\ndurma(0.2)\nescreva(a::existe({:?}))",
-                marker.to_str().unwrap()
-            );
-            let output = outcome(&source, backend).unwrap();
-            assert_eq!(
-                output.stdout,
-                if expected { "verdadeiro\n" } else { "falso\n" },
-                "{backend:?}: {source}"
-            );
-        }
-    }
-}
-
 #[test]
 fn range_start_is_validated_before_evaluating_the_end() {
     equivalent(
@@ -248,47 +266,6 @@ fn top_level_control_signals_have_identical_diagnostics() {
         "f = funcao() { { pare } se_falhar 0 }\nf()",
     ] {
         equivalent(source);
-    }
-}
-
-#[cfg(unix)]
-#[test]
-fn discarded_process_values_keep_the_ast_cleanup_timing() {
-    use std::path::PathBuf;
-    struct Temp(PathBuf);
-    impl Drop for Temp {
-        fn drop(&mut self) {
-            let _ = std::fs::remove_dir_all(&self.0);
-        }
-    }
-    let temp = Temp(
-        std::env::temp_dir().join(format!("expressa-bytecode-cleanup-{}", std::process::id())),
-    );
-    std::fs::create_dir_all(&temp.0).unwrap();
-    for backend in [ExecutionBackend::Ast, ExecutionBackend::Bytecode] {
-        for in_loop in [false, true] {
-            let marker = temp.0.join(format!("{backend:?}-{in_loop}"));
-            let command = format!(
-                "p::linhas_de([\"sh\", \"-c\", \"sleep 0.05; touch \\\"$1\\\"\", \"sh\", {:?}])",
-                marker.to_str().unwrap()
-            );
-            let body = format!("{command}\ndurma(0.2)");
-            let body = if in_loop {
-                format!("repita 1 vezes {{ {body} }}")
-            } else {
-                body
-            };
-            let source = format!(
-                "p = importe \"processo\"\na = importe \"arquivo\"\n{body}\nescreva(a::existe({:?}))",
-                marker.to_str().unwrap()
-            );
-            let output = outcome(&source, backend).unwrap();
-            assert_eq!(
-                output.stdout,
-                if in_loop { "verdadeiro\n" } else { "falso\n" },
-                "{backend:?}: {source}"
-            );
-        }
     }
 }
 

@@ -7,11 +7,14 @@ use std::fmt;
 use std::rc::Rc;
 
 use crate::lexer::Span;
-use crate::parser::{Block, Param};
+#[cfg(feature = "ast")]
+use crate::parser::Block;
+use crate::parser::Param;
 
 use super::env::Env;
 use super::imagem::Imagem;
 use super::numero::Numero;
+#[cfg(feature = "process")]
 use super::processo::Processo;
 
 #[derive(Clone)]
@@ -30,6 +33,7 @@ pub enum Value {
     Builtin(&'static str),
     Modulo(Rc<RefCell<Env>>),
     /// `linhas_de`: a command still running, read with `para … em`.
+    #[cfg(feature = "process")]
     Processo(Rc<RefCell<Processo>>),
 }
 
@@ -107,6 +111,7 @@ pub enum MapKey {
 }
 
 pub enum FunctionBody {
+    #[cfg(feature = "ast")]
     Ast(Rc<Block>),
     Bytecode(Rc<super::eval::bytecode::Chunk>),
 }
@@ -172,8 +177,20 @@ impl Value {
 
     /// Nomes que `tipo()` devolve e `tipos()` lista (iguais às mensagens de erro).
     pub const NOMES_DE_TIPO: &'static [&'static str] = &[
-        "numero", "texto", "bool", "lista", "par", "mapa", "conjunto", "matriz", "imagem",
-        "funcao", "modulo", "processo", "nada",
+        "numero",
+        "texto",
+        "bool",
+        "lista",
+        "par",
+        "mapa",
+        "conjunto",
+        "matriz",
+        "imagem",
+        "funcao",
+        "modulo",
+        #[cfg(feature = "process")]
+        "processo",
+        "nada",
     ];
 
     pub fn type_name(&self) -> &'static str {
@@ -191,6 +208,7 @@ impl Value {
             Value::Funcao(_) => "funcao",
             Value::Builtin(_) => "funcao",
             Value::Modulo(_) => "modulo",
+            #[cfg(feature = "process")]
             Value::Processo(_) => "processo",
         }
     }
@@ -261,6 +279,7 @@ fn iguais(a: &Value, b: &Value, comparando: &mut HashSet<(usize, usize)>) -> boo
         (Value::Funcao(a), Value::Funcao(b)) => Rc::ptr_eq(a, b),
         (Value::Builtin(a), Value::Builtin(b)) => a == b,
         (Value::Modulo(a), Value::Modulo(b)) => Rc::ptr_eq(a, b),
+        #[cfg(feature = "process")]
         (Value::Processo(a), Value::Processo(b)) => Rc::ptr_eq(a, b),
         _ => false,
     })
@@ -355,6 +374,7 @@ fn escrever(
             let _ = write!(out, "<funcao {name}>");
         }
         Value::Modulo(_) => out.push_str("<modulo>"),
+        #[cfg(feature = "process")]
         Value::Processo(p) => match p.try_borrow() {
             Ok(p) => {
                 let _ = write!(out, "<processo {}>", p.descricao);

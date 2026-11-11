@@ -76,6 +76,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--engine", action="append", required=True, metavar="NAME=BINARY")
     parser.add_argument("--backend", action="append", default=[], metavar="NAME=ast|bytecode")
+    parser.add_argument("--exb", action="append", default=[], metavar="NAME=DIRECTORY",
+                        help="use precompiled .exb files for this engine; compilation is excluded")
     parser.add_argument("--repeat", type=int, default=7)
     parser.add_argument("--warmup", type=int, default=2)
     parser.add_argument("--timeout", type=float, default=30)
@@ -101,18 +103,32 @@ def main():
         if not separator or name not in engines or backend not in {"ast", "bytecode"}:
             parser.error("backend must be NAME=ast|bytecode for a declared engine")
         backends[name] = backend
+    compiled_inputs = {}
+    for specification in args.exb:
+        name, separator, directory = specification.partition("=")
+        if not separator or name not in engines or name in compiled_inputs:
+            parser.error("exb must be a unique NAME=DIRECTORY for a declared engine")
+        if backends[name] != "bytecode":
+            parser.error("exb inputs require the bytecode backend")
+        compiled_inputs[name] = Path(directory).resolve()
     helper = ROOT / "target/benchmarks/measure"
     helper.parent.mkdir(parents=True, exist_ok=True)
     subprocess.run(["cc", "-O2", "-std=c11", "-Wall", "-Wextra", "-Werror",
                     str(ROOT / "benchmarks/measure.c"), "-o", str(helper)], check=True)
     programs = sorted((ROOT / "benchmarks/programs").glob("*.lep"))
+    inputs = {name: {p.stem: (compiled_inputs[name] / (p.stem + ".exb") if name in compiled_inputs else p)
+                     for p in programs} for name in engines}
+    for cases in inputs.values():
+        for program in cases.values():
+            if not program.is_file():
+                parser.error(f"missing input: {program}")
     results = {name: {p.stem: [] for p in programs} for name in engines}
     rng = random.Random(args.seed)
     for round_number in range(args.warmup + args.repeat):
         jobs = [(name, p) for name in engines for p in programs]
         rng.shuffle(jobs)
         for name, program in jobs:
-            sample = measure(helper, engines[name], program, args.timeout, backends[name])
+            sample = measure(helper, engines[name], inputs[name][program.stem], args.timeout, backends[name])
             if round_number >= args.warmup:
                 results[name][program.stem].append(sample)
     cpu_model = platform.processor()
@@ -132,6 +148,11 @@ def main():
         "measurement_helper_binary_sha256": digest(helper),
         "cc": subprocess.check_output(["cc", "--version"], text=True).splitlines()[0],
         "backends": backends,
+        "input_formats": {name: "exb" if name in compiled_inputs else "lep" for name in engines},
+        "engine_programs": {name: {case: {"path": str(p), "sha256": digest(p), "bytes": p.stat().st_size}
+                                   for case, p in cases.items()} for name, cases in inputs.items()},
+        "compilation": {name: "offline compilation excluded; load/decode/verify included" if name in compiled_inputs else "parsing/compilation included"
+                        for name in engines},
         "arithmetic": "decimal", "locale": "en", "mode": "fresh-process end-to-end",
         "repeat": args.repeat, "warmup": args.warmup, "seed": args.seed,
         "binaries": {name: {"path": str(p), "sha256": digest(p), "bytes": p.stat().st_size} for name, p in engines.items()},

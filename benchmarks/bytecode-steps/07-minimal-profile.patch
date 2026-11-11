@@ -1,0 +1,2723 @@
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -46,11 +46,19 @@
+ [lints]
+ workspace = true
+ 
++[features]
++default = ["ast", "graphics", "process", "terminal"]
++# AST is a reference evaluator; parser/compiler remain in every profile.
++ast = []
++graphics = ["terminal", "dep:minifb", "dep:png"]
++process = []
++terminal = ["dep:rustyline"]
++
+ [dependencies]
+-rustyline = "15"
++rustyline = { version = "15", optional = true }
+ rust_decimal = "1"
+-minifb = "0.28"
+-png = "0.17"
++minifb = { version = "0.28", optional = true }
++png = { version = "0.17", optional = true }
+ stacker = "0.1"
+ 
+ [target.'cfg(unix)'.dependencies]
+@@ -59,3 +67,4 @@
+ [[bin]]
+ name = "expressa-grafico"
+ path = "src/bin/expressa-grafico.rs"
++required-features = ["graphics"]
+--- a/src/main.rs
++++ b/src/main.rs
+@@ -2,7 +2,7 @@
+ use std::process;
+ 
+ use expressa::parser::parse;
+-use expressa::runtime::{debug_source_args, run_repl, run_source_args, run_source_marcador_args};
++use expressa::runtime::{debug_source_args, run_source_args, run_source_marcador_args};
+ 
+ fn main() {
+     if let Err(e) = try_main() {
+@@ -24,6 +24,9 @@
+                     .filter(|s| expressa::runtime::ExecutionBackend::from_name(s).is_some())
+                     .ok_or("Uso: expressa --backend ast|bytecode [arquivo.lep]")?
+                     .clone();
++                if name == "ast" && !cfg!(feature = "ast") {
++                    return Err("backend AST indisponível neste build".into());
++                }
+                 unsafe { std::env::set_var("EXPRESSA_BACKEND", &name) };
+                 args.drain(option..=option + 1);
+             }
+@@ -58,25 +61,40 @@
+         args.drain(i..=i + 1);
+     }
+     if args.is_empty() {
+-        run_repl()?;
++        if !expressa::runtime::ExecutionOptions::default()
++            .backend
++            .is_available()
++        {
++            return Err("backend AST indisponível neste build".into());
++        }
++        #[cfg(feature = "terminal")]
++        expressa::runtime::run_repl()?;
++        #[cfg(not(feature = "terminal"))]
++        return Err("REPL indisponível neste build; informe um arquivo .lep ou .exb".into());
++        #[cfg(feature = "terminal")]
+         return Ok(());
+     }
+     if args[0] == "--help" || args[0] == "-h" {
+-        eprintln!(
+-            "Uso:\n  \
+-             expressa                         REPL\n  \
+-             expressa <arquivo.lep|arquivo.exb> [args…]\n  \
+-             expressa debug <arquivo.lep|arquivo.exb> [args…]\n  \
+-             expressa --ast <arquivo.lep>\n  \
+-             expressa compilar <arquivo.lep> [-o arquivo.exb]\n  \
+-             expressa --marcador-leia <arquivo.lep|arquivo.exb> [args…]\n  \
+-             expressa --grafico <arquivo.cart>\n  \
+-             expressa --ao-vivo\n  \
+-             expressa --instalar-exemplos\n  \
+-             expressa --backend ast|bytecode [arquivo.lep] [args…]\n  \
+-             expressa --numeros pt|en [arquivo.lep] [args…]\n  \
+-             expressa --aritmetica decimal|float [arquivo.lep] [args…]"
+-        );
++        eprintln!("Uso:");
++        #[cfg(feature = "terminal")]
++        eprintln!("  expressa                         REPL");
++        eprintln!("  expressa <arquivo.lep|arquivo.exb> [args…]");
++        #[cfg(feature = "terminal")]
++        eprintln!("  expressa debug <arquivo.lep|arquivo.exb> [args…]");
++        eprintln!("  expressa --ast <arquivo.lep>     imprime a árvore sintática");
++        eprintln!("  expressa compilar <arquivo.lep> [-o arquivo.exb]");
++        eprintln!("  expressa --marcador-leia <arquivo.lep|arquivo.exb> [args…]");
++        #[cfg(feature = "graphics")]
++        eprintln!("  expressa --grafico <arquivo.cart>\n  expressa --ao-vivo");
++        eprintln!("  expressa --instalar-exemplos");
++        let backends = if cfg!(feature = "ast") {
++            "ast|bytecode"
++        } else {
++            "bytecode"
++        };
++        eprintln!("  expressa --backend {backends} [arquivo.lep] [args…]");
++        eprintln!("  expressa --numeros pt|en [arquivo.lep] [args…]");
++        eprintln!("  expressa --aritmetica decimal|float [arquivo.lep] [args…]");
+         return Ok(());
+     }
+     if args[0] == "--instalar-exemplos" {
+@@ -89,11 +107,19 @@
+             eprintln!("Uso: expressa --grafico <arquivo.cart>");
+             return Ok(());
+         }
++        #[cfg(feature = "graphics")]
+         expressa::runtime::run_viewer(std::path::Path::new(&args[1]))?;
++        #[cfg(not(feature = "graphics"))]
++        return Err("gráficos indisponíveis neste build".into());
++        #[cfg(feature = "graphics")]
+         return Ok(());
+     }
+     if args[0] == "--ao-vivo" {
++        #[cfg(feature = "graphics")]
+         expressa::runtime::run_live_viewer()?;
++        #[cfg(not(feature = "graphics"))]
++        return Err("gráficos indisponíveis neste build".into());
++        #[cfg(feature = "graphics")]
+         return Ok(());
+     }
+ 
+@@ -133,6 +159,9 @@
+     }
+ 
+     let (mode, file, script_args) = if args[0] == "debug" {
++        if !cfg!(feature = "terminal") {
++            return Err("depurador de terminal indisponível neste build".into());
++        }
+         if args.len() < 2 {
+             eprintln!("Uso: expressa debug <arquivo.lep|arquivo.exb> [args…]");
+             return Ok(());
+--- a/src/runtime/cartesiano_host.rs
++++ b/src/runtime/cartesiano_host.rs
+@@ -1,9 +1,4 @@
+ //! Who shows a [`FolhaPronta`]. Tests stay silent; the CLI spawns a viewer.
+-
+-use std::collections::HashMap;
+-use std::fs;
+-use std::path::{Path, PathBuf};
+-use std::process::{Child, Command, Stdio};
+ 
+ use super::folha::FolhaPronta;
+ 
+@@ -33,68 +28,7 @@
+     }
+ }
+ 
+-/// One child process per documento. Writing the `.cart` file updates it.
+-#[derive(Default)]
+-pub struct CliCartesianoHost {
+-    children: HashMap<u64, Child>,
+-}
+-
+-impl CliCartesianoHost {
+-    pub fn new() -> Self {
+-        Self::default()
+-    }
+-
+-    fn path_for(id: u64) -> PathBuf {
+-        std::env::temp_dir().join(format!("expressa-cart-{}-{id}.cart", std::process::id()))
+-    }
+-
+-    fn spawn_viewer(path: &Path) -> Result<Child, String> {
+-        let mut cmd = viewer_command(path)?;
+-        cmd.stdin(Stdio::null())
+-            .stdout(Stdio::null())
+-            .stderr(Stdio::null());
+-        #[cfg(unix)]
+-        {
+-            use std::os::unix::process::CommandExt;
+-            cmd.process_group(0);
+-        }
+-        cmd.spawn()
+-            .map_err(|e| format!("não abriu a janela do gráfico: {e}"))
+-    }
+-}
+-
+-impl CartesianoHost for CliCartesianoHost {
+-    fn mostre(&mut self, folha: FolhaPronta) -> Result<(), String> {
+-        let path = Self::path_for(folha.id);
+-        fs::write(&path, folha.to_cart()).map_err(|e| format!("não gravou o gráfico: {e}"))?;
+-        let dead = match self.children.get_mut(&folha.id) {
+-            Some(child) => child.try_wait().ok().flatten().is_some(),
+-            None => true,
+-        };
+-        if dead {
+-            let child = Self::spawn_viewer(&path)?;
+-            self.children.insert(folha.id, child);
+-        }
+-        Ok(())
+-    }
+-}
+-
+-fn viewer_command(path: &Path) -> Result<Command, String> {
+-    let exe = std::env::current_exe().map_err(|e| e.to_string())?;
+-    if let Some(dir) = exe.parent() {
+-        let name = if cfg!(windows) {
+-            "expressa-grafico.exe"
+-        } else {
+-            "expressa-grafico"
+-        };
+-        let p = dir.join(name);
+-        if p.is_file() {
+-            let mut cmd = Command::new(p);
+-            cmd.arg(path);
+-            return Ok(cmd);
+-        }
+-    }
+-    let mut cmd = Command::new(exe);
+-    cmd.arg("--grafico").arg(path);
+-    Ok(cmd)
+-}
++#[cfg(feature = "graphics")]
++mod desktop;
++#[cfg(feature = "graphics")]
++pub use desktop::CliCartesianoHost;
+--- /dev/null
++++ b/src/runtime/cartesiano_host/desktop.rs
+@@ -0,0 +1,70 @@
++use super::*;
++use std::collections::HashMap;
++use std::fs;
++use std::path::{Path, PathBuf};
++use std::process::{Child, Command, Stdio};
++/// One child process per documento. Writing the `.cart` file updates it.
++#[derive(Default)]
++pub struct CliCartesianoHost {
++    children: HashMap<u64, Child>,
++}
++
++impl CliCartesianoHost {
++    pub fn new() -> Self {
++        Self::default()
++    }
++
++    fn path_for(id: u64) -> PathBuf {
++        std::env::temp_dir().join(format!("expressa-cart-{}-{id}.cart", std::process::id()))
++    }
++
++    fn spawn_viewer(path: &Path) -> Result<Child, String> {
++        let mut cmd = viewer_command(path)?;
++        cmd.stdin(Stdio::null())
++            .stdout(Stdio::null())
++            .stderr(Stdio::null());
++        #[cfg(unix)]
++        {
++            use std::os::unix::process::CommandExt;
++            cmd.process_group(0);
++        }
++        cmd.spawn()
++            .map_err(|e| format!("não abriu a janela do gráfico: {e}"))
++    }
++}
++
++impl CartesianoHost for CliCartesianoHost {
++    fn mostre(&mut self, folha: FolhaPronta) -> Result<(), String> {
++        let path = Self::path_for(folha.id);
++        fs::write(&path, folha.to_cart()).map_err(|e| format!("não gravou o gráfico: {e}"))?;
++        let dead = match self.children.get_mut(&folha.id) {
++            Some(child) => child.try_wait().ok().flatten().is_some(),
++            None => true,
++        };
++        if dead {
++            let child = Self::spawn_viewer(&path)?;
++            self.children.insert(folha.id, child);
++        }
++        Ok(())
++    }
++}
++
++fn viewer_command(path: &Path) -> Result<Command, String> {
++    let exe = std::env::current_exe().map_err(|e| e.to_string())?;
++    if let Some(dir) = exe.parent() {
++        let name = if cfg!(windows) {
++            "expressa-grafico.exe"
++        } else {
++            "expressa-grafico"
++        };
++        let p = dir.join(name);
++        if p.is_file() {
++            let mut cmd = Command::new(p);
++            cmd.arg(path);
++            return Ok(cmd);
++        }
++    }
++    let mut cmd = Command::new(exe);
++    cmd.arg("--grafico").arg(path);
++    Ok(cmd)
++}
+--- a/src/runtime/debug.rs
++++ b/src/runtime/debug.rs
+@@ -1,5 +1,7 @@
+ use std::collections::HashSet;
+-use std::io::{self, BufRead, Write};
++#[cfg(feature = "terminal")]
++use std::io::BufRead;
++use std::io::{self, Write};
+ use std::rc::Rc;
+ 
+ use crate::lexer::Span;
+@@ -256,12 +258,14 @@
+     }
+ }
+ 
++#[cfg(feature = "terminal")]
+ pub struct CliDebugger {
+     session: DebugSession,
+     last_line: String,
+     out: Box<dyn Write>,
+ }
+ 
++#[cfg(feature = "terminal")]
+ impl CliDebugger {
+     pub fn new() -> Self {
+         Self::with_out(Box::new(io::stderr()))
+@@ -423,12 +427,14 @@
+     }
+ }
+ 
++#[cfg(feature = "terminal")]
+ impl Default for CliDebugger {
+     fn default() -> Self {
+         Self::new()
+     }
+ }
+ 
++#[cfg(feature = "terminal")]
+ impl DebugHook for CliDebugger {
+     fn before_stmt(&mut self, ctx: &DebugCtx<'_>) -> DebugAction {
+         if self.session.consume_pause_on_start() {
+@@ -665,6 +671,7 @@
+         }
+     }
+ 
++    #[cfg(feature = "terminal")]
+     fn debugger() -> CliDebugger {
+         CliDebugger::with_out(Box::new(io::sink()))
+     }
+@@ -680,6 +687,7 @@
+     }
+ 
+     #[test]
++    #[cfg(feature = "terminal")]
+     fn ponto_and_remover_take_file_and_line() {
+         let e = env();
+         let c = ctx("/p/main.lep", "", Span::new(1, 1, 0, 1), &e, &[]);
+@@ -712,6 +720,7 @@
+     }
+ 
+     #[test]
++    #[cfg(feature = "terminal")]
+     fn commands_change_step_mode() {
+         let env = env();
+         let span = Span::new(1, 1, 0, 5);
+@@ -759,6 +768,7 @@
+     }
+ 
+     #[test]
++    #[cfg(feature = "terminal")]
+     fn ponto_and_remover_use_current_file() {
+         let env = env();
+         let span = Span::new(3, 1, 0, 1);
+@@ -776,6 +786,7 @@
+     }
+ 
+     #[test]
++    #[cfg(feature = "terminal")]
+     fn continue_only_pauses_on_breakpoints() {
+         let env = env();
+         let span3 = Span::new(3, 1, 0, 4);
+@@ -796,6 +807,7 @@
+     }
+ 
+     #[test]
++    #[cfg(feature = "terminal")]
+     fn step_in_pauses_on_every_statement() {
+         let env = env();
+         let span = Span::new(1, 1, 0, 1);
+@@ -805,6 +817,7 @@
+     }
+ 
+     #[test]
++    #[cfg(feature = "terminal")]
+     fn step_over_skips_statements_nested_in_the_current_span() {
+         let env = env();
+         let outer = Span::new(1, 1, 0, 20);
+@@ -837,6 +850,7 @@
+     }
+ 
+     #[test]
++    #[cfg(feature = "terminal")]
+     fn step_out_pauses_when_the_call_stack_shrinks() {
+         let env = env();
+         let span = Span::new(1, 1, 0, 1);
+--- a/src/runtime/env.rs
++++ b/src/runtime/env.rs
+@@ -330,6 +330,8 @@
+ impl Objeto {
+     fn de_valor(v: &Value) -> Option<Self> {
+         match v {
++            #[cfg(feature = "process")]
++            Value::Processo(_) => None,
+             Value::Lista(xs) => Some(Self::Lista(Rc::clone(xs))),
+             Value::Mapa(m) => Some(Self::Mapa(Rc::clone(m))),
+             Value::Funcao(c) => Some(Self::Funcao(Rc::clone(c))),
+@@ -344,7 +346,6 @@
+             | Value::Conjunto(_)
+             | Value::Matriz(_)
+             | Value::Imagem(_)
+-            | Value::Processo(_)
+             | Value::Builtin(_) => None,
+         }
+     }
+@@ -498,7 +499,7 @@
+     use super::super::value::Closure;
+     use super::*;
+     use crate::lexer::Span;
+-    use crate::parser::{Block, Expr, Stmt};
++    use crate::parser::{Expr, Item, Stmt};
+ 
+     fn num(n: f64) -> Value {
+         Value::Numero(n.try_into().unwrap())
+@@ -507,16 +508,13 @@
+     fn closao(env: Rc<RefCell<Env>>, ident: &str) -> Value {
+         Value::Funcao(Rc::new(Closure {
+             params: vec![],
+-            body: super::super::value::FunctionBody::Ast(Rc::new(Block {
+-                stmts: vec![Stmt::Expr {
+-                    expr: Expr::Ident {
+-                        name: ident.into(),
+-                        span: Span::default(),
+-                    },
++            body: super::super::eval::bytecode::test_function_body(&[Item::Stmt(Stmt::Expr {
++                expr: Expr::Ident {
++                    name: ident.into(),
+                     span: Span::default(),
+-                }],
++                },
+                 span: Span::default(),
+-            })),
++            })]),
+             env,
+             span: Span::default(),
+             file: String::new(),
+--- a/src/runtime/eval.rs
++++ b/src/runtime/eval.rs
+@@ -10,7 +10,9 @@
+ 
+ use std::cell::RefCell;
+ use std::collections::{HashMap, HashSet};
+-use std::io::{self, BufRead, IsTerminal, Write};
++#[cfg(feature = "terminal")]
++use std::io::IsTerminal;
++use std::io::{self, BufRead, Write};
+ use std::path::{Path, PathBuf};
+ use std::rc::{Rc, Weak};
+ use std::thread;
+@@ -21,11 +23,15 @@
+     AssignTarget, BinaryOp, Block, Expr, Import, Item, Param, Program, Stmt, UnaryOp, parse,
+ };
+ 
+-use super::cartesiano_host::{CartesianoHost, CliCartesianoHost};
++use super::cartesiano_host::CartesianoHost;
++#[cfg(feature = "graphics")]
++use super::cartesiano_host::CliCartesianoHost;
+ use super::debug::{DebugAction, DebugCtx, DebugHook, NoopHook};
+ use super::env::{AssignError, Env, FrameKind};
+ use super::error::{CallFrame, EvalError, RuntimeError};
+-use super::graf_host::{CliGrafHost, GrafHost};
++#[cfg(feature = "graphics")]
++use super::graf_host::CliGrafHost;
++use super::graf_host::GrafHost;
+ use super::leia::LeiaHost;
+ use super::nativas;
+ use super::numero::{Numero, NumeroAritmetica, default_numero_aritmetica, parse_numero};
+@@ -41,6 +47,7 @@
+ /// debugger can still prompt on the same terminal).
+ pub(crate) trait LineInput {
+     fn read_line(&mut self, buf: &mut String) -> io::Result<usize>;
++    #[cfg(feature = "terminal")]
+     fn is_terminal(&self) -> bool {
+         false
+     }
+@@ -59,12 +66,14 @@
+         io::stdin().read_line(buf)
+     }
+ 
++    #[cfg(feature = "terminal")]
+     fn is_terminal(&self) -> bool {
+         io::stdin().is_terminal()
+     }
+ }
+ 
+ pub(crate) struct Vm<'a, 'c> {
++    host_lifetime: std::marker::PhantomData<&'c ()>,
+     pub(crate) out: &'a mut dyn Write,
+     pub(crate) err: &'a mut dyn Write,
+     pub(crate) input: &'a mut dyn LineInput,
+@@ -84,10 +93,15 @@
+     pub(crate) max_matrix_cells: usize,
+     backend: ExecutionBackend,
+     pub(crate) leia_host: Option<&'a mut dyn LeiaHost>,
++    #[cfg(feature = "graphics")]
+     pub(crate) cartesiano_host: Option<&'c mut dyn CartesianoHost>,
++    #[cfg(feature = "graphics")]
+     pub(crate) cli_cart: CliCartesianoHost,
++    #[cfg(feature = "graphics")]
+     pub(crate) graf_host: Option<&'c mut dyn GrafHost>,
++    #[cfg(feature = "graphics")]
+     pub(crate) cli_graf: CliGrafHost,
++    #[cfg(feature = "graphics")]
+     pub(crate) abrir_cartesiano: bool,
+     pub(crate) numero_locale: NumeroLocale,
+     pub(crate) numero_aritmetica: NumeroAritmetica,
+@@ -256,24 +270,37 @@
+ }
+ 
+ pub fn debug_source_args(source: &str, file: &str, args: &[String]) -> Result<i32, RuntimeError> {
+-    let mut input = ConsoleInput;
+-    let mut stdout = io::stdout();
+-    let mut stderr = io::stderr();
+-    run_with_io(
+-        source,
+-        file,
+-        Box::new(super::debug::CliDebugger::new()),
+-        &mut input,
+-        &mut stdout,
+-        &mut stderr,
+-        None,
+-        None,
+-        None,
+-        None,
+-        true,
+-        None,
+-        args,
+-    )
++    #[cfg(not(feature = "terminal"))]
++    {
++        let _ = (source, args);
++        Err(RuntimeError {
++            message: "depurador de terminal indisponível neste build".into(),
++            file: file.into(),
++            span: Span::default(),
++            stack: vec![],
++        })
++    }
++    #[cfg(feature = "terminal")]
++    {
++        let mut input = ConsoleInput;
++        let mut stdout = io::stdout();
++        let mut stderr = io::stderr();
++        run_with_io(
++            source,
++            file,
++            Box::new(super::debug::CliDebugger::new()),
++            &mut input,
++            &mut stdout,
++            &mut stderr,
++            None,
++            None,
++            None,
++            None,
++            true,
++            None,
++            args,
++        )
++    }
+ }
+ 
+ pub fn run_to_string(source: &str, file: &str) -> Result<String, RuntimeError> {
+@@ -470,6 +497,23 @@
+     graf_host: Option<&'c mut dyn GrafHost>,
+     script_args: &[String],
+ ) -> Result<i32, RuntimeError> {
++    #[cfg(not(feature = "graphics"))]
++    if cartesiano_host.is_some() || graf_host.is_some() {
++        return Err(RuntimeError {
++            message: "gráficos indisponíveis neste build".into(),
++            file: file.into(),
++            span: Span::default(),
++            stack: vec![],
++        });
++    }
++    if !options.backend.is_available() {
++        return Err(RuntimeError {
++            message: "backend AST indisponível neste build".into(),
++            file: file.into(),
++            span: Span::default(),
++            stack: vec![],
++        });
++    }
+     if options
+         .time_limit
+         .is_some_and(|limit| Instant::now().checked_add(limit).is_none())
+@@ -552,7 +596,10 @@
+             .borrow_mut()
+             .define("argumentos", script_args_value(script_args));
+         let workspace_root = workspace_root.map(|p| lexical_normalize(&p));
++        #[cfg(not(feature = "graphics"))]
++        let _ = (cartesiano_host, graf_host, abrir_cartesiano);
+         Self {
++            host_lifetime: std::marker::PhantomData,
+             out,
+             err,
+             input,
+@@ -570,10 +617,15 @@
+             max_matrix_cells: DEFAULT_MAX_MATRIX_CELLS,
+             backend: bytecode::default_backend(),
+             leia_host,
++            #[cfg(feature = "graphics")]
+             cartesiano_host,
++            #[cfg(feature = "graphics")]
+             cli_cart: CliCartesianoHost::new(),
++            #[cfg(feature = "graphics")]
+             graf_host,
++            #[cfg(feature = "graphics")]
+             cli_graf: CliGrafHost::default(),
++            #[cfg(feature = "graphics")]
+             abrir_cartesiano,
+             numero_locale: default_numero_locale(),
+             numero_aritmetica: default_numero_aritmetica(),
+@@ -639,21 +691,30 @@
+         let result = if self.backend == ExecutionBackend::Bytecode {
+             self.execute_module(program, env).map(|_| ())
+         } else {
+-            (|| {
+-                for item in &program.items {
+-                    self.eval_item(item, env)?;
+-                }
+-                Ok(())
+-            })()
++            #[cfg(feature = "ast")]
++            {
++                (|| {
++                    for item in &program.items {
++                        self.eval_item(item, env)?;
++                    }
++                    Ok(())
++                })()
++            }
++            #[cfg(not(feature = "ast"))]
++            {
++                Err(self.err("backend AST indisponível neste build", program.span))
++            }
+         };
+         self.stack.pop();
+         self.retorne_so_em_funcao(result)
+     }
+ 
++    #[cfg(feature = "ast")]
+     fn eval_item(&mut self, item: &Item, env: &Rc<RefCell<Env>>) -> Result<(), EvalError> {
+         self.eval_item_value(item, env).map(|_| ())
+     }
+ 
++    #[cfg(feature = "ast")]
+     fn eval_item_value(&mut self, item: &Item, env: &Rc<RefCell<Env>>) -> Result<Value, EvalError> {
+         match item {
+             Item::Import(import) => {
+@@ -671,6 +732,7 @@
+         }
+     }
+ 
++    #[cfg(feature = "ast")]
+     pub(crate) fn eval_items_value(
+         &mut self,
+         items: &[Item],
+@@ -679,26 +741,36 @@
+         if self.backend == ExecutionBackend::Bytecode {
+             return self.execute_items(items, env);
+         }
+-        let mut last = Value::Nada;
+-        for item in items {
+-            last = match self.eval_item_value(item, env) {
+-                Ok(v) => v,
+-                Err(e) => return self.retorne_so_em_funcao(Err(e)),
+-            };
+-        }
+-        Ok(last)
+-    }
+-
++        #[cfg(feature = "ast")]
++        {
++            let mut last = Value::Nada;
++            for item in items {
++                last = match self.eval_item_value(item, env) {
++                    Ok(v) => v,
++                    Err(e) => return self.retorne_so_em_funcao(Err(e)),
++                };
++            }
++            Ok(last)
++        }
++        #[cfg(not(feature = "ast"))]
++        {
++            Err(self.err("backend AST indisponível neste build", Span::default()))
++        }
++    }
++
++    #[cfg(feature = "terminal")]
+     pub(crate) fn builtins_env(&self) -> Rc<RefCell<Env>> {
+         Rc::clone(&self.builtins)
+     }
+ 
++    #[cfg(feature = "terminal")]
+     pub(crate) fn set_source(&mut self, file: &str, source: &str) {
+         self.file = file.to_string();
+         self.source = Rc::from(source);
+         self.base_dir = base_dir_of(file);
+     }
+ 
++    #[cfg(feature = "terminal")]
+     pub(crate) fn enter_repl(&mut self) {
+         self.stack.push(CallFrame {
+             name: "<repl>".into(),
+@@ -721,6 +793,11 @@
+                     ));
+             }
+             return self.bind_imported(import, env, native);
++        }
++        if is_bare_module_spec(&import.path)
++            && let Some(feature) = nativas::unavailable_module(&import.path)
++        {
++            return Err(self.err(format!("módulo nativo '{}' indisponível neste build (requer feature '{feature}'); para um arquivo local, use './{}'", import.path, import.path), import.span));
+         }
+         let path = self.resolve_import_path(&import.path, import.span)?;
+         let key = std::fs::canonicalize(&path).unwrap_or_else(|_| path.clone());
+@@ -876,6 +953,7 @@
+         Ok(full)
+     }
+ 
++    #[cfg(feature = "ast")]
+     fn eval_stmt(&mut self, stmt: &Stmt, env: &Rc<RefCell<Env>>) -> Result<Value, EvalError> {
+         self.pause(stmt.span(), env)?;
+         let result = self.eval_stmt_inner(stmt, env);
+@@ -909,6 +987,7 @@
+         }
+     }
+ 
++    #[cfg(feature = "ast")]
+     fn eval_stmt_inner(&mut self, stmt: &Stmt, env: &Rc<RefCell<Env>>) -> Result<Value, EvalError> {
+         match stmt {
+             Stmt::Expr { expr, .. } => self.eval_expr(expr, env),
+@@ -981,6 +1060,7 @@
+                 var, iter, body, ..
+             } => {
+                 let seq = self.eval_expr(iter, env)?;
++                #[cfg(feature = "process")]
+                 if let Value::Processo(p) = &seq {
+                     // Lines as they arrive; leaving the loop stops the command.
+                     let p = Rc::clone(p);
+@@ -1040,6 +1120,7 @@
+     }
+ 
+     /// `true` = `pare` left the loop.
++    #[cfg(feature = "ast")]
+     fn eval_loop_body(
+         &mut self,
+         stmts: &[Stmt],
+@@ -1067,6 +1148,7 @@
+         }
+     }
+ 
++    #[cfg(feature = "ast")]
+     fn eval_stmts(&mut self, stmts: &[Stmt], env: &Rc<RefCell<Env>>) -> Result<Value, EvalError> {
+         let mut last = Value::Nada;
+         for stmt in stmts {
+@@ -1078,6 +1160,7 @@
+         Ok(last)
+     }
+ 
++    #[cfg(feature = "ast")]
+     fn eval_block(&mut self, block: &Block, env: &Rc<RefCell<Env>>) -> Result<Value, EvalError> {
+         self.eval_in_child(env, FrameKind::Block, |vm, child| {
+             vm.eval_stmts(&block.stmts, child)
+@@ -1086,6 +1169,7 @@
+ 
+     /// Runs `f` in a fresh frame and breaks `Rc` cycles before the frame
+     /// is dropped (`g = funcao() { … }` inside a function or block).
++    #[cfg(feature = "ast")]
+     fn eval_in_child(
+         &mut self,
+         parent: &Rc<RefCell<Env>>,
+@@ -1101,6 +1185,7 @@
+     /// Every recursion in the evaluator (calls, nested expressions, blocks)
+     /// passes through here, so this is where the Rust stack is grown before
+     /// it can overflow — on any thread, in debug or release.
++    #[cfg(feature = "ast")]
+     fn eval_expr(&mut self, expr: &Expr, env: &Rc<RefCell<Env>>) -> Result<Value, EvalError> {
+         #[cfg(test)]
+         assert_eq!(
+@@ -1113,6 +1198,7 @@
+         })
+     }
+ 
++    #[cfg(feature = "ast")]
+     fn eval_expr_inner(&mut self, expr: &Expr, env: &Rc<RefCell<Env>>) -> Result<Value, EvalError> {
+         match expr {
+             Expr::Number { raw, span } => {
+@@ -1304,6 +1390,7 @@
+         }
+     }
+ 
++    #[cfg(feature = "ast")]
+     fn eval_binary(
+         &mut self,
+         left: &Expr,
+@@ -1510,13 +1597,17 @@
+                 }
+                 self.check_profundidade(span)?;
+                 let call_env = Env::child(&closure.env, FrameKind::Function);
+-                if let FunctionBody::Bytecode(code) = &closure.body {
+-                    code.bind_parameters(&mut call_env.borrow_mut(), args.iter().cloned());
+-                } else {
+-                    for (param, arg) in closure.params.iter().zip(args) {
+-                        call_env
+-                            .borrow_mut()
+-                            .define(param.name.clone(), arg.clone());
++                match &closure.body {
++                    FunctionBody::Bytecode(code) => {
++                        code.bind_parameters(&mut call_env.borrow_mut(), args.iter().cloned())
++                    }
++                    #[cfg(feature = "ast")]
++                    FunctionBody::Ast(_) => {
++                        for (param, arg) in closure.params.iter().zip(args) {
++                            call_env
++                                .borrow_mut()
++                                .define(param.name.clone(), arg.clone());
++                        }
+                     }
+                 }
+                 self.stack.push(CallFrame {
+@@ -1530,6 +1621,7 @@
+                 let saved_file = std::mem::replace(&mut self.file, closure.file.clone());
+                 let saved_source = std::mem::replace(&mut self.source, Rc::clone(&closure.source));
+                 let result = match &closure.body {
++                    #[cfg(feature = "ast")]
+                     FunctionBody::Ast(body) => self.eval_stmts(&body.stmts, &call_env),
+                     FunctionBody::Bytecode(code) => {
+                         self.execute_function(Rc::clone(code), &call_env)
+@@ -1777,6 +1869,7 @@
+         }
+     }
+ 
++    #[cfg(feature = "graphics")]
+     pub(crate) fn interrupted(&mut self) -> bool {
+         self.hook.interrupted()
+     }
+@@ -1798,6 +1891,7 @@
+ 
+     /// Child processes (`importe "processo"`) would escape the folder a
+     /// confined program (Aula, fuzz) must stay in, so they are off there.
++    #[cfg(feature = "process")]
+     pub(crate) fn processos_permitidos(&self) -> bool {
+         self.workspace_root.is_none()
+     }
+--- a/src/runtime/eval/assignment.rs
++++ b/src/runtime/eval/assignment.rs
+@@ -31,6 +31,7 @@
+ }
+ 
+ impl Vm<'_, '_> {
++    #[cfg(feature = "ast")]
+     pub(super) fn resolve_target(
+         &mut self,
+         target: &AssignTarget,
+@@ -139,6 +140,7 @@
+ 
+     /// Evaluate a receiver and retain a writeback path only when its value needs one.
+     /// Lists/maps/matrices mutate their storage; text values need their owner's slot.
++    #[cfg(feature = "ast")]
+     fn resolve_receiver(
+         &mut self,
+         expr: &Expr,
+@@ -149,6 +151,7 @@
+         })
+     }
+ 
++    #[cfg(feature = "ast")]
+     fn resolve_receiver_inner(
+         &mut self,
+         expr: &Expr,
+--- a/src/runtime/eval/bytecode/execute.rs
++++ b/src/runtime/eval/bytecode/execute.rs
+@@ -24,11 +24,16 @@
+ }
+ enum Iteration {
+     Repeat(i64),
+-    Range { next: Option<i64>, end: i64 },
++    Range {
++        next: Option<i64>,
++        end: i64,
++    },
+     Items(std::vec::IntoIter<Value>),
++    #[cfg(feature = "process")]
+     Process(Rc<RefCell<super::super::super::processo::Processo>>),
+     While,
+ }
++#[cfg(feature = "process")]
+ impl Drop for Loop {
+     fn drop(&mut self) {
+         if let Iteration::Process(p) = &self.state {
+@@ -311,6 +316,7 @@
+                     LoopKind::Items => {
+                         let seq = pop!();
+                         match seq {
++                            #[cfg(feature = "process")]
+                             Value::Processo(p) => Iteration::Process(p),
+                             other => Iteration::Items(
+                                 vm.iter_items(&other, spec.first_span)?.into_iter(),
+@@ -352,6 +358,7 @@
+                         Value::Numero(n.into())
+                     }),
+                     Iteration::Items(items) => items.next(),
++                    #[cfg(feature = "process")]
+                     Iteration::Process(p) => vm
+                         .processo_proxima(p, spec.first_span, &env)?
+                         .map(Value::Texto),
+@@ -542,9 +549,12 @@
+             return Err(error);
+         }
+         let env = Env::child(&closure.env, FrameKind::Function);
++        #[cfg(feature = "ast")]
+         let FunctionBody::Bytecode(code) = &closure.body else {
+             unreachable!("bytecode call dispatch")
+         };
++        #[cfg(not(feature = "ast"))]
++        let FunctionBody::Bytecode(code) = &closure.body;
+         code.bind_parameters(&mut env.borrow_mut(), self.values.drain(args_start..));
+         self.values.truncate(stack_base);
+         self.push(
+@@ -758,6 +768,10 @@
+         program: Program,
+         env: &Rc<RefCell<Env>>,
+     ) -> Result<Value, EvalError> {
++        if !self.backend.is_available() {
++            return Err(self.err("backend AST indisponível neste build", program.span));
++        }
++        #[cfg(feature = "ast")]
+         if self.backend == ExecutionBackend::Ast {
+             return self.eval_items_value(&program.items, env);
+         }
+@@ -766,6 +780,7 @@
+         let result = self.execute_code(code, env, FrameKindCode::Plain);
+         self.retorne_so_em_funcao(result)
+     }
++    #[cfg(feature = "ast")]
+     pub(in crate::runtime::eval) fn execute_items(
+         &mut self,
+         items: &[Item],
+--- a/src/runtime/eval/bytecode/mod.rs
++++ b/src/runtime/eval/bytecode/mod.rs
+@@ -15,6 +15,14 @@
+ }
+ 
+ impl ExecutionBackend {
++    /// Whether this build includes the selected executor. The parser is always present.
++    pub const fn is_available(self) -> bool {
++        match self {
++            Self::Ast => cfg!(feature = "ast"),
++            Self::Bytecode => true,
++        }
++    }
++
+     pub fn from_name(name: &str) -> Option<Self> {
+         match name {
+             "ast" => Some(Self::Ast),
+@@ -135,3 +143,8 @@
+     exit: u32,
+     next: u32,
+ }
++
++#[cfg(test)]
++pub(crate) fn test_function_body(items: &[Item]) -> FunctionBody {
++    FunctionBody::Bytecode(compiler::items(items))
++}
+--- a/src/runtime/eval/exb.rs
++++ b/src/runtime/eval/exb.rs
+@@ -68,7 +68,19 @@
+ ) -> Result<i32, RuntimeError> {
+     let program = format::read_exb(Path::new(path)).map_err(|e| load_error(e, path))?;
+     let hook: Box<dyn DebugHook> = if mode == ExbRunMode::Debug {
+-        Box::new(super::super::debug::CliDebugger::new())
++        #[cfg(feature = "terminal")]
++        {
++            Box::new(super::super::debug::CliDebugger::new())
++        }
++        #[cfg(not(feature = "terminal"))]
++        {
++            return Err(RuntimeError {
++                message: "depurador de terminal indisponível neste build".into(),
++                file: path.into(),
++                span: Span::default(),
++                stack: vec![],
++            });
++        }
+     } else {
+         Box::new(NoopHook)
+     };
+--- a/src/runtime/eval/tests.rs
++++ b/src/runtime/eval/tests.rs
+@@ -61,6 +61,7 @@
+ }
+ 
+ #[test]
++#[cfg(feature = "graphics")]
+ fn example_programs_run() {
+     let examples = [
+         (
+@@ -176,6 +177,7 @@
+     assert!(out.contains("1/4 + 1/4 = 1/2"), "{out}");
+ }
+ 
++#[cfg(feature = "graphics")]
+ #[test]
+ fn tartaruga_anda_para_cima_e_pinta() {
+     let src = r#"
+@@ -195,6 +197,7 @@
+     assert_eq!(out, "azul\nazul\nbranco\n10\n5\n");
+ }
+ 
++#[cfg(feature = "graphics")]
+ #[test]
+ fn tartaruga_subir_nao_pinta_e_olhe_direita() {
+     let src = r#"
+@@ -219,6 +222,7 @@
+ }
+ 
+ #[test]
++#[cfg(feature = "graphics")]
+ fn tartaruga_catalogo_esconde_imports_internos() {
+     let src = r#"
+ ache = funcao(lista, nome)
+@@ -243,6 +247,7 @@
+     assert_eq!(out, "verdadeiro\nverdadeiro\nfalso\nfalso\n");
+ }
+ 
++#[cfg(feature = "graphics")]
+ #[test]
+ fn tartaruga_devagar_termina_no_mesmo_ponto() {
+     let src = r#"
+@@ -786,6 +791,7 @@
+ }
+ 
+ #[test]
++#[cfg(feature = "terminal")]
+ fn migrated_games_accept_first_and_last_letters() {
+     let termo = include_str!("../../../exemplos/jogos/termo.lep")
+         .split("// Para trocar a palavra secreta")
+@@ -1127,6 +1133,7 @@
+     let _ = std::fs::remove_dir_all(&dir);
+ }
+ 
++#[cfg(feature = "graphics")]
+ #[test]
+ fn importe_achatado_nao_cobre_nome_existente() {
+     let err = run_err(
+@@ -1441,6 +1448,7 @@
+ 
+ /// `exemplos/jogos/conway_jogo_da_vida.lep` without its endless main
+ /// loop, running `geracoes` generations of the glider pattern.
++#[cfg(feature = "terminal")]
+ fn conway(geracoes: usize) -> String {
+     let src = include_str!("../../../exemplos/jogos/conway_jogo_da_vida.lep");
+     let funcoes = src.split("// Rotina principal do jogo").next().unwrap();
+@@ -1451,6 +1459,7 @@
+ }
+ 
+ #[test]
++#[cfg(feature = "terminal")]
+ fn funcoes_locais_que_nao_escapam_nao_acumulam_frames() {
+     // `vizinhos` defines `pos_lin`/`pos_col`, which close over its frame.
+     // Each call must free that frame, or every generation strands one
+@@ -2054,7 +2063,7 @@
+     );
+ }
+ 
+-#[cfg(unix)]
++#[cfg(all(unix, feature = "process"))]
+ mod process_lifetime {
+     use super::*;
+     use std::os::unix::net::{UnixListener, UnixStream};
+@@ -2194,7 +2203,10 @@
+ 
+     #[test]
+     fn discarded_process_values_keep_the_ast_cleanup_timing() {
+-        for backend in [ExecutionBackend::Ast, ExecutionBackend::Bytecode] {
++        for backend in [ExecutionBackend::Ast, ExecutionBackend::Bytecode]
++            .into_iter()
++            .filter(|backend| backend.is_available())
++        {
+             check("ARG\nobserve = 0", false, backend);
+             check("repita 1 vezes {\nARG\nobserve = 0\n}", true, backend);
+         }
+@@ -2202,7 +2214,10 @@
+ 
+     #[test]
+     fn stack_arguments_release_processes_on_return_and_arity_error() {
+-        for backend in [ExecutionBackend::Ast, ExecutionBackend::Bytecode] {
++        for backend in [ExecutionBackend::Ast, ExecutionBackend::Bytecode]
++            .into_iter()
++            .filter(|backend| backend.is_available())
++        {
+             check("f = funcao(p) { 0 }\nf(ARG)\nobserve = 0", false, backend);
+             check(
+                 "f = funcao() { 0 }\nf(ARG) se_falhar 0\nobserve = 0",
+@@ -2242,7 +2257,10 @@
+             DebugAction::Continue
+         }
+     }
+-    for backend in [ExecutionBackend::Ast, ExecutionBackend::Bytecode] {
++    for backend in [ExecutionBackend::Ast, ExecutionBackend::Bytecode]
++        .into_iter()
++        .filter(|backend| backend.is_available())
++    {
+         let values = Rc::new(RefCell::new(Vec::new()));
+         let before = super::super::env::ENVS_VIVOS.with(|n| n.get());
+         let source = "f = funcao(arg) {\navalie(\"arg = 7\")\nobserve = 0\ng = funcao() { arg }\narg = g\n0\n}\nf(1)";
+--- a/src/runtime/fonte8x8.rs
++++ b/src/runtime/fonte8x8.rs
+@@ -2,7 +2,9 @@
+ //! Cada byte é uma linha; o bit 0 é o pixel da esquerda.
+ 
+ pub const LADO: i32 = 8;
++#[cfg(feature = "graphics")]
+ pub const TAMANHO_PADRAO: i32 = 8;
++#[cfg(feature = "graphics")]
+ pub const TAMANHO_MAX: i32 = 256;
+ 
+ const BASIC: [[u8; 8]; 95] = [
+--- a/src/runtime/graf.rs
++++ b/src/runtime/graf.rs
+@@ -1,14 +1,20 @@
+ //! Bitmap canvas after drawing commands. Shared by tests, PNG save,
+ //! `expressa-grafico`, and the Aula window.
+ 
++#[cfg(feature = "graphics")]
+ use std::io::Cursor;
++#[cfg(feature = "graphics")]
+ use std::path::Path;
+ 
+ use super::folha::cor_rgb;
+ use super::fonte8x8;
+-use super::imagem::{self, Imagem, carimbar, carimbar_rgba};
+-
++#[cfg(feature = "graphics")]
++use super::imagem;
++use super::imagem::{Imagem, carimbar, carimbar_rgba};
++
++#[cfg(feature = "graphics")]
+ pub const LARGURA_MAX: u32 = 2048;
++#[cfg(feature = "graphics")]
+ pub const ALTURA_MAX: u32 = 2048;
+ 
+ #[derive(Clone, Debug, PartialEq)]
+@@ -214,10 +220,12 @@
+         }
+     }
+ 
++    #[cfg(feature = "graphics")]
+     pub fn png_bytes(&self) -> Result<Vec<u8>, String> {
+         imagem::encode_png_rgba(&self.como_imagem())
+     }
+ 
++    #[cfg(feature = "graphics")]
+     pub fn write_png(&self, path: &Path) -> Result<(), String> {
+         std::fs::write(path, self.png_bytes()?).map_err(|e| e.to_string())
+     }
+@@ -244,15 +252,18 @@
+             .collect()
+     }
+ 
++    #[cfg(feature = "graphics")]
+     pub fn png_bytes(&self) -> Result<Vec<u8>, String> {
+         encode_png(self.largura, self.altura, &self.rgb32())
+     }
+ 
++    #[cfg(feature = "graphics")]
+     pub fn write_png(&self, path: &Path) -> Result<(), String> {
+         std::fs::write(path, self.png_bytes()?).map_err(|e| e.to_string())
+     }
+ }
+ 
++#[cfg(feature = "graphics")]
+ fn encode_png(w: u32, h: u32, rgb32: &[u32]) -> Result<Vec<u8>, String> {
+     let mut raw = Vec::with_capacity((w * h * 3) as usize);
+     for px in rgb32 {
+@@ -271,6 +282,7 @@
+     Ok(out)
+ }
+ 
++#[cfg(feature = "graphics")]
+ pub fn png_to_rgb32(bytes: &[u8]) -> Result<(u32, u32, Vec<u32>), String> {
+     let mut dec = png::Decoder::new(Cursor::new(bytes));
+     dec.set_transformations(png::Transformations::EXPAND | png::Transformations::STRIP_16);
+@@ -302,6 +314,7 @@
+     Ok((w, h, out))
+ }
+ 
++#[cfg(feature = "graphics")]
+ pub fn cor_graf_conhecida(nome: &str) -> bool {
+     matches!(
+         nome,
+@@ -459,7 +472,7 @@
+     }
+ }
+ 
+-#[cfg(test)]
++#[cfg(all(test, feature = "graphics"))]
+ #[allow(clippy::identity_op)] // `1 * 4`: pixel 1, 4 bytes each
+ mod tests {
+     use super::*;
+--- a/src/runtime/graf_host.rs
++++ b/src/runtime/graf_host.rs
+@@ -1,16 +1,11 @@
+ //! Who shows a [`TelaGrafica`]. Tests stay silent; the CLI talks to a child.
+ 
+-use std::collections::{HashMap, HashSet, VecDeque};
+-use std::io::BufReader;
+-use std::process::{Child, ChildStdin, Command, Stdio};
+-use std::sync::mpsc::{self, Receiver};
+-use std::thread;
++use std::collections::VecDeque;
+ use std::time::Duration;
+ 
+ use super::graf::TelaGrafica;
+-use super::graf_proto::{
+-    self, FiguraIntern, Msg, TIPO_CLIQUE, TIPO_SAIR, TIPO_SOLTE, TIPO_TECLA, write_msg,
+-};
++#[cfg(feature = "graphics")]
++use super::graf_proto::{self, TIPO_CLIQUE, TIPO_SAIR, TIPO_SOLTE, TIPO_TECLA};
+ 
+ #[derive(Clone, Debug, PartialEq, Eq)]
+ pub struct EventoGraf {
+@@ -62,6 +57,7 @@
+         }
+     }
+ 
++    #[cfg(feature = "graphics")]
+     pub fn from_msg(tipo: u8, x: i32, y: i32, botao: u8, tecla: String) -> Self {
+         Self {
+             tipo: match tipo {
+@@ -127,188 +123,7 @@
+     }
+ }
+ 
+-struct Filho {
+-    stdin: Option<ChildStdin>,
+-    child: Option<Child>,
+-    rx: Receiver<Result<Msg, String>>,
+-    enviadas: HashSet<u32>,
+-}
+-
+-impl Drop for Filho {
+-    fn drop(&mut self) {
+-        // EOF to the viewer so it keeps the last frame; do not wait, or
+-        // `expressa casa.lep` would sit until the student closes the window.
+-        self.stdin.take();
+-        if let Some(mut child) = self.child.take()
+-            && let Ok(None) = child.try_wait()
+-        {
+-            std::mem::forget(child)
+-        }
+-    }
+-}
+-
+-#[derive(Default)]
+-pub struct CliGrafHost {
+-    filhos: HashMap<u64, Filho>,
+-    intern: FiguraIntern,
+-}
+-
+-impl CliGrafHost {
+-    fn vivo(filho: &mut Filho) -> bool {
+-        matches!(filho.child.as_mut().map(|c| c.try_wait()), Some(Ok(None)))
+-    }
+-
+-    fn ensure(&mut self, tela: &TelaGrafica) -> Result<&mut Filho, String> {
+-        let morto = match self.filhos.get_mut(&tela.id) {
+-            Some(f) => !Self::vivo(f),
+-            None => true,
+-        };
+-        if morto {
+-            self.filhos.remove(&tela.id);
+-            let filho = spawn_live()?;
+-            self.filhos.insert(tela.id, filho);
+-            let intern = &mut self.intern;
+-            let filho = self.filhos.get_mut(&tela.id).unwrap();
+-            for msg in graf_proto::mensagens_de(tela, intern, &mut filho.enviadas, true) {
+-                let stdin = filho
+-                    .stdin
+-                    .as_mut()
+-                    .ok_or_else(|| "visor sem stdin".to_string())?;
+-                write_msg(stdin, &msg).map_err(|e| format!("não falou com o visor: {e}"))?;
+-            }
+-        }
+-        Ok(self.filhos.get_mut(&tela.id).unwrap())
+-    }
+-}
+-
+-impl GrafHost for CliGrafHost {
+-    fn mostre(&mut self, tela: TelaGrafica) -> Result<(), String> {
+-        let id = tela.id;
+-        if self.filhos.get_mut(&id).map(Self::vivo).unwrap_or(false) {
+-            let intern = &mut self.intern;
+-            let filho = self.filhos.get_mut(&id).unwrap();
+-            for msg in graf_proto::mensagens_de(&tela, intern, &mut filho.enviadas, false) {
+-                let stdin = filho
+-                    .stdin
+-                    .as_mut()
+-                    .ok_or_else(|| "visor sem stdin".to_string())?;
+-                write_msg(stdin, &msg).map_err(|e| format!("não falou com o visor: {e}"))?;
+-            }
+-            return Ok(());
+-        }
+-        self.ensure(&tela)?;
+-        Ok(())
+-    }
+-
+-    fn evento(
+-        &mut self,
+-        tela: &TelaGrafica,
+-        timeout: Option<Duration>,
+-    ) -> Result<EventoGraf, String> {
+-        let morto = match self.filhos.get_mut(&tela.id) {
+-            Some(f) => !Self::vivo(f),
+-            None => {
+-                self.ensure(tela)?;
+-                false
+-            }
+-        };
+-        if morto {
+-            self.filhos.remove(&tela.id);
+-            return Ok(EventoGraf::sair());
+-        }
+-        let timeout_ms = match timeout {
+-            None => -1,
+-            Some(d) => i32::try_from(d.as_millis().min(i32::MAX as u128)).unwrap_or(i32::MAX),
+-        };
+-        let filho = self.filhos.get_mut(&tela.id).unwrap();
+-        let stdin = filho
+-            .stdin
+-            .as_mut()
+-            .ok_or_else(|| "visor sem stdin".to_string())?;
+-        if write_msg(
+-            stdin,
+-            &Msg::Espere {
+-                id: tela.id,
+-                timeout_ms,
+-            },
+-        )
+-        .is_err()
+-        {
+-            self.filhos.remove(&tela.id);
+-            return Ok(EventoGraf::sair());
+-        }
+-        let wait = match timeout {
+-            None => Duration::from_secs(3600),
+-            Some(d) => d.saturating_add(Duration::from_millis(400)),
+-        };
+-        match filho.rx.recv_timeout(wait) {
+-            Ok(Ok(Msg::Evento {
+-                tipo,
+-                x,
+-                y,
+-                botao,
+-                tecla,
+-                ..
+-            })) => Ok(EventoGraf::from_msg(tipo, x, y, botao, tecla)),
+-            Ok(Ok(_)) => Ok(EventoGraf::nada()),
+-            Ok(Err(_)) => Ok(EventoGraf::sair()),
+-            Err(mpsc::RecvTimeoutError::Timeout) => Ok(EventoGraf::nada()),
+-            Err(mpsc::RecvTimeoutError::Disconnected) => Ok(EventoGraf::sair()),
+-        }
+-    }
+-}
+-
+-fn spawn_live() -> Result<Filho, String> {
+-    let mut cmd = live_command()?;
+-    cmd.stdin(Stdio::piped())
+-        .stdout(Stdio::piped())
+-        .stderr(Stdio::inherit());
+-    #[cfg(unix)]
+-    {
+-        use std::os::unix::process::CommandExt;
+-        cmd.process_group(0);
+-    }
+-    let mut child = cmd
+-        .spawn()
+-        .map_err(|e| format!("não abriu a janela do graf: {e}"))?;
+-    let stdin = child
+-        .stdin
+-        .take()
+-        .ok_or_else(|| "visor sem stdin".to_string())?;
+-    let stdout = child
+-        .stdout
+-        .take()
+-        .ok_or_else(|| "visor sem stdout".to_string())?;
+-    let (tx, rx) = mpsc::channel();
+-    thread::spawn(move || {
+-        let mut r = BufReader::new(stdout);
+-        loop {
+-            match graf_proto::read_msg(&mut r) {
+-                Ok(m) => {
+-                    if tx.send(Ok(m)).is_err() {
+-                        break;
+-                    }
+-                }
+-                Err(e) => {
+-                    let _ = tx.send(Err(e.to_string()));
+-                    break;
+-                }
+-            }
+-        }
+-    });
+-    Ok(Filho {
+-        stdin: Some(stdin),
+-        child: Some(child),
+-        rx,
+-        enviadas: HashSet::new(),
+-    })
+-}
+-
+-fn live_command() -> Result<Command, String> {
+-    // Same binary as the parent, so `--ao-vivo` matches this build (a
+-    // leftover `expressa-grafico` next to it may still be the file viewer).
+-    let exe = std::env::current_exe().map_err(|e| e.to_string())?;
+-    let mut cmd = Command::new(exe);
+-    cmd.arg("--ao-vivo");
+-    Ok(cmd)
+-}
++#[cfg(feature = "graphics")]
++mod desktop;
++#[cfg(feature = "graphics")]
++pub use desktop::CliGrafHost;
+--- /dev/null
++++ b/src/runtime/graf_host/desktop.rs
+@@ -0,0 +1,192 @@
++use super::super::graf_proto::{FiguraIntern, Msg, write_msg};
++use super::*;
++use std::collections::{HashMap, HashSet};
++use std::io::BufReader;
++use std::process::{Child, ChildStdin, Command, Stdio};
++use std::sync::mpsc::{self, Receiver};
++use std::thread;
++struct Filho {
++    stdin: Option<ChildStdin>,
++    child: Option<Child>,
++    rx: Receiver<Result<Msg, String>>,
++    enviadas: HashSet<u32>,
++}
++
++impl Drop for Filho {
++    fn drop(&mut self) {
++        // EOF to the viewer so it keeps the last frame; do not wait, or
++        // `expressa casa.lep` would sit until the student closes the window.
++        self.stdin.take();
++        if let Some(mut child) = self.child.take()
++            && let Ok(None) = child.try_wait()
++        {
++            std::mem::forget(child)
++        }
++    }
++}
++
++#[derive(Default)]
++pub struct CliGrafHost {
++    filhos: HashMap<u64, Filho>,
++    intern: FiguraIntern,
++}
++
++impl CliGrafHost {
++    fn vivo(filho: &mut Filho) -> bool {
++        matches!(filho.child.as_mut().map(|c| c.try_wait()), Some(Ok(None)))
++    }
++
++    fn ensure(&mut self, tela: &TelaGrafica) -> Result<&mut Filho, String> {
++        let morto = match self.filhos.get_mut(&tela.id) {
++            Some(f) => !Self::vivo(f),
++            None => true,
++        };
++        if morto {
++            self.filhos.remove(&tela.id);
++            let filho = spawn_live()?;
++            self.filhos.insert(tela.id, filho);
++            let intern = &mut self.intern;
++            let filho = self.filhos.get_mut(&tela.id).unwrap();
++            for msg in graf_proto::mensagens_de(tela, intern, &mut filho.enviadas, true) {
++                let stdin = filho
++                    .stdin
++                    .as_mut()
++                    .ok_or_else(|| "visor sem stdin".to_string())?;
++                write_msg(stdin, &msg).map_err(|e| format!("não falou com o visor: {e}"))?;
++            }
++        }
++        Ok(self.filhos.get_mut(&tela.id).unwrap())
++    }
++}
++
++impl GrafHost for CliGrafHost {
++    fn mostre(&mut self, tela: TelaGrafica) -> Result<(), String> {
++        let id = tela.id;
++        if self.filhos.get_mut(&id).map(Self::vivo).unwrap_or(false) {
++            let intern = &mut self.intern;
++            let filho = self.filhos.get_mut(&id).unwrap();
++            for msg in graf_proto::mensagens_de(&tela, intern, &mut filho.enviadas, false) {
++                let stdin = filho
++                    .stdin
++                    .as_mut()
++                    .ok_or_else(|| "visor sem stdin".to_string())?;
++                write_msg(stdin, &msg).map_err(|e| format!("não falou com o visor: {e}"))?;
++            }
++            return Ok(());
++        }
++        self.ensure(&tela)?;
++        Ok(())
++    }
++
++    fn evento(
++        &mut self,
++        tela: &TelaGrafica,
++        timeout: Option<Duration>,
++    ) -> Result<EventoGraf, String> {
++        let morto = match self.filhos.get_mut(&tela.id) {
++            Some(f) => !Self::vivo(f),
++            None => {
++                self.ensure(tela)?;
++                false
++            }
++        };
++        if morto {
++            self.filhos.remove(&tela.id);
++            return Ok(EventoGraf::sair());
++        }
++        let timeout_ms = match timeout {
++            None => -1,
++            Some(d) => i32::try_from(d.as_millis().min(i32::MAX as u128)).unwrap_or(i32::MAX),
++        };
++        let filho = self.filhos.get_mut(&tela.id).unwrap();
++        let stdin = filho
++            .stdin
++            .as_mut()
++            .ok_or_else(|| "visor sem stdin".to_string())?;
++        if write_msg(
++            stdin,
++            &Msg::Espere {
++                id: tela.id,
++                timeout_ms,
++            },
++        )
++        .is_err()
++        {
++            self.filhos.remove(&tela.id);
++            return Ok(EventoGraf::sair());
++        }
++        let wait = match timeout {
++            None => Duration::from_secs(3600),
++            Some(d) => d.saturating_add(Duration::from_millis(400)),
++        };
++        match filho.rx.recv_timeout(wait) {
++            Ok(Ok(Msg::Evento {
++                tipo,
++                x,
++                y,
++                botao,
++                tecla,
++                ..
++            })) => Ok(EventoGraf::from_msg(tipo, x, y, botao, tecla)),
++            Ok(Ok(_)) => Ok(EventoGraf::nada()),
++            Ok(Err(_)) => Ok(EventoGraf::sair()),
++            Err(mpsc::RecvTimeoutError::Timeout) => Ok(EventoGraf::nada()),
++            Err(mpsc::RecvTimeoutError::Disconnected) => Ok(EventoGraf::sair()),
++        }
++    }
++}
++
++fn spawn_live() -> Result<Filho, String> {
++    let mut cmd = live_command()?;
++    cmd.stdin(Stdio::piped())
++        .stdout(Stdio::piped())
++        .stderr(Stdio::inherit());
++    #[cfg(unix)]
++    {
++        use std::os::unix::process::CommandExt;
++        cmd.process_group(0);
++    }
++    let mut child = cmd
++        .spawn()
++        .map_err(|e| format!("não abriu a janela do graf: {e}"))?;
++    let stdin = child
++        .stdin
++        .take()
++        .ok_or_else(|| "visor sem stdin".to_string())?;
++    let stdout = child
++        .stdout
++        .take()
++        .ok_or_else(|| "visor sem stdout".to_string())?;
++    let (tx, rx) = mpsc::channel();
++    thread::spawn(move || {
++        let mut r = BufReader::new(stdout);
++        loop {
++            match graf_proto::read_msg(&mut r) {
++                Ok(m) => {
++                    if tx.send(Ok(m)).is_err() {
++                        break;
++                    }
++                }
++                Err(e) => {
++                    let _ = tx.send(Err(e.to_string()));
++                    break;
++                }
++            }
++        }
++    });
++    Ok(Filho {
++        stdin: Some(stdin),
++        child: Some(child),
++        rx,
++        enviadas: HashSet::new(),
++    })
++}
++
++fn live_command() -> Result<Command, String> {
++    // Same binary as the parent, so `--ao-vivo` matches this build (a
++    // leftover `expressa-grafico` next to it may still be the file viewer).
++    let exe = std::env::current_exe().map_err(|e| e.to_string())?;
++    let mut cmd = Command::new(exe);
++    cmd.arg("--ao-vivo");
++    Ok(cmd)
++}
+--- a/src/runtime/imagem.rs
++++ b/src/runtime/imagem.rs
+@@ -1,6 +1,8 @@
+ //! RGBA image values: load, save, rotate, scale, stamp onto a canvas.
+ 
++#[cfg(feature = "graphics")]
+ use std::io::Cursor;
++#[cfg(feature = "graphics")]
+ use std::path::Path;
+ use std::sync::Arc;
+ 
+@@ -54,11 +56,13 @@
+     Ok(())
+ }
+ 
++#[cfg(feature = "graphics")]
+ pub fn leia_png(path: &Path) -> Result<Imagem, String> {
+     let bytes = std::fs::read(path).map_err(|e| e.to_string())?;
+     decode_png(&bytes)
+ }
+ 
++#[cfg(feature = "graphics")]
+ pub fn decode_png(bytes: &[u8]) -> Result<Imagem, String> {
+     let mut dec = png::Decoder::new(Cursor::new(bytes));
+     dec.set_transformations(png::Transformations::EXPAND | png::Transformations::STRIP_16);
+@@ -90,6 +94,7 @@
+     Imagem::nova(info.width, info.height, px)
+ }
+ 
++#[cfg(feature = "graphics")]
+ pub fn encode_png_rgba(img: &Imagem) -> Result<Vec<u8>, String> {
+     let mut out = Vec::new();
+     {
+@@ -104,11 +109,13 @@
+     Ok(out)
+ }
+ 
++#[cfg(feature = "graphics")]
+ pub fn salve_png(img: &Imagem, path: &Path) -> Result<(), String> {
+     std::fs::write(path, encode_png_rgba(img)?).map_err(|e| e.to_string())
+ }
+ 
+ /// Clockwise degrees. 0 keeps the top of the image pointing up.
++#[cfg(feature = "graphics")]
+ pub fn rotacione(img: &Imagem, graus: f64) -> Result<Imagem, String> {
+     if !graus.is_finite() {
+         return Err("ângulo da imagem deve ser um número finito".into());
+@@ -132,6 +139,7 @@
+     rotacione_geral(img, a)
+ }
+ 
++#[cfg(feature = "graphics")]
+ fn rotacione_90(src: &Imagem) -> Imagem {
+     let w = src.largura;
+     let h = src.altura;
+@@ -150,6 +158,7 @@
+     }
+ }
+ 
++#[cfg(feature = "graphics")]
+ fn rotacione_180(src: &Imagem) -> Imagem {
+     let w = src.largura;
+     let h = src.altura;
+@@ -166,6 +175,7 @@
+     }
+ }
+ 
++#[cfg(feature = "graphics")]
+ fn rotacione_270(src: &Imagem) -> Imagem {
+     let w = src.largura;
+     let h = src.altura;
+@@ -182,12 +192,14 @@
+     }
+ }
+ 
++#[cfg(feature = "graphics")]
+ fn copy_px(src: &Imagem, sx: u32, sy: u32, dest: &mut [u8], dx: u32, dy: u32, dest_w: u32) {
+     let si = ((sy * src.largura + sx) as usize) * 4;
+     let di = ((dy * dest_w + dx) as usize) * 4;
+     dest[di..di + 4].copy_from_slice(&src.px[si..si + 4]);
+ }
+ 
++#[cfg(feature = "graphics")]
+ fn rotacione_geral(src: &Imagem, graus: f64) -> Result<Imagem, String> {
+     let rad = graus.to_radians();
+     let (cos, sin) = (rad.cos(), rad.sin());
+@@ -220,6 +232,7 @@
+     Imagem::nova(nw, nh, px)
+ }
+ 
++#[cfg(feature = "graphics")]
+ pub fn escala(img: &Imagem, fx: f64, fy: f64) -> Result<Imagem, String> {
+     if !fx.is_finite() || !fy.is_finite() || fx <= 0.0 || fy <= 0.0 {
+         return Err("escala deve ser um número maior que 0".into());
+@@ -360,7 +373,7 @@
+     });
+ }
+ 
+-#[cfg(test)]
++#[cfg(all(test, feature = "graphics"))]
+ #[allow(clippy::identity_op)] // `1 * 4`: pixel 1, 4 bytes each
+ mod tests {
+     use super::*;
+--- a/src/runtime/mod.rs
++++ b/src/runtime/mod.rs
+@@ -9,23 +9,32 @@
+ mod formate;
+ mod graf;
+ mod graf_host;
++#[cfg(feature = "graphics")]
+ mod graf_proto;
+ mod imagem;
+ mod leia;
+ mod nativas;
+ mod numero;
+ mod pilha;
++#[cfg(feature = "process")]
+ mod processo;
++#[cfg(feature = "terminal")]
+ mod repl;
+ mod rng;
++#[cfg(feature = "terminal")]
+ mod terminal;
+ mod value;
++#[cfg(feature = "graphics")]
+ mod viewer;
+ 
+-pub use cartesiano_host::{CapturaCartesiano, CartesianoHost, CliCartesianoHost, NullCartesiano};
++#[cfg(feature = "graphics")]
++pub use cartesiano_host::CliCartesianoHost;
++pub use cartesiano_host::{CapturaCartesiano, CartesianoHost, NullCartesiano};
++#[cfg(feature = "terminal")]
++pub use debug::CliDebugger;
+ pub use debug::{
+-    ChannelDebugger, CliDebugger, DebugAction, DebugBinding, DebugCtx, DebugFrameInfo, DebugHook,
+-    DebugPaused, DebugSession, NoopHook, StopHook, collect_stack, collect_vars, snapshot,
++    ChannelDebugger, DebugAction, DebugBinding, DebugCtx, DebugFrameInfo, DebugHook, DebugPaused,
++    DebugSession, NoopHook, StopHook, collect_stack, collect_vars, snapshot,
+ };
+ pub use error::{CallFrame, RuntimeError};
+ pub use eval::{
+@@ -47,11 +56,13 @@
+ };
+ pub use numero::{Numero, NumeroAritmetica, default_numero_aritmetica};
+ pub use pilha::PROFUNDIDADE_MAXIMA;
++#[cfg(feature = "terminal")]
+ pub use repl::{
+     CanalRepl, ConteudoRepl, EventoRepl, FimRepl, FluxoRepl, IdAvaliacao, IdSessao,
+     REPL_MAX_CODIGO, TextoRepl, run_repl,
+ };
+ pub use value::{NumeroLocale, Value, default_numero_locale};
++#[cfg(feature = "graphics")]
+ pub use viewer::{run_live_viewer, run_viewer};
+ 
+ #[cfg(test)]
+--- a/src/runtime/nativas/mod.rs
++++ b/src/runtime/nativas/mod.rs
+@@ -10,16 +10,21 @@
+ use super::value::{Value, format_numero};
+ 
+ mod arquivo;
++#[cfg(feature = "graphics")]
+ mod cartesiano;
+ mod crono;
++#[cfg(feature = "graphics")]
+ mod graf;
++#[cfg(feature = "graphics")]
+ mod imagem;
+ mod mat;
+ mod matriz;
+ mod nucleo;
++#[cfg(feature = "process")]
+ mod processo;
+ mod referencia;
+ mod sistema;
++#[cfg(feature = "terminal")]
+ mod tela;
+ 
+ pub use referencia::{
+@@ -161,54 +166,67 @@
+         names: &["termina_com"],
+         module: None,
+     },
++    #[cfg(feature = "terminal")]
+     Nativa {
+         names: &["cls", "limpe_tela"],
+         module: Some("tela"),
+     },
++    #[cfg(feature = "terminal")]
+     Nativa {
+         names: &["posicao_cursor", "posição_cursor"],
+         module: Some("tela"),
+     },
++    #[cfg(feature = "terminal")]
+     Nativa {
+         names: &["apague_linha"],
+         module: Some("tela"),
+     },
++    #[cfg(feature = "terminal")]
+     Nativa {
+         names: &["casa"],
+         module: Some("tela"),
+     },
++    #[cfg(feature = "terminal")]
+     Nativa {
+         names: &["eh_terminal", "é_terminal"],
+         module: Some("tela"),
+     },
++    #[cfg(feature = "terminal")]
+     Nativa {
+         names: &["pinte"],
+         module: Some("tela"),
+     },
++    #[cfg(feature = "terminal")]
+     Nativa {
+         names: &["fundo"],
+         module: Some("tela"),
+     },
++    #[cfg(feature = "terminal")]
+     Nativa {
+         names: &["negrito"],
+         module: Some("tela"),
+     },
++    #[cfg(feature = "terminal")]
+     Nativa {
+         names: &["colunas"],
+         module: Some("tela"),
+     },
++    #[cfg(feature = "terminal")]
+     Nativa {
+         names: &["linhas"],
+         module: Some("tela"),
+     },
++    #[cfg(feature = "terminal")]
+     Nativa {
+         names: &["quadro"],
+         module: Some("tela"),
+     },
++    #[cfg(feature = "terminal")]
+     Nativa {
+         names: &["bloco"],
+         module: Some("tela"),
+     },
++    #[cfg(feature = "terminal")]
+     Nativa {
+         names: &["escreva_em"],
+         module: Some("tela"),
+@@ -401,34 +419,42 @@
+         names: &["pasta_atual"],
+         module: Some("arquivo"),
+     },
++    #[cfg(feature = "process")]
+     Nativa {
+         names: &["execute"],
+         module: Some("processo"),
+     },
++    #[cfg(feature = "process")]
+     Nativa {
+         names: &["linhas_de"],
+         module: Some("processo"),
+     },
++    #[cfg(feature = "graphics")]
+     Nativa {
+         names: &["documento"],
+         module: Some("cartesiano"),
+     },
++    #[cfg(feature = "graphics")]
+     Nativa {
+         names: &["grafico"],
+         module: Some("cartesiano"),
+     },
++    #[cfg(feature = "graphics")]
+     Nativa {
+         names: &["eixos"],
+         module: Some("cartesiano"),
+     },
++    #[cfg(feature = "graphics")]
+     Nativa {
+         names: &["plote"],
+         module: Some("cartesiano"),
+     },
++    #[cfg(feature = "graphics")]
+     Nativa {
+         names: &["adicione"],
+         module: Some("cartesiano"),
+     },
++    #[cfg(feature = "graphics")]
+     Nativa {
+         names: &["mostre"],
+         module: Some("cartesiano"),
+@@ -461,91 +487,122 @@
+         names: &["formate_data"],
+         module: Some("crono"),
+     },
++    #[cfg(feature = "graphics")]
+     Nativa {
+         names: &["nova"],
+         module: Some("tela_grafica"),
+     },
++    #[cfg(feature = "graphics")]
+     Nativa {
+         names: &["cor"],
+         module: Some("tela_grafica"),
+     },
++    #[cfg(feature = "graphics")]
+     Nativa {
+         names: &["fundo"],
+         module: Some("tela_grafica"),
+     },
++    #[cfg(feature = "graphics")]
+     Nativa {
+         names: &["linha"],
+         module: Some("tela_grafica"),
+     },
++    #[cfg(feature = "graphics")]
+     Nativa {
+         names: &["circulo", "círculo"],
+         module: Some("tela_grafica"),
+     },
++    #[cfg(feature = "graphics")]
+     Nativa {
+         names: &["ponto"],
+         module: Some("tela_grafica"),
+     },
++    #[cfg(feature = "graphics")]
+     Nativa {
+         names: &["retangulo", "retângulo"],
+         module: Some("tela_grafica"),
+     },
++    #[cfg(feature = "graphics")]
+     Nativa {
+         names: &["texto"],
+         module: Some("tela_grafica"),
+     },
++    #[cfg(feature = "graphics")]
+     Nativa {
+         names: &["imagem"],
+         module: Some("tela_grafica"),
+     },
++    #[cfg(feature = "graphics")]
+     Nativa {
+         names: &["apague"],
+         module: Some("tela_grafica"),
+     },
++    #[cfg(feature = "graphics")]
+     Nativa {
+         names: &["pixel"],
+         module: Some("tela_grafica"),
+     },
++    #[cfg(feature = "graphics")]
+     Nativa {
+         names: &["como_imagem"],
+         module: Some("tela_grafica"),
+     },
++    #[cfg(feature = "graphics")]
+     Nativa {
+         names: &["salve"],
+         module: Some("tela_grafica"),
+     },
++    #[cfg(feature = "graphics")]
+     Nativa {
+         names: &["mostre"],
+         module: Some("tela_grafica"),
+     },
++    #[cfg(feature = "graphics")]
+     Nativa {
+         names: &["evento"],
+         module: Some("tela_grafica"),
+     },
++    #[cfg(feature = "graphics")]
+     Nativa {
+         names: &["carregue"],
+         module: Some("imagem"),
+     },
++    #[cfg(feature = "graphics")]
+     Nativa {
+         names: &["salve"],
+         module: Some("imagem"),
+     },
++    #[cfg(feature = "graphics")]
+     Nativa {
+         names: &["rotacione"],
+         module: Some("imagem"),
+     },
++    #[cfg(feature = "graphics")]
+     Nativa {
+         names: &["redimensione"],
+         module: Some("imagem"),
+     },
++    #[cfg(feature = "graphics")]
+     Nativa {
+         names: &["largura"],
+         module: Some("imagem"),
+     },
++    #[cfg(feature = "graphics")]
+     Nativa {
+         names: &["altura"],
+         module: Some("imagem"),
+     },
+ ];
++
++/// Recognize omitted native modules without silently treating them as files.
++pub(crate) fn unavailable_module(name: &str) -> Option<&'static str> {
++    match name {
++        "tela" if !cfg!(feature = "terminal") => Some("terminal"),
++        "cartesiano" | "tela_grafica" | "imagem" if !cfg!(feature = "graphics") => Some("graphics"),
++        "processo" if !cfg!(feature = "process") => Some("process"),
++        _ => None,
++    }
++}
+ 
+ pub fn bind_nucleo(env: &Rc<RefCell<Env>>) {
+     for n in NATIVAS {
+@@ -578,6 +635,7 @@
+             ),
+         );
+     }
++    #[cfg(feature = "terminal")]
+     if let Some(tela) = map.get("tela") {
+         tela.borrow_mut()
+             .define("nova_linha", Value::Texto(tela::NOVA_LINHA.into()));
+@@ -597,27 +655,40 @@
+             "escreva" => self.bi_escreva(args, span, env),
+             "escreva_erro" => self.bi_escreva_erro(args, span, env),
+             "saia" => self.bi_saia(args, span),
++            #[cfg(feature = "terminal")]
+             "cls" | "limpe_tela" => self.bi_cls(args, span),
++            #[cfg(feature = "terminal")]
+             "casa" => self.bi_casa(args, span),
++            #[cfg(feature = "terminal")]
+             "posicao_cursor" | "posição_cursor" => self.bi_posicao_cursor(args, span),
++            #[cfg(feature = "terminal")]
+             "apague_linha" => self.bi_apague_linha(args, span),
+             "durma" => self.bi_durma(args, span),
+             "leia" => self.bi_leia(args, span),
+             "leia_linhas" => self.bi_leia_linhas(args, span),
++            #[cfg(feature = "terminal")]
+             "eh_terminal" | "é_terminal" => self.bi_eh_terminal(args, span),
++            #[cfg(feature = "terminal")]
+             "pinte" => self.bi_pinte(args, span),
++            #[cfg(feature = "terminal")]
+             "fundo" => {
++                #[cfg(feature = "graphics")]
+                 if !args.is_empty() && graf::is_graf(&args[0]) {
+-                    self.bi_graf_fundo(args, span)
+-                } else {
+-                    self.bi_fundo(args, span)
++                    return self.bi_graf_fundo(args, span);
+                 }
++                self.bi_fundo(args, span)
+             }
++            #[cfg(feature = "terminal")]
+             "negrito" => self.bi_negrito(args, span),
++            #[cfg(feature = "terminal")]
+             "colunas" => self.bi_colunas(args, span),
++            #[cfg(feature = "terminal")]
+             "linhas" => self.bi_linhas(args, span),
++            #[cfg(feature = "terminal")]
+             "quadro" => self.bi_quadro(args, span),
++            #[cfg(feature = "terminal")]
+             "bloco" => self.bi_bloco(args, span),
++            #[cfg(feature = "terminal")]
+             "escreva_em" => self.bi_escreva_em(args, span),
+             "raiz" => self.bi_raiz(args, span),
+             "aleatorio" | "aleatório" => self.bi_aleatorio(args, span),
+@@ -668,7 +739,9 @@
+             "separe" => self.bi_separe(args, span),
+             "junte" => self.bi_junte(args, span, env),
+             "limpe" => self.bi_limpe(args, span),
++            #[cfg(feature = "graphics")]
+             "apague" => self.bi_graf_limpe(args, span),
++            #[cfg(feature = "graphics")]
+             "evento" => self.bi_graf_evento(args, span),
+             "leia_arquivo" => self.bi_leia_arquivo(args, span),
+             "salve_arquivo" => self.bi_salve_arquivo(args, span),
+@@ -698,11 +771,17 @@
+             "pasta_de" => self.bi_pasta_de(args, span),
+             "extensao" | "extensão" => self.bi_extensao(args, span),
+             "pasta_atual" => self.bi_pasta_atual(args, span),
++            #[cfg(feature = "process")]
+             "execute" => self.bi_execute(args, span, env),
++            #[cfg(feature = "process")]
+             "linhas_de" => self.bi_linhas_de(args, span),
++            #[cfg(feature = "graphics")]
+             "documento" => self.bi_documento(args, span),
++            #[cfg(feature = "graphics")]
+             "grafico" => self.bi_grafico(args, span),
++            #[cfg(feature = "graphics")]
+             "eixos" => self.bi_eixos(args, span),
++            #[cfg(feature = "graphics")]
+             "plote" => self.bi_plote(args, span, env),
+             "adicione" => {
+                 if args.len() == 3 {
+@@ -713,24 +792,47 @@
+                         span,
+                     ))
+                 } else {
+-                    self.bi_adicione(args, span)
++                    #[cfg(feature = "graphics")]
++                    {
++                        self.bi_adicione(args, span)
++                    }
++                    #[cfg(not(feature = "graphics"))]
++                    {
++                        Err(self.err("adicione espera 3 argumentos: data, n, unidade", span))
++                    }
+                 }
+             }
++            #[cfg(feature = "graphics")]
+             "nova" => self.bi_graf_nova(args, span),
++            #[cfg(feature = "graphics")]
+             "cor" => self.bi_graf_cor(args, span),
++            #[cfg(feature = "graphics")]
+             "linha" => self.bi_graf_linha(args, span),
++            #[cfg(feature = "graphics")]
+             "circulo" | "círculo" => self.bi_graf_circulo(args, span),
++            #[cfg(feature = "graphics")]
+             "ponto" => self.bi_graf_ponto(args, span),
++            #[cfg(feature = "graphics")]
+             "retangulo" | "retângulo" => self.bi_graf_retangulo(args, span),
++            #[cfg(feature = "graphics")]
+             "texto" => self.bi_graf_texto(args, span),
++            #[cfg(feature = "graphics")]
+             "imagem" => self.bi_graf_imagem(args, span),
++            #[cfg(feature = "graphics")]
+             "pixel" => self.bi_graf_pixel(args, span),
++            #[cfg(feature = "graphics")]
+             "como_imagem" => self.bi_graf_como_imagem(args, span),
++            #[cfg(feature = "graphics")]
+             "carregue" => self.bi_img_carregue(args, span),
++            #[cfg(feature = "graphics")]
+             "rotacione" => self.bi_img_rotacione(args, span),
++            #[cfg(feature = "graphics")]
+             "redimensione" => self.bi_img_redimensione(args, span),
++            #[cfg(feature = "graphics")]
+             "largura" => self.bi_img_largura(args, span),
++            #[cfg(feature = "graphics")]
+             "altura" => self.bi_img_altura(args, span),
++            #[cfg(feature = "graphics")]
+             "salve" => {
+                 if !args.is_empty() && matches!(&args[0], Value::Imagem(_)) {
+                     self.bi_img_salve(args, span)
+@@ -738,6 +840,7 @@
+                     self.bi_graf_salve(args, span)
+                 }
+             }
++            #[cfg(feature = "graphics")]
+             "mostre" => {
+                 if !args.is_empty() && graf::is_graf(&args[0]) {
+                     self.bi_graf_mostre(args, span)
+@@ -847,14 +950,17 @@
+     use std::path::{Path, PathBuf};
+     use std::time::{SystemTime, UNIX_EPOCH};
+ 
++    #[cfg(feature = "graphics")]
+     use super::{NATIVAS, builtin_docs, lookup_builtin_doc};
+     use crate::runtime::run_to_string;
+ 
+-    const PRELUDE: &str =
+-        "importe \"matriz\"\nimporte \"arquivo\"\nimporte \"tela\"\nimporte \"mat\"\n";
+-
+     fn with_mods(src: &str) -> String {
+-        format!("{PRELUDE}{src}")
++        let terminal = if cfg!(feature = "terminal") {
++            "importe \"tela\"\n"
++        } else {
++            ""
++        };
++        format!("importe \"matriz\"\nimporte \"arquivo\"\nimporte \"mat\"\n{terminal}{src}")
+     }
+ 
+     fn run(src: &str) -> String {
+@@ -888,6 +994,7 @@
+     }
+ 
+     #[test]
++    #[cfg(feature = "graphics")]
+     fn builtins_are_registered() {
+         let names: Vec<_> = NATIVAS
+             .iter()
+@@ -985,7 +1092,11 @@
+         assert_eq!(run(r#"escreva(10.tipo())"#), "numero\n");
+         assert_eq!(
+             run(r#"escreva(tipos())"#),
+-            "[\"numero\", \"texto\", \"bool\", \"lista\", \"par\", \"mapa\", \"conjunto\", \"matriz\", \"imagem\", \"funcao\", \"modulo\", \"processo\", \"nada\"]\n"
++            if cfg!(feature = "process") {
++                "[\"numero\", \"texto\", \"bool\", \"lista\", \"par\", \"mapa\", \"conjunto\", \"matriz\", \"imagem\", \"funcao\", \"modulo\", \"processo\", \"nada\"]\n"
++            } else {
++                "[\"numero\", \"texto\", \"bool\", \"lista\", \"par\", \"mapa\", \"conjunto\", \"matriz\", \"imagem\", \"funcao\", \"modulo\", \"nada\"]\n"
++            }
+         );
+         assert_eq!(run(r#"escreva(tipos() contem "numero")"#), "verdadeiro\n");
+         assert!(run_err("tipos(1)").contains("argumento"));
+@@ -1252,6 +1363,7 @@
+     }
+ 
+     #[test]
++    #[cfg(feature = "terminal")]
+     fn cls_writes_ansi_clear() {
+         use crate::runtime::CLEAR_SCREEN;
+         assert_eq!(run("cls()"), CLEAR_SCREEN);
+@@ -1269,6 +1381,7 @@
+     }
+ 
+     #[test]
++    #[cfg(feature = "terminal")]
+     fn cursor_movement_and_line_erasure() {
+         assert_eq!(
+             run("posicao_cursor(bloco(2, 4))\napague_linha()"),
+@@ -1284,6 +1397,7 @@
+     }
+ 
+     #[test]
++    #[cfg(feature = "terminal")]
+     fn casa_writes_cursor_home() {
+         use crate::runtime::CURSOR_HOME;
+         assert_eq!(run("casa()"), CURSOR_HOME);
+@@ -1299,6 +1413,7 @@
+     }
+ 
+     #[test]
++    #[cfg(feature = "terminal")]
+     fn pinte_wraps_ansi_and_reset() {
+         assert_eq!(
+             run(r#"escreva(pinte("HP", :verde))"#),
+@@ -1332,6 +1447,7 @@
+     }
+ 
+     #[test]
++    #[cfg(feature = "terminal")]
+     fn tela_quadro_bloco_escreva_em() {
+         assert_eq!(run("escreva(colunas() >= 1)"), "verdadeiro\n");
+         assert_eq!(run("escreva(linhas() >= 1)"), "verdadeiro\n");
+@@ -1395,6 +1511,7 @@
+     }
+ 
+     #[test]
++    #[cfg(feature = "terminal")]
+     fn eh_terminal_is_false_on_captured_stdin() {
+         assert_eq!(run("escreva(eh_terminal())"), "falso\n");
+         assert_eq!(run("escreva(é_terminal())"), "falso\n");
+@@ -1585,6 +1702,7 @@
+     }
+ 
+     #[test]
++    #[cfg(feature = "terminal")]
+     fn catalogo_lists_natives_user_functions_and_modules() {
+         assert_eq!(
+             run(r#"
+--- a/src/runtime/nativas/referencia.rs
++++ b/src/runtime/nativas/referencia.rs
+@@ -50,14 +50,19 @@
+ }
+ 
+ const NUCLEO: &str = include_str!("../../../docs/nativas/nucleo.lep");
++#[cfg(feature = "terminal")]
+ const TELA: &str = include_str!("../../../docs/nativas/tela.lep");
+ const MAT: &str = include_str!("../../../docs/nativas/mat.lep");
+ const MATRIZ: &str = include_str!("../../../docs/nativas/matriz.lep");
+ const ARQUIVO: &str = include_str!("../../../docs/nativas/arquivo.lep");
+ const CRONO: &str = include_str!("../../../docs/nativas/crono.lep");
++#[cfg(feature = "graphics")]
+ const CARTESIANO: &str = include_str!("../../../docs/nativas/cartesiano.lep");
++#[cfg(feature = "graphics")]
+ const TELA_GRAFICA: &str = include_str!("../../../docs/nativas/tela_grafica.lep");
++#[cfg(feature = "graphics")]
+ const IMAGEM: &str = include_str!("../../../docs/nativas/imagem.lep");
++#[cfg(feature = "process")]
+ const PROCESSO: &str = include_str!("../../../docs/nativas/processo.lep");
+ 
+ pub fn builtin_docs() -> &'static [BuiltinDoc] {
+@@ -207,14 +212,19 @@
+     let mut out = Vec::new();
+     for (src, module) in [
+         (NUCLEO, None),
++        #[cfg(feature = "terminal")]
+         (TELA, Some("tela")),
+         (MAT, Some("mat")),
+         (MATRIZ, Some("matriz")),
+         (ARQUIVO, Some("arquivo")),
+         (CRONO, Some("crono")),
++        #[cfg(feature = "graphics")]
+         (CARTESIANO, Some("cartesiano")),
++        #[cfg(feature = "graphics")]
+         (TELA_GRAFICA, Some("tela_grafica")),
++        #[cfg(feature = "graphics")]
+         (IMAGEM, Some("imagem")),
++        #[cfg(feature = "process")]
+         (PROCESSO, Some("processo")),
+     ] {
+         out.extend(extract(src, module).unwrap_or_else(|e| {
+@@ -354,10 +364,13 @@
+ 
+ #[cfg(test)]
+ mod tests {
+-    use super::{builtin_docs, docs_agrupados, lookup_alvo, lookup_ficha, tema_de};
++    #[cfg(feature = "terminal")]
++    use super::lookup_ficha;
++    use super::{builtin_docs, docs_agrupados, lookup_alvo, tema_de};
+     use crate::runtime::nativas::NATIVAS;
+ 
+     #[test]
++    #[cfg(feature = "terminal")]
+     fn every_nativa_has_doc() {
+         for n in NATIVAS {
+             assert!(
+@@ -375,6 +388,7 @@
+     }
+ 
+     #[test]
++    #[cfg(feature = "graphics")]
+     fn ficha_modulo_nome() {
+         let t = lookup_ficha("matriz::zeros").expect("zeros");
+         assert!(t.contains("zeros(n)"));
+--- a/src/runtime/nativas/tela.rs
++++ b/src/runtime/nativas/tela.rs
+@@ -15,6 +15,7 @@
+ 
+ const RESET: &str = "\x1b[0m";
+ 
++#[cfg(feature = "graphics")]
+ pub(crate) fn cor_conhecida(nome: &str) -> bool {
+     sgr_cor(nome, false).is_some()
+ }
+--- a/src/runtime/value.rs
++++ b/src/runtime/value.rs
+@@ -7,11 +7,14 @@
+ use std::rc::Rc;
+ 
+ use crate::lexer::Span;
+-use crate::parser::{Block, Param};
++#[cfg(feature = "ast")]
++use crate::parser::Block;
++use crate::parser::Param;
+ 
+ use super::env::Env;
+ use super::imagem::Imagem;
+ use super::numero::Numero;
++#[cfg(feature = "process")]
+ use super::processo::Processo;
+ 
+ #[derive(Clone)]
+@@ -30,6 +33,7 @@
+     Builtin(&'static str),
+     Modulo(Rc<RefCell<Env>>),
+     /// `linhas_de`: a command still running, read with `para … em`.
++    #[cfg(feature = "process")]
+     Processo(Rc<RefCell<Processo>>),
+ }
+ 
+@@ -107,6 +111,7 @@
+ }
+ 
+ pub enum FunctionBody {
++    #[cfg(feature = "ast")]
+     Ast(Rc<Block>),
+     Bytecode(Rc<super::eval::bytecode::Chunk>),
+ }
+@@ -172,8 +177,20 @@
+ 
+     /// Nomes que `tipo()` devolve e `tipos()` lista (iguais às mensagens de erro).
+     pub const NOMES_DE_TIPO: &'static [&'static str] = &[
+-        "numero", "texto", "bool", "lista", "par", "mapa", "conjunto", "matriz", "imagem",
+-        "funcao", "modulo", "processo", "nada",
++        "numero",
++        "texto",
++        "bool",
++        "lista",
++        "par",
++        "mapa",
++        "conjunto",
++        "matriz",
++        "imagem",
++        "funcao",
++        "modulo",
++        #[cfg(feature = "process")]
++        "processo",
++        "nada",
+     ];
+ 
+     pub fn type_name(&self) -> &'static str {
+@@ -191,6 +208,7 @@
+             Value::Funcao(_) => "funcao",
+             Value::Builtin(_) => "funcao",
+             Value::Modulo(_) => "modulo",
++            #[cfg(feature = "process")]
+             Value::Processo(_) => "processo",
+         }
+     }
+@@ -261,6 +279,7 @@
+         (Value::Funcao(a), Value::Funcao(b)) => Rc::ptr_eq(a, b),
+         (Value::Builtin(a), Value::Builtin(b)) => a == b,
+         (Value::Modulo(a), Value::Modulo(b)) => Rc::ptr_eq(a, b),
++        #[cfg(feature = "process")]
+         (Value::Processo(a), Value::Processo(b)) => Rc::ptr_eq(a, b),
+         _ => false,
+     })
+@@ -355,6 +374,7 @@
+             let _ = write!(out, "<funcao {name}>");
+         }
+         Value::Modulo(_) => out.push_str("<modulo>"),
++        #[cfg(feature = "process")]
+         Value::Processo(p) => match p.try_borrow() {
+             Ok(p) => {
+                 let _ = write!(out, "<processo {}>", p.descricao);
+--- a/src/runtime/value/cycles.rs
++++ b/src/runtime/value/cycles.rs
+@@ -316,6 +316,7 @@
+     }
+ 
+     #[test]
++    #[cfg(feature = "terminal")]
+     fn values_returned_to_a_host_survive_repl_collection_and_shutdown() {
+         let mut input = std::io::Cursor::new("");
+         let (mut out, mut err) = (Vec::new(), Vec::new());
+--- a/tests/bytecode_conformance.rs
++++ b/tests/bytecode_conformance.rs
+@@ -1,3 +1,4 @@
++#![cfg(feature = "ast")]
+ //! Compare backends through the same public API, including complete diagnostics.
+ use expressa::runtime::{
+     ExecutionBackend, ExecutionOptions, ExecutionOutput, RuntimeError, run_with_options,
+--- a/tests/exb.rs
++++ b/tests/exb.rs
+@@ -81,7 +81,15 @@
+         .output()
+         .unwrap();
+     assert!(!rejected.status.success());
+-    assert!(String::from_utf8_lossy(&rejected.stderr).contains("backend bytecode"));
++    let message = String::from_utf8_lossy(&rejected.stderr);
++    assert!(
++        message.contains(if cfg!(feature = "ast") {
++            "backend bytecode"
++        } else {
++            "backend AST indisponível"
++        }),
++        "{message}"
++    );
+ }
+ #[test]
+ fn cli_compilation_is_atomic_and_does_not_replace_source() {
+@@ -223,17 +231,20 @@
+     assert!(output.status.success());
+     assert_eq!(output.stdout, b"Ana\n");
+     assert!(String::from_utf8_lossy(&output.stderr).contains("<<<EXPRESSA-LEIA>>>"));
+-    std::fs::write(&file, compile_exb("escreva(42)", "missing.lep").unwrap()).unwrap();
+-    let mut child = cli()
+-        .arg("debug")
+-        .arg(&file)
+-        .stdin(std::process::Stdio::piped())
+-        .stdout(std::process::Stdio::piped())
+-        .stderr(std::process::Stdio::piped())
+-        .spawn()
+-        .unwrap();
+-    child.stdin.take().unwrap().write_all(b"c\n").unwrap();
+-    let output = child.wait_with_output().unwrap();
+-    assert!(output.status.success(), "{:?}", output);
+-    assert!(String::from_utf8_lossy(&output.stdout).contains("42"));
+-}
++    #[cfg(feature = "terminal")]
++    {
++        std::fs::write(&file, compile_exb("escreva(42)", "missing.lep").unwrap()).unwrap();
++        let mut child = cli()
++            .arg("debug")
++            .arg(&file)
++            .stdin(std::process::Stdio::piped())
++            .stdout(std::process::Stdio::piped())
++            .stderr(std::process::Stdio::piped())
++            .spawn()
++            .unwrap();
++        child.stdin.take().unwrap().write_all(b"c\n").unwrap();
++        let output = child.wait_with_output().unwrap();
++        assert!(output.status.success(), "{:?}", output);
++        assert!(String::from_utf8_lossy(&output.stdout).contains("42"));
++    }
++}
+--- /dev/null
++++ b/tests/runtime_profiles.rs
+@@ -0,0 +1,209 @@
++//! The same language core and wire format run in full and reduced desktop builds.
++use expressa::runtime::{
++    ExecutionBackend, ExecutionOptions, NATIVAS, builtin_docs, compile_exb, load_exb,
++    run_compiled_with_options, run_with_options,
++};
++use std::path::PathBuf;
++use std::sync::atomic::{AtomicU64, Ordering};
++
++fn options() -> ExecutionOptions {
++    ExecutionOptions {
++        backend: ExecutionBackend::Bytecode,
++        ..Default::default()
++    }
++}
++fn cli() -> std::process::Command {
++    let mut c = std::process::Command::new(env!("CARGO_BIN_EXE_expressa"));
++    c.env("EXPRESSA_BACKEND", "bytecode")
++        .env("EXPRESSA_NUMEROS", "en")
++        .env("EXPRESSA_ARITMETICA", "decimal");
++    c
++}
++struct Temp(PathBuf);
++impl Temp {
++    fn new() -> Self {
++        static NEXT: AtomicU64 = AtomicU64::new(0);
++        let path = std::env::temp_dir().join(format!(
++            "expressa-profile-{}-{}",
++            std::process::id(),
++            NEXT.fetch_add(1, Ordering::Relaxed)
++        ));
++        std::fs::create_dir_all(&path).unwrap();
++        Self(path)
++    }
++}
++impl Drop for Temp {
++    fn drop(&mut self) {
++        let _ = std::fs::remove_dir_all(&self.0);
++    }
++}
++
++#[test]
++fn all_common_workloads_run_from_source_and_exb_in_every_profile() {
++    let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("benchmarks/programs");
++    for entry in std::fs::read_dir(dir).unwrap() {
++        let path = entry.unwrap().path();
++        if path.extension().and_then(|x| x.to_str()) != Some("lep") {
++            continue;
++        }
++        let name = path.to_str().unwrap();
++        let source = std::fs::read_to_string(&path).unwrap();
++        let expected = run_with_options(&source, name, "", options()).unwrap();
++        assert_eq!(expected.stdout, "verdadeiro\n", "{name}");
++        let program = load_exb(&compile_exb(&source, name).unwrap()).unwrap();
++        assert_eq!(
++            run_compiled_with_options(&program, name, "", options()).unwrap(),
++            expected,
++            "{name}"
++        );
++    }
++}
++
++#[test]
++fn native_registration_help_and_imports_agree_with_enabled_features() {
++    for (module, enabled) in [
++        ("tela", cfg!(feature = "terminal")),
++        ("cartesiano", cfg!(feature = "graphics")),
++        ("tela_grafica", cfg!(feature = "graphics")),
++        ("imagem", cfg!(feature = "graphics")),
++        ("processo", cfg!(feature = "process")),
++    ] {
++        assert_eq!(
++            NATIVAS.iter().any(|n| n.module == Some(module)),
++            enabled,
++            "{module}"
++        );
++        assert_eq!(
++            builtin_docs()
++                .iter()
++                .any(|d| d.module.as_deref() == Some(module)),
++            enabled,
++            "{module}"
++        );
++        let source = format!("m = importe \"{module}\"\nescreva(tipo(m))");
++        let result = run_with_options(&source, "profile.lep", "", options());
++        if enabled {
++            assert_eq!(result.unwrap().stdout, "modulo\n");
++        } else {
++            let err = result.unwrap_err();
++            assert!(err.message.contains("indisponível neste build"), "{err}");
++            assert_eq!(err.span.line, 1);
++        }
++    }
++}
++
++#[test]
++fn ast_availability_is_explicit_and_syntax_tree_printing_keeps_the_frontend() {
++    assert_eq!(ExecutionBackend::Ast.is_available(), cfg!(feature = "ast"));
++    let result = run_with_options(
++        "escreva(2 + 3)",
++        "ast.lep",
++        "",
++        ExecutionOptions {
++            backend: ExecutionBackend::Ast,
++            ..options()
++        },
++    );
++    if cfg!(feature = "ast") {
++        assert_eq!(result.unwrap().stdout, "5\n");
++    } else {
++        assert!(
++            result
++                .unwrap_err()
++                .message
++                .contains("backend AST indisponível")
++        );
++    }
++    let t = Temp::new();
++    let source = t.0.join("sample.lep");
++    std::fs::write(&source, "escreva(1)").unwrap();
++    assert!(
++        cli()
++            .arg("--ast")
++            .arg(&source)
++            .output()
++            .unwrap()
++            .status
++            .success()
++    );
++    if !cfg!(feature = "ast") {
++        let no_file = cli().env("EXPRESSA_BACKEND", "ast").output().unwrap();
++        assert!(!no_file.status.success());
++        assert!(String::from_utf8_lossy(&no_file.stderr).contains("backend AST indisponível"));
++        for c in [
++            cli()
++                .args(["--backend", "ast"])
++                .arg(&source)
++                .output()
++                .unwrap(),
++            cli()
++                .env("EXPRESSA_BACKEND", "ast")
++                .arg(&source)
++                .output()
++                .unwrap(),
++        ] {
++            assert!(!c.status.success());
++            assert!(String::from_utf8_lossy(&c.stderr).contains("backend AST indisponível"));
++        }
++    }
++}
++
++#[test]
++fn cli_help_and_unavailable_services_match_the_build() {
++    let out = cli().arg("--help").output().unwrap();
++    assert!(out.status.success());
++    let text = String::from_utf8(out.stderr).unwrap();
++    assert_eq!(text.contains("REPL"), cfg!(feature = "terminal"));
++    assert_eq!(text.contains("expressa debug"), cfg!(feature = "terminal"));
++    assert_eq!(text.contains("--grafico"), cfg!(feature = "graphics"));
++    assert_eq!(
++        text.contains("--backend ast|bytecode"),
++        cfg!(feature = "ast")
++    );
++    if !cfg!(feature = "terminal") {
++        let out = cli().output().unwrap();
++        assert!(!out.status.success());
++        assert!(String::from_utf8_lossy(&out.stderr).contains("REPL indisponível"));
++        let out = cli().args(["debug", "missing.exb"]).output().unwrap();
++        assert!(!out.status.success());
++        assert!(
++            String::from_utf8_lossy(&out.stderr).contains("depurador de terminal indisponível")
++        );
++    }
++    if !cfg!(feature = "graphics") {
++        for args in [vec!["--grafico", "sample.cart"], vec!["--ao-vivo"]] {
++            let out = cli().args(args).output().unwrap();
++            assert!(!out.status.success());
++            assert!(String::from_utf8_lossy(&out.stderr).contains("gráficos indisponíveis"));
++        }
++    }
++}
++
++#[test]
++fn explicit_file_imports_work_even_when_a_native_with_that_name_is_omitted() {
++    let t = Temp::new();
++    let name = if !cfg!(feature = "process") {
++        "processo"
++    } else {
++        "custom"
++    };
++    std::fs::write(t.0.join(format!("{name}.lep")), "n = 42").unwrap();
++    let source = format!("m = importe \"./{name}\"\nescreva(m::n)");
++    let file = t.0.join("main.lep");
++    assert_eq!(
++        run_with_options(&source, file.to_str().unwrap(), "", options())
++            .unwrap()
++            .stdout,
++        "42\n"
++    );
++    if !cfg!(feature = "process") {
++        let err = run_with_options(
++            "importe \"processo\"",
++            file.to_str().unwrap(),
++            "",
++            options(),
++        )
++        .unwrap_err();
++        assert!(err.message.contains("indisponível neste build"));
++    }
++}

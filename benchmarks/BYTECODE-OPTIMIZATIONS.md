@@ -120,9 +120,25 @@ Não houve alteração de dependências, sintaxe, semântica numérica, `avalie`
 
 A experiência seguinte é documentada separadamente em [BYTECODE-STEP-03.md](BYTECODE-STEP-03.md), com alterações, testes, medições e decisão. Sua referência é `02-inline-dispatch`.
 
+## Etapa 04: parâmetros por posição
+
+[Implementação, regressões, comparação CPU/RSS e validação](BYTECODE-STEP-04.md). Os testes de processos foram estabilizados em uma mudança separada antes desta medição.
+
+## Etapa 05: instruções compactas
+
+**Experimento descartado e implementação revertida após revisão do usuário.** [Contagem de armazenamento, comparação CPU/RSS e dados preservados](BYTECODE-STEP-05.md). A etapa 04 continua ativa.
+
 ## Próximas hipóteses
 
-- Investigar resolução de variáveis por posições locais, com tratamento explícito de closures, referências a nomes definidos depois e `avalie`. Não assumir que uma resolução estática simples preserva a linguagem.
-- Avaliar separadamente a representação compacta das instruções e suas tabelas; medir economia de memória e custo de decodificação.
+- Expandir a resolução por posições além dos parâmetros no escopo principal, com análise explícita de sombreamento, closures e avaliação dinâmica. Essa expansão ainda não está implementada.
+- Definir separadamente o formato `.exb` e o carregamento, sem exigir a representação compacta descartada no runtime. Reavaliar compactação em memória somente com nova evidência de benefício.
 
-Estas hipóteses não estão implementadas. Cache de `avalie`, serialização de bytecode e firmware Pico não fazem parte destas experiências. O AST permanece disponível como referência.
+Cache de `avalie` e firmware Pico continuam pendentes. O AST permanece disponível como referência.
+
+## Etapa 06: formato EXB v1
+
+Implementados compilação offline, carregamento validado e execução desktop de `.exb`, preservando a representação em memória anterior à etapa 05. [Contrato](../docs/exb.md), [tarefa](../lang-tasks/047-exb-file-format-and-loader.md) e [comparação antes/depois e fonte/EXB](EXB-V1-REVIEW.md). A serialização não implementa execução direta da flash nem reduz por si só a SRAM da VM.
+
+## Etapa 07: perfil mínimo desktop
+
+[Features e limites](../docs/runtime-profiles.md) e [comparação de tamanho/CPU/RSS](MINIMAL-PROFILE.md). O mesmo código gera um executável completo e outro sem executor AST, gráficos, processos e terminal interativo. O frontend e `avalie` são mantidos. A referência é a etapa 06 aceita, sem restauração da compactação da etapa 05.

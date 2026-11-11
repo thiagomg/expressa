@@ -4,12 +4,14 @@ struct Compiler {
     code: Chunk,
     names: HashMap<String, u32>,
     spans: HashMap<Span, u32>,
+    locals: bool,
 }
 
 impl Compiler {
     fn new() -> Self {
         Self {
             code: Chunk {
+                parameter_slots: Rc::new(HashMap::new()),
                 instructions: vec![],
                 spans: vec![],
                 names: vec![],
@@ -20,6 +22,7 @@ impl Compiler {
             },
             names: HashMap::new(),
             spans: HashMap::new(),
+            locals: true,
         }
     }
     fn name(&mut self, name: &str) -> u32 {
@@ -89,9 +92,11 @@ impl Compiler {
         }
     }
     fn block(&mut self, block: &Block) {
+        let locals = std::mem::replace(&mut self.locals, false);
         self.emit(Op::EnterScope, block.span);
         self.stmts(&block.stmts);
         self.emit(Op::LeaveScope, block.span);
+        self.locals = locals;
     }
     fn stmt(&mut self, stmt: &Stmt) {
         stacker::maybe_grow(PILHA_RESERVA, PILHA_SEGMENTO, || self.stmt_inner(stmt));
@@ -112,6 +117,19 @@ impl Compiler {
                     span: target_span,
                 } = target
                 {
+                    if self.locals
+                        && let Some(&slot) = self.code.parameter_slots.get(name)
+                    {
+                        if let Some(op) = compound {
+                            self.emit(Op::LoadLocal(slot), *target_span);
+                            self.expr(value);
+                            self.emit(Op::Binary(*op), span);
+                        } else {
+                            self.expr(value);
+                        }
+                        self.emit(Op::StoreLocal(slot), *target_span);
+                        return;
+                    }
                     let id = self.name(name);
                     if let Some(op) = compound {
                         self.emit(Op::Load(id), *target_span);
@@ -191,6 +209,7 @@ impl Compiler {
         body: &Block,
         cond: Option<&Expr>,
     ) {
+        let locals = std::mem::replace(&mut self.locals, false);
         let var = var.map(|v| self.name(v));
         let id = self.code.loops.len() as u32;
         self.code.loops.push(LoopSpec {
@@ -236,6 +255,7 @@ impl Compiler {
         self.emit(Op::LoopEnd, body.span);
         self.code.loops[id as usize].next = next;
         self.code.loops[id as usize].exit = exit;
+        self.locals = locals;
     }
     fn expr(&mut self, expr: &Expr) {
         stacker::maybe_grow(PILHA_RESERVA, PILHA_SEGMENTO, || self.expr_inner(expr));
@@ -262,6 +282,12 @@ impl Compiler {
                 self.emit(Op::Bool(*value), span);
             }
             Expr::Ident { name, .. } => {
+                if self.locals
+                    && let Some(&slot) = self.code.parameter_slots.get(name)
+                {
+                    self.emit(Op::LoadLocal(slot), span);
+                    return;
+                }
                 let id = self.name(name);
                 self.emit(Op::Load(id), span);
             }
@@ -280,6 +306,13 @@ impl Compiler {
                 params, body, doc, ..
             } => {
                 let mut compiler = Self::new();
+                compiler.code.parameter_slots = Rc::new(
+                    params
+                        .iter()
+                        .enumerate()
+                        .map(|(index, param)| (param.name.clone(), index as u32))
+                        .collect(),
+                );
                 compiler.stmts(&body.stmts);
                 compiler.emit(Op::Finish, body.span);
                 let id = self.code.functions.len() as u32;
@@ -507,4 +540,31 @@ pub(super) fn module(items: &[Item]) -> Rc<Chunk> {
     compiler.emit(Op::Nada, Span::default());
     compiler.emit(Op::Finish, Span::default());
     Rc::new(compiler.code)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parameters_use_slots_only_in_the_function_scope() {
+        let program = parse("f = funcao(x) { x += 1 { x } x }").unwrap();
+        let code = items(&program.items);
+        let body = &code.functions[0].code;
+        assert!(
+            body.instructions
+                .iter()
+                .any(|i| matches!(i.op, Op::LoadLocal(0)))
+        );
+        assert!(
+            body.instructions
+                .iter()
+                .any(|i| matches!(i.op, Op::StoreLocal(0)))
+        );
+        assert!(
+            body.instructions
+                .iter()
+                .any(|i| matches!(i.op, Op::Load(_)))
+        );
+    }
 }

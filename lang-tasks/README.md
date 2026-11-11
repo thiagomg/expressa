@@ -85,3 +85,8 @@ Task 036 owns the VM migration; 034–035, 037, and 039–043 define its target 
 | 041 | [Define cooperative scheduling, time, and cancellation on board](041-embedded-scheduling-and-time.md) | Pico 2 · runtime integration |
 | 042 | [Build the Pico 2 firmware and minimal console integration](042-pico-firmware-and-console.md) | Pico 2 · delivery |
 | 043 | [Add Pico 2 conformance, resource, and hardware validation](043-pico-validation-and-size-gates.md) | Pico 2 · validation |
+| 044 | [Testes determinísticos de retenção de processos](044-deterministic-process-tests.md) | Implementado para revisão |
+| 045 | [Parâmetros de funções por posição](045-indexed-function-parameters.md) | Implementado para revisão; CPU/RSS medidos |
+| 046 | [Instruções compactas em memória](046-compact-bytecode-instructions.md) | Descartado e revertido; dados e patch preservados |
+| 047 | [Formato EXB v1 e carregamento desktop](047-exb-file-format-and-loader.md) | Implementado para revisão; CPU/RSS medidos |
+| 048 | [Primeiro perfil mínimo do runtime desktop](048-minimal-desktop-runtime-profile.md) | Implementado para revisão; tamanho/CPU/RSS medidos; núcleo portátil pendente |

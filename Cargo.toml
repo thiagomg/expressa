@@ -5,7 +5,7 @@ members = [".", "aula/proto", "aula/storage", "aula/server", "aula/ui", "aula/tu
 exclude = ["fuzz"]
 
 [workspace.package]
-version = "0.4.4"
+version = "0.5.0"
 edition = "2024"
 license = "MIT"
 authors = ["Thiago Massari Guedes"]
@@ -46,11 +46,19 @@ edition.workspace = true
 [lints]
 workspace = true
 
+[features]
+default = ["ast", "graphics", "process", "terminal"]
+# AST is a reference evaluator; parser/compiler remain in every profile.
+ast = []
+graphics = ["terminal", "dep:minifb", "dep:png"]
+process = []
+terminal = ["dep:rustyline"]
+
 [dependencies]
-rustyline = "15"
+rustyline = { version = "15", optional = true }
 rust_decimal = "1"
-minifb = "0.28"
-png = "0.17"
+minifb = { version = "0.28", optional = true }
+png = { version = "0.17", optional = true }
 stacker = "0.1"
 
 [target.'cfg(unix)'.dependencies]
@@ -59,3 +67,4 @@ libc = "0.2"
 [[bin]]
 name = "expressa-grafico"
 path = "src/bin/expressa-grafico.rs"
+required-features = ["graphics"]

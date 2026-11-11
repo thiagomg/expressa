@@ -1,6 +1,7 @@
 //! Bytecode compilation and execution. No instruction retains an AST expression.
 mod compiler;
 mod execute;
+pub(super) mod format;
 
 use super::super::value::FunctionBody;
 use super::assignment::Destination;
@@ -14,6 +15,14 @@ pub enum ExecutionBackend {
 }
 
 impl ExecutionBackend {
+    /// Whether this build includes the selected executor. The parser is always present.
+    pub const fn is_available(self) -> bool {
+        match self {
+            Self::Ast => cfg!(feature = "ast"),
+            Self::Bytecode => true,
+        }
+    }
+
     pub fn from_name(name: &str) -> Option<Self> {
         match name {
             "ast" => Some(Self::Ast),
@@ -30,7 +39,7 @@ pub(super) fn default_backend() -> ExecutionBackend {
         .unwrap_or_default()
 }
 
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Op {
     Nada,
     Bool(bool),
@@ -38,6 +47,8 @@ enum Op {
     BadNumber(u32),
     Load(u32),
     Store(u32),
+    LoadLocal(u32),
+    StoreLocal(u32),
     Drop,
     SetLast,
     List(u32),
@@ -92,6 +103,7 @@ struct Instruction {
 }
 
 pub struct Chunk {
+    parameter_slots: Rc<HashMap<String, u32>>,
     instructions: Vec<Instruction>,
     spans: Vec<Span>,
     names: Vec<String>,
@@ -99,6 +111,15 @@ pub struct Chunk {
     functions: Vec<Prototype>,
     imports: Vec<Import>,
     loops: Vec<LoopSpec>,
+}
+
+impl Chunk {
+    pub(super) fn bind_parameters(&self, env: &mut Env, args: impl Iterator<Item = Value>) {
+        if !self.parameter_slots.is_empty() {
+            env.vars
+                .bind_parameters(Rc::clone(&self.parameter_slots), args.collect());
+        }
+    }
 }
 
 struct Prototype {
@@ -121,4 +142,9 @@ struct LoopSpec {
     second_span: Span,
     exit: u32,
     next: u32,
+}
+
+#[cfg(test)]
+pub(crate) fn test_function_body(items: &[Item]) -> FunctionBody {
+    FunctionBody::Bytecode(compiler::items(items))
 }

@@ -2,7 +2,9 @@
 //! Cada byte é uma linha; o bit 0 é o pixel da esquerda.
 
 pub const LADO: i32 = 8;
+#[cfg(feature = "graphics")]
 pub const TAMANHO_PADRAO: i32 = 8;
+#[cfg(feature = "graphics")]
 pub const TAMANHO_MAX: i32 = 256;
 
 const BASIC: [[u8; 8]; 95] = [
