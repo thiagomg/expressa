@@ -70,3 +70,9 @@ The [EXB v1 review](EXB-V1-REVIEW.md) compares the preceding accepted binary on 
 ## Desktop feature profiles
 
 [Minimal-profile review](MINIMAL-PROFILE.md) compares the previous accepted full build with the new full and `--no-default-features` builds on the same source workloads. Parser/compiler and `avalie` remain included in every engine. Feature sets are recorded separately from the source fingerprint, which is identical between the two new builds.
+
+## Conway gráfico (execução explícita)
+
+O [exemplo Conway](programs/conway/README.md) fica em uma subpasta para não entrar automaticamente nos workloads curtos. Oferece simulação, desenho pré-calculado e execução completa, com destino janela ou rasterização sem janela. Ainda não fornece métricas por frame nem confirmação de apresentação do viewer; seu README distingue preparação, execução e custos de memória.
+
+A [comparação Conway AST × bytecode](CONWAY.md) registra CPU, tempo e RSS do processo completo, com rasterização sem janela e verificações independentes de correção. O runner dedicado é `benchmarks/conway.py`; ele não altera a seleção nem as saídas esperadas dos benchmarks curtos.
