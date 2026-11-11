@@ -60,3 +60,9 @@ Desktop results do not prove Pico suitability. Once firmware exists, measure on 
 The current provisional measurement is summarized in [AST-BASELINE.md](AST-BASELINE.md), with raw samples in [results/ast-review.json](results/ast-review.json).
 
 `results/ast-review.json`, if present, is an unapproved working-tree AST snapshot only. It must be regenerated or explicitly accepted after review. The desktop comparison is recorded separately in [AST-VS-BYTECODE.md](AST-VS-BYTECODE.md); the older AST-only result is historical, not the comparison denominator. Execution-only, heap-allocation and Pico measurements remain unmeasured. Do not use the previous broken evaluator as the performance reference for a candidate that performs additional correctness checks without disclosing the difference.
+
+## Precompiled EXB inputs
+
+`--exb NAME=DIRECTORY` selects `DIRECTORY/<workload>.exb` for a bytecode engine. Every case must exist. Other engines keep the `.lep` inputs. The runner records each engine's input format, hashes and sizes. Generate artifacts before sampling with the same frozen candidate binary. Offline compilation is excluded from EXB samples; reading, decoding and verification are included. Source samples include parsing and compilation. These are process end-to-end measurements, not isolated VM execution.
+
+The [EXB v1 review](EXB-V1-REVIEW.md) compares the preceding accepted binary on source, the new binary on source, and the new binary on EXB. It retains both interleaved rounds and identifies any regressions.

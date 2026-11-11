@@ -1,6 +1,7 @@
 //! Bytecode compilation and execution. No instruction retains an AST expression.
 mod compiler;
 mod execute;
+pub(super) mod format;
 
 use super::super::value::FunctionBody;
 use super::assignment::Destination;
@@ -30,7 +31,7 @@ pub(super) fn default_backend() -> ExecutionBackend {
         .unwrap_or_default()
 }
 
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Op {
     Nada,
     Bool(bool),

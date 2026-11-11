@@ -1,0 +1,591 @@
+--- a/src/runtime/eval/bytecode/compiler.rs
++++ b/src/runtime/eval/bytecode/compiler.rs
+@@ -13,6 +13,8 @@
+             code: Chunk {
+                 parameter_slots: Rc::new(HashMap::new()),
+                 instructions: vec![],
++                call_sites: vec![],
++                wide_operands: None,
+                 spans: vec![],
+                 names: vec![],
+                 constants: vec![],
+@@ -41,18 +43,22 @@
+             n
+         });
+         let at = self.here();
+-        self.code.instructions.push(Instruction { op, span });
++        let encoded = self.code.encode_op(at, op);
++        self.code.instructions.push(Instruction { encoded, span });
+         at
+     }
+     fn here(&self) -> u32 {
+         self.code.instructions.len() as u32
+     }
+     fn jump(&mut self, at: u32, target: u32) {
+-        match &mut self.code.instructions[at as usize].op {
+-            Op::Jump(to) | Op::BranchFalse(to) | Op::Try(to) => *to = target,
+-            Op::ShortCircuit { target: to, .. } => *to = target,
++        let op = match self.code.op_at(at as usize) {
++            Op::Jump(_) => Op::Jump(target),
++            Op::BranchFalse(_) => Op::BranchFalse(target),
++            Op::Try(_) => Op::Try(target),
++            Op::ShortCircuit { value, .. } => Op::ShortCircuit { target, value },
+             _ => unreachable!("compiler patch"),
+-        }
++        };
++        self.code.instructions[at as usize].encoded = self.code.encode_op(at, op);
+     }
+     fn items(&mut self, items: &[Item]) {
+         self.emit(Op::Nada, Span::default());
+@@ -554,17 +560,20 @@
+         assert!(
+             body.instructions
+                 .iter()
+-                .any(|i| matches!(i.op, Op::LoadLocal(0)))
++                .enumerate()
++                .any(|(i, _)| matches!(body.op_at(i), Op::LoadLocal(0)))
+         );
+         assert!(
+             body.instructions
+                 .iter()
+-                .any(|i| matches!(i.op, Op::StoreLocal(0)))
++                .enumerate()
++                .any(|(i, _)| matches!(body.op_at(i), Op::StoreLocal(0)))
+         );
+         assert!(
+             body.instructions
+                 .iter()
+-                .any(|i| matches!(i.op, Op::Load(_)))
++                .enumerate()
++                .any(|(i, _)| matches!(body.op_at(i), Op::Load(_)))
+         );
+     }
+ }
+--- /dev/null
++++ b/src/runtime/eval/bytecode/encoding.rs
+@@ -0,0 +1,457 @@
++//! Private in-memory encoding. This is not a serialized file ABI.
++use super::*;
++
++const INLINE_MAX: u32 = 0x00ff_ffff;
++const WIDE: u8 = 0x80;
++
++#[derive(Clone, Copy)]
++pub(super) struct CallSite {
++    argc: u32,
++    name: u32,
++}
++
++impl Chunk {
++    /// Eight opcode bits and 24 inline operand bits. Rare larger operands keep
++    /// their full u32 value out of line, keyed by instruction ordinal.
++    pub(super) fn encode_op(&mut self, index: u32, op: Op) -> u32 {
++        let (tag, operand): (u8, u32) = match op {
++            Op::Nada => (0, 0),
++            Op::Drop => (1, 0),
++            Op::SetLast => (2, 0),
++            Op::Pair => (3, 0),
++            Op::Index => (4, 0),
++            Op::Index2 => (5, 0),
++            Op::Return => (6, 0),
++            Op::Finish => (7, 0),
++            Op::Checkpoint => (8, 0),
++            Op::EnterScope => (9, 0),
++            Op::LeaveScope => (10, 0),
++            Op::ParentScope => (11, 0),
++            Op::RestoreScope => (12, 0),
++            Op::CheckBool => (13, 0),
++            Op::CheckInt => (14, 0),
++            Op::EndTry => (15, 0),
++            Op::LoopBody => (16, 0),
++            Op::LoopEnd => (17, 0),
++            Op::Break => (18, 0),
++            Op::Continue => (19, 0),
++            Op::ReceiverIndex => (20, 0),
++            Op::ReceiverIndex2 => (21, 0),
++            Op::MatrixDestination => (22, 0),
++            Op::ReadDestination => (23, 0),
++            Op::WriteDestination => (24, 0),
++            Op::Constant(value) => (25, value),
++            Op::BadNumber(value) => (26, value),
++            Op::Load(value) => (27, value),
++            Op::Store(value) => (28, value),
++            Op::LoadLocal(value) => (29, value),
++            Op::StoreLocal(value) => (30, value),
++            Op::List(value) => (31, value),
++            Op::Field(value) => (32, value),
++            Op::MapField(value) => (33, value),
++            Op::Closure(value) => (34, value),
++            Op::Jump(value) => (35, value),
++            Op::BranchFalse(value) => (36, value),
++            Op::Try(value) => (37, value),
++            Op::Import(value) => (38, value),
++            Op::LoopEnter(value) => (39, value),
++            Op::LoopNext(value) => (40, value),
++            Op::NameDestination(value) => (41, value),
++            Op::ReceiverName(value) => (42, value),
++            Op::ReceiverMap(value) => (43, value),
++            Op::MapDestination(value) => (44, value),
++            Op::Bool(false) => (45, 0),
++            Op::Bool(true) => (46, 0),
++            Op::Slice(false) => (47, 0),
++            Op::Slice(true) => (48, 0),
++            Op::ReceiverReadOnly(false) => (49, 0),
++            Op::ReceiverReadOnly(true) => (50, 0),
++            Op::IndexDestination(false) => (51, 0),
++            Op::IndexDestination(true) => (52, 0),
++            Op::Unary(UnaryOp::Neg) => (53, 0),
++            Op::Unary(UnaryOp::Not) => (54, 0),
++            Op::Binary(BinaryOp::Add) => (55, 0),
++            Op::Binary(BinaryOp::Sub) => (56, 0),
++            Op::Binary(BinaryOp::Mul) => (57, 0),
++            Op::Binary(BinaryOp::Div) => (58, 0),
++            Op::Binary(BinaryOp::Rem) => (59, 0),
++            Op::Binary(BinaryOp::Eq) => (60, 0),
++            Op::Binary(BinaryOp::Ne) => (61, 0),
++            Op::Binary(BinaryOp::Lt) => (62, 0),
++            Op::Binary(BinaryOp::Le) => (63, 0),
++            Op::Binary(BinaryOp::Gt) => (64, 0),
++            Op::Binary(BinaryOp::Ge) => (65, 0),
++            Op::Binary(BinaryOp::And) => (66, 0),
++            Op::Binary(BinaryOp::Or) => (67, 0),
++            Op::Binary(BinaryOp::Contem) => (68, 0),
++            Op::ShortCircuit {
++                target,
++                value: false,
++            } => (69, target),
++            Op::ShortCircuit {
++                target,
++                value: true,
++            } => (70, target),
++            Op::Call { argc, name } => (71, {
++                let id = self.call_sites.len() as u32;
++                self.call_sites.push(CallSite { argc, name });
++                id
++            }),
++        };
++        if operand > INLINE_MAX {
++            self.wide_operands
++                .get_or_insert_with(Default::default)
++                .insert(index, operand);
++            (u32::from(tag | WIDE)) << 24
++        } else {
++            if let Some(wide) = &mut self.wide_operands {
++                wide.remove(&index);
++                if wide.is_empty() {
++                    self.wide_operands = None;
++                }
++            }
++            (u32::from(tag) << 24) | operand
++        }
++    }
++
++    #[inline(always)]
++    pub(super) fn op_at(&self, index: usize) -> Op {
++        let word = self.instructions[index].encoded;
++        let tag = (word >> 24) as u8;
++        let operand = if tag & WIDE != 0 {
++            self.wide_operands.as_ref().expect("wide operands")[&(index as u32)]
++        } else {
++            word & INLINE_MAX
++        };
++        match tag & !WIDE {
++            0 => Op::Nada,
++            1 => Op::Drop,
++            2 => Op::SetLast,
++            3 => Op::Pair,
++            4 => Op::Index,
++            5 => Op::Index2,
++            6 => Op::Return,
++            7 => Op::Finish,
++            8 => Op::Checkpoint,
++            9 => Op::EnterScope,
++            10 => Op::LeaveScope,
++            11 => Op::ParentScope,
++            12 => Op::RestoreScope,
++            13 => Op::CheckBool,
++            14 => Op::CheckInt,
++            15 => Op::EndTry,
++            16 => Op::LoopBody,
++            17 => Op::LoopEnd,
++            18 => Op::Break,
++            19 => Op::Continue,
++            20 => Op::ReceiverIndex,
++            21 => Op::ReceiverIndex2,
++            22 => Op::MatrixDestination,
++            23 => Op::ReadDestination,
++            24 => Op::WriteDestination,
++            25 => Op::Constant(operand),
++            26 => Op::BadNumber(operand),
++            27 => Op::Load(operand),
++            28 => Op::Store(operand),
++            29 => Op::LoadLocal(operand),
++            30 => Op::StoreLocal(operand),
++            31 => Op::List(operand),
++            32 => Op::Field(operand),
++            33 => Op::MapField(operand),
++            34 => Op::Closure(operand),
++            35 => Op::Jump(operand),
++            36 => Op::BranchFalse(operand),
++            37 => Op::Try(operand),
++            38 => Op::Import(operand),
++            39 => Op::LoopEnter(operand),
++            40 => Op::LoopNext(operand),
++            41 => Op::NameDestination(operand),
++            42 => Op::ReceiverName(operand),
++            43 => Op::ReceiverMap(operand),
++            44 => Op::MapDestination(operand),
++            45 => Op::Bool(false),
++            46 => Op::Bool(true),
++            47 => Op::Slice(false),
++            48 => Op::Slice(true),
++            49 => Op::ReceiverReadOnly(false),
++            50 => Op::ReceiverReadOnly(true),
++            51 => Op::IndexDestination(false),
++            52 => Op::IndexDestination(true),
++            53 => Op::Unary(UnaryOp::Neg),
++            54 => Op::Unary(UnaryOp::Not),
++            55 => Op::Binary(BinaryOp::Add),
++            56 => Op::Binary(BinaryOp::Sub),
++            57 => Op::Binary(BinaryOp::Mul),
++            58 => Op::Binary(BinaryOp::Div),
++            59 => Op::Binary(BinaryOp::Rem),
++            60 => Op::Binary(BinaryOp::Eq),
++            61 => Op::Binary(BinaryOp::Ne),
++            62 => Op::Binary(BinaryOp::Lt),
++            63 => Op::Binary(BinaryOp::Le),
++            64 => Op::Binary(BinaryOp::Gt),
++            65 => Op::Binary(BinaryOp::Ge),
++            66 => Op::Binary(BinaryOp::And),
++            67 => Op::Binary(BinaryOp::Or),
++            68 => Op::Binary(BinaryOp::Contem),
++            69 => Op::ShortCircuit {
++                target: operand,
++                value: false,
++            },
++            70 => Op::ShortCircuit {
++                target: operand,
++                value: true,
++            },
++            71 => {
++                let site = self.call_sites[operand as usize];
++                Op::Call {
++                    argc: site.argc,
++                    name: site.name,
++                }
++            }
++            _ => unreachable!("compiler opcode"),
++        }
++    }
++}
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++
++    fn empty_code() -> Chunk {
++        let mut code =
++            Rc::try_unwrap(compiler::items(&[])).unwrap_or_else(|_| panic!("shared test chunk"));
++        code.instructions.clear();
++        code
++    }
++    fn append(code: &mut Chunk, op: Op) -> usize {
++        let index = code.instructions.len();
++        let encoded = code.encode_op(index as u32, op);
++        code.instructions.push(Instruction {
++            encoded,
++            span: u32::MAX,
++        });
++        index
++    }
++    #[test]
++    fn all_instructions_round_trip_without_retaining_decoded_ops() {
++        let mut code = empty_code();
++        let cases = [
++            Op::Nada,
++            Op::Drop,
++            Op::SetLast,
++            Op::Pair,
++            Op::Index,
++            Op::Index2,
++            Op::Return,
++            Op::Finish,
++            Op::Checkpoint,
++            Op::EnterScope,
++            Op::LeaveScope,
++            Op::ParentScope,
++            Op::RestoreScope,
++            Op::CheckBool,
++            Op::CheckInt,
++            Op::EndTry,
++            Op::LoopBody,
++            Op::LoopEnd,
++            Op::Break,
++            Op::Continue,
++            Op::ReceiverIndex,
++            Op::ReceiverIndex2,
++            Op::MatrixDestination,
++            Op::ReadDestination,
++            Op::WriteDestination,
++            Op::Constant(17),
++            Op::BadNumber(17),
++            Op::Load(17),
++            Op::Store(17),
++            Op::LoadLocal(17),
++            Op::StoreLocal(17),
++            Op::List(17),
++            Op::Field(17),
++            Op::MapField(17),
++            Op::Closure(17),
++            Op::Jump(17),
++            Op::BranchFalse(17),
++            Op::Try(17),
++            Op::Import(17),
++            Op::LoopEnter(17),
++            Op::LoopNext(17),
++            Op::NameDestination(17),
++            Op::ReceiverName(17),
++            Op::ReceiverMap(17),
++            Op::MapDestination(17),
++            Op::Bool(false),
++            Op::Bool(true),
++            Op::Slice(false),
++            Op::Slice(true),
++            Op::ReceiverReadOnly(false),
++            Op::ReceiverReadOnly(true),
++            Op::IndexDestination(false),
++            Op::IndexDestination(true),
++            Op::Unary(UnaryOp::Neg),
++            Op::Unary(UnaryOp::Not),
++            Op::Binary(BinaryOp::Add),
++            Op::Binary(BinaryOp::Sub),
++            Op::Binary(BinaryOp::Mul),
++            Op::Binary(BinaryOp::Div),
++            Op::Binary(BinaryOp::Rem),
++            Op::Binary(BinaryOp::Eq),
++            Op::Binary(BinaryOp::Ne),
++            Op::Binary(BinaryOp::Lt),
++            Op::Binary(BinaryOp::Le),
++            Op::Binary(BinaryOp::Gt),
++            Op::Binary(BinaryOp::Ge),
++            Op::Binary(BinaryOp::And),
++            Op::Binary(BinaryOp::Or),
++            Op::Binary(BinaryOp::Contem),
++            Op::ShortCircuit {
++                target: 19,
++                value: false,
++            },
++            Op::ShortCircuit {
++                target: 19,
++                value: true,
++            },
++            Op::Call {
++                argc: u32::MAX,
++                name: u32::MAX,
++            },
++        ];
++        for op in cases {
++            let index = append(&mut code, op);
++            assert_eq!(code.op_at(index), op);
++            assert_eq!(code.instructions[index].span, u32::MAX);
++        }
++        assert_eq!(std::mem::size_of::<Instruction>(), 8);
++    }
++
++    #[test]
++    fn wide_operands_and_backpatching_preserve_full_u32_range() {
++        let mut code = empty_code();
++        for value in [0, INLINE_MAX, INLINE_MAX + 1, u32::MAX] {
++            for op in [
++                Op::Constant(value),
++                Op::LoadLocal(value),
++                Op::Jump(value),
++                Op::BranchFalse(value),
++                Op::Try(value),
++                Op::ShortCircuit {
++                    target: value,
++                    value: true,
++                },
++            ] {
++                let index = append(&mut code, op);
++                assert_eq!(code.op_at(index), op);
++            }
++        }
++        let mut code = empty_code();
++        let index = append(&mut code, Op::Jump(0));
++        for value in [INLINE_MAX + 1, u32::MAX, 0] {
++            code.instructions[index].encoded = code.encode_op(index as u32, Op::Jump(value));
++            assert_eq!(code.op_at(index), Op::Jump(value));
++        }
++        assert!(code.wide_operands.is_none());
++    }
++
++    // Exact field types from the preserved pre-encoding layout. These are size
++    // accounting types, never instantiated or retained by production code.
++    #[allow(dead_code)]
++    struct LegacyInstruction {
++        op: Op,
++        span: u32,
++    }
++    #[allow(dead_code)]
++    struct LegacyChunk {
++        parameter_slots: Rc<HashMap<String, u32>>,
++        instructions: Vec<LegacyInstruction>,
++        spans: Vec<Span>,
++        names: Vec<String>,
++        constants: Vec<Value>,
++        functions: Vec<Prototype>,
++        imports: Vec<Import>,
++        loops: Vec<LoopSpec>,
++    }
++    #[derive(Default)]
++    struct Storage {
++        instructions: usize,
++        chunks: usize,
++        calls: usize,
++        wide: usize,
++        old_bytes: usize,
++        new_bytes: usize,
++        old_capacity: usize,
++        new_capacity: usize,
++    }
++    fn storage(code: &Chunk, stats: &mut Storage) {
++        use std::mem::size_of;
++        // Rebuild the predecessor's instruction vector with the same push
++        // sequence, measuring its actual capacity rather than assuming the
++        // allocator growth policy is identical for both element sizes.
++        let mut legacy = Vec::new();
++        for (index, instruction) in code.instructions.iter().enumerate() {
++            legacy.push(LegacyInstruction {
++                op: code.op_at(index),
++                span: instruction.span,
++            });
++        }
++        stats.instructions += code.instructions.len();
++        stats.chunks += 1;
++        stats.calls += code.call_sites.len();
++        stats.wide += code.wide_operands.as_ref().map_or(0, |m| m.len());
++        stats.old_bytes += code.instructions.len() * size_of::<LegacyInstruction>();
++        stats.new_bytes += code.instructions.len() * size_of::<Instruction>()
++            + code.call_sites.len() * size_of::<CallSite>();
++        stats.old_capacity +=
++            legacy.capacity() * size_of::<LegacyInstruction>() + size_of::<LegacyChunk>();
++        stats.new_capacity += code.instructions.capacity() * size_of::<Instruction>()
++            + code.call_sites.capacity() * size_of::<CallSite>()
++            + size_of::<Chunk>();
++        for function in &code.functions {
++            storage(&function.code, stats);
++        }
++    }
++    #[test]
++    fn compiled_workload_storage_report() {
++        use std::fmt::Write;
++        let mut paths: Vec<_> =
++            std::fs::read_dir(concat!(env!("CARGO_MANIFEST_DIR"), "/benchmarks/programs"))
++                .unwrap()
++                .map(|e| e.unwrap().path())
++                .filter(|p| p.extension().is_some_and(|e| e == "lep"))
++                .collect();
++        paths.sort();
++        let mut report = String::from(
++            "program,instructions,chunks,calls,wide,legacy_instruction_bytes,compact_instruction_bytes,legacy_used_bytes,compact_used_bytes,legacy_capacity_and_headers_bytes,compact_capacity_and_headers_bytes\n",
++        );
++        for path in paths {
++            let program = parse(&std::fs::read_to_string(&path).unwrap()).unwrap();
++            let code = compiler::module(&program.items);
++            let mut stats = Storage::default();
++            storage(&code, &mut stats);
++            assert_eq!(
++                stats.wide, 0,
++                "report excludes allocator bucket sizes for exceptional operands"
++            );
++            writeln!(
++                &mut report,
++                "{},{},{},{},{},{},{},{},{},{},{}",
++                path.file_stem().unwrap().to_str().unwrap(),
++                stats.instructions,
++                stats.chunks,
++                stats.calls,
++                stats.wide,
++                std::mem::size_of::<LegacyInstruction>(),
++                std::mem::size_of::<Instruction>(),
++                stats.old_bytes,
++                stats.new_bytes,
++                stats.old_capacity,
++                stats.new_capacity
++            )
++            .unwrap();
++        }
++        if let Some(path) = std::env::var_os("EXPRESSA_CODE_SIZE_CSV") {
++            std::fs::write(path, report).unwrap();
++        }
++    }
++}
+--- a/src/runtime/eval/bytecode/execute.rs
++++ b/src/runtime/eval/bytecode/execute.rs
+@@ -81,6 +81,7 @@
+     fn step(&mut self, vm: &mut Vm<'_, '_>) -> Result<Step, EvalError> {
+         let frame = self.frames.last_mut().expect("frame");
+         let instruction = frame.code.instructions[frame.ip];
++        let op = frame.code.op_at(frame.ip);
+         frame.ip += 1;
+         let span = frame.code.spans[instruction.span as usize];
+         macro_rules! pop {
+@@ -93,7 +94,7 @@
+                 &frame.code.names[$id as usize]
+             };
+         }
+-        match instruction.op {
++        match op {
+             Op::Nada => self.values.push(Value::Nada),
+             Op::Bool(value) => self.values.push(Value::Bool(value)),
+             Op::Constant(id) => self.values.push(frame.code.constants[id as usize].clone()),
+@@ -422,7 +423,7 @@
+                     col,
+                     span,
+                 };
+-                if matches!(instruction.op, Op::ReceiverIndex2) {
++                if matches!(op, Op::ReceiverIndex2) {
+                     self.values.push(vm.read_destination(&destination)?);
+                 }
+                 self.destinations.push(destination);
+--- a/src/runtime/eval/bytecode/mod.rs
++++ b/src/runtime/eval/bytecode/mod.rs
+@@ -1,5 +1,6 @@
+ //! Bytecode compilation and execution. No instruction retains an AST expression.
+ mod compiler;
++mod encoding;
+ mod execute;
+ 
+ use super::super::value::FunctionBody;
+@@ -30,7 +31,7 @@
+         .unwrap_or_default()
+ }
+ 
+-#[derive(Clone, Copy)]
++#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+ enum Op {
+     Nada,
+     Bool(bool),
+@@ -88,14 +89,20 @@
+ }
+ 
+ #[derive(Clone, Copy)]
++#[repr(C)]
+ struct Instruction {
+-    op: Op,
++    encoded: u32,
+     span: u32,
+ }
+ 
+ pub struct Chunk {
+     parameter_slots: Rc<HashMap<String, u32>>,
+     instructions: Vec<Instruction>,
++    call_sites: Vec<encoding::CallSite>,
++    // Keep the empty HashMap header out of every Chunk; allocate it only when
++    // an operand exceeds 24 bits. This extra indirection is deliberately rare.
++    #[allow(clippy::box_collection)]
++    wide_operands: Option<Box<HashMap<u32, u32>>>,
+     spans: Vec<Span>,
+     names: Vec<String>,
+     constants: Vec<Value>,

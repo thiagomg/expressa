@@ -15,27 +15,40 @@ fn outcome(source: &str, backend: ExecutionBackend) -> Result<ExecutionOutput, R
     )
 }
 fn equivalent(source: &str) {
-    match (
-        outcome(source, ExecutionBackend::Ast),
-        outcome(source, ExecutionBackend::Bytecode),
-    ) {
-        (Ok(ast), Ok(bytecode)) => assert_eq!(ast, bytecode, "{source}"),
-        (Err(ast), Err(bytecode)) => {
-            assert_eq!(
-                (&ast.message, &ast.file, ast.span),
-                (&bytecode.message, &bytecode.file, bytecode.span),
-                "{source}"
-            );
-            let frames = |error: &RuntimeError| {
-                error
-                    .stack
-                    .iter()
-                    .map(|frame| (frame.name.clone(), frame.file.clone(), frame.span))
-                    .collect::<Vec<_>>()
-            };
-            assert_eq!(frames(&ast), frames(&bytecode), "{source}");
+    let expected = outcome(source, ExecutionBackend::Ast);
+    let mut actual = vec![outcome(source, ExecutionBackend::Bytecode)];
+    if expressa::parser::parse(source).is_ok() {
+        let bytes = expressa::runtime::compile_exb(source, "conformance.lep").unwrap();
+        actual.push(expressa::runtime::run_exb_with_options(
+            &bytes,
+            "conformance.lep",
+            "Ana\n",
+            ExecutionOptions {
+                backend: ExecutionBackend::Bytecode,
+                ..ExecutionOptions::default()
+            },
+        ));
+    }
+    for actual in actual {
+        match (&expected, &actual) {
+            (Ok(ast), Ok(bytecode)) => assert_eq!(ast, bytecode, "{source}"),
+            (Err(ast), Err(bytecode)) => {
+                assert_eq!(
+                    (&ast.message, &ast.file, ast.span),
+                    (&bytecode.message, &bytecode.file, bytecode.span),
+                    "{source}"
+                );
+                let frames = |error: &RuntimeError| {
+                    error
+                        .stack
+                        .iter()
+                        .map(|frame| (frame.name.clone(), frame.file.clone(), frame.span))
+                        .collect::<Vec<_>>()
+                };
+                assert_eq!(frames(ast), frames(bytecode), "{source}");
+            }
+            _ => panic!("{source}\nAST: {expected:?}\nBytecode: {actual:?}"),
         }
-        (ast, bytecode) => panic!("{source}\nAST: {ast:?}\nBytecode: {bytecode:?}"),
     }
 }
 

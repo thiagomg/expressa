@@ -39,6 +39,18 @@ pub fn default_numero_aritmetica() -> NumeroAritmetica {
 pub struct Numero(Decimal);
 
 impl Numero {
+    pub(crate) fn exb_bytes(self) -> [u8; 16] {
+        self.0.serialize()
+    }
+
+    pub(crate) fn from_exb_bytes(bytes: [u8; 16]) -> Option<Self> {
+        let flags = u32::from_le_bytes(bytes[..4].try_into().unwrap());
+        if flags & !0x80ff_0000 != 0 || (flags >> 16) & 0xff > 28 {
+            return None;
+        }
+        Some(Self(Decimal::deserialize(bytes)))
+    }
+
     pub fn from_i64(n: i64) -> Self {
         Self(Decimal::from(n))
     }

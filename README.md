@@ -33,6 +33,8 @@ O binário `expressa` (`expressa.exe` no Windows) no PATH:
 expressa                 REPL
 expressa prog.lep        arquivo
 expressa debug prog.lep  depurador
+expressa compilar prog.lep -o prog.exb
+expressa prog.exb        bytecode previamente compilado
 ```
 
 No REPL: `2 + 3`, `escreva("oi")`, `ajuda escreva`. `sair` ou Ctrl+D encerra.
@@ -40,6 +42,8 @@ No REPL: `2 + 3`, `escreva("oi")`, `ajuda escreva`. `sair` ou Ctrl+D encerra.
 Compilar: `cargo build --release` (Rust, edition 2024). Binários em `target/release/`. A pipeline empacota com `--profile release-lto` (`target/release-lto/`).
 
 O backend padrão executa bytecode, sem JIT. Para comparar com o interpretador AST de referência: `expressa --backend ast prog.lep`; `--backend bytecode` seleciona explicitamente a VM. A opção `--ast` apenas imprime a árvore sintática. Veja [a revisão da migração](lang-tasks/BYTECODE-REVIEW.md) e [a comparação de CPU e memória](benchmarks/AST-VS-BYTECODE.md).
+
+O formato [EXB v1](docs/exb.md) inclui fonte para diagnósticos, valida instruções no carregamento e dispensa o `.lep` original. Veja [a medição de CPU e memória](benchmarks/EXB-V1-REVIEW.md).
 
 Pacote `.deb` (Ubuntu 24.04 e 26.04, via Docker): `./empacotar-deb.sh`. Os arquivos saem em `dist/`.
 

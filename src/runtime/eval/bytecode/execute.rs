@@ -744,6 +744,13 @@ impl Vm<'_, '_> {
     ) -> Result<Value, EvalError> {
         let code = compiler::module(&program.items);
         drop(program);
+        self.execute_loaded_module(code, env)
+    }
+    pub(in crate::runtime::eval) fn execute_loaded_module(
+        &mut self,
+        code: Rc<Chunk>,
+        env: &Rc<RefCell<Env>>,
+    ) -> Result<Value, EvalError> {
         self.execute_code(code, env, FrameKindCode::Plain)
     }
     pub(in crate::runtime) fn execute_program_value(

@@ -1,0 +1,2445 @@
+--- a/src/main.rs
++++ b/src/main.rs
+@@ -65,10 +65,11 @@
+         eprintln!(
+             "Uso:\n  \
+              expressa                         REPL\n  \
+-             expressa <arquivo.lep> [args…]\n  \
+-             expressa debug <arquivo.lep> [args…]\n  \
++             expressa <arquivo.lep|arquivo.exb> [args…]\n  \
++             expressa debug <arquivo.lep|arquivo.exb> [args…]\n  \
+              expressa --ast <arquivo.lep>\n  \
+-             expressa --marcador-leia <arquivo.lep> [args…]\n  \
++             expressa compilar <arquivo.lep> [-o arquivo.exb]\n  \
++             expressa --marcador-leia <arquivo.lep|arquivo.exb> [args…]\n  \
+              expressa --grafico <arquivo.cart>\n  \
+              expressa --ao-vivo\n  \
+              expressa --instalar-exemplos\n  \
+@@ -96,9 +97,44 @@
+         return Ok(());
+     }
+ 
++    if args[0] == "compilar" {
++        if !(args.len() == 2 || (args.len() == 4 && args[2] == "-o")) {
++            return Err("Uso: expressa compilar <arquivo.lep> [-o arquivo.exb]".into());
++        }
++        let input = std::path::Path::new(&args[1]);
++        let output = if args.len() == 4 {
++            std::path::PathBuf::from(&args[3])
++        } else {
++            input.with_extension("exb")
++        };
++        if input == output
++            || std::fs::canonicalize(input)
++                .ok()
++                .zip(std::fs::canonicalize(&output).ok())
++                .is_some_and(|(a, b)| a == b)
++        {
++            return Err("a saída compilada não pode substituir o arquivo fonte".into());
++        }
++        if !output
++            .extension()
++            .and_then(|s| s.to_str())
++            .is_some_and(|s| s.eq_ignore_ascii_case("exb"))
++        {
++            return Err("a saída compilada deve ter extensão .exb".into());
++        }
++        use std::io::Read;
++        let mut source = String::new();
++        std::fs::File::open(input)?
++            .take(expressa::runtime::EXB_MAX_BYTES as u64 + 1)
++            .read_to_string(&mut source)?;
++        let bytes = expressa::runtime::compile_exb(&source, &args[1])?;
++        write_exb_output(&output, &bytes)?;
++        return Ok(());
++    }
++
+     let (mode, file, script_args) = if args[0] == "debug" {
+         if args.len() < 2 {
+-            eprintln!("Uso: expressa debug <arquivo.lep> [args…]");
++            eprintln!("Uso: expressa debug <arquivo.lep|arquivo.exb> [args…]");
+             return Ok(());
+         }
+         ("debug", args[1].as_str(), &args[2..])
+@@ -110,7 +146,7 @@
+         ("ast", args[1].as_str(), &args[2..])
+     } else if args[0] == "--marcador-leia" {
+         if args.len() < 2 {
+-            eprintln!("Uso: expressa --marcador-leia <arquivo.lep> [args…]");
++            eprintln!("Uso: expressa --marcador-leia <arquivo.lep|arquivo.exb> [args…]");
+             return Ok(());
+         }
+         ("marcador-leia", args[1].as_str(), &args[2..])
+@@ -118,6 +154,28 @@
+         ("run", args[0].as_str(), &args[1..])
+     };
+ 
++    if std::path::Path::new(file)
++        .extension()
++        .and_then(|s| s.to_str())
++        .is_some_and(|s| s.eq_ignore_ascii_case("exb"))
++    {
++        let mode = match mode {
++            "ast" => {
++                return Err(
++                    "--ast requer o fonte .lep; o arquivo .exb não armazena uma AST".into(),
++                );
++            }
++            "debug" => expressa::runtime::ExbRunMode::Debug,
++            "marcador-leia" => expressa::runtime::ExbRunMode::Marker,
++            _ => expressa::runtime::ExbRunMode::Run,
++        };
++        exit_if_nonzero(expressa::runtime::run_exb_file_args(
++            file,
++            script_args,
++            mode,
++        )?)?;
++        return Ok(());
++    }
+     let source = std::fs::read_to_string(file)?;
+     match mode {
+         "ast" => match parse(&source) {
+@@ -140,3 +198,41 @@
+     }
+     Ok(())
+ }
++
++fn write_exb_output(path: &std::path::Path, bytes: &[u8]) -> std::io::Result<()> {
++    use std::io::Write;
++    struct Temp(std::path::PathBuf);
++    impl Drop for Temp {
++        fn drop(&mut self) {
++            let _ = std::fs::remove_file(&self.0);
++        }
++    }
++    let _name = path
++        .file_name()
++        .ok_or_else(|| std::io::Error::other("nome de saída inválido"))?;
++    for nonce in 0..100 {
++        let tmp = path.with_file_name(format!(
++            ".expressa-exb.tmp.{}.{}",
++            std::process::id(),
++            nonce
++        ));
++        match std::fs::OpenOptions::new()
++            .write(true)
++            .create_new(true)
++            .open(&tmp)
++        {
++            Ok(mut file) => {
++                let temp = Temp(tmp);
++                let written = file.write_all(bytes).and_then(|()| file.sync_all());
++                drop(file);
++                written?;
++                return std::fs::rename(&temp.0, path);
++            }
++            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {}
++            Err(e) => return Err(e),
++        }
++    }
++    Err(std::io::Error::other(
++        "não foi possível criar saída temporária",
++    ))
++}
+--- a/src/runtime/eval.rs
++++ b/src/runtime/eval.rs
+@@ -1,4 +1,9 @@
+ mod assignment;
++mod exb;
++pub use bytecode::format::{
++    CompiledProgram, EXB_MAX_BYTES, EXB_VERSION, ExbError, compile_exb, load_exb, read_exb,
++};
++pub use exb::{ExbRunMode, run_compiled_with_options, run_exb_file_args, run_exb_with_options};
+ pub(crate) mod bytecode;
+ pub use bytecode::ExecutionBackend;
+ mod matrix;
+@@ -730,23 +735,41 @@
+         let module_env = if let Some(existing) = self.modules.get(&key) {
+             Rc::clone(existing)
+         } else {
+-            let source = std::fs::read_to_string(&path).map_err(|e| {
+-                self.err(
+-                    format!("não foi possível importar '{}': {e}", path.display()),
+-                    import.span,
+-                )
+-            })?;
+-            let program = parse(&source).map_err(|e| {
+-                self.err(
+-                    format!(
+-                        "sintaxe em '{}': {} ({})",
+-                        path.display(),
+-                        e.message,
+-                        e.span
+-                    ),
+-                    import.span,
+-                )
+-            })?;
++            enum Input {
++                Source(String, Program),
++                Compiled(CompiledProgram),
++            }
++            let input = if exb::is_exb_path(&path) {
++                if self.backend != ExecutionBackend::Bytecode {
++                    return Err(self.err("importar .exb exige o backend bytecode", import.span));
++                }
++                Input::Compiled(read_exb(&path).map_err(|e| {
++                    self.err(
++                        format!("não foi possível importar '{}': {e}", path.display()),
++                        import.span,
++                    )
++                })?)
++            } else {
++                let source = std::fs::read_to_string(&path).map_err(|e| {
++                    self.err(
++                        format!("não foi possível importar '{}': {e}", path.display()),
++                        import.span,
++                    )
++                })?;
++                let program = parse(&source).map_err(|e| {
++                    self.err(
++                        format!(
++                            "sintaxe em '{}': {} ({})",
++                            path.display(),
++                            e.message,
++                            e.span
++                        ),
++                        import.span,
++                    )
++                })?;
++
++                Input::Source(source, program)
++            };
+ 
+             self.loading.insert(key.clone());
+ 
+@@ -754,12 +777,20 @@
+             let saved_source = std::mem::replace(&mut self.source, Rc::from(""));
+             let saved_base = self.base_dir.clone();
+ 
+-            self.file = path.display().to_string();
+-            self.source = Rc::from(source);
+-            self.base_dir = base_dir_of(&self.file);
+-
++            self.base_dir = base_dir_of(&path.display().to_string());
+             let module_env = Env::child(&self.builtins, FrameKind::Module);
+-            let result = self.eval_program(program, &module_env);
++            let result = match input {
++                Input::Source(source, program) => {
++                    self.file = path.display().to_string();
++                    self.source = Rc::from(source);
++                    self.eval_program(program, &module_env)
++                }
++                Input::Compiled(program) => {
++                    self.file = program.source_name.clone();
++                    self.source = Rc::clone(&program.source);
++                    self.eval_loaded_module(&program, &module_env)
++                }
++            };
+ 
+             self.file = saved_file;
+             self.source = saved_source;
+--- a/src/runtime/eval/bytecode/execute.rs
++++ b/src/runtime/eval/bytecode/execute.rs
+@@ -744,6 +744,13 @@
+     ) -> Result<Value, EvalError> {
+         let code = compiler::module(&program.items);
+         drop(program);
++        self.execute_loaded_module(code, env)
++    }
++    pub(in crate::runtime::eval) fn execute_loaded_module(
++        &mut self,
++        code: Rc<Chunk>,
++        env: &Rc<RefCell<Env>>,
++    ) -> Result<Value, EvalError> {
+         self.execute_code(code, env, FrameKindCode::Plain)
+     }
+     pub(in crate::runtime) fn execute_program_value(
+--- /dev/null
++++ b/src/runtime/eval/bytecode/format.rs
+@@ -0,0 +1,454 @@
++//! EXB v1: portable file encoding, independent from the VM's in-memory Op enum.
++mod opcodes;
++#[cfg(test)]
++mod tests;
++mod verify;
++
++use super::*;
++use std::fmt;
++use std::io::Read;
++
++pub const EXB_VERSION: u16 = 1;
++pub const EXB_MAX_BYTES: usize = 16 * 1024 * 1024;
++const MAGIC: &[u8; 4] = b"EXB\0";
++const FLAGS: u16 = 3; // decimal96 constants and embedded debug source
++const HEADER: usize = 20;
++const MAX_ITEMS: usize = 250_000;
++const MAX_DEPTH: usize = 64;
++const MAX_DECODED_BYTES: usize = 64 * 1024 * 1024;
++
++#[derive(Debug, Clone, PartialEq, Eq)]
++pub struct ExbError {
++    pub offset: usize,
++    pub message: String,
++}
++impl fmt::Display for ExbError {
++    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
++        write!(f, "EXB: {} (byte {})", self.message, self.offset)
++    }
++}
++impl std::error::Error for ExbError {}
++fn error(message: impl Into<String>) -> ExbError {
++    ExbError {
++        offset: 0,
++        message: message.into(),
++    }
++}
++type Result<T> = std::result::Result<T, ExbError>;
++
++/// Immutable, validated module. Loading does not parse or execute embedded source.
++#[derive(Clone)]
++pub struct CompiledProgram {
++    pub(in crate::runtime::eval) source_name: String,
++    pub(in crate::runtime::eval) source: Rc<str>,
++    pub(in crate::runtime::eval) span: Span,
++    pub(in crate::runtime::eval) code: Rc<Chunk>,
++}
++impl CompiledProgram {
++    pub fn source_name(&self) -> &str {
++        &self.source_name
++    }
++    pub fn source(&self) -> &str {
++        &self.source
++    }
++}
++
++pub fn compile_exb(source: &str, source_name: &str) -> Result<Vec<u8>> {
++    if source.len() > EXB_MAX_BYTES {
++        return Err(error("fonte excede o limite EXB de 16 MiB"));
++    }
++    let program = parse(source).map_err(|e| ExbError {
++        offset: e.span.start,
++        message: format!("sintaxe em {source_name}: {} ({})", e.message, e.span),
++    })?;
++    let compiled = CompiledProgram {
++        source_name: source_name.into(),
++        source: Rc::from(source),
++        span: program.span,
++        code: compiler::module(&program.items),
++    };
++    verify::program(&compiled)?;
++    let mut w = Writer {
++        bytes: Vec::new(),
++        items: MAX_ITEMS,
++    };
++    w.string(source_name)?;
++    w.string(source)?;
++    w.span(compiled.span)?;
++    w.chunk(&compiled.code, 0)?;
++    if w.bytes.len() > EXB_MAX_BYTES - HEADER {
++        return Err(error("arquivo EXB excede 16 MiB"));
++    }
++    let mut result = Vec::with_capacity(HEADER + w.bytes.len());
++    result.extend_from_slice(MAGIC);
++    result.extend_from_slice(&EXB_VERSION.to_le_bytes());
++    result.extend_from_slice(&FLAGS.to_le_bytes());
++    result.extend_from_slice(&(w.bytes.len() as u32).to_le_bytes());
++    result.extend_from_slice(&checksum(&w.bytes).to_le_bytes());
++    result.extend(w.bytes);
++    Ok(result)
++}
++
++pub fn load_exb(bytes: &[u8]) -> Result<CompiledProgram> {
++    if bytes.len() > EXB_MAX_BYTES {
++        return Err(error("arquivo EXB excede 16 MiB"));
++    }
++    let mut r = Reader::new(bytes);
++    if r.take(4)? != MAGIC {
++        return Err(r.err("assinatura EXB inválida"));
++    }
++    if r.u16()? != EXB_VERSION {
++        return Err(r.err("versão EXB não suportada"));
++    }
++    if r.u16()? != FLAGS {
++        return Err(r.err("recursos EXB não suportados"));
++    }
++    let length = r.u32()? as usize;
++    let digest = r.u64()?;
++    if length != bytes.len() - HEADER {
++        return Err(r.err("tamanho EXB inconsistente"));
++    }
++    if checksum(&bytes[HEADER..]) != digest {
++        return Err(r.err("checksum EXB inválido"));
++    }
++    let source_name = r.string()?;
++    let source = Rc::from(r.string()?);
++    let span = r.span()?;
++    let code = Rc::new(r.chunk(&[], 0)?);
++    if r.pos != bytes.len() {
++        return Err(r.err("dados após o módulo EXB"));
++    }
++    let program = CompiledProgram {
++        source_name,
++        source,
++        span,
++        code,
++    };
++    verify::program(&program)?;
++    Ok(program)
++}
++
++/// Bounded filesystem read; does not allocate based on an unchecked file length.
++pub fn read_exb(path: &Path) -> Result<CompiledProgram> {
++    let file = std::fs::File::open(path).map_err(|e| error(format!("{}: {e}", path.display())))?;
++    let mut bytes = Vec::new();
++    file.take(EXB_MAX_BYTES as u64 + 1)
++        .read_to_end(&mut bytes)
++        .map_err(|e| error(format!("{}: {e}", path.display())))?;
++    load_exb(&bytes)
++}
++fn checksum(bytes: &[u8]) -> u64 {
++    bytes.iter().fold(0xcbf29ce484222325u64, |hash, byte| {
++        (hash ^ u64::from(*byte)).wrapping_mul(0x100000001b3)
++    })
++}
++
++struct Writer {
++    bytes: Vec<u8>,
++    items: usize,
++}
++impl Writer {
++    fn raw(&mut self, bytes: &[u8]) -> Result<()> {
++        if bytes.len() > (EXB_MAX_BYTES - HEADER).saturating_sub(self.bytes.len()) {
++            return Err(error("arquivo EXB excede 16 MiB"));
++        }
++        self.bytes.extend_from_slice(bytes);
++        Ok(())
++    }
++    fn u8(&mut self, n: u8) -> Result<()> {
++        self.raw(&[n])
++    }
++    fn u32(&mut self, n: u32) -> Result<()> {
++        self.raw(&n.to_le_bytes())
++    }
++    fn count(&mut self, n: usize) -> Result<()> {
++        self.items = self
++            .items
++            .checked_sub(n)
++            .ok_or_else(|| error("limite de elementos EXB excedido"))?;
++        self.u32(u32::try_from(n).map_err(|_| error("índice fora do intervalo EXB"))?)
++    }
++    fn string(&mut self, text: &str) -> Result<()> {
++        self.u32(u32::try_from(text.len()).map_err(|_| error("texto EXB longo demais"))?)?;
++        self.raw(text.as_bytes())
++    }
++    fn optional(&mut self, text: &Option<String>) -> Result<()> {
++        self.u8(u8::from(text.is_some()))?;
++        if let Some(text) = text {
++            self.string(text)?;
++        }
++        Ok(())
++    }
++    fn span(&mut self, span: Span) -> Result<()> {
++        self.u32(span.line)?;
++        self.u32(span.col)?;
++        self.u32(u32::try_from(span.start).map_err(|_| error("posição EXB fora do intervalo"))?)?;
++        self.u32(u32::try_from(span.end).map_err(|_| error("posição EXB fora do intervalo"))?)
++    }
++    fn chunk(&mut self, code: &Chunk, depth: usize) -> Result<()> {
++        if depth > MAX_DEPTH {
++            return Err(error("funções EXB aninhadas demais"));
++        }
++        self.count(code.spans.len())?;
++        for s in &code.spans {
++            self.span(*s)?;
++        }
++        self.count(code.names.len())?;
++        for n in &code.names {
++            self.string(n)?;
++        }
++        self.count(code.constants.len())?;
++        for v in &code.constants {
++            match v {
++                Value::Numero(n) => {
++                    self.u8(0)?;
++                    self.raw(&n.exb_bytes())?;
++                }
++                Value::Texto(s) => {
++                    self.u8(1)?;
++                    self.string(s)?;
++                }
++                _ => return Err(error("constante não suportada pelo EXB")),
++            }
++        }
++        self.count(code.functions.len())?;
++        for f in &code.functions {
++            self.count(f.params.len())?;
++            for p in &f.params {
++                self.string(&p.name)?;
++                self.span(p.span)?;
++            }
++            self.optional(&f.doc)?;
++            self.span(f.span)?;
++            self.chunk(&f.code, depth + 1)?;
++        }
++        self.count(code.imports.len())?;
++        for i in &code.imports {
++            self.optional(&i.alias)?;
++            self.string(&i.path)?;
++            self.optional(&i.doc)?;
++            self.span(i.span)?;
++        }
++        self.count(code.loops.len())?;
++        for l in &code.loops {
++            self.u8(match l.kind {
++                LoopKind::Repeat => 0,
++                LoopKind::Range => 1,
++                LoopKind::Items => 2,
++                LoopKind::While => 3,
++            })?;
++            self.u8(u8::from(l.var.is_some()))?;
++            if let Some(v) = l.var {
++                self.u32(v)?;
++            }
++            self.span(l.first_span)?;
++            self.span(l.second_span)?;
++            self.u32(l.exit)?;
++            self.u32(l.next)?;
++        }
++        self.count(code.instructions.len())?;
++        for i in &code.instructions {
++            self.op(i.op)?;
++            self.u32(i.span)?;
++        }
++        Ok(())
++    }
++}
++
++struct Reader<'a> {
++    bytes: &'a [u8],
++    pos: usize,
++    items: usize,
++    budget: usize,
++}
++impl<'a> Reader<'a> {
++    fn new(bytes: &'a [u8]) -> Self {
++        Self {
++            bytes,
++            pos: 0,
++            items: MAX_ITEMS,
++            budget: MAX_DECODED_BYTES,
++        }
++    }
++    fn err(&self, text: &str) -> ExbError {
++        ExbError {
++            offset: self.pos,
++            message: text.into(),
++        }
++    }
++    fn take(&mut self, n: usize) -> Result<&'a [u8]> {
++        let end = self
++            .pos
++            .checked_add(n)
++            .filter(|&n| n <= self.bytes.len())
++            .ok_or_else(|| self.err("arquivo EXB truncado"))?;
++        let result = &self.bytes[self.pos..end];
++        self.pos = end;
++        Ok(result)
++    }
++    fn claim(&mut self, n: usize) -> Result<()> {
++        self.budget = self
++            .budget
++            .checked_sub(n)
++            .ok_or_else(|| self.err("orçamento de decodificação EXB excedido"))?;
++        Ok(())
++    }
++    fn u8(&mut self) -> Result<u8> {
++        Ok(self.take(1)?[0])
++    }
++    fn boolean(&mut self) -> Result<bool> {
++        match self.u8()? {
++            0 => Ok(false),
++            1 => Ok(true),
++            _ => Err(self.err("booleano EXB inválido")),
++        }
++    }
++    fn u16(&mut self) -> Result<u16> {
++        Ok(u16::from_le_bytes(self.take(2)?.try_into().unwrap()))
++    }
++    fn u32(&mut self) -> Result<u32> {
++        Ok(u32::from_le_bytes(self.take(4)?.try_into().unwrap()))
++    }
++    fn u64(&mut self) -> Result<u64> {
++        Ok(u64::from_le_bytes(self.take(8)?.try_into().unwrap()))
++    }
++    fn string(&mut self) -> Result<String> {
++        let len = self.u32()? as usize;
++        self.claim(len)?;
++        let bytes = self.take(len)?;
++        std::str::from_utf8(bytes)
++            .map(str::to_owned)
++            .map_err(|_| self.err("texto EXB não é UTF-8"))
++    }
++    fn optional(&mut self) -> Result<Option<String>> {
++        if self.boolean()? {
++            Ok(Some(self.string()?))
++        } else {
++            Ok(None)
++        }
++    }
++    fn span(&mut self) -> Result<Span> {
++        let line = self.u32()?;
++        let col = self.u32()?;
++        let start = self.u32()? as usize;
++        let end = self.u32()? as usize;
++        if start > end {
++            return Err(self.err("intervalo de posição EXB inválido"));
++        }
++        Ok(Span::new(line, col, start, end))
++    }
++    fn vector<T>(
++        &mut self,
++        minimum: usize,
++        mut read: impl FnMut(&mut Self) -> Result<T>,
++    ) -> Result<Vec<T>> {
++        let n = self.u32()? as usize;
++        if n > (self.bytes.len() - self.pos) / minimum {
++            return Err(self.err("contagem EXB incompatível com o arquivo"));
++        }
++        self.items = self
++            .items
++            .checked_sub(n)
++            .ok_or_else(|| self.err("limite de elementos EXB excedido"))?;
++        self.claim(
++            n.checked_mul(std::mem::size_of::<T>())
++                .ok_or_else(|| self.err("tamanho EXB fora do intervalo"))?,
++        )?;
++        let mut out = Vec::new();
++        out.try_reserve_exact(n)
++            .map_err(|_| self.err("memória insuficiente para EXB"))?;
++        for _ in 0..n {
++            out.push(read(self)?);
++        }
++        Ok(out)
++    }
++    fn chunk(&mut self, params: &[Param], depth: usize) -> Result<Chunk> {
++        if depth > MAX_DEPTH {
++            return Err(self.err("funções EXB aninhadas demais"));
++        }
++        self.claim(
++            std::mem::size_of::<Chunk>()
++                + std::mem::size_of::<HashMap<String, u32>>()
++                + 4 * std::mem::size_of::<usize>(),
++        )?;
++        let spans = self.vector(16, Self::span)?;
++        let names = self.vector(4, Self::string)?;
++        let constants = self.vector(1, |r| match r.u8()? {
++            0 => {
++                let bytes = r.take(16)?.try_into().unwrap();
++                Numero::from_exb_bytes(bytes)
++                    .map(Value::Numero)
++                    .ok_or_else(|| r.err("decimal EXB inválido"))
++            }
++            1 => Ok(Value::Texto(r.string()?)),
++            _ => Err(r.err("tipo de constante EXB inválido")),
++        })?;
++        let functions = self.vector(1, |r| {
++            let params = r.vector(20, |r| {
++                Ok(Param {
++                    name: r.string()?,
++                    span: r.span()?,
++                })
++            })?;
++            let doc = r.optional()?;
++            let span = r.span()?;
++            let code = Rc::new(r.chunk(&params, depth + 1)?);
++            Ok(Prototype {
++                params,
++                code,
++                span,
++                doc,
++            })
++        })?;
++        let imports = self.vector(1, |r| {
++            Ok(Import {
++                alias: r.optional()?,
++                path: r.string()?,
++                doc: r.optional()?,
++                span: r.span()?,
++            })
++        })?;
++        let loops = self.vector(1, |r| {
++            let kind = match r.u8()? {
++                0 => LoopKind::Repeat,
++                1 => LoopKind::Range,
++                2 => LoopKind::Items,
++                3 => LoopKind::While,
++                _ => return Err(r.err("laço EXB inválido")),
++            };
++            let var = if r.boolean()? { Some(r.u32()?) } else { None };
++            Ok(LoopSpec {
++                kind,
++                var,
++                first_span: r.span()?,
++                second_span: r.span()?,
++                exit: r.u32()?,
++                next: r.u32()?,
++            })
++        })?;
++        let instructions = self.vector(5, |r| {
++            Ok(Instruction {
++                op: r.op()?,
++                span: r.u32()?,
++            })
++        })?;
++        self.claim(params.iter().map(|p| p.name.len() + 48).sum())?;
++        let parameter_slots = Rc::new(
++            params
++                .iter()
++                .enumerate()
++                .map(|(i, p)| (p.name.clone(), i as u32))
++                .collect(),
++        );
++        Ok(Chunk {
++            parameter_slots,
++            instructions,
++            spans,
++            names,
++            constants,
++            functions,
++            imports,
++            loops,
++        })
++    }
++}
+--- /dev/null
++++ b/src/runtime/eval/bytecode/format/opcodes.rs
+@@ -0,0 +1,310 @@
++//! Stable EXB v1 opcode assignments. Do not renumber without a format version change.
++use super::*;
++impl Writer {
++    pub(super) fn op(&mut self, op: Op) -> Result<()> {
++        match op {
++            Op::Nada => self.u8(0),
++            Op::Drop => self.u8(1),
++            Op::SetLast => self.u8(2),
++            Op::Pair => self.u8(3),
++            Op::Index => self.u8(4),
++            Op::Index2 => self.u8(5),
++            Op::Return => self.u8(6),
++            Op::Finish => self.u8(7),
++            Op::Checkpoint => self.u8(8),
++            Op::EnterScope => self.u8(9),
++            Op::LeaveScope => self.u8(10),
++            Op::ParentScope => self.u8(11),
++            Op::RestoreScope => self.u8(12),
++            Op::CheckBool => self.u8(13),
++            Op::CheckInt => self.u8(14),
++            Op::EndTry => self.u8(15),
++            Op::LoopBody => self.u8(16),
++            Op::LoopEnd => self.u8(17),
++            Op::Break => self.u8(18),
++            Op::Continue => self.u8(19),
++            Op::ReceiverIndex => self.u8(20),
++            Op::ReceiverIndex2 => self.u8(21),
++            Op::MatrixDestination => self.u8(22),
++            Op::ReadDestination => self.u8(23),
++            Op::WriteDestination => self.u8(24),
++            Op::Constant(value) => {
++                self.u8(25)?;
++                self.u32(value)
++            }
++            Op::BadNumber(value) => {
++                self.u8(26)?;
++                self.u32(value)
++            }
++            Op::Load(value) => {
++                self.u8(27)?;
++                self.u32(value)
++            }
++            Op::Store(value) => {
++                self.u8(28)?;
++                self.u32(value)
++            }
++            Op::LoadLocal(value) => {
++                self.u8(29)?;
++                self.u32(value)
++            }
++            Op::StoreLocal(value) => {
++                self.u8(30)?;
++                self.u32(value)
++            }
++            Op::List(value) => {
++                self.u8(31)?;
++                self.u32(value)
++            }
++            Op::Field(value) => {
++                self.u8(32)?;
++                self.u32(value)
++            }
++            Op::MapField(value) => {
++                self.u8(33)?;
++                self.u32(value)
++            }
++            Op::Closure(value) => {
++                self.u8(34)?;
++                self.u32(value)
++            }
++            Op::Jump(value) => {
++                self.u8(35)?;
++                self.u32(value)
++            }
++            Op::BranchFalse(value) => {
++                self.u8(36)?;
++                self.u32(value)
++            }
++            Op::Try(value) => {
++                self.u8(37)?;
++                self.u32(value)
++            }
++            Op::Import(value) => {
++                self.u8(38)?;
++                self.u32(value)
++            }
++            Op::LoopEnter(value) => {
++                self.u8(39)?;
++                self.u32(value)
++            }
++            Op::LoopNext(value) => {
++                self.u8(40)?;
++                self.u32(value)
++            }
++            Op::NameDestination(value) => {
++                self.u8(41)?;
++                self.u32(value)
++            }
++            Op::ReceiverName(value) => {
++                self.u8(42)?;
++                self.u32(value)
++            }
++            Op::ReceiverMap(value) => {
++                self.u8(43)?;
++                self.u32(value)
++            }
++            Op::MapDestination(value) => {
++                self.u8(44)?;
++                self.u32(value)
++            }
++            Op::Bool(false) => self.u8(45),
++            Op::Bool(true) => self.u8(46),
++            Op::Slice(false) => self.u8(47),
++            Op::Slice(true) => self.u8(48),
++            Op::ReceiverReadOnly(false) => self.u8(49),
++            Op::ReceiverReadOnly(true) => self.u8(50),
++            Op::IndexDestination(false) => self.u8(51),
++            Op::IndexDestination(true) => self.u8(52),
++            Op::Unary(UnaryOp::Neg) => self.u8(53),
++            Op::Unary(UnaryOp::Not) => self.u8(54),
++            Op::Binary(BinaryOp::Add) => self.u8(55),
++            Op::Binary(BinaryOp::Sub) => self.u8(56),
++            Op::Binary(BinaryOp::Mul) => self.u8(57),
++            Op::Binary(BinaryOp::Div) => self.u8(58),
++            Op::Binary(BinaryOp::Rem) => self.u8(59),
++            Op::Binary(BinaryOp::Eq) => self.u8(60),
++            Op::Binary(BinaryOp::Ne) => self.u8(61),
++            Op::Binary(BinaryOp::Lt) => self.u8(62),
++            Op::Binary(BinaryOp::Le) => self.u8(63),
++            Op::Binary(BinaryOp::Gt) => self.u8(64),
++            Op::Binary(BinaryOp::Ge) => self.u8(65),
++            Op::Binary(BinaryOp::And) => self.u8(66),
++            Op::Binary(BinaryOp::Or) => self.u8(67),
++            Op::Binary(BinaryOp::Contem) => self.u8(68),
++            Op::ShortCircuit {
++                target,
++                value: false,
++            } => {
++                self.u8(69)?;
++                self.u32(target)
++            }
++            Op::ShortCircuit {
++                target,
++                value: true,
++            } => {
++                self.u8(70)?;
++                self.u32(target)
++            }
++            Op::Call { argc, name } => {
++                self.u8(71)?;
++                self.u32(argc)?;
++                self.u32(name)
++            }
++        }
++    }
++}
++impl Reader<'_> {
++    pub(super) fn op(&mut self) -> Result<Op> {
++        Ok(match self.u8()? {
++            0 => Op::Nada,
++            1 => Op::Drop,
++            2 => Op::SetLast,
++            3 => Op::Pair,
++            4 => Op::Index,
++            5 => Op::Index2,
++            6 => Op::Return,
++            7 => Op::Finish,
++            8 => Op::Checkpoint,
++            9 => Op::EnterScope,
++            10 => Op::LeaveScope,
++            11 => Op::ParentScope,
++            12 => Op::RestoreScope,
++            13 => Op::CheckBool,
++            14 => Op::CheckInt,
++            15 => Op::EndTry,
++            16 => Op::LoopBody,
++            17 => Op::LoopEnd,
++            18 => Op::Break,
++            19 => Op::Continue,
++            20 => Op::ReceiverIndex,
++            21 => Op::ReceiverIndex2,
++            22 => Op::MatrixDestination,
++            23 => Op::ReadDestination,
++            24 => Op::WriteDestination,
++            25 => {
++                let operand = self.u32()?;
++                Op::Constant(operand)
++            }
++            26 => {
++                let operand = self.u32()?;
++                Op::BadNumber(operand)
++            }
++            27 => {
++                let operand = self.u32()?;
++                Op::Load(operand)
++            }
++            28 => {
++                let operand = self.u32()?;
++                Op::Store(operand)
++            }
++            29 => {
++                let operand = self.u32()?;
++                Op::LoadLocal(operand)
++            }
++            30 => {
++                let operand = self.u32()?;
++                Op::StoreLocal(operand)
++            }
++            31 => {
++                let operand = self.u32()?;
++                Op::List(operand)
++            }
++            32 => {
++                let operand = self.u32()?;
++                Op::Field(operand)
++            }
++            33 => {
++                let operand = self.u32()?;
++                Op::MapField(operand)
++            }
++            34 => {
++                let operand = self.u32()?;
++                Op::Closure(operand)
++            }
++            35 => {
++                let operand = self.u32()?;
++                Op::Jump(operand)
++            }
++            36 => {
++                let operand = self.u32()?;
++                Op::BranchFalse(operand)
++            }
++            37 => {
++                let operand = self.u32()?;
++                Op::Try(operand)
++            }
++            38 => {
++                let operand = self.u32()?;
++                Op::Import(operand)
++            }
++            39 => {
++                let operand = self.u32()?;
++                Op::LoopEnter(operand)
++            }
++            40 => {
++                let operand = self.u32()?;
++                Op::LoopNext(operand)
++            }
++            41 => {
++                let operand = self.u32()?;
++                Op::NameDestination(operand)
++            }
++            42 => {
++                let operand = self.u32()?;
++                Op::ReceiverName(operand)
++            }
++            43 => {
++                let operand = self.u32()?;
++                Op::ReceiverMap(operand)
++            }
++            44 => {
++                let operand = self.u32()?;
++                Op::MapDestination(operand)
++            }
++            45 => Op::Bool(false),
++            46 => Op::Bool(true),
++            47 => Op::Slice(false),
++            48 => Op::Slice(true),
++            49 => Op::ReceiverReadOnly(false),
++            50 => Op::ReceiverReadOnly(true),
++            51 => Op::IndexDestination(false),
++            52 => Op::IndexDestination(true),
++            53 => Op::Unary(UnaryOp::Neg),
++            54 => Op::Unary(UnaryOp::Not),
++            55 => Op::Binary(BinaryOp::Add),
++            56 => Op::Binary(BinaryOp::Sub),
++            57 => Op::Binary(BinaryOp::Mul),
++            58 => Op::Binary(BinaryOp::Div),
++            59 => Op::Binary(BinaryOp::Rem),
++            60 => Op::Binary(BinaryOp::Eq),
++            61 => Op::Binary(BinaryOp::Ne),
++            62 => Op::Binary(BinaryOp::Lt),
++            63 => Op::Binary(BinaryOp::Le),
++            64 => Op::Binary(BinaryOp::Gt),
++            65 => Op::Binary(BinaryOp::Ge),
++            66 => Op::Binary(BinaryOp::And),
++            67 => Op::Binary(BinaryOp::Or),
++            68 => Op::Binary(BinaryOp::Contem),
++            69 => {
++                let operand = self.u32()?;
++                Op::ShortCircuit {
++                    target: operand,
++                    value: false,
++                }
++            }
++            70 => {
++                let operand = self.u32()?;
++                Op::ShortCircuit {
++                    target: operand,
++                    value: true,
++                }
++            }
++            71 => Op::Call {
++                argc: self.u32()?,
++                name: self.u32()?,
++            },
++            _ => return Err(self.err("opcode EXB inválido")),
++        })
++    }
++}
+--- /dev/null
++++ b/src/runtime/eval/bytecode/format/tests.rs
+@@ -0,0 +1,344 @@
++use super::*;
++#[test]
++fn simple_roundtrip_and_all_workloads_validate() {
++    let mut paths: Vec<_> =
++        std::fs::read_dir(concat!(env!("CARGO_MANIFEST_DIR"), "/benchmarks/programs"))
++            .unwrap()
++            .map(|e| e.unwrap().path())
++            .filter(|p| p.extension().is_some_and(|e| e == "lep"))
++            .collect();
++    paths.sort();
++    for path in paths {
++        let source = std::fs::read_to_string(path).unwrap();
++        let bytes = compile_exb(&source, "test.lep").unwrap();
++        let program = load_exb(&bytes).unwrap();
++        assert_eq!(program.source(), source);
++        assert_eq!(bytes, compile_exb(&source, "test.lep").unwrap());
++    }
++}
++
++fn fixture(source: &str) -> CompiledProgram {
++    load_exb(&compile_exb(source, "test.lep").unwrap()).unwrap()
++}
++fn forged(program: &CompiledProgram) -> Vec<u8> {
++    let mut w = Writer {
++        bytes: vec![],
++        items: MAX_ITEMS,
++    };
++    w.string(&program.source_name).unwrap();
++    w.string(&program.source).unwrap();
++    w.span(program.span).unwrap();
++    w.chunk(&program.code, 0).unwrap();
++    let mut bytes = Vec::new();
++    bytes.extend(MAGIC);
++    bytes.extend(EXB_VERSION.to_le_bytes());
++    bytes.extend(FLAGS.to_le_bytes());
++    bytes.extend((w.bytes.len() as u32).to_le_bytes());
++    bytes.extend(checksum(&w.bytes).to_le_bytes());
++    bytes.extend(w.bytes);
++    bytes
++}
++#[test]
++fn rejects_truncation_version_flags_checksum_and_trailing_data() {
++    let bytes = compile_exb("escreva(1)", "test.lep").unwrap();
++    for end in 0..bytes.len() {
++        assert!(load_exb(&bytes[..end]).is_err(), "truncation {end}");
++    }
++    for offset in [0, 4, 6, 8, 12, HEADER + 1] {
++        let mut broken = bytes.clone();
++        broken[offset] ^= 0x80;
++        assert!(load_exb(&broken).is_err());
++    }
++    let mut broken = bytes;
++    broken.push(0);
++    assert!(load_exb(&broken).is_err());
++}
++#[test]
++fn rejects_valid_checksum_programs_with_unsafe_stack_and_scope_shapes() {
++    let cases = vec![
++        vec![Op::Drop],
++        vec![Op::SetLast],
++        vec![Op::Finish],
++        vec![Op::Constant(u32::MAX)],
++        vec![Op::LoadLocal(0)],
++        vec![Op::Call {
++            argc: u32::MAX,
++            name: 0,
++        }],
++        vec![Op::Jump(u32::MAX)],
++        vec![Op::LeaveScope],
++        vec![Op::RestoreScope],
++        vec![Op::ParentScope],
++        vec![Op::EndTry],
++        vec![Op::LoopBody],
++        vec![Op::LoopEnd],
++        vec![Op::LoopNext(0)],
++        vec![Op::ReadDestination],
++        vec![Op::WriteDestination],
++        vec![Op::Jump(0)],
++        vec![
++            Op::Bool(false),
++            Op::BranchFalse(4),
++            Op::Nada,
++            Op::Jump(4),
++            Op::Nada,
++            Op::Finish,
++        ],
++        vec![
++            Op::Nada,
++            Op::Try(5),
++            Op::Drop,
++            Op::Nada,
++            Op::EndTry,
++            Op::Finish,
++        ],
++    ];
++    for ops in cases {
++        let mut p = fixture("escreva(1)");
++        let c = Rc::get_mut(&mut p.code).unwrap();
++        c.instructions = ops
++            .into_iter()
++            .map(|op| Instruction { op, span: 0 })
++            .collect();
++        assert!(load_exb(&forged(&p)).is_err());
++    }
++}
++#[test]
++fn malformed_metadata_and_decimal_flags_are_rejected() {
++    let mut p = fixture("repita 1 vezes { 1 }");
++    Rc::get_mut(&mut p.code).unwrap().loops[0].exit = u32::MAX;
++    assert!(load_exb(&forged(&p)).is_err());
++    let mut p = fixture("escreva(1)");
++    Rc::get_mut(&mut p.code).unwrap().spans[0].line = u32::MAX;
++    assert!(load_exb(&forged(&p)).is_err());
++    let mut p = fixture("escreva(1)");
++    Rc::get_mut(&mut p.code).unwrap().spans[0].end = u32::MAX as usize;
++    assert!(load_exb(&forged(&p)).is_err());
++    for flags in [1u32, 0x001d0000, 0x01000000, u32::MAX] {
++        let mut bytes = [0; 16];
++        bytes[..4].copy_from_slice(&flags.to_le_bytes());
++        assert!(Numero::from_exb_bytes(bytes).is_none());
++    }
++}
++#[test]
++fn exact_decimal_representation_roundtrips() {
++    for raw in [
++        "0.0000",
++        "1.2300",
++        "79228162514264337593543950335",
++        "0.0000000000000000000000000001",
++        "-0.0",
++        "-123.4500",
++    ] {
++        let n = parse_numero(raw).unwrap();
++        let bytes = n.exb_bytes();
++        assert_eq!(Numero::from_exb_bytes(bytes).unwrap().exb_bytes(), bytes);
++    }
++}
++#[test]
++fn checked_control_flow_is_cancellable_and_source_is_not_reparsed() {
++    let mut p = fixture("escreva(1)");
++    p.source = Rc::from("!!!!!!!!!!");
++    let bytes = forged(&p);
++    let output = crate::runtime::run_exb_with_options(
++        &bytes,
++        "test.exb",
++        "",
++        crate::runtime::ExecutionOptions {
++            backend: ExecutionBackend::Bytecode,
++            ..Default::default()
++        },
++    )
++    .unwrap();
++    assert_eq!(output.stdout, "1\n");
++    let mut p = fixture("1");
++    Rc::get_mut(&mut p.code).unwrap().instructions = vec![
++        Instruction {
++            op: Op::Checkpoint,
++            span: 0,
++        },
++        Instruction {
++            op: Op::Jump(0),
++            span: 0,
++        },
++    ];
++    let bytes = forged(&p);
++    let result = crate::runtime::run_exb_with_options(
++        &bytes,
++        "test.exb",
++        "",
++        crate::runtime::ExecutionOptions {
++            backend: ExecutionBackend::Bytecode,
++            time_limit: Some(Duration::from_millis(1)),
++            ..Default::default()
++        },
++    );
++    assert!(result.unwrap_err().message.contains("tempo esgotado"));
++}
++#[test]
++fn arbitrary_mutations_do_not_panic_the_loader() {
++    let original = compile_exb("f = funcao(x) { x + 1 }\nescreva(f(2))", "test.lep").unwrap();
++    for i in 0..512 {
++        let mut bytes = original.clone();
++        let pos = HEADER + (i * 7919) % (bytes.len() - HEADER);
++        bytes[pos] ^= (i as u8).wrapping_mul(17) | 1;
++        let hash = checksum(&bytes[HEADER..]);
++        bytes[12..20].copy_from_slice(&hash.to_le_bytes());
++        assert!(
++            std::panic::catch_unwind(|| load_exb(&bytes)).is_ok(),
++            "mutation {i}, byte {pos}"
++        );
++    }
++}
++
++#[test]
++fn every_wire_opcode_roundtrips_with_full_operands() {
++    let cases = [
++        Op::Nada,
++        Op::Drop,
++        Op::SetLast,
++        Op::Pair,
++        Op::Index,
++        Op::Index2,
++        Op::Return,
++        Op::Finish,
++        Op::Checkpoint,
++        Op::EnterScope,
++        Op::LeaveScope,
++        Op::ParentScope,
++        Op::RestoreScope,
++        Op::CheckBool,
++        Op::CheckInt,
++        Op::EndTry,
++        Op::LoopBody,
++        Op::LoopEnd,
++        Op::Break,
++        Op::Continue,
++        Op::ReceiverIndex,
++        Op::ReceiverIndex2,
++        Op::MatrixDestination,
++        Op::ReadDestination,
++        Op::WriteDestination,
++        Op::Constant(17),
++        Op::BadNumber(17),
++        Op::Load(17),
++        Op::Store(17),
++        Op::LoadLocal(17),
++        Op::StoreLocal(17),
++        Op::List(17),
++        Op::Field(17),
++        Op::MapField(17),
++        Op::Closure(17),
++        Op::Jump(17),
++        Op::BranchFalse(17),
++        Op::Try(17),
++        Op::Import(17),
++        Op::LoopEnter(17),
++        Op::LoopNext(17),
++        Op::NameDestination(17),
++        Op::ReceiverName(17),
++        Op::ReceiverMap(17),
++        Op::MapDestination(17),
++        Op::Bool(false),
++        Op::Bool(true),
++        Op::Slice(false),
++        Op::Slice(true),
++        Op::ReceiverReadOnly(false),
++        Op::ReceiverReadOnly(true),
++        Op::IndexDestination(false),
++        Op::IndexDestination(true),
++        Op::Unary(UnaryOp::Neg),
++        Op::Unary(UnaryOp::Not),
++        Op::Binary(BinaryOp::Add),
++        Op::Binary(BinaryOp::Sub),
++        Op::Binary(BinaryOp::Mul),
++        Op::Binary(BinaryOp::Div),
++        Op::Binary(BinaryOp::Rem),
++        Op::Binary(BinaryOp::Eq),
++        Op::Binary(BinaryOp::Ne),
++        Op::Binary(BinaryOp::Lt),
++        Op::Binary(BinaryOp::Le),
++        Op::Binary(BinaryOp::Gt),
++        Op::Binary(BinaryOp::Ge),
++        Op::Binary(BinaryOp::And),
++        Op::Binary(BinaryOp::Or),
++        Op::Binary(BinaryOp::Contem),
++        Op::ShortCircuit {
++            target: 19,
++            value: false,
++        },
++        Op::ShortCircuit {
++            target: 19,
++            value: true,
++        },
++        Op::Call {
++            argc: u32::MAX,
++            name: u32::MAX,
++        },
++    ];
++    for (tag, op) in cases.into_iter().enumerate() {
++        let mut w = Writer {
++            bytes: vec![],
++            items: MAX_ITEMS,
++        };
++        w.op(op).unwrap();
++        assert_eq!(
++            w.bytes[0], tag as u8,
++            "EXB v1 opcode assignments are pinned"
++        );
++        let mut r = Reader::new(&w.bytes);
++        let decoded = r.op().unwrap();
++        assert_eq!(decoded, op);
++        assert_eq!(r.pos, w.bytes.len());
++        let mut out = Writer {
++            bytes: vec![],
++            items: MAX_ITEMS,
++        };
++        out.op(decoded).unwrap();
++        assert_eq!(out.bytes, w.bytes);
++    }
++    let mut r = Reader::new(&[255]);
++    assert!(r.op().is_err());
++}
++
++#[test]
++fn runtime_layout_remains_unpacked_and_file_limits_are_bounded() {
++    assert_eq!(std::mem::size_of::<Instruction>(), 16);
++    assert!(load_exb(&vec![0; EXB_MAX_BYTES + 1]).is_err());
++    let mut bytes = compile_exb("1", "test.lep").unwrap();
++    bytes.push(0);
++    let len = (bytes.len() - HEADER) as u32;
++    bytes[8..12].copy_from_slice(&len.to_le_bytes());
++    let hash = checksum(&bytes[HEADER..]);
++    bytes[12..20].copy_from_slice(&hash.to_le_bytes());
++    match load_exb(&bytes) {
++        Err(e) => assert!(e.message.contains("dados após")),
++        Ok(_) => panic!("trailing byte accepted"),
++    }
++}
++
++#[test]
++fn version_one_golden_file_remains_compatible() {
++    let hex = "4558420001000300d7000000e56a91e5538f756c0a000000676f6c64656e2e6c65700a000000657363726576612831290100000001000000000000000a000000040000000100000001000000000000000a0000000100000001000000000000000700000001000000090000000800000009000000000000000000000000000000000000000100000007000000657363726576610100000000000000000100000000000000000000000000000000000000000000000700000008000000001b000000000100000019000000000200000047010000000000000000000000010000000000030000000703000000";
++    let bytes: Vec<u8> = hex
++        .as_bytes()
++        .as_chunks::<2>()
++        .0
++        .iter()
++        .map(|pair| u8::from_str_radix(std::str::from_utf8(pair).unwrap(), 16).unwrap())
++        .collect();
++    let program = load_exb(&bytes).unwrap();
++    assert_eq!(program.source_name(), "golden.lep");
++    assert_eq!(forged(&program), bytes);
++    let result = crate::runtime::run_compiled_with_options(
++        &program,
++        "golden.exb",
++        "",
++        ExecutionOptions {
++            backend: ExecutionBackend::Bytecode,
++            ..Default::default()
++        },
++    )
++    .unwrap();
++    assert_eq!(result.stdout, "1\n");
++}
+--- /dev/null
++++ b/src/runtime/eval/bytecode/format/verify.rs
+@@ -0,0 +1,498 @@
++//! Bounded control-flow verification before untrusted file instructions reach
++//! VM paths that assume compiler-owned stack/scope invariants.
++use super::*;
++use std::collections::VecDeque;
++
++const MAX_WORK: usize = 4_000_000;
++#[derive(Clone, PartialEq, Eq)]
++enum Scope {
++    Root,
++    Block,
++    Loop(u32),
++    Parent(u32),
++}
++#[derive(Clone, PartialEq, Eq)]
++struct Loop {
++    id: u32,
++    values: usize,
++    dest: usize,
++    scopes: usize,
++    handlers: usize,
++    active: bool,
++}
++#[derive(Clone, PartialEq, Eq)]
++struct Handler {
++    target: usize,
++    values: usize,
++    dest: usize,
++    scopes: usize,
++    loops: usize,
++}
++#[derive(Clone, PartialEq, Eq)]
++struct State {
++    values: usize,
++    dest: usize,
++    scopes: Vec<Scope>,
++    loops: Vec<Loop>,
++    handlers: Vec<Handler>,
++}
++impl State {
++    fn effect(&mut self, pop: usize, push: usize, dp: usize, dpush: usize) -> Result<()> {
++        let values = self
++            .values
++            .checked_sub(pop)
++            .ok_or_else(|| error("pilha de valores EXB insuficiente"))?;
++        let dest = self
++            .dest
++            .checked_sub(dp)
++            .ok_or_else(|| error("pilha de destinos EXB insuficiente"))?;
++        if self
++            .handlers
++            .iter()
++            .any(|h| values < h.values || dest < h.dest)
++            || self
++                .loops
++                .iter()
++                .any(|l| values < l.values || dest < l.dest)
++        {
++            return Err(error(
++                "operação EXB atravessa a base de uma pilha protegida",
++            ));
++        }
++        self.values = values
++            .checked_add(push)
++            .ok_or_else(|| error("pilha EXB grande demais"))?;
++        self.dest = dest
++            .checked_add(dpush)
++            .ok_or_else(|| error("pilha EXB grande demais"))?;
++        Ok(())
++    }
++    fn scope_floor(&self, depth: usize) -> Result<()> {
++        if self.handlers.iter().any(|h| h.scopes > depth)
++            || self.loops.iter().any(|l| l.scopes + 1 > depth)
++        {
++            return Err(error("escopo EXB atravessa estrutura protegida"));
++        }
++        Ok(())
++    }
++    fn weight(&self) -> usize {
++        1 + self.scopes.len() + self.loops.len() * 6 + self.handlers.len() * 5
++    }
++}
++
++pub(super) fn program(program: &CompiledProgram) -> Result<()> {
++    let mut spans = vec![program.span];
++    let mut work = MAX_WORK;
++    chunk(&program.code, 0, 0, &mut work, &mut spans)?;
++    // Validate UTF-8 offsets first, then line/character columns in one source
++    // traversal rather than rescanning long lines for every span.
++    spans.retain(|s| *s != Span::default());
++    for s in &spans {
++        if s.start > s.end
++            || s.end > program.source.len()
++            || !program.source.is_char_boundary(s.start)
++            || !program.source.is_char_boundary(s.end)
++        {
++            return Err(error("posição EXB fora do fonte"));
++        }
++    }
++    spans.sort_unstable_by_key(|s| s.start);
++    let mut spans = spans.into_iter().peekable();
++    let (mut line, mut col) = (1, 1);
++    for (offset, ch) in program
++        .source
++        .char_indices()
++        .chain(std::iter::once((program.source.len(), '\0')))
++    {
++        while spans.peek().is_some_and(|s| s.start == offset) {
++            let s = spans.next().unwrap();
++            if s.line != line || s.col != col {
++                return Err(error("linha/coluna EXB inconsistente com o fonte"));
++            }
++        }
++        if ch == '\n' {
++            line += 1;
++            col = 1;
++        } else {
++            col += 1;
++        }
++    }
++    if spans.next().is_some() {
++        return Err(error("posição EXB inválida"));
++    }
++    Ok(())
++}
++fn index(id: u32, len: usize) -> Result<()> {
++    if id as usize >= len {
++        Err(error("índice EXB fora da tabela"))
++    } else {
++        Ok(())
++    }
++}
++fn chunk(
++    code: &Chunk,
++    params: usize,
++    depth: usize,
++    work: &mut usize,
++    spans: &mut Vec<Span>,
++) -> Result<()> {
++    if depth > MAX_DEPTH || code.instructions.is_empty() {
++        return Err(error("bloco EXB vazio ou profundo demais"));
++    }
++    spans.extend_from_slice(&code.spans);
++    for f in &code.functions {
++        spans.push(f.span);
++        spans.extend(f.params.iter().map(|p| p.span));
++        chunk(&f.code, f.params.len(), depth + 1, work, spans)?;
++    }
++    spans.extend(code.imports.iter().map(|i| i.span));
++    let n = code.instructions.len();
++    for (id, l) in code.loops.iter().enumerate() {
++        spans.extend([l.first_span, l.second_span]);
++        index(l.exit, n)?;
++        index(l.next, n)?;
++        if l.exit <= l.next || !matches!(code.instructions[l.exit as usize].op, Op::LoopEnd) {
++            return Err(error("destinos de laço EXB inválidos"));
++        }
++        match l.kind {
++            LoopKind::While
++                if !matches!(code.instructions[l.next as usize].op, Op::ParentScope) =>
++            {
++                return Err(error("condição de laço EXB inválida"));
++            }
++            LoopKind::Repeat | LoopKind::Range | LoopKind::Items if !matches!(code.instructions[l.next as usize].op, Op::LoopNext(i) if i as usize == id) =>
++            {
++                return Err(error("avanço de laço EXB inválido"));
++            }
++            _ => {}
++        }
++        if let Some(v) = l.var {
++            index(v, code.names.len())?;
++        }
++    }
++    for (ip, i) in code.instructions.iter().enumerate() {
++        index(i.span, code.spans.len())?;
++        if code.spans[i.span as usize] == Span::default() && !matches!(i.op, Op::Nada | Op::Finish)
++        {
++            return Err(error("instrução EXB sem posição de fonte"));
++        }
++        match i.op {
++            Op::Constant(id) => index(id, code.constants.len())?,
++            Op::BadNumber(id)
++            | Op::Load(id)
++            | Op::Store(id)
++            | Op::Field(id)
++            | Op::MapField(id)
++            | Op::NameDestination(id)
++            | Op::ReceiverName(id)
++            | Op::ReceiverMap(id)
++            | Op::MapDestination(id) => index(id, code.names.len())?,
++            Op::Call { name, .. } => index(name, code.names.len())?,
++            Op::LoadLocal(id) | Op::StoreLocal(id) => index(id, params)?,
++            Op::Closure(id) => index(id, code.functions.len())?,
++            Op::Import(id) => index(id, code.imports.len())?,
++            Op::Jump(id)
++            | Op::BranchFalse(id)
++            | Op::ShortCircuit { target: id, .. }
++            | Op::Try(id) => index(id, n)?,
++            Op::LoopEnter(id) => {
++                index(id, code.loops.len())?;
++                if code.loops[id as usize].next as usize != ip + 1 {
++                    return Err(error("entrada de laço EXB inválida"));
++                }
++            }
++            Op::LoopNext(id) => {
++                index(id, code.loops.len())?;
++                if code.loops[id as usize].next as usize != ip
++                    || matches!(code.loops[id as usize].kind, LoopKind::While)
++                {
++                    return Err(error("avanço de laço EXB inválido"));
++                }
++            }
++            _ => {}
++        }
++    }
++    let initial = State {
++        values: 0,
++        dest: 0,
++        scopes: vec![Scope::Root],
++        loops: vec![],
++        handlers: vec![],
++    };
++    let mut queue = VecDeque::from([(0usize, initial, None::<usize>)]);
++    let mut edges: Vec<Vec<usize>> = vec![Vec::new(); n];
++    let mut seen: HashMap<usize, State> = HashMap::new();
++    while let Some((ip, mut s, from)) = queue.pop_front() {
++        *work = work
++            .checked_sub(s.weight())
++            .ok_or_else(|| error("verificação EXB complexa demais"))?;
++        if ip >= n {
++            return Err(error("fluxo EXB sai do bloco sem terminar"));
++        }
++        if let Some(from) = from {
++            edges[from].push(ip);
++        }
++        let op = code.instructions[ip].op;
++        if matches!(op, Op::LoopNext(_) | Op::ParentScope | Op::LoopBody)
++            && let Some(l) = s.loops.last_mut()
++        {
++            l.active = false;
++        }
++        if let Some(old) = seen.get(&ip) {
++            if old != &s {
++                return Err(error(format!(
++                    "pilhas/escopos EXB incompatíveis na instrução {ip}"
++                )));
++            }
++            continue;
++        }
++        *work = work
++            .checked_sub(s.weight())
++            .ok_or_else(|| error("verificação EXB complexa demais"))?;
++        seen.insert(ip, s.clone());
++        // Every runtime failure may unwind to the nearest protected expression.
++        if let Some(h) = s.handlers.last().cloned() {
++            let mut catch = s.clone();
++            catch.handlers.pop();
++            catch.values = h.values;
++            catch.dest = h.dest;
++            catch.scopes.truncate(h.scopes);
++            catch.loops.truncate(h.loops);
++            queue.push_back((h.target, catch, Some(ip)));
++        }
++        let mut fallthrough = true;
++        match op {
++            Op::Nada | Op::Bool(_) | Op::Constant(_) | Op::Load(_) | Op::Closure(_) => {
++                s.effect(0, 1, 0, 0)?
++            }
++            Op::LoadLocal(_) | Op::StoreLocal(_) => {
++                if s.scopes != [Scope::Root] {
++                    return Err(error("slot EXB fora do escopo da função"));
++                }
++                s.effect(
++                    usize::from(matches!(op, Op::StoreLocal(_))),
++                    usize::from(matches!(op, Op::LoadLocal(_))),
++                    0,
++                    0,
++                )?;
++            }
++            Op::Store(_) | Op::Drop => s.effect(1, 0, 0, 0)?,
++            Op::SetLast | Op::Pair | Op::Binary(_) | Op::Index => s.effect(2, 1, 0, 0)?,
++            Op::List(count) => s.effect(count as usize, 1, 0, 0)?,
++            Op::Unary(_) | Op::Field(_) | Op::MapField(_) | Op::CheckBool => {
++                s.effect(1, 1, 0, 0)?
++            }
++            Op::Index2 => s.effect(3, 1, 0, 0)?,
++            Op::Slice(end) => s.effect(if end { 3 } else { 2 }, 1, 0, 0)?,
++            Op::Call { argc, .. } => s.effect(
++                (argc as usize)
++                    .checked_add(1)
++                    .ok_or_else(|| error("aridade EXB fora do intervalo"))?,
++                1,
++                0,
++                0,
++            )?,
++            Op::Return => {
++                s.effect(1, 0, 0, 0)?;
++                fallthrough = false;
++            }
++            Op::Finish => {
++                if s.values != 1
++                    || s.dest != 0
++                    || s.scopes != [Scope::Root]
++                    || !s.loops.is_empty()
++                    || !s.handlers.is_empty()
++                {
++                    return Err(error("término EXB com pilhas abertas"));
++                }
++                fallthrough = false;
++            }
++            Op::BadNumber(_) => fallthrough = false,
++            Op::Checkpoint | Op::Import(_) => {}
++            Op::CheckInt => {
++                if s.values == 0 {
++                    return Err(error("pilha EXB vazia na validação de inteiro"));
++                }
++            }
++            Op::EnterScope => s.scopes.push(Scope::Block),
++            Op::LeaveScope => {
++                if s.scopes.pop() != Some(Scope::Block) {
++                    return Err(error("saída de escopo EXB inválida"));
++                }
++                s.scope_floor(s.scopes.len())?;
++            }
++            Op::ParentScope => {
++                let l = s
++                    .loops
++                    .last()
++                    .ok_or_else(|| error("condição EXB sem laço"))?;
++                if !matches!(code.loops[l.id as usize].kind, LoopKind::While)
++                    || s.scopes.last() != Some(&Scope::Loop(l.id))
++                    || s.scopes.len() != l.scopes + 1
++                {
++                    return Err(error("escopo de condição EXB inválido"));
++                }
++                s.scopes.push(Scope::Parent(l.id));
++            }
++            Op::RestoreScope => {
++                let l = s
++                    .loops
++                    .last()
++                    .ok_or_else(|| error("restauração EXB sem laço"))?;
++                if s.scopes.pop() != Some(Scope::Parent(l.id)) {
++                    return Err(error("restauração de escopo EXB inválida"));
++                }
++                s.scope_floor(s.scopes.len())?;
++            }
++            Op::Jump(target) => {
++                queue.push_back((target as usize, s.clone(), Some(ip)));
++                fallthrough = false;
++            }
++            Op::BranchFalse(target) => {
++                s.effect(1, 0, 0, 0)?;
++                queue.push_back((target as usize, s.clone(), Some(ip)));
++            }
++            Op::ShortCircuit { target, .. } => {
++                s.effect(1, 0, 0, 0)?;
++                let mut jump = s.clone();
++                jump.effect(0, 1, 0, 0)?;
++                queue.push_back((target as usize, jump, Some(ip)));
++            }
++            Op::Try(target) => s.handlers.push(Handler {
++                target: target as usize,
++                values: s.values,
++                dest: s.dest,
++                scopes: s.scopes.len(),
++                loops: s.loops.len(),
++            }),
++            Op::EndTry => {
++                if s.handlers.pop().is_none()
++                    || s.loops.iter().any(|l| l.handlers > s.handlers.len())
++                {
++                    return Err(error("fim de proteção EXB inválido"));
++                }
++            }
++            Op::LoopEnter(id) => {
++                let spec = &code.loops[id as usize];
++                let count = match spec.kind {
++                    LoopKind::While => 0,
++                    LoopKind::Range => 2,
++                    _ => 1,
++                };
++                s.effect(count, 0, 0, 0)?;
++                s.loops.push(Loop {
++                    id,
++                    values: s.values,
++                    dest: s.dest,
++                    scopes: s.scopes.len(),
++                    handlers: s.handlers.len(),
++                    active: false,
++                });
++                s.scopes.push(Scope::Loop(id));
++            }
++            Op::LoopNext(id) => {
++                let l = s.loops.last().ok_or_else(|| error("avanço EXB sem laço"))?;
++                if l.id != id
++                    || s.values != l.values
++                    || s.dest != l.dest
++                    || s.scopes.len() != l.scopes + 1
++                    || s.handlers.len() != l.handlers
++                {
++                    return Err(error("pilhas EXB desequilibradas no laço"));
++                }
++                queue.push_back((code.loops[id as usize].exit as usize, s.clone(), Some(ip)));
++            }
++            Op::LoopBody => {
++                s.loops
++                    .last_mut()
++                    .ok_or_else(|| error("corpo EXB sem laço"))?
++                    .active = true
++            }
++            Op::LoopEnd => {
++                let l = s.loops.pop().ok_or_else(|| error("fim EXB sem laço"))?;
++                if code.loops[l.id as usize].exit as usize != ip
++                    || s.values != l.values
++                    || s.dest != l.dest
++                    || s.scopes.len() != l.scopes + 1
++                    || s.handlers.len() != l.handlers
++                {
++                    return Err(error("fim de laço EXB desequilibrado"));
++                }
++                s.scopes.truncate(l.scopes);
++            }
++            Op::Break | Op::Continue => {
++                fallthrough = false;
++                if let Some(i) = s.loops.iter().rposition(|l| l.active) {
++                    s.loops.truncate(i + 1);
++                    let l = s.loops[i].clone();
++                    s.loops[i].active = false;
++                    if l.handlers > s.handlers.len() || l.scopes + 1 > s.scopes.len() {
++                        return Err(error("desvio de laço EXB inválido"));
++                    }
++                    s.handlers.truncate(l.handlers);
++                    s.scopes.truncate(l.scopes + 1);
++                    s.values = l.values;
++                    s.dest = l.dest;
++                    let spec = &code.loops[l.id as usize];
++                    queue.push_back((
++                        if matches!(op, Op::Break) {
++                            spec.exit
++                        } else {
++                            spec.next
++                        } as usize,
++                        s.clone(),
++                        Some(ip),
++                    ));
++                }
++            }
++            Op::NameDestination(_) | Op::ReceiverReadOnly(_) => s.effect(0, 0, 0, 1)?,
++            Op::ReceiverName(_) => s.effect(0, 1, 0, 1)?,
++            Op::IndexDestination(_) => s.effect(2, 0, 1, 1)?,
++            Op::ReceiverIndex => s.effect(2, 1, 1, 1)?,
++            Op::ReceiverIndex2 => s.effect(3, 1, 0, 1)?,
++            Op::MatrixDestination => s.effect(3, 0, 0, 1)?,
++            Op::ReceiverMap(_) => s.effect(1, 1, 0, 1)?,
++            Op::MapDestination(_) => s.effect(1, 0, 0, 1)?,
++            Op::ReadDestination => {
++                if s.dest == 0 {
++                    return Err(error("leitura EXB sem destino"));
++                }
++                s.effect(0, 1, 0, 0)?;
++            }
++            Op::WriteDestination => s.effect(1, 0, 1, 0)?,
++        }
++        if fallthrough {
++            queue.push_back((ip + 1, s, Some(ip)));
++        }
++    }
++    // Every reachable cycle must pass an execution checkpoint. Otherwise a
++    // hand-written Jump cycle could bypass the VM's cooperative cancellation.
++    let live = |ip: usize| !matches!(code.instructions[ip].op, Op::Checkpoint);
++    let mut indegree = vec![0usize; n];
++    for (from, targets) in edges.iter().enumerate() {
++        if live(from) {
++            for &to in targets {
++                if live(to) {
++                    indegree[to] += 1;
++                }
++            }
++        }
++    }
++    let mut ready: VecDeque<_> = (0..n).filter(|&ip| live(ip) && indegree[ip] == 0).collect();
++    let mut removed = 0;
++    while let Some(from) = ready.pop_front() {
++        removed += 1;
++        for &to in &edges[from] {
++            if live(to) {
++                indegree[to] -= 1;
++                if indegree[to] == 0 {
++                    ready.push_back(to);
++                }
++            }
++        }
++    }
++    if removed != (0..n).filter(|&ip| live(ip)).count() {
++        return Err(error("ciclo EXB sem checkpoint de execução"));
++    }
++    Ok(())
++}
+--- a/src/runtime/eval/bytecode/mod.rs
++++ b/src/runtime/eval/bytecode/mod.rs
+@@ -1,6 +1,7 @@
+ //! Bytecode compilation and execution. No instruction retains an AST expression.
+ mod compiler;
+ mod execute;
++pub(super) mod format;
+ 
+ use super::super::value::FunctionBody;
+ use super::assignment::Destination;
+@@ -30,7 +31,7 @@
+         .unwrap_or_default()
+ }
+ 
+-#[derive(Clone, Copy)]
++#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+ enum Op {
+     Nada,
+     Bool(bool),
+--- /dev/null
++++ b/src/runtime/eval/exb.rs
+@@ -0,0 +1,204 @@
++//! Execution entry points for already verified modules. No source parsing here.
++use super::bytecode::format::{self, CompiledProgram};
++use super::*;
++
++fn load_error(error: format::ExbError, file: &str) -> RuntimeError {
++    RuntimeError {
++        message: error.to_string(),
++        file: file.into(),
++        span: Span::default(),
++        stack: vec![],
++    }
++}
++
++pub fn run_exb_with_options(
++    bytes: &[u8],
++    execution_file: &str,
++    stdin: &str,
++    options: ExecutionOptions,
++) -> Result<ExecutionOutput, RuntimeError> {
++    let program = format::load_exb(bytes).map_err(|e| load_error(e, execution_file))?;
++    run_compiled_with_options(&program, execution_file, stdin, options)
++}
++pub fn run_compiled_with_options(
++    program: &CompiledProgram,
++    execution_file: &str,
++    stdin: &str,
++    options: ExecutionOptions,
++) -> Result<ExecutionOutput, RuntimeError> {
++    let mut out = Vec::new();
++    let mut err = Vec::new();
++    let mut input = io::Cursor::new(stdin);
++    let code = run(
++        program,
++        execution_file,
++        Box::new(NoopHook),
++        &mut input,
++        &mut out,
++        &mut err,
++        options,
++        None,
++        false,
++        &[],
++    )?;
++    Ok(ExecutionOutput {
++        stdout: String::from_utf8_lossy(&out).into_owned(),
++        stderr: String::from_utf8_lossy(&err).into_owned(),
++        exit_code: code,
++    })
++}
++
++#[derive(Debug, Clone, Copy, PartialEq, Eq)]
++pub enum ExbRunMode {
++    Run,
++    Debug,
++    Marker,
++}
++
++pub(super) fn is_exb_path(path: &Path) -> bool {
++    path.extension()
++        .and_then(|s| s.to_str())
++        .is_some_and(|s| s.eq_ignore_ascii_case("exb"))
++}
++
++pub fn run_exb_file_args(
++    path: &str,
++    args: &[String],
++    mode: ExbRunMode,
++) -> Result<i32, RuntimeError> {
++    let program = format::read_exb(Path::new(path)).map_err(|e| load_error(e, path))?;
++    let hook: Box<dyn DebugHook> = if mode == ExbRunMode::Debug {
++        Box::new(super::super::debug::CliDebugger::new())
++    } else {
++        Box::new(NoopHook)
++    };
++    let mut out = io::stdout();
++    let mut err = io::stderr();
++    if mode == ExbRunMode::Marker {
++        let mut host = super::super::leia::MarkerLeiaHost {
++            stdin: io::stdin().lock(),
++        };
++        run(
++            &program,
++            path,
++            hook,
++            &mut io::Cursor::new(""),
++            &mut out,
++            &mut err,
++            ExecutionOptions::default(),
++            Some(&mut host),
++            true,
++            args,
++        )
++    } else {
++        run(
++            &program,
++            path,
++            hook,
++            &mut ConsoleInput,
++            &mut out,
++            &mut err,
++            ExecutionOptions::default(),
++            None,
++            true,
++            args,
++        )
++    }
++}
++
++fn run<'a>(
++    program: &CompiledProgram,
++    file: &str,
++    hook: Box<dyn DebugHook>,
++    input: &'a mut dyn LineInput,
++    out: &'a mut dyn Write,
++    err: &'a mut dyn Write,
++    options: ExecutionOptions,
++    leia: Option<&'a mut dyn LeiaHost>,
++    graphics: bool,
++    args: &[String],
++) -> Result<i32, RuntimeError> {
++    if options.backend != ExecutionBackend::Bytecode {
++        return Err(RuntimeError {
++            message: "arquivos .exb exigem o backend bytecode".into(),
++            file: file.into(),
++            span: Span::default(),
++            stack: vec![],
++        });
++    }
++    if options
++        .time_limit
++        .is_some_and(|d| Instant::now().checked_add(d).is_none())
++    {
++        return Err(RuntimeError {
++            message: "limite de tempo fora do intervalo".into(),
++            file: file.into(),
++            span: Span::default(),
++            stack: vec![],
++        });
++    }
++    let mut vm = Vm::new(
++        &program.source_name,
++        "",
++        hook,
++        input,
++        out,
++        err,
++        options.workspace_root,
++        options.time_limit,
++        leia,
++        None,
++        graphics,
++        None,
++        args,
++    );
++    vm.source = Rc::clone(&program.source);
++    vm.base_dir = base_dir_of(file);
++    vm.backend = ExecutionBackend::Bytecode;
++    vm.max_matrix_cells = options.max_matrix_cells;
++    let env = Env::child(&vm.builtins, FrameKind::Module);
++    let result = vm.eval_loaded_module(program, &env);
++    drop(env);
++    vm.liberar_frames();
++    match result {
++        Ok(()) => Ok(0),
++        Err(EvalError::Quit(code)) => Ok(code),
++        Err(EvalError::Runtime(e)) => Err(e),
++        Err(EvalError::Return { span, .. }) => Err(RuntimeError {
++            message: "retorne só pode ser usado numa função".into(),
++            file: program.source_name.clone(),
++            span,
++            stack: vec![],
++        }),
++        Err(EvalError::Break { span }) => Err(RuntimeError {
++            message: "pare só pode ser usado num laço".into(),
++            file: program.source_name.clone(),
++            span,
++            stack: vec![],
++        }),
++        Err(EvalError::Continue { span }) => Err(RuntimeError {
++            message: "continue só pode ser usado num laço".into(),
++            file: program.source_name.clone(),
++            span,
++            stack: vec![],
++        }),
++    }
++}
++impl Vm<'_, '_> {
++    pub(super) fn eval_loaded_module(
++        &mut self,
++        program: &CompiledProgram,
++        env: &Rc<RefCell<Env>>,
++    ) -> Result<(), EvalError> {
++        self.stack.push(CallFrame {
++            name: "<modulo>".into(),
++            file: self.file.clone(),
++            span: program.span,
++        });
++        let result = self
++            .execute_loaded_module(Rc::clone(&program.code), env)
++            .map(|_| ());
++        self.stack.pop();
++        self.retorne_so_em_funcao(result)
++    }
++}
+--- a/src/runtime/mod.rs
++++ b/src/runtime/mod.rs
+@@ -29,10 +29,12 @@
+ };
+ pub use error::{CallFrame, RuntimeError};
+ pub use eval::{
+-    DEFAULT_MAX_MATRIX_CELLS, ExecutionBackend, ExecutionOptions, ExecutionOutput, debug_source,
+-    debug_source_args, run_source, run_source_args, run_source_marcador, run_source_marcador_args,
+-    run_to_string, run_to_string_with, run_to_strings_with, run_with_hook, run_with_hosts,
+-    run_with_leia_host, run_with_options,
++    CompiledProgram, DEFAULT_MAX_MATRIX_CELLS, EXB_MAX_BYTES, EXB_VERSION, ExbError, ExbRunMode,
++    ExecutionBackend, ExecutionOptions, ExecutionOutput, compile_exb, debug_source,
++    debug_source_args, load_exb, read_exb, run_compiled_with_options, run_exb_file_args,
++    run_exb_with_options, run_source, run_source_args, run_source_marcador,
++    run_source_marcador_args, run_to_string, run_to_string_with, run_to_strings_with,
++    run_with_hook, run_with_hosts, run_with_leia_host, run_with_options,
+ };
+ pub use folha::{CurvaPronta, FolhaPronta, GraficoPronto, pintar};
+ pub use graf::{OpGraf, TelaGrafica};
+--- a/src/runtime/numero.rs
++++ b/src/runtime/numero.rs
+@@ -39,6 +39,18 @@
+ pub struct Numero(Decimal);
+ 
+ impl Numero {
++    pub(crate) fn exb_bytes(self) -> [u8; 16] {
++        self.0.serialize()
++    }
++
++    pub(crate) fn from_exb_bytes(bytes: [u8; 16]) -> Option<Self> {
++        let flags = u32::from_le_bytes(bytes[..4].try_into().unwrap());
++        if flags & !0x80ff_0000 != 0 || (flags >> 16) & 0xff > 28 {
++            return None;
++        }
++        Some(Self(Decimal::deserialize(bytes)))
++    }
++
+     pub fn from_i64(n: i64) -> Self {
+         Self(Decimal::from(n))
+     }
+--- a/tests/bytecode_conformance.rs
++++ b/tests/bytecode_conformance.rs
+@@ -15,27 +15,40 @@
+     )
+ }
+ fn equivalent(source: &str) {
+-    match (
+-        outcome(source, ExecutionBackend::Ast),
+-        outcome(source, ExecutionBackend::Bytecode),
+-    ) {
+-        (Ok(ast), Ok(bytecode)) => assert_eq!(ast, bytecode, "{source}"),
+-        (Err(ast), Err(bytecode)) => {
+-            assert_eq!(
+-                (&ast.message, &ast.file, ast.span),
+-                (&bytecode.message, &bytecode.file, bytecode.span),
+-                "{source}"
+-            );
+-            let frames = |error: &RuntimeError| {
+-                error
+-                    .stack
+-                    .iter()
+-                    .map(|frame| (frame.name.clone(), frame.file.clone(), frame.span))
+-                    .collect::<Vec<_>>()
+-            };
+-            assert_eq!(frames(&ast), frames(&bytecode), "{source}");
++    let expected = outcome(source, ExecutionBackend::Ast);
++    let mut actual = vec![outcome(source, ExecutionBackend::Bytecode)];
++    if expressa::parser::parse(source).is_ok() {
++        let bytes = expressa::runtime::compile_exb(source, "conformance.lep").unwrap();
++        actual.push(expressa::runtime::run_exb_with_options(
++            &bytes,
++            "conformance.lep",
++            "Ana\n",
++            ExecutionOptions {
++                backend: ExecutionBackend::Bytecode,
++                ..ExecutionOptions::default()
++            },
++        ));
++    }
++    for actual in actual {
++        match (&expected, &actual) {
++            (Ok(ast), Ok(bytecode)) => assert_eq!(ast, bytecode, "{source}"),
++            (Err(ast), Err(bytecode)) => {
++                assert_eq!(
++                    (&ast.message, &ast.file, ast.span),
++                    (&bytecode.message, &bytecode.file, bytecode.span),
++                    "{source}"
++                );
++                let frames = |error: &RuntimeError| {
++                    error
++                        .stack
++                        .iter()
++                        .map(|frame| (frame.name.clone(), frame.file.clone(), frame.span))
++                        .collect::<Vec<_>>()
++                };
++                assert_eq!(frames(ast), frames(bytecode), "{source}");
++            }
++            _ => panic!("{source}\nAST: {expected:?}\nBytecode: {actual:?}"),
+         }
+-        (ast, bytecode) => panic!("{source}\nAST: {ast:?}\nBytecode: {bytecode:?}"),
+     }
+ }
+ 
+--- /dev/null
++++ b/tests/exb.rs
+@@ -0,0 +1,239 @@
++use expressa::runtime::{
++    ExecutionBackend, ExecutionOptions, compile_exb, load_exb, run_compiled_with_options,
++    run_exb_with_options, run_with_options,
++};
++use std::path::PathBuf;
++use std::sync::atomic::{AtomicU64, Ordering};
++struct Temp(PathBuf);
++impl Temp {
++    fn new() -> Self {
++        static NEXT: AtomicU64 = AtomicU64::new(0);
++        let p = std::env::temp_dir().join(format!(
++            "expressa-exb-{}-{}",
++            std::process::id(),
++            NEXT.fetch_add(1, Ordering::Relaxed)
++        ));
++        std::fs::create_dir_all(&p).unwrap();
++        Self(p)
++    }
++}
++impl Drop for Temp {
++    fn drop(&mut self) {
++        let _ = std::fs::remove_dir_all(&self.0);
++    }
++}
++fn options() -> ExecutionOptions {
++    ExecutionOptions {
++        backend: ExecutionBackend::Bytecode,
++        ..Default::default()
++    }
++}
++fn cli() -> std::process::Command {
++    let mut c = std::process::Command::new(env!("CARGO_BIN_EXE_expressa"));
++    c.env("EXPRESSA_BACKEND", "bytecode")
++        .env("EXPRESSA_NUMEROS", "en")
++        .env("EXPRESSA_ARITMETICA", "decimal");
++    c
++}
++#[test]
++fn compiled_execution_matches_source_values_input_exit_codes_and_reuses_fresh_state() {
++    for source in [
++        "escreva(leia(\"nome? \"))\nescreva_erro(\"erro\")\nsaia(7)",
++        "f = funcao(a) { avalie(\"a = a + 1\") a }\nescreva(f(2))",
++        "make = funcao(a) { funcao() { a } }\nescreva(make(9)())",
++        "escreva(0.1234567890123456789012345678 + 0.0000000000000000000000000001)",
++        "xs = [0]\nxs[0] += 1\nescreva(xs)",
++        "f = funcao(n) { se n == 0 { 0 } senao { f(n - 1) + 1 } }\nescreva(f(2000))",
++    ] {
++        let expected = run_with_options(source, "sample.lep", "Ana\n", options()).unwrap();
++        let bytes = compile_exb(source, "sample.lep").unwrap();
++        let loaded = load_exb(&bytes).unwrap();
++        for _ in 0..2 {
++            assert_eq!(
++                run_compiled_with_options(&loaded, "sample.exb", "Ana\n", options()).unwrap(),
++                expected
++            );
++        }
++    }
++}
++#[test]
++fn cli_compiles_without_executing_and_runs_without_the_lep() {
++    let t = Temp::new();
++    let source = t.0.join("main.lep");
++    let output = t.0.join("main.exb");
++    std::fs::write(&source, "escreva(argumentos)\nsaia(7)").unwrap();
++    let result = cli().arg("compilar").arg(&source).output().unwrap();
++    assert!(result.status.success(), "{:?}", result);
++    assert!(result.stdout.is_empty());
++    assert!(output.exists());
++    std::fs::remove_file(&source).unwrap();
++    let result = cli()
++        .arg(&output)
++        .args(["--backend", "literal"])
++        .output()
++        .unwrap();
++    assert_eq!(result.status.code(), Some(7));
++    assert_eq!(result.stdout, b"[\"--backend\", \"literal\"]\n");
++    assert!(result.stderr.is_empty());
++    let rejected = cli()
++        .args(["--backend", "ast"])
++        .arg(&output)
++        .output()
++        .unwrap();
++    assert!(!rejected.status.success());
++    assert!(String::from_utf8_lossy(&rejected.stderr).contains("backend bytecode"));
++}
++#[test]
++fn cli_compilation_is_atomic_and_does_not_replace_source() {
++    let t = Temp::new();
++    let source = t.0.join("bad.lep");
++    let output = t.0.join("keep.exb");
++    std::fs::write(&source, "[").unwrap();
++    std::fs::write(&output, b"keep").unwrap();
++    let result = cli()
++        .arg("compilar")
++        .arg(&source)
++        .arg("-o")
++        .arg(&output)
++        .output()
++        .unwrap();
++    assert!(!result.status.success());
++    assert_eq!(std::fs::read(&output).unwrap(), b"keep");
++    std::fs::write(&source, "1").unwrap();
++    let result = cli()
++        .arg("compilar")
++        .arg(&source)
++        .arg("-o")
++        .arg(&source)
++        .output()
++        .unwrap();
++    assert!(!result.status.success());
++    assert_eq!(std::fs::read_to_string(&source).unwrap(), "1");
++}
++#[test]
++fn compiled_modules_import_and_cache_relative_to_artifact_location() {
++    let t = Temp::new();
++    let module = t.0.join("helper.exb");
++    std::fs::write(
++        &module,
++        compile_exb("escreva(\"loaded\")\nf = funcao(a) { a + 1 }", "helper.lep").unwrap(),
++    )
++    .unwrap();
++    let source = "m = importe \"./helper.exb\"\nn = importe \"./helper.exb\"\nescreva(m::f(4))\nescreva(n::f(5))";
++    let bytes = compile_exb(source, "old-location/main.lep").unwrap();
++    let file = t.0.join("main.exb").to_str().unwrap().to_owned();
++    assert_eq!(
++        run_exb_with_options(&bytes, &file, "", options())
++            .unwrap()
++            .stdout,
++        "loaded\n5\n6\n"
++    );
++    let error = run_exb_with_options(
++        &bytes,
++        &file,
++        "",
++        ExecutionOptions {
++            workspace_root: Some(t.0.join("restricted")),
++            ..options()
++        },
++    )
++    .unwrap_err();
++    assert!(error.message.contains("fora da pasta"));
++}
++#[test]
++fn imported_compiled_errors_preserve_original_source_and_stack() {
++    let t = Temp::new();
++    let module = t.0.join("m.exb");
++    std::fs::write(
++        &module,
++        compile_exb("f = funcao(a) { a / 0 }", "original-m.lep").unwrap(),
++    )
++    .unwrap();
++    let src = "m = importe \"./m.exb\"\nm::f(2)";
++    let file = t.0.join("main.lep").to_str().unwrap().to_owned();
++    let expected = run_with_options(src, &file, "", options()).unwrap_err();
++    let bytes = compile_exb(src, &file).unwrap();
++    let actual = run_exb_with_options(&bytes, &file, "", options()).unwrap_err();
++    assert_eq!(
++        (&expected.message, &expected.file, expected.span),
++        (&actual.message, &actual.file, actual.span)
++    );
++    assert_eq!(actual.file, "original-m.lep");
++    let frames = |e: &expressa::runtime::RuntimeError| {
++        e.stack
++            .iter()
++            .map(|f| (f.name.clone(), f.file.clone(), f.span))
++            .collect::<Vec<_>>()
++    };
++    assert_eq!(frames(&actual), frames(&expected));
++}
++#[test]
++fn compiled_cycles_and_limits_are_errors() {
++    let t = Temp::new();
++    let module = t.0.join("cycle.exb");
++    std::fs::write(
++        &module,
++        compile_exb("importe \"./cycle.exb\"", "cycle.lep").unwrap(),
++    )
++    .unwrap();
++    let bytes = compile_exb("importe \"./cycle.exb\"", "main.lep").unwrap();
++    let file = t.0.join("main.exb").to_str().unwrap().to_owned();
++    assert!(
++        run_exb_with_options(&bytes, &file, "", options())
++            .unwrap_err()
++            .message
++            .contains("cíclica")
++    );
++    let bytes = compile_exb("importe \"matriz\"\nescreva(uns(10))", "main.lep").unwrap();
++    assert!(
++        run_exb_with_options(
++            &bytes,
++            &file,
++            "",
++            ExecutionOptions {
++                max_matrix_cells: 4,
++                ..options()
++            }
++        )
++        .unwrap_err()
++        .message
++        .contains("matriz")
++    );
++}
++#[test]
++fn cli_marker_and_debug_use_embedded_source() {
++    use std::io::Write;
++    let t = Temp::new();
++    let file = t.0.join("main.exb");
++    std::fs::write(
++        &file,
++        compile_exb("escreva(leia(\"nome? \"))", "missing.lep").unwrap(),
++    )
++    .unwrap();
++    let mut child = cli()
++        .arg("--marcador-leia")
++        .arg(&file)
++        .stdin(std::process::Stdio::piped())
++        .stdout(std::process::Stdio::piped())
++        .stderr(std::process::Stdio::piped())
++        .spawn()
++        .unwrap();
++    child.stdin.take().unwrap().write_all(b"Ana\n").unwrap();
++    let output = child.wait_with_output().unwrap();
++    assert!(output.status.success());
++    assert_eq!(output.stdout, b"Ana\n");
++    assert!(String::from_utf8_lossy(&output.stderr).contains("<<<EXPRESSA-LEIA>>>"));
++    std::fs::write(&file, compile_exb("escreva(42)", "missing.lep").unwrap()).unwrap();
++    let mut child = cli()
++        .arg("debug")
++        .arg(&file)
++        .stdin(std::process::Stdio::piped())
++        .stdout(std::process::Stdio::piped())
++        .stderr(std::process::Stdio::piped())
++        .spawn()
++        .unwrap();
++    child.stdin.take().unwrap().write_all(b"c\n").unwrap();
++    let output = child.wait_with_output().unwrap();
++    assert!(output.status.success(), "{:?}", output);
++    assert!(String::from_utf8_lossy(&output.stdout).contains("42"));
++}

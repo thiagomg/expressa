@@ -29,3 +29,7 @@ Extends 008, 024, and 031. Coordinate with 034 and 036: on-board source compilat
 ## Scope
 
 This task records a finding or proposal, not an approved implementation. Resolve open semantic choices during individual review. Keep implementation changes and commits separate from this planning document.
+
+## Desktop precursor implemented for review
+
+[Task 047](047-exb-file-format-and-loader.md) implements the separate [EXB v1 format and validating desktop loader](../docs/exb.md). Source programs and EXB enter the same bytecode VM. File compatibility, bounds and structural checks are implemented; imports remain explicit files rather than a bundled image. Firmware delivery, flash partitions, update/recovery protocol and execution from flash remain pending. Desktop RSS is not a Pico SRAM measurement.

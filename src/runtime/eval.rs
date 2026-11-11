@@ -1,4 +1,9 @@
 mod assignment;
+mod exb;
+pub use bytecode::format::{
+    CompiledProgram, EXB_MAX_BYTES, EXB_VERSION, ExbError, compile_exb, load_exb, read_exb,
+};
+pub use exb::{ExbRunMode, run_compiled_with_options, run_exb_file_args, run_exb_with_options};
 pub(crate) mod bytecode;
 pub use bytecode::ExecutionBackend;
 mod matrix;
@@ -730,23 +735,41 @@ impl<'a, 'c> Vm<'a, 'c> {
         let module_env = if let Some(existing) = self.modules.get(&key) {
             Rc::clone(existing)
         } else {
-            let source = std::fs::read_to_string(&path).map_err(|e| {
-                self.err(
-                    format!("não foi possível importar '{}': {e}", path.display()),
-                    import.span,
-                )
-            })?;
-            let program = parse(&source).map_err(|e| {
-                self.err(
-                    format!(
-                        "sintaxe em '{}': {} ({})",
-                        path.display(),
-                        e.message,
-                        e.span
-                    ),
-                    import.span,
-                )
-            })?;
+            enum Input {
+                Source(String, Program),
+                Compiled(CompiledProgram),
+            }
+            let input = if exb::is_exb_path(&path) {
+                if self.backend != ExecutionBackend::Bytecode {
+                    return Err(self.err("importar .exb exige o backend bytecode", import.span));
+                }
+                Input::Compiled(read_exb(&path).map_err(|e| {
+                    self.err(
+                        format!("não foi possível importar '{}': {e}", path.display()),
+                        import.span,
+                    )
+                })?)
+            } else {
+                let source = std::fs::read_to_string(&path).map_err(|e| {
+                    self.err(
+                        format!("não foi possível importar '{}': {e}", path.display()),
+                        import.span,
+                    )
+                })?;
+                let program = parse(&source).map_err(|e| {
+                    self.err(
+                        format!(
+                            "sintaxe em '{}': {} ({})",
+                            path.display(),
+                            e.message,
+                            e.span
+                        ),
+                        import.span,
+                    )
+                })?;
+
+                Input::Source(source, program)
+            };
 
             self.loading.insert(key.clone());
 
@@ -754,12 +777,20 @@ impl<'a, 'c> Vm<'a, 'c> {
             let saved_source = std::mem::replace(&mut self.source, Rc::from(""));
             let saved_base = self.base_dir.clone();
 
-            self.file = path.display().to_string();
-            self.source = Rc::from(source);
-            self.base_dir = base_dir_of(&self.file);
-
+            self.base_dir = base_dir_of(&path.display().to_string());
             let module_env = Env::child(&self.builtins, FrameKind::Module);
-            let result = self.eval_program(program, &module_env);
+            let result = match input {
+                Input::Source(source, program) => {
+                    self.file = path.display().to_string();
+                    self.source = Rc::from(source);
+                    self.eval_program(program, &module_env)
+                }
+                Input::Compiled(program) => {
+                    self.file = program.source_name.clone();
+                    self.source = Rc::clone(&program.source);
+                    self.eval_loaded_module(&program, &module_env)
+                }
+            };
 
             self.file = saved_file;
             self.source = saved_source;

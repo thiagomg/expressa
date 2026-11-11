@@ -1,0 +1,179 @@
+{
+  "method": "Actual pre-change compiler built in a temporary HEAD snapshot with a test-only storage probe, cross-checked against legacy layout reconstruction. Compact counts include nested function prototypes. Used/capacity figures cover instruction buffers, new call-site metadata and Chunk headers; common pools, Rc headers, allocator overhead, imports and dynamic eval are excluded.",
+  "reference_probe_patch_sha256": "db927bc63dc247c3ba28630d63b91f1e70012ed5db5557290e88dd832c8d6a07",
+  "programs": {
+    "arguments": {
+      "instructions": 64,
+      "chunks": 3,
+      "calls": 3,
+      "wide": 0,
+      "legacy_instruction_bytes": 16,
+      "compact_instruction_bytes": 8,
+      "legacy_used_bytes": 1024,
+      "compact_used_bytes": 536,
+      "legacy_capacity_and_headers_bytes": 2128,
+      "compact_capacity_and_headers_bytes": 1456
+    },
+    "arithmetic": {
+      "instructions": 26,
+      "chunks": 1,
+      "calls": 1,
+      "wide": 0,
+      "legacy_instruction_bytes": 16,
+      "compact_instruction_bytes": 8,
+      "legacy_used_bytes": 416,
+      "compact_used_bytes": 216,
+      "legacy_capacity_and_headers_bytes": 688,
+      "compact_capacity_and_headers_bytes": 496
+    },
+    "avalie": {
+      "instructions": 48,
+      "chunks": 1,
+      "calls": 4,
+      "wide": 0,
+      "legacy_instruction_bytes": 16,
+      "compact_instruction_bytes": 8,
+      "legacy_used_bytes": 768,
+      "compact_used_bytes": 416,
+      "legacy_capacity_and_headers_bytes": 1200,
+      "compact_capacity_and_headers_bytes": 752
+    },
+    "closures": {
+      "instructions": 44,
+      "chunks": 3,
+      "calls": 3,
+      "wide": 0,
+      "legacy_instruction_bytes": 16,
+      "compact_instruction_bytes": 8,
+      "legacy_used_bytes": 704,
+      "compact_used_bytes": 376,
+      "legacy_capacity_and_headers_bytes": 1744,
+      "compact_capacity_and_headers_bytes": 1264
+    },
+    "collections": {
+      "instructions": 53,
+      "chunks": 1,
+      "calls": 2,
+      "wide": 0,
+      "legacy_instruction_bytes": 16,
+      "compact_instruction_bytes": 8,
+      "legacy_used_bytes": 848,
+      "compact_used_bytes": 440,
+      "legacy_capacity_and_headers_bytes": 1200,
+      "compact_capacity_and_headers_bytes": 752
+    },
+    "cycles": {
+      "instructions": 32,
+      "chunks": 1,
+      "calls": 2,
+      "wide": 0,
+      "legacy_instruction_bytes": 16,
+      "compact_instruction_bytes": 8,
+      "legacy_used_bytes": 512,
+      "compact_used_bytes": 272,
+      "legacy_capacity_and_headers_bytes": 688,
+      "compact_capacity_and_headers_bytes": 496
+    },
+    "matrix": {
+      "instructions": 31,
+      "chunks": 1,
+      "calls": 2,
+      "wide": 0,
+      "legacy_instruction_bytes": 16,
+      "compact_instruction_bytes": 8,
+      "legacy_used_bytes": 496,
+      "compact_used_bytes": 264,
+      "legacy_capacity_and_headers_bytes": 688,
+      "compact_capacity_and_headers_bytes": 496
+    },
+    "recursion": {
+      "instructions": 35,
+      "chunks": 2,
+      "calls": 3,
+      "wide": 0,
+      "legacy_instruction_bytes": 16,
+      "compact_instruction_bytes": 8,
+      "legacy_used_bytes": 560,
+      "compact_used_bytes": 304,
+      "legacy_capacity_and_headers_bytes": 1120,
+      "compact_capacity_and_headers_bytes": 864
+    },
+    "startup": {
+      "instructions": 11,
+      "chunks": 1,
+      "calls": 1,
+      "wide": 0,
+      "legacy_instruction_bytes": 16,
+      "compact_instruction_bytes": 8,
+      "legacy_used_bytes": 176,
+      "compact_used_bytes": 96,
+      "legacy_capacity_and_headers_bytes": 432,
+      "compact_capacity_and_headers_bytes": 368
+    }
+  },
+  "actual_reference_programs": {
+    "arguments": {
+      "instructions": 64,
+      "chunks": 3,
+      "legacy_used_bytes": 1024,
+      "legacy_capacity_and_headers_bytes": 2128,
+      "legacy_instruction_bytes": 16
+    },
+    "arithmetic": {
+      "instructions": 26,
+      "chunks": 1,
+      "legacy_used_bytes": 416,
+      "legacy_capacity_and_headers_bytes": 688,
+      "legacy_instruction_bytes": 16
+    },
+    "avalie": {
+      "instructions": 48,
+      "chunks": 1,
+      "legacy_used_bytes": 768,
+      "legacy_capacity_and_headers_bytes": 1200,
+      "legacy_instruction_bytes": 16
+    },
+    "closures": {
+      "instructions": 44,
+      "chunks": 3,
+      "legacy_used_bytes": 704,
+      "legacy_capacity_and_headers_bytes": 1744,
+      "legacy_instruction_bytes": 16
+    },
+    "collections": {
+      "instructions": 53,
+      "chunks": 1,
+      "legacy_used_bytes": 848,
+      "legacy_capacity_and_headers_bytes": 1200,
+      "legacy_instruction_bytes": 16
+    },
+    "cycles": {
+      "instructions": 32,
+      "chunks": 1,
+      "legacy_used_bytes": 512,
+      "legacy_capacity_and_headers_bytes": 688,
+      "legacy_instruction_bytes": 16
+    },
+    "matrix": {
+      "instructions": 31,
+      "chunks": 1,
+      "legacy_used_bytes": 496,
+      "legacy_capacity_and_headers_bytes": 688,
+      "legacy_instruction_bytes": 16
+    },
+    "recursion": {
+      "instructions": 35,
+      "chunks": 2,
+      "legacy_used_bytes": 560,
+      "legacy_capacity_and_headers_bytes": 1120,
+      "legacy_instruction_bytes": 16
+    },
+    "startup": {
+      "instructions": 11,
+      "chunks": 1,
+      "legacy_used_bytes": 176,
+      "legacy_capacity_and_headers_bytes": 432,
+      "legacy_instruction_bytes": 16
+    }
+  }
+}

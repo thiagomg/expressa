@@ -1,0 +1,32 @@
+--- a/src/runtime/eval/bytecode/mod.rs
++++ b/src/runtime/eval/bytecode/mod.rs
+@@ -134,3 +134,29 @@
+     exit: u32,
+     next: u32,
+ }
++
++#[cfg(test)]
++mod storage_reference_probe {
++    use super::*;
++    #[test]
++    fn preserved_storage_report() {
++        fn walk(code: &Chunk, count: &mut [usize; 4]) {
++            count[0] += code.instructions.len();
++            count[1] += 1;
++            count[2] += code.instructions.len() * std::mem::size_of::<Instruction>();
++            count[3] += code.instructions.capacity() * std::mem::size_of::<Instruction>() + std::mem::size_of::<Chunk>();
++            for f in &code.functions { walk(&f.code, count); }
++        }
++        let mut paths: Vec<_> = std::fs::read_dir(concat!(env!("CARGO_MANIFEST_DIR"), "/benchmarks/programs")).unwrap()
++            .map(|e| e.unwrap().path()).filter(|p| p.extension().is_some_and(|e| e == "lep")).collect();
++        paths.sort();
++        let mut report = String::from("program,instructions,chunks,legacy_used_bytes,legacy_capacity_and_headers_bytes,legacy_instruction_bytes\n");
++        for path in paths {
++            let program = parse(&std::fs::read_to_string(&path).unwrap()).unwrap();
++            let code = compiler::module(&program.items);
++            let mut count = [0;4];walk(&code, &mut count);
++            report.push_str(&format!("{},{},{},{},{},{}\n", path.file_stem().unwrap().to_str().unwrap(),count[0],count[1],count[2],count[3],std::mem::size_of::<Instruction>()));
++        }
++        std::fs::write("/tmp/expressa-step05-reference-storage.csv", report).unwrap();
++    }
++}

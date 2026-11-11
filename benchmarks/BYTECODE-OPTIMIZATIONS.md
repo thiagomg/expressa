@@ -124,9 +124,17 @@ A experiência seguinte é documentada separadamente em [BYTECODE-STEP-03.md](BY
 
 [Implementação, regressões, comparação CPU/RSS e validação](BYTECODE-STEP-04.md). Os testes de processos foram estabilizados em uma mudança separada antes desta medição.
 
+## Etapa 05: instruções compactas
+
+**Experimento descartado e implementação revertida após revisão do usuário.** [Contagem de armazenamento, comparação CPU/RSS e dados preservados](BYTECODE-STEP-05.md). A etapa 04 continua ativa.
+
 ## Próximas hipóteses
 
 - Expandir a resolução por posições além dos parâmetros no escopo principal, com análise explícita de sombreamento, closures e avaliação dinâmica. Essa expansão ainda não está implementada.
-- Avaliar separadamente a representação compacta das instruções e suas tabelas; medir economia de memória e custo de decodificação.
+- Definir separadamente o formato `.exb` e o carregamento, sem exigir a representação compacta descartada no runtime. Reavaliar compactação em memória somente com nova evidência de benefício.
 
-Estas hipóteses não estão implementadas. Cache de `avalie`, serialização de bytecode e firmware Pico não fazem parte destas experiências. O AST permanece disponível como referência.
+Cache de `avalie` e firmware Pico continuam pendentes. O AST permanece disponível como referência.
+
+## Etapa 06: formato EXB v1
+
+Implementados compilação offline, carregamento validado e execução desktop de `.exb`, preservando a representação em memória anterior à etapa 05. [Contrato](../docs/exb.md), [tarefa](../lang-tasks/047-exb-file-format-and-loader.md) e [comparação antes/depois e fonte/EXB](EXB-V1-REVIEW.md). A serialização não implementa execução direta da flash nem reduz por si só a SRAM da VM.
