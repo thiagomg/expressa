@@ -221,3 +221,11 @@ python3 benchmarks/clone_allocations.py \
 - Contagens de amostras/medianas, hashes de fontes, binários, arquivos, bibliotecas, probes e runners conferidos. Patch aplicado numa cópia temporária da referência e comparado aos fontes/testes atuais.
 
 A classificação de funções é conservadora, não completa; callbacks indiretos e `ordene` podem ser recusados mesmo em casos seguros. Há limites de trabalho/depth, sem orçamento global de heap. Não há mudança de semântica numérica, sintaxe de referências, teclado ou API de apresentação de frames, firmware ou medição em Raspberry Pi. No_std continua fora desta etapa. A coleta de desempenho desta entrega pode ser revisada junto com os custos antes de qualquer commit manual.
+
+## Investigação dos custos da etapa 08
+
+[Alocações de imagens, tamanho de mapas, cópia de Value e comparação reexecutada com AST histórico](clone-investigation/README.md). Inclui variantes experimentais isoladas e uma candidata a otimização do caminho comum; nenhuma foi adotada no runtime.
+
+## Etapa 09: cópia interna de valores
+
+[Implementação, perf e comparação de CPU/memória antes/depois](clone-fastpath/README.md). O percurso de pares foi separado para permitir melhor inlining das cópias comuns; a política dos recursos não clonáveis foi mantida. Ganhos e regressões estão registrados por caso.

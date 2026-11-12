@@ -80,3 +80,15 @@ A [comparação Conway AST × bytecode](CONWAY.md) registra CPU, tempo e RSS do 
 ## Etapa 08: referências e clone
 
 [Contrato e limites](../docs/clone.md) e [comparação antes/depois de CPU, RSS, alocações e tamanho](CLONE.md). Implementação para revisão em AST, bytecode e EXB; inclui custos observados nos cenários gráficos. Esta etapa estabelece a semântica de cópia, sem prometer aceleração geral.
+
+## Investigação dos custos da etapa 08
+
+[Alocações de imagens, tamanho de mapas, cópia de Value e comparação reexecutada com AST histórico](clone-investigation/README.md). Inclui variantes experimentais isoladas e uma candidata a otimização do caminho comum; nenhuma foi adotada no runtime.
+
+## Etapa 09: cópia interna de valores
+
+[Implementação, perf e comparação de CPU/memória antes/depois](clone-fastpath/README.md). O percurso de pares foi separado para permitir melhor inlining das cópias comuns; a política dos recursos não clonáveis foi mantida. Ganhos e regressões estão registrados por caso.
+
+## Prioridades após a etapa 09
+
+[Novos perfis de variáveis, chamadas, sprites, Conway e ciclos](PERF-PRIORITIES.md). A análise distingue o maior potencial da VM das próximas otimizações gráficas pequenas, sem adotar novas mudanças no runtime.

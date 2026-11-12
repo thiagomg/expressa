@@ -83,3 +83,7 @@ Os exemplos com `clone` estão cobertos pelos testes da implementação.
 ## Entrega para revisão
 
 [Contrato implementado, limitações e compatibilidade](../docs/clone.md). [Testes](../tests/clone.rs). [Desempenho antes/depois](../benchmarks/CLONE.md). A classificação recusa chamadas indiretas não comprovadas e operações de consulta dinâmica do ambiente; não confunde ausência de prova com captura comprovada. O marcador adotado é `:_clonavel` bool; mapas comuns podem alterá-lo, mas recursos nativos mantêm uma marca interna que não é removida por edição do campo. Efeitos de imagem e otimização do armazenamento de textos não foram adicionados.
+
+### Otimização posterior da cópia interna
+
+A [etapa 09](../benchmarks/clone-fastpath/README.md) separa a travessia de pares do caminho comum de `Value::clone`, sem alterar o contrato de `clone` ou a política dos recursos não clonáveis. Inclui teste de cadeia profunda, perfil com `perf` e comparação CPU/RSS/alocações.

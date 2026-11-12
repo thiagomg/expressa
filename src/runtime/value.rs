@@ -56,24 +56,29 @@ impl Clone for Value {
             Self::Modulo(v) => Self::Modulo(Rc::clone(v)),
             #[cfg(feature = "process")]
             Self::Processo(v) => Self::Processo(Rc::clone(v)),
-            Self::Par(key, value) => {
-                if !matches!(value.as_ref(), Self::Par(_, _)) {
-                    return Self::Par(key.clone(), Box::new(value.as_ref().clone()));
-                }
-                let mut keys = Vec::new();
-                let mut tail = self;
-                while let Self::Par(key, value) = tail {
-                    keys.push(key.clone());
-                    tail = value;
-                }
-                let mut result = tail.clone();
-                for key in keys.into_iter().rev() {
-                    result = Self::Par(key, Box::new(result));
-                }
-                result
-            }
+            Self::Par(key, value) => clone_pair(self, key, value),
         }
     }
+}
+
+// Keep pair traversal out of the inline Clone body so scalar/reference copies
+// can be inlined without pulling in the allocation and unwind paths below.
+#[inline(never)]
+fn clone_pair(original: &Value, key: &MapKey, value: &Value) -> Value {
+    if !matches!(value, Value::Par(_, _)) {
+        return Value::Par(key.clone(), Box::new(value.clone()));
+    }
+    let mut keys = Vec::new();
+    let mut tail = original;
+    while let Value::Par(key, value) = tail {
+        keys.push(key.clone());
+        tail = value;
+    }
+    let mut result = tail.clone();
+    for key in keys.into_iter().rev() {
+        result = Value::Par(key, Box::new(result));
+    }
+    result
 }
 
 /// A list's items, shared by every copy of the list value.
@@ -850,6 +855,36 @@ mod tests {
         }
         assert_eq!(a, b);
         assert_eq!(b.to_string(), "[9]");
+    }
+
+    #[test]
+    fn deep_pair_clone_keeps_keys_and_shares_collection_tail() {
+        std::thread::Builder::new()
+            .stack_size(128 * 1024)
+            .spawn(|| {
+                let tail = Value::lista(vec![Value::Bool(true)]);
+                let mut original = tail.clone();
+                for key in 0..50_000 {
+                    original = Value::Par(MapKey::Numero(key), Box::new(original));
+                }
+                let copied = original.clone();
+                let mut cursor = &copied;
+                for expected in (0..50_000).rev() {
+                    let Value::Par(key, value) = cursor else {
+                        panic!("missing pair");
+                    };
+                    assert_eq!(*key, MapKey::Numero(expected));
+                    cursor = value;
+                }
+                let (Value::Lista(source), Value::Lista(copy)) = (&tail, cursor) else {
+                    panic!("missing list tail");
+                };
+                assert!(Rc::ptr_eq(source, copy));
+                desmontar(vec![original, copied]);
+            })
+            .unwrap()
+            .join()
+            .unwrap();
     }
 
     #[test]

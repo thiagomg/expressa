@@ -1,0 +1,3605 @@
+{
+  "metadata": {
+    "captured_at_utc": "2026-11-12T03:32:32.401544+00:00",
+    "source_sha256": "72512a755aad50ec2985d8775129f9be7aa2b117b0705e44033fe66d0b971e2e",
+    "git_head": "f709c0a2ee378dde3a2cd9c1b4d8951e5b91ae49",
+    "perf": "perf version 7.3.0",
+    "perf_event_paranoid": "2",
+    "runner_sha256": "6d2c19f4697022c13981ae6ab4690823d92dea0f67fd4bc5b533213dc0be8b11",
+    "files_sha256": {
+      "/home/thiago/src/expressa/target/bytecode-steps/08-clone/expressa": "142e4f6196a5b199c59e71905243b4d0848cfc2065cf78f213522a85675abbe7",
+      "/home/thiago/src/expressa/target/bytecode-steps/09-clone-fastpath/expressa": "6ac5548d05e8da11ca95022bbd111fe95bd1237049767bb78fca596c33fe3a0d",
+      "/home/thiago/src/expressa/benchmarks/clone-investigation/programs/arithmetic.lep": "1b8f002be7293c50e939670b8798726bc7cb71ec49280a7cea8d87be15b7eac7",
+      "/home/thiago/src/expressa/benchmarks/clone-investigation/programs/closures.lep": "f4aef8eac2ecf7720f7916d788bd6821b86c50d41c177c9aac1e70785f15e519",
+      "/home/thiago/src/expressa/benchmarks/clone-fastpath/programs/arithmetic.lep": "e5fbc7be50a03b910719ddb7b6594cda7695dde124dfd4138071f57393ff15f7",
+      "/home/thiago/src/expressa/benchmarks/clone-fastpath/programs/closures.lep": "6de871c9043c8e9cea095c334deac7be98c930ee3dfc4a00e9cdce08c302bed4"
+    },
+    "repeat": 11,
+    "warmup": 2,
+    "seed": 89,
+    "cpu_affinity": [
+      0
+    ],
+    "events": [
+      "cycles:u",
+      "instructions:u",
+      "branches:u",
+      "branch-misses:u"
+    ],
+    "scope": "process-local user-space hardware counts, whole source execution; cycle profiles are flat leaf-symbol samples, bytecode only, separate longer programs; no claim of reliable DWARF call chains or line attribution"
+  },
+  "samples": {
+    "before_ast": {
+      "arithmetic": [
+        {
+          "counts": {
+            "cycles:u": 1206601840.0,
+            "instructions:u": 3383482886.0,
+            "branches:u": 479608833.0,
+            "branch-misses:u": 10412.0
+          },
+          "raw": [
+            {
+              "counter-value": "1206601840.000000",
+              "unit": "",
+              "event": "cycles:u",
+              "event-runtime": 316385656,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "3383482886.000000",
+              "unit": "",
+              "event": "instructions:u",
+              "event-runtime": 316385656,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "479608833.000000",
+              "unit": "",
+              "event": "branches:u",
+              "event-runtime": 316385656,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "10412.000000",
+              "unit": "",
+              "event": "branch-misses:u",
+              "event-runtime": 316385656,
+              "pcnt-running": 100.0
+            }
+          ]
+        },
+        {
+          "counts": {
+            "cycles:u": 1200904496.0,
+            "instructions:u": 3383483028.0,
+            "branches:u": 479608917.0,
+            "branch-misses:u": 10507.0
+          },
+          "raw": [
+            {
+              "counter-value": "1200904496.000000",
+              "unit": "",
+              "event": "cycles:u",
+              "event-runtime": 314551736,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "3383483028.000000",
+              "unit": "",
+              "event": "instructions:u",
+              "event-runtime": 314551736,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "479608917.000000",
+              "unit": "",
+              "event": "branches:u",
+              "event-runtime": 314551736,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "10507.000000",
+              "unit": "",
+              "event": "branch-misses:u",
+              "event-runtime": 314551736,
+              "pcnt-running": 100.0
+            }
+          ]
+        },
+        {
+          "counts": {
+            "cycles:u": 1198083382.0,
+            "instructions:u": 3383483465.0,
+            "branches:u": 479609092.0,
+            "branch-misses:u": 10511.0
+          },
+          "raw": [
+            {
+              "counter-value": "1198083382.000000",
+              "unit": "",
+              "event": "cycles:u",
+              "event-runtime": 312677419,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "3383483465.000000",
+              "unit": "",
+              "event": "instructions:u",
+              "event-runtime": 312677419,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "479609092.000000",
+              "unit": "",
+              "event": "branches:u",
+              "event-runtime": 312677419,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "10511.000000",
+              "unit": "",
+              "event": "branch-misses:u",
+              "event-runtime": 312677419,
+              "pcnt-running": 100.0
+            }
+          ]
+        },
+        {
+          "counts": {
+            "cycles:u": 1204478045.0,
+            "instructions:u": 3383482002.0,
+            "branches:u": 479608616.0,
+            "branch-misses:u": 10752.0
+          },
+          "raw": [
+            {
+              "counter-value": "1204478045.000000",
+              "unit": "",
+              "event": "cycles:u",
+              "event-runtime": 323184723,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "3383482002.000000",
+              "unit": "",
+              "event": "instructions:u",
+              "event-runtime": 323184723,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "479608616.000000",
+              "unit": "",
+              "event": "branches:u",
+              "event-runtime": 323184723,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "10752.000000",
+              "unit": "",
+              "event": "branch-misses:u",
+              "event-runtime": 323184723,
+              "pcnt-running": 100.0
+            }
+          ]
+        },
+        {
+          "counts": {
+            "cycles:u": 1203558542.0,
+            "instructions:u": 3383482938.0,
+            "branches:u": 479608907.0,
+            "branch-misses:u": 11532.0
+          },
+          "raw": [
+            {
+              "counter-value": "1203558542.000000",
+              "unit": "",
+              "event": "cycles:u",
+              "event-runtime": 320642290,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "3383482938.000000",
+              "unit": "",
+              "event": "instructions:u",
+              "event-runtime": 320642290,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "479608907.000000",
+              "unit": "",
+              "event": "branches:u",
+              "event-runtime": 320642290,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "11532.000000",
+              "unit": "",
+              "event": "branch-misses:u",
+              "event-runtime": 320642290,
+              "pcnt-running": 100.0
+            }
+          ]
+        },
+        {
+          "counts": {
+            "cycles:u": 1204089989.0,
+            "instructions:u": 3383484170.0,
+            "branches:u": 479609282.0,
+            "branch-misses:u": 10554.0
+          },
+          "raw": [
+            {
+              "counter-value": "1204089989.000000",
+              "unit": "",
+              "event": "cycles:u",
+              "event-runtime": 318609931,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "3383484170.000000",
+              "unit": "",
+              "event": "instructions:u",
+              "event-runtime": 318609931,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "479609282.000000",
+              "unit": "",
+              "event": "branches:u",
+              "event-runtime": 318609931,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "10554.000000",
+              "unit": "",
+              "event": "branch-misses:u",
+              "event-runtime": 318609931,
+              "pcnt-running": 100.0
+            }
+          ]
+        },
+        {
+          "counts": {
+            "cycles:u": 1206518800.0,
+            "instructions:u": 3383484493.0,
+            "branches:u": 479609411.0,
+            "branch-misses:u": 11050.0
+          },
+          "raw": [
+            {
+              "counter-value": "1206518800.000000",
+              "unit": "",
+              "event": "cycles:u",
+              "event-runtime": 318724359,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "3383484493.000000",
+              "unit": "",
+              "event": "instructions:u",
+              "event-runtime": 318724359,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "479609411.000000",
+              "unit": "",
+              "event": "branches:u",
+              "event-runtime": 318724359,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "11050.000000",
+              "unit": "",
+              "event": "branch-misses:u",
+              "event-runtime": 318724359,
+              "pcnt-running": 100.0
+            }
+          ]
+        },
+        {
+          "counts": {
+            "cycles:u": 1202143690.0,
+            "instructions:u": 3383482918.0,
+            "branches:u": 479608880.0,
+            "branch-misses:u": 10616.0
+          },
+          "raw": [
+            {
+              "counter-value": "1202143690.000000",
+              "unit": "",
+              "event": "cycles:u",
+              "event-runtime": 315793205,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "3383482918.000000",
+              "unit": "",
+              "event": "instructions:u",
+              "event-runtime": 315793205,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "479608880.000000",
+              "unit": "",
+              "event": "branches:u",
+              "event-runtime": 315793205,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "10616.000000",
+              "unit": "",
+              "event": "branch-misses:u",
+              "event-runtime": 315793205,
+              "pcnt-running": 100.0
+            }
+          ]
+        },
+        {
+          "counts": {
+            "cycles:u": 1209551773.0,
+            "instructions:u": 3383482251.0,
+            "branches:u": 479608651.0,
+            "branch-misses:u": 10732.0
+          },
+          "raw": [
+            {
+              "counter-value": "1209551773.000000",
+              "unit": "",
+              "event": "cycles:u",
+              "event-runtime": 323454794,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "3383482251.000000",
+              "unit": "",
+              "event": "instructions:u",
+              "event-runtime": 323454794,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "479608651.000000",
+              "unit": "",
+              "event": "branches:u",
+              "event-runtime": 323454794,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "10732.000000",
+              "unit": "",
+              "event": "branch-misses:u",
+              "event-runtime": 323454794,
+              "pcnt-running": 100.0
+            }
+          ]
+        },
+        {
+          "counts": {
+            "cycles:u": 1237065846.0,
+            "instructions:u": 3383482542.0,
+            "branches:u": 479608725.0,
+            "branch-misses:u": 12316.0
+          },
+          "raw": [
+            {
+              "counter-value": "1237065846.000000",
+              "unit": "",
+              "event": "cycles:u",
+              "event-runtime": 327494804,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "3383482542.000000",
+              "unit": "",
+              "event": "instructions:u",
+              "event-runtime": 327494804,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "479608725.000000",
+              "unit": "",
+              "event": "branches:u",
+              "event-runtime": 327494804,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "12316.000000",
+              "unit": "",
+              "event": "branch-misses:u",
+              "event-runtime": 327494804,
+              "pcnt-running": 100.0
+            }
+          ]
+        },
+        {
+          "counts": {
+            "cycles:u": 1194011375.0,
+            "instructions:u": 3383481904.0,
+            "branches:u": 479608544.0,
+            "branch-misses:u": 10902.0
+          },
+          "raw": [
+            {
+              "counter-value": "1194011375.000000",
+              "unit": "",
+              "event": "cycles:u",
+              "event-runtime": 312367179,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "3383481904.000000",
+              "unit": "",
+              "event": "instructions:u",
+              "event-runtime": 312367179,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "479608544.000000",
+              "unit": "",
+              "event": "branches:u",
+              "event-runtime": 312367179,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "10902.000000",
+              "unit": "",
+              "event": "branch-misses:u",
+              "event-runtime": 312367179,
+              "pcnt-running": 100.0
+            }
+          ]
+        }
+      ],
+      "closures": [
+        {
+          "counts": {
+            "cycles:u": 1373490558.0,
+            "instructions:u": 3792694332.0,
+            "branches:u": 578149284.0,
+            "branch-misses:u": 19227.0
+          },
+          "raw": [
+            {
+              "counter-value": "1373490558.000000",
+              "unit": "",
+              "event": "cycles:u",
+              "event-runtime": 367255480,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "3792694332.000000",
+              "unit": "",
+              "event": "instructions:u",
+              "event-runtime": 367255480,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "578149284.000000",
+              "unit": "",
+              "event": "branches:u",
+              "event-runtime": 367255480,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "19227.000000",
+              "unit": "",
+              "event": "branch-misses:u",
+              "event-runtime": 367255480,
+              "pcnt-running": 100.0
+            }
+          ]
+        },
+        {
+          "counts": {
+            "cycles:u": 1400261696.0,
+            "instructions:u": 3792696339.0,
+            "branches:u": 578149523.0,
+            "branch-misses:u": 19109.0
+          },
+          "raw": [
+            {
+              "counter-value": "1400261696.000000",
+              "unit": "",
+              "event": "cycles:u",
+              "event-runtime": 370211166,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "3792696339.000000",
+              "unit": "",
+              "event": "instructions:u",
+              "event-runtime": 370211166,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "578149523.000000",
+              "unit": "",
+              "event": "branches:u",
+              "event-runtime": 370211166,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "19109.000000",
+              "unit": "",
+              "event": "branch-misses:u",
+              "event-runtime": 370211166,
+              "pcnt-running": 100.0
+            }
+          ]
+        },
+        {
+          "counts": {
+            "cycles:u": 1373568008.0,
+            "instructions:u": 3792687766.0,
+            "branches:u": 578147922.0,
+            "branch-misses:u": 19080.0
+          },
+          "raw": [
+            {
+              "counter-value": "1373568008.000000",
+              "unit": "",
+              "event": "cycles:u",
+              "event-runtime": 358872848,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "3792687766.000000",
+              "unit": "",
+              "event": "instructions:u",
+              "event-runtime": 358872848,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "578147922.000000",
+              "unit": "",
+              "event": "branches:u",
+              "event-runtime": 358872848,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "19080.000000",
+              "unit": "",
+              "event": "branch-misses:u",
+              "event-runtime": 358872848,
+              "pcnt-running": 100.0
+            }
+          ]
+        },
+        {
+          "counts": {
+            "cycles:u": 1379089744.0,
+            "instructions:u": 3792694337.0,
+            "branches:u": 578149091.0,
+            "branch-misses:u": 298090.0
+          },
+          "raw": [
+            {
+              "counter-value": "1379089744.000000",
+              "unit": "",
+              "event": "cycles:u",
+              "event-runtime": 361667366,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "3792694337.000000",
+              "unit": "",
+              "event": "instructions:u",
+              "event-runtime": 361667366,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "578149091.000000",
+              "unit": "",
+              "event": "branches:u",
+              "event-runtime": 361667366,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "298090.000000",
+              "unit": "",
+              "event": "branch-misses:u",
+              "event-runtime": 361667366,
+              "pcnt-running": 100.0
+            }
+          ]
+        },
+        {
+          "counts": {
+            "cycles:u": 1393551443.0,
+            "instructions:u": 3792691301.0,
+            "branches:u": 578148619.0,
+            "branch-misses:u": 449023.0
+          },
+          "raw": [
+            {
+              "counter-value": "1393551443.000000",
+              "unit": "",
+              "event": "cycles:u",
+              "event-runtime": 366802631,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "3792691301.000000",
+              "unit": "",
+              "event": "instructions:u",
+              "event-runtime": 366802631,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "578148619.000000",
+              "unit": "",
+              "event": "branches:u",
+              "event-runtime": 366802631,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "449023.000000",
+              "unit": "",
+              "event": "branch-misses:u",
+              "event-runtime": 366802631,
+              "pcnt-running": 100.0
+            }
+          ]
+        },
+        {
+          "counts": {
+            "cycles:u": 1383867761.0,
+            "instructions:u": 3792693482.0,
+            "branches:u": 578148882.0,
+            "branch-misses:u": 19071.0
+          },
+          "raw": [
+            {
+              "counter-value": "1383867761.000000",
+              "unit": "",
+              "event": "cycles:u",
+              "event-runtime": 378621344,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "3792693482.000000",
+              "unit": "",
+              "event": "instructions:u",
+              "event-runtime": 378621344,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "578148882.000000",
+              "unit": "",
+              "event": "branches:u",
+              "event-runtime": 378621344,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "19071.000000",
+              "unit": "",
+              "event": "branch-misses:u",
+              "event-runtime": 378621344,
+              "pcnt-running": 100.0
+            }
+          ]
+        },
+        {
+          "counts": {
+            "cycles:u": 1388433355.0,
+            "instructions:u": 3792693208.0,
+            "branches:u": 578148824.0,
+            "branch-misses:u": 497421.0
+          },
+          "raw": [
+            {
+              "counter-value": "1388433355.000000",
+              "unit": "",
+              "event": "cycles:u",
+              "event-runtime": 364540199,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "3792693208.000000",
+              "unit": "",
+              "event": "instructions:u",
+              "event-runtime": 364540199,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "578148824.000000",
+              "unit": "",
+              "event": "branches:u",
+              "event-runtime": 364540199,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "497421.000000",
+              "unit": "",
+              "event": "branch-misses:u",
+              "event-runtime": 364540199,
+              "pcnt-running": 100.0
+            }
+          ]
+        },
+        {
+          "counts": {
+            "cycles:u": 1371569842.0,
+            "instructions:u": 3792693133.0,
+            "branches:u": 578148855.0,
+            "branch-misses:u": 18704.0
+          },
+          "raw": [
+            {
+              "counter-value": "1371569842.000000",
+              "unit": "",
+              "event": "cycles:u",
+              "event-runtime": 358887974,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "3792693133.000000",
+              "unit": "",
+              "event": "instructions:u",
+              "event-runtime": 358887974,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "578148855.000000",
+              "unit": "",
+              "event": "branches:u",
+              "event-runtime": 358887974,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "18704.000000",
+              "unit": "",
+              "event": "branch-misses:u",
+              "event-runtime": 358887974,
+              "pcnt-running": 100.0
+            }
+          ]
+        },
+        {
+          "counts": {
+            "cycles:u": 1410785355.0,
+            "instructions:u": 3792697549.0,
+            "branches:u": 578149629.0,
+            "branch-misses:u": 559740.0
+          },
+          "raw": [
+            {
+              "counter-value": "1410785355.000000",
+              "unit": "",
+              "event": "cycles:u",
+              "event-runtime": 368308780,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "3792697549.000000",
+              "unit": "",
+              "event": "instructions:u",
+              "event-runtime": 368308780,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "578149629.000000",
+              "unit": "",
+              "event": "branches:u",
+              "event-runtime": 368308780,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "559740.000000",
+              "unit": "",
+              "event": "branch-misses:u",
+              "event-runtime": 368308780,
+              "pcnt-running": 100.0
+            }
+          ]
+        },
+        {
+          "counts": {
+            "cycles:u": 1374712441.0,
+            "instructions:u": 3792690946.0,
+            "branches:u": 578148549.0,
+            "branch-misses:u": 18743.0
+          },
+          "raw": [
+            {
+              "counter-value": "1374712441.000000",
+              "unit": "",
+              "event": "cycles:u",
+              "event-runtime": 361913910,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "3792690946.000000",
+              "unit": "",
+              "event": "instructions:u",
+              "event-runtime": 361913910,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "578148549.000000",
+              "unit": "",
+              "event": "branches:u",
+              "event-runtime": 361913910,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "18743.000000",
+              "unit": "",
+              "event": "branch-misses:u",
+              "event-runtime": 361913910,
+              "pcnt-running": 100.0
+            }
+          ]
+        },
+        {
+          "counts": {
+            "cycles:u": 1368448477.0,
+            "instructions:u": 3792695316.0,
+            "branches:u": 578149185.0,
+            "branch-misses:u": 70463.0
+          },
+          "raw": [
+            {
+              "counter-value": "1368448477.000000",
+              "unit": "",
+              "event": "cycles:u",
+              "event-runtime": 353894947,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "3792695316.000000",
+              "unit": "",
+              "event": "instructions:u",
+              "event-runtime": 353894947,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "578149185.000000",
+              "unit": "",
+              "event": "branches:u",
+              "event-runtime": 353894947,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "70463.000000",
+              "unit": "",
+              "event": "branch-misses:u",
+              "event-runtime": 353894947,
+              "pcnt-running": 100.0
+            }
+          ]
+        }
+      ]
+    },
+    "before_bytecode": {
+      "arithmetic": [
+        {
+          "counts": {
+            "cycles:u": 934841944.0,
+            "instructions:u": 2876517268.0,
+            "branches:u": 374613968.0,
+            "branch-misses:u": 9501.0
+          },
+          "raw": [
+            {
+              "counter-value": "934841944.000000",
+              "unit": "",
+              "event": "cycles:u",
+              "event-runtime": 250225658,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "2876517268.000000",
+              "unit": "",
+              "event": "instructions:u",
+              "event-runtime": 250225658,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "374613968.000000",
+              "unit": "",
+              "event": "branches:u",
+              "event-runtime": 250225658,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "9501.000000",
+              "unit": "",
+              "event": "branch-misses:u",
+              "event-runtime": 250225658,
+              "pcnt-running": 100.0
+            }
+          ]
+        },
+        {
+          "counts": {
+            "cycles:u": 940253457.0,
+            "instructions:u": 2876516552.0,
+            "branches:u": 374613745.0,
+            "branch-misses:u": 9716.0
+          },
+          "raw": [
+            {
+              "counter-value": "940253457.000000",
+              "unit": "",
+              "event": "cycles:u",
+              "event-runtime": 248076115,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "2876516552.000000",
+              "unit": "",
+              "event": "instructions:u",
+              "event-runtime": 248076115,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "374613745.000000",
+              "unit": "",
+              "event": "branches:u",
+              "event-runtime": 248076115,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "9716.000000",
+              "unit": "",
+              "event": "branch-misses:u",
+              "event-runtime": 248076115,
+              "pcnt-running": 100.0
+            }
+          ]
+        },
+        {
+          "counts": {
+            "cycles:u": 938571546.0,
+            "instructions:u": 2876516209.0,
+            "branches:u": 374613643.0,
+            "branch-misses:u": 9955.0
+          },
+          "raw": [
+            {
+              "counter-value": "938571546.000000",
+              "unit": "",
+              "event": "cycles:u",
+              "event-runtime": 255902623,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "2876516209.000000",
+              "unit": "",
+              "event": "instructions:u",
+              "event-runtime": 255902623,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "374613643.000000",
+              "unit": "",
+              "event": "branches:u",
+              "event-runtime": 255902623,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "9955.000000",
+              "unit": "",
+              "event": "branch-misses:u",
+              "event-runtime": 255902623,
+              "pcnt-running": 100.0
+            }
+          ]
+        },
+        {
+          "counts": {
+            "cycles:u": 933253015.0,
+            "instructions:u": 2876517720.0,
+            "branches:u": 374614120.0,
+            "branch-misses:u": 9852.0
+          },
+          "raw": [
+            {
+              "counter-value": "933253015.000000",
+              "unit": "",
+              "event": "cycles:u",
+              "event-runtime": 248700146,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "2876517720.000000",
+              "unit": "",
+              "event": "instructions:u",
+              "event-runtime": 248700146,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "374614120.000000",
+              "unit": "",
+              "event": "branches:u",
+              "event-runtime": 248700146,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "9852.000000",
+              "unit": "",
+              "event": "branch-misses:u",
+              "event-runtime": 248700146,
+              "pcnt-running": 100.0
+            }
+          ]
+        },
+        {
+          "counts": {
+            "cycles:u": 960243638.0,
+            "instructions:u": 2876517153.0,
+            "branches:u": 374613943.0,
+            "branch-misses:u": 10165.0
+          },
+          "raw": [
+            {
+              "counter-value": "960243638.000000",
+              "unit": "",
+              "event": "cycles:u",
+              "event-runtime": 259633225,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "2876517153.000000",
+              "unit": "",
+              "event": "instructions:u",
+              "event-runtime": 259633225,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "374613943.000000",
+              "unit": "",
+              "event": "branches:u",
+              "event-runtime": 259633225,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "10165.000000",
+              "unit": "",
+              "event": "branch-misses:u",
+              "event-runtime": 259633225,
+              "pcnt-running": 100.0
+            }
+          ]
+        },
+        {
+          "counts": {
+            "cycles:u": 933387435.0,
+            "instructions:u": 2876516920.0,
+            "branches:u": 374613851.0,
+            "branch-misses:u": 9795.0
+          },
+          "raw": [
+            {
+              "counter-value": "933387435.000000",
+              "unit": "",
+              "event": "cycles:u",
+              "event-runtime": 245540742,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "2876516920.000000",
+              "unit": "",
+              "event": "instructions:u",
+              "event-runtime": 245540742,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "374613851.000000",
+              "unit": "",
+              "event": "branches:u",
+              "event-runtime": 245540742,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "9795.000000",
+              "unit": "",
+              "event": "branch-misses:u",
+              "event-runtime": 245540742,
+              "pcnt-running": 100.0
+            }
+          ]
+        },
+        {
+          "counts": {
+            "cycles:u": 939722772.0,
+            "instructions:u": 2876517514.0,
+            "branches:u": 374614055.0,
+            "branch-misses:u": 10003.0
+          },
+          "raw": [
+            {
+              "counter-value": "939722772.000000",
+              "unit": "",
+              "event": "cycles:u",
+              "event-runtime": 251257172,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "2876517514.000000",
+              "unit": "",
+              "event": "instructions:u",
+              "event-runtime": 251257172,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "374614055.000000",
+              "unit": "",
+              "event": "branches:u",
+              "event-runtime": 251257172,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "10003.000000",
+              "unit": "",
+              "event": "branch-misses:u",
+              "event-runtime": 251257172,
+              "pcnt-running": 100.0
+            }
+          ]
+        },
+        {
+          "counts": {
+            "cycles:u": 936722944.0,
+            "instructions:u": 2876516849.0,
+            "branches:u": 374613888.0,
+            "branch-misses:u": 10072.0
+          },
+          "raw": [
+            {
+              "counter-value": "936722944.000000",
+              "unit": "",
+              "event": "cycles:u",
+              "event-runtime": 245849397,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "2876516849.000000",
+              "unit": "",
+              "event": "instructions:u",
+              "event-runtime": 245849397,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "374613888.000000",
+              "unit": "",
+              "event": "branches:u",
+              "event-runtime": 245849397,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "10072.000000",
+              "unit": "",
+              "event": "branch-misses:u",
+              "event-runtime": 245849397,
+              "pcnt-running": 100.0
+            }
+          ]
+        },
+        {
+          "counts": {
+            "cycles:u": 931464021.0,
+            "instructions:u": 2876518593.0,
+            "branches:u": 374614399.0,
+            "branch-misses:u": 9777.0
+          },
+          "raw": [
+            {
+              "counter-value": "931464021.000000",
+              "unit": "",
+              "event": "cycles:u",
+              "event-runtime": 247838006,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "2876518593.000000",
+              "unit": "",
+              "event": "instructions:u",
+              "event-runtime": 247838006,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "374614399.000000",
+              "unit": "",
+              "event": "branches:u",
+              "event-runtime": 247838006,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "9777.000000",
+              "unit": "",
+              "event": "branch-misses:u",
+              "event-runtime": 247838006,
+              "pcnt-running": 100.0
+            }
+          ]
+        },
+        {
+          "counts": {
+            "cycles:u": 934468036.0,
+            "instructions:u": 2876517695.0,
+            "branches:u": 374614155.0,
+            "branch-misses:u": 9908.0
+          },
+          "raw": [
+            {
+              "counter-value": "934468036.000000",
+              "unit": "",
+              "event": "cycles:u",
+              "event-runtime": 252644033,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "2876517695.000000",
+              "unit": "",
+              "event": "instructions:u",
+              "event-runtime": 252644033,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "374614155.000000",
+              "unit": "",
+              "event": "branches:u",
+              "event-runtime": 252644033,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "9908.000000",
+              "unit": "",
+              "event": "branch-misses:u",
+              "event-runtime": 252644033,
+              "pcnt-running": 100.0
+            }
+          ]
+        },
+        {
+          "counts": {
+            "cycles:u": 930199894.0,
+            "instructions:u": 2876516897.0,
+            "branches:u": 374613893.0,
+            "branch-misses:u": 9720.0
+          },
+          "raw": [
+            {
+              "counter-value": "930199894.000000",
+              "unit": "",
+              "event": "cycles:u",
+              "event-runtime": 242623218,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "2876516897.000000",
+              "unit": "",
+              "event": "instructions:u",
+              "event-runtime": 242623218,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "374613893.000000",
+              "unit": "",
+              "event": "branches:u",
+              "event-runtime": 242623218,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "9720.000000",
+              "unit": "",
+              "event": "branch-misses:u",
+              "event-runtime": 242623218,
+              "pcnt-running": 100.0
+            }
+          ]
+        }
+      ],
+      "closures": [
+        {
+          "counts": {
+            "cycles:u": 1106545271.0,
+            "instructions:u": 3186590998.0,
+            "branches:u": 464127879.0,
+            "branch-misses:u": 198243.0
+          },
+          "raw": [
+            {
+              "counter-value": "1106545271.000000",
+              "unit": "",
+              "event": "cycles:u",
+              "event-runtime": 301056382,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "3186590998.000000",
+              "unit": "",
+              "event": "instructions:u",
+              "event-runtime": 301056382,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "464127879.000000",
+              "unit": "",
+              "event": "branches:u",
+              "event-runtime": 301056382,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "198243.000000",
+              "unit": "",
+              "event": "branch-misses:u",
+              "event-runtime": 301056382,
+              "pcnt-running": 100.0
+            }
+          ]
+        },
+        {
+          "counts": {
+            "cycles:u": 1121150083.0,
+            "instructions:u": 3186591694.0,
+            "branches:u": 464128169.0,
+            "branch-misses:u": 672193.0
+          },
+          "raw": [
+            {
+              "counter-value": "1121150083.000000",
+              "unit": "",
+              "event": "cycles:u",
+              "event-runtime": 292308262,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "3186591694.000000",
+              "unit": "",
+              "event": "instructions:u",
+              "event-runtime": 292308262,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "464128169.000000",
+              "unit": "",
+              "event": "branches:u",
+              "event-runtime": 292308262,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "672193.000000",
+              "unit": "",
+              "event": "branch-misses:u",
+              "event-runtime": 292308262,
+              "pcnt-running": 100.0
+            }
+          ]
+        },
+        {
+          "counts": {
+            "cycles:u": 1098288778.0,
+            "instructions:u": 3186591415.0,
+            "branches:u": 464128112.0,
+            "branch-misses:u": 197045.0
+          },
+          "raw": [
+            {
+              "counter-value": "1098288778.000000",
+              "unit": "",
+              "event": "cycles:u",
+              "event-runtime": 287720215,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "3186591415.000000",
+              "unit": "",
+              "event": "instructions:u",
+              "event-runtime": 287720215,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "464128112.000000",
+              "unit": "",
+              "event": "branches:u",
+              "event-runtime": 287720215,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "197045.000000",
+              "unit": "",
+              "event": "branch-misses:u",
+              "event-runtime": 287720215,
+              "pcnt-running": 100.0
+            }
+          ]
+        },
+        {
+          "counts": {
+            "cycles:u": 1101291311.0,
+            "instructions:u": 3186590780.0,
+            "branches:u": 464127895.0,
+            "branch-misses:u": 207757.0
+          },
+          "raw": [
+            {
+              "counter-value": "1101291311.000000",
+              "unit": "",
+              "event": "cycles:u",
+              "event-runtime": 289373243,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "3186590780.000000",
+              "unit": "",
+              "event": "instructions:u",
+              "event-runtime": 289373243,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "464127895.000000",
+              "unit": "",
+              "event": "branches:u",
+              "event-runtime": 289373243,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "207757.000000",
+              "unit": "",
+              "event": "branch-misses:u",
+              "event-runtime": 289373243,
+              "pcnt-running": 100.0
+            }
+          ]
+        },
+        {
+          "counts": {
+            "cycles:u": 1099808598.0,
+            "instructions:u": 3186592919.0,
+            "branches:u": 464128543.0,
+            "branch-misses:u": 197900.0
+          },
+          "raw": [
+            {
+              "counter-value": "1099808598.000000",
+              "unit": "",
+              "event": "cycles:u",
+              "event-runtime": 288887953,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "3186592919.000000",
+              "unit": "",
+              "event": "instructions:u",
+              "event-runtime": 288887953,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "464128543.000000",
+              "unit": "",
+              "event": "branches:u",
+              "event-runtime": 288887953,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "197900.000000",
+              "unit": "",
+              "event": "branch-misses:u",
+              "event-runtime": 288887953,
+              "pcnt-running": 100.0
+            }
+          ]
+        },
+        {
+          "counts": {
+            "cycles:u": 1100144113.0,
+            "instructions:u": 3186591652.0,
+            "branches:u": 464128189.0,
+            "branch-misses:u": 197269.0
+          },
+          "raw": [
+            {
+              "counter-value": "1100144113.000000",
+              "unit": "",
+              "event": "cycles:u",
+              "event-runtime": 292120406,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "3186591652.000000",
+              "unit": "",
+              "event": "instructions:u",
+              "event-runtime": 292120406,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "464128189.000000",
+              "unit": "",
+              "event": "branches:u",
+              "event-runtime": 292120406,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "197269.000000",
+              "unit": "",
+              "event": "branch-misses:u",
+              "event-runtime": 292120406,
+              "pcnt-running": 100.0
+            }
+          ]
+        },
+        {
+          "counts": {
+            "cycles:u": 1132259715.0,
+            "instructions:u": 3186592719.0,
+            "branches:u": 464128546.0,
+            "branch-misses:u": 201347.0
+          },
+          "raw": [
+            {
+              "counter-value": "1132259715.000000",
+              "unit": "",
+              "event": "cycles:u",
+              "event-runtime": 330660575,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "3186592719.000000",
+              "unit": "",
+              "event": "instructions:u",
+              "event-runtime": 330660575,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "464128546.000000",
+              "unit": "",
+              "event": "branches:u",
+              "event-runtime": 330660575,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "201347.000000",
+              "unit": "",
+              "event": "branch-misses:u",
+              "event-runtime": 330660575,
+              "pcnt-running": 100.0
+            }
+          ]
+        },
+        {
+          "counts": {
+            "cycles:u": 1100121594.0,
+            "instructions:u": 3186589765.0,
+            "branches:u": 464127496.0,
+            "branch-misses:u": 197579.0
+          },
+          "raw": [
+            {
+              "counter-value": "1100121594.000000",
+              "unit": "",
+              "event": "cycles:u",
+              "event-runtime": 289578343,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "3186589765.000000",
+              "unit": "",
+              "event": "instructions:u",
+              "event-runtime": 289578343,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "464127496.000000",
+              "unit": "",
+              "event": "branches:u",
+              "event-runtime": 289578343,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "197579.000000",
+              "unit": "",
+              "event": "branch-misses:u",
+              "event-runtime": 289578343,
+              "pcnt-running": 100.0
+            }
+          ]
+        },
+        {
+          "counts": {
+            "cycles:u": 1104127543.0,
+            "instructions:u": 3186591919.0,
+            "branches:u": 464128290.0,
+            "branch-misses:u": 198105.0
+          },
+          "raw": [
+            {
+              "counter-value": "1104127543.000000",
+              "unit": "",
+              "event": "cycles:u",
+              "event-runtime": 295923427,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "3186591919.000000",
+              "unit": "",
+              "event": "instructions:u",
+              "event-runtime": 295923427,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "464128290.000000",
+              "unit": "",
+              "event": "branches:u",
+              "event-runtime": 295923427,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "198105.000000",
+              "unit": "",
+              "event": "branch-misses:u",
+              "event-runtime": 295923427,
+              "pcnt-running": 100.0
+            }
+          ]
+        },
+        {
+          "counts": {
+            "cycles:u": 1105310554.0,
+            "instructions:u": 3186590714.0,
+            "branches:u": 464127832.0,
+            "branch-misses:u": 213285.0
+          },
+          "raw": [
+            {
+              "counter-value": "1105310554.000000",
+              "unit": "",
+              "event": "cycles:u",
+              "event-runtime": 295405077,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "3186590714.000000",
+              "unit": "",
+              "event": "instructions:u",
+              "event-runtime": 295405077,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "464127832.000000",
+              "unit": "",
+              "event": "branches:u",
+              "event-runtime": 295405077,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "213285.000000",
+              "unit": "",
+              "event": "branch-misses:u",
+              "event-runtime": 295405077,
+              "pcnt-running": 100.0
+            }
+          ]
+        },
+        {
+          "counts": {
+            "cycles:u": 1107238735.0,
+            "instructions:u": 3186592305.0,
+            "branches:u": 464128387.0,
+            "branch-misses:u": 324938.0
+          },
+          "raw": [
+            {
+              "counter-value": "1107238735.000000",
+              "unit": "",
+              "event": "cycles:u",
+              "event-runtime": 291112134,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "3186592305.000000",
+              "unit": "",
+              "event": "instructions:u",
+              "event-runtime": 291112134,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "464128387.000000",
+              "unit": "",
+              "event": "branches:u",
+              "event-runtime": 291112134,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "324938.000000",
+              "unit": "",
+              "event": "branch-misses:u",
+              "event-runtime": 291112134,
+              "pcnt-running": 100.0
+            }
+          ]
+        }
+      ]
+    },
+    "after_ast": {
+      "arithmetic": [
+        {
+          "counts": {
+            "cycles:u": 1203168971.0,
+            "instructions:u": 3355484636.0,
+            "branches:u": 477609578.0,
+            "branch-misses:u": 10607.0
+          },
+          "raw": [
+            {
+              "counter-value": "1203168971.000000",
+              "unit": "",
+              "event": "cycles:u",
+              "event-runtime": 318259931,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "3355484636.000000",
+              "unit": "",
+              "event": "instructions:u",
+              "event-runtime": 318259931,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "477609578.000000",
+              "unit": "",
+              "event": "branches:u",
+              "event-runtime": 318259931,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "10607.000000",
+              "unit": "",
+              "event": "branch-misses:u",
+              "event-runtime": 318259931,
+              "pcnt-running": 100.0
+            }
+          ]
+        },
+        {
+          "counts": {
+            "cycles:u": 1211740414.0,
+            "instructions:u": 3355483423.0,
+            "branches:u": 477609144.0,
+            "branch-misses:u": 10649.0
+          },
+          "raw": [
+            {
+              "counter-value": "1211740414.000000",
+              "unit": "",
+              "event": "cycles:u",
+              "event-runtime": 318837809,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "3355483423.000000",
+              "unit": "",
+              "event": "instructions:u",
+              "event-runtime": 318837809,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "477609144.000000",
+              "unit": "",
+              "event": "branches:u",
+              "event-runtime": 318837809,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "10649.000000",
+              "unit": "",
+              "event": "branch-misses:u",
+              "event-runtime": 318837809,
+              "pcnt-running": 100.0
+            }
+          ]
+        },
+        {
+          "counts": {
+            "cycles:u": 1211422042.0,
+            "instructions:u": 3355484286.0,
+            "branches:u": 477609446.0,
+            "branch-misses:u": 10803.0
+          },
+          "raw": [
+            {
+              "counter-value": "1211422042.000000",
+              "unit": "",
+              "event": "cycles:u",
+              "event-runtime": 321136802,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "3355484286.000000",
+              "unit": "",
+              "event": "instructions:u",
+              "event-runtime": 321136802,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "477609446.000000",
+              "unit": "",
+              "event": "branches:u",
+              "event-runtime": 321136802,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "10803.000000",
+              "unit": "",
+              "event": "branch-misses:u",
+              "event-runtime": 321136802,
+              "pcnt-running": 100.0
+            }
+          ]
+        },
+        {
+          "counts": {
+            "cycles:u": 1216734528.0,
+            "instructions:u": 3355485725.0,
+            "branches:u": 477609903.0,
+            "branch-misses:u": 10565.0
+          },
+          "raw": [
+            {
+              "counter-value": "1216734528.000000",
+              "unit": "",
+              "event": "cycles:u",
+              "event-runtime": 319601384,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "3355485725.000000",
+              "unit": "",
+              "event": "instructions:u",
+              "event-runtime": 319601384,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "477609903.000000",
+              "unit": "",
+              "event": "branches:u",
+              "event-runtime": 319601384,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "10565.000000",
+              "unit": "",
+              "event": "branch-misses:u",
+              "event-runtime": 319601384,
+              "pcnt-running": 100.0
+            }
+          ]
+        },
+        {
+          "counts": {
+            "cycles:u": 1202842177.0,
+            "instructions:u": 3355483666.0,
+            "branches:u": 477609282.0,
+            "branch-misses:u": 10635.0
+          },
+          "raw": [
+            {
+              "counter-value": "1202842177.000000",
+              "unit": "",
+              "event": "cycles:u",
+              "event-runtime": 314765835,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "3355483666.000000",
+              "unit": "",
+              "event": "instructions:u",
+              "event-runtime": 314765835,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "477609282.000000",
+              "unit": "",
+              "event": "branches:u",
+              "event-runtime": 314765835,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "10635.000000",
+              "unit": "",
+              "event": "branch-misses:u",
+              "event-runtime": 314765835,
+              "pcnt-running": 100.0
+            }
+          ]
+        },
+        {
+          "counts": {
+            "cycles:u": 1201286788.0,
+            "instructions:u": 3355483359.0,
+            "branches:u": 477609142.0,
+            "branch-misses:u": 10360.0
+          },
+          "raw": [
+            {
+              "counter-value": "1201286788.000000",
+              "unit": "",
+              "event": "cycles:u",
+              "event-runtime": 323665976,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "3355483359.000000",
+              "unit": "",
+              "event": "instructions:u",
+              "event-runtime": 323665976,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "477609142.000000",
+              "unit": "",
+              "event": "branches:u",
+              "event-runtime": 323665976,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "10360.000000",
+              "unit": "",
+              "event": "branch-misses:u",
+              "event-runtime": 323665976,
+              "pcnt-running": 100.0
+            }
+          ]
+        },
+        {
+          "counts": {
+            "cycles:u": 1215875888.0,
+            "instructions:u": 3355483675.0,
+            "branches:u": 477609234.0,
+            "branch-misses:u": 10402.0
+          },
+          "raw": [
+            {
+              "counter-value": "1215875888.000000",
+              "unit": "",
+              "event": "cycles:u",
+              "event-runtime": 319326927,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "3355483675.000000",
+              "unit": "",
+              "event": "instructions:u",
+              "event-runtime": 319326927,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "477609234.000000",
+              "unit": "",
+              "event": "branches:u",
+              "event-runtime": 319326927,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "10402.000000",
+              "unit": "",
+              "event": "branch-misses:u",
+              "event-runtime": 319326927,
+              "pcnt-running": 100.0
+            }
+          ]
+        },
+        {
+          "counts": {
+            "cycles:u": 1205227753.0,
+            "instructions:u": 3355483017.0,
+            "branches:u": 477609023.0,
+            "branch-misses:u": 10764.0
+          },
+          "raw": [
+            {
+              "counter-value": "1205227753.000000",
+              "unit": "",
+              "event": "cycles:u",
+              "event-runtime": 322083147,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "3355483017.000000",
+              "unit": "",
+              "event": "instructions:u",
+              "event-runtime": 322083147,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "477609023.000000",
+              "unit": "",
+              "event": "branches:u",
+              "event-runtime": 322083147,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "10764.000000",
+              "unit": "",
+              "event": "branch-misses:u",
+              "event-runtime": 322083147,
+              "pcnt-running": 100.0
+            }
+          ]
+        },
+        {
+          "counts": {
+            "cycles:u": 1209934468.0,
+            "instructions:u": 3355482974.0,
+            "branches:u": 477608987.0,
+            "branch-misses:u": 10455.0
+          },
+          "raw": [
+            {
+              "counter-value": "1209934468.000000",
+              "unit": "",
+              "event": "cycles:u",
+              "event-runtime": 317731330,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "3355482974.000000",
+              "unit": "",
+              "event": "instructions:u",
+              "event-runtime": 317731330,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "477608987.000000",
+              "unit": "",
+              "event": "branches:u",
+              "event-runtime": 317731330,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "10455.000000",
+              "unit": "",
+              "event": "branch-misses:u",
+              "event-runtime": 317731330,
+              "pcnt-running": 100.0
+            }
+          ]
+        },
+        {
+          "counts": {
+            "cycles:u": 1201891483.0,
+            "instructions:u": 3355485171.0,
+            "branches:u": 477609713.0,
+            "branch-misses:u": 10132.0
+          },
+          "raw": [
+            {
+              "counter-value": "1201891483.000000",
+              "unit": "",
+              "event": "cycles:u",
+              "event-runtime": 314237610,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "3355485171.000000",
+              "unit": "",
+              "event": "instructions:u",
+              "event-runtime": 314237610,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "477609713.000000",
+              "unit": "",
+              "event": "branches:u",
+              "event-runtime": 314237610,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "10132.000000",
+              "unit": "",
+              "event": "branch-misses:u",
+              "event-runtime": 314237610,
+              "pcnt-running": 100.0
+            }
+          ]
+        },
+        {
+          "counts": {
+            "cycles:u": 1204663020.0,
+            "instructions:u": 3355484432.0,
+            "branches:u": 477609466.0,
+            "branch-misses:u": 9767.0
+          },
+          "raw": [
+            {
+              "counter-value": "1204663020.000000",
+              "unit": "",
+              "event": "cycles:u",
+              "event-runtime": 313762951,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "3355484432.000000",
+              "unit": "",
+              "event": "instructions:u",
+              "event-runtime": 313762951,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "477609466.000000",
+              "unit": "",
+              "event": "branches:u",
+              "event-runtime": 313762951,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "9767.000000",
+              "unit": "",
+              "event": "branch-misses:u",
+              "event-runtime": 313762951,
+              "pcnt-running": 100.0
+            }
+          ]
+        }
+      ],
+      "closures": [
+        {
+          "counts": {
+            "cycles:u": 1615585445.0,
+            "instructions:u": 3751690032.0,
+            "branches:u": 575648781.0,
+            "branch-misses:u": 62845.0
+          },
+          "raw": [
+            {
+              "counter-value": "1615585445.000000",
+              "unit": "",
+              "event": "cycles:u",
+              "event-runtime": 456901080,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "3751690032.000000",
+              "unit": "",
+              "event": "instructions:u",
+              "event-runtime": 456901080,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "575648781.000000",
+              "unit": "",
+              "event": "branches:u",
+              "event-runtime": 456901080,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "62845.000000",
+              "unit": "",
+              "event": "branch-misses:u",
+              "event-runtime": 456901080,
+              "pcnt-running": 100.0
+            }
+          ]
+        },
+        {
+          "counts": {
+            "cycles:u": 1351750990.0,
+            "instructions:u": 3751691819.0,
+            "branches:u": 575648765.0,
+            "branch-misses:u": 17569.0
+          },
+          "raw": [
+            {
+              "counter-value": "1351750990.000000",
+              "unit": "",
+              "event": "cycles:u",
+              "event-runtime": 353432362,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "3751691819.000000",
+              "unit": "",
+              "event": "instructions:u",
+              "event-runtime": 353432362,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "575648765.000000",
+              "unit": "",
+              "event": "branches:u",
+              "event-runtime": 353432362,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "17569.000000",
+              "unit": "",
+              "event": "branch-misses:u",
+              "event-runtime": 353432362,
+              "pcnt-running": 100.0
+            }
+          ]
+        },
+        {
+          "counts": {
+            "cycles:u": 1359867222.0,
+            "instructions:u": 3751693663.0,
+            "branches:u": 575649217.0,
+            "branch-misses:u": 18580.0
+          },
+          "raw": [
+            {
+              "counter-value": "1359867222.000000",
+              "unit": "",
+              "event": "cycles:u",
+              "event-runtime": 358471257,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "3751693663.000000",
+              "unit": "",
+              "event": "instructions:u",
+              "event-runtime": 358471257,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "575649217.000000",
+              "unit": "",
+              "event": "branches:u",
+              "event-runtime": 358471257,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "18580.000000",
+              "unit": "",
+              "event": "branch-misses:u",
+              "event-runtime": 358471257,
+              "pcnt-running": 100.0
+            }
+          ]
+        },
+        {
+          "counts": {
+            "cycles:u": 1362168911.0,
+            "instructions:u": 3751693338.0,
+            "branches:u": 575649235.0,
+            "branch-misses:u": 18593.0
+          },
+          "raw": [
+            {
+              "counter-value": "1362168911.000000",
+              "unit": "",
+              "event": "cycles:u",
+              "event-runtime": 355910842,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "3751693338.000000",
+              "unit": "",
+              "event": "instructions:u",
+              "event-runtime": 355910842,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "575649235.000000",
+              "unit": "",
+              "event": "branches:u",
+              "event-runtime": 355910842,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "18593.000000",
+              "unit": "",
+              "event": "branch-misses:u",
+              "event-runtime": 355910842,
+              "pcnt-running": 100.0
+            }
+          ]
+        },
+        {
+          "counts": {
+            "cycles:u": 1359440800.0,
+            "instructions:u": 3751693934.0,
+            "branches:u": 575649370.0,
+            "branch-misses:u": 18584.0
+          },
+          "raw": [
+            {
+              "counter-value": "1359440800.000000",
+              "unit": "",
+              "event": "cycles:u",
+              "event-runtime": 356580341,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "3751693934.000000",
+              "unit": "",
+              "event": "instructions:u",
+              "event-runtime": 356580341,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "575649370.000000",
+              "unit": "",
+              "event": "branches:u",
+              "event-runtime": 356580341,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "18584.000000",
+              "unit": "",
+              "event": "branch-misses:u",
+              "event-runtime": 356580341,
+              "pcnt-running": 100.0
+            }
+          ]
+        },
+        {
+          "counts": {
+            "cycles:u": 1364010291.0,
+            "instructions:u": 3751692762.0,
+            "branches:u": 575649105.0,
+            "branch-misses:u": 18701.0
+          },
+          "raw": [
+            {
+              "counter-value": "1364010291.000000",
+              "unit": "",
+              "event": "cycles:u",
+              "event-runtime": 361491704,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "3751692762.000000",
+              "unit": "",
+              "event": "instructions:u",
+              "event-runtime": 361491704,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "575649105.000000",
+              "unit": "",
+              "event": "branches:u",
+              "event-runtime": 361491704,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "18701.000000",
+              "unit": "",
+              "event": "branch-misses:u",
+              "event-runtime": 361491704,
+              "pcnt-running": 100.0
+            }
+          ]
+        },
+        {
+          "counts": {
+            "cycles:u": 1358007384.0,
+            "instructions:u": 3751692665.0,
+            "branches:u": 575648835.0,
+            "branch-misses:u": 18647.0
+          },
+          "raw": [
+            {
+              "counter-value": "1358007384.000000",
+              "unit": "",
+              "event": "cycles:u",
+              "event-runtime": 356191751,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "3751692665.000000",
+              "unit": "",
+              "event": "instructions:u",
+              "event-runtime": 356191751,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "575648835.000000",
+              "unit": "",
+              "event": "branches:u",
+              "event-runtime": 356191751,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "18647.000000",
+              "unit": "",
+              "event": "branch-misses:u",
+              "event-runtime": 356191751,
+              "pcnt-running": 100.0
+            }
+          ]
+        },
+        {
+          "counts": {
+            "cycles:u": 1371568480.0,
+            "instructions:u": 3751689587.0,
+            "branches:u": 575648302.0,
+            "branch-misses:u": 558192.0
+          },
+          "raw": [
+            {
+              "counter-value": "1371568480.000000",
+              "unit": "",
+              "event": "cycles:u",
+              "event-runtime": 359071648,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "3751689587.000000",
+              "unit": "",
+              "event": "instructions:u",
+              "event-runtime": 359071648,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "575648302.000000",
+              "unit": "",
+              "event": "branches:u",
+              "event-runtime": 359071648,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "558192.000000",
+              "unit": "",
+              "event": "branch-misses:u",
+              "event-runtime": 359071648,
+              "pcnt-running": 100.0
+            }
+          ]
+        },
+        {
+          "counts": {
+            "cycles:u": 1401526317.0,
+            "instructions:u": 3751695031.0,
+            "branches:u": 575649650.0,
+            "branch-misses:u": 666641.0
+          },
+          "raw": [
+            {
+              "counter-value": "1401526317.000000",
+              "unit": "",
+              "event": "cycles:u",
+              "event-runtime": 366980203,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "3751695031.000000",
+              "unit": "",
+              "event": "instructions:u",
+              "event-runtime": 366980203,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "575649650.000000",
+              "unit": "",
+              "event": "branches:u",
+              "event-runtime": 366980203,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "666641.000000",
+              "unit": "",
+              "event": "branch-misses:u",
+              "event-runtime": 366980203,
+              "pcnt-running": 100.0
+            }
+          ]
+        },
+        {
+          "counts": {
+            "cycles:u": 1373918679.0,
+            "instructions:u": 3751695317.0,
+            "branches:u": 575649626.0,
+            "branch-misses:u": 420773.0
+          },
+          "raw": [
+            {
+              "counter-value": "1373918679.000000",
+              "unit": "",
+              "event": "cycles:u",
+              "event-runtime": 361760867,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "3751695317.000000",
+              "unit": "",
+              "event": "instructions:u",
+              "event-runtime": 361760867,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "575649626.000000",
+              "unit": "",
+              "event": "branches:u",
+              "event-runtime": 361760867,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "420773.000000",
+              "unit": "",
+              "event": "branch-misses:u",
+              "event-runtime": 361760867,
+              "pcnt-running": 100.0
+            }
+          ]
+        },
+        {
+          "counts": {
+            "cycles:u": 1355231473.0,
+            "instructions:u": 3751690012.0,
+            "branches:u": 575648475.0,
+            "branch-misses:u": 18209.0
+          },
+          "raw": [
+            {
+              "counter-value": "1355231473.000000",
+              "unit": "",
+              "event": "cycles:u",
+              "event-runtime": 353196483,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "3751690012.000000",
+              "unit": "",
+              "event": "instructions:u",
+              "event-runtime": 353196483,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "575648475.000000",
+              "unit": "",
+              "event": "branches:u",
+              "event-runtime": 353196483,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "18209.000000",
+              "unit": "",
+              "event": "branch-misses:u",
+              "event-runtime": 353196483,
+              "pcnt-running": 100.0
+            }
+          ]
+        }
+      ]
+    },
+    "after_bytecode": {
+      "arithmetic": [
+        {
+          "counts": {
+            "cycles:u": 909862095.0,
+            "instructions:u": 2850519005.0,
+            "branches:u": 372614803.0,
+            "branch-misses:u": 10547.0
+          },
+          "raw": [
+            {
+              "counter-value": "909862095.000000",
+              "unit": "",
+              "event": "cycles:u",
+              "event-runtime": 248395144,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "2850519005.000000",
+              "unit": "",
+              "event": "instructions:u",
+              "event-runtime": 248395144,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "372614803.000000",
+              "unit": "",
+              "event": "branches:u",
+              "event-runtime": 248395144,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "10547.000000",
+              "unit": "",
+              "event": "branch-misses:u",
+              "event-runtime": 248395144,
+              "pcnt-running": 100.0
+            }
+          ]
+        },
+        {
+          "counts": {
+            "cycles:u": 915821851.0,
+            "instructions:u": 2850519046.0,
+            "branches:u": 372614703.0,
+            "branch-misses:u": 10325.0
+          },
+          "raw": [
+            {
+              "counter-value": "915821851.000000",
+              "unit": "",
+              "event": "cycles:u",
+              "event-runtime": 241656769,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "2850519046.000000",
+              "unit": "",
+              "event": "instructions:u",
+              "event-runtime": 241656769,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "372614703.000000",
+              "unit": "",
+              "event": "branches:u",
+              "event-runtime": 241656769,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "10325.000000",
+              "unit": "",
+              "event": "branch-misses:u",
+              "event-runtime": 241656769,
+              "pcnt-running": 100.0
+            }
+          ]
+        },
+        {
+          "counts": {
+            "cycles:u": 910665524.0,
+            "instructions:u": 2850517973.0,
+            "branches:u": 372614348.0,
+            "branch-misses:u": 9733.0
+          },
+          "raw": [
+            {
+              "counter-value": "910665524.000000",
+              "unit": "",
+              "event": "cycles:u",
+              "event-runtime": 240715940,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "2850517973.000000",
+              "unit": "",
+              "event": "instructions:u",
+              "event-runtime": 240715940,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "372614348.000000",
+              "unit": "",
+              "event": "branches:u",
+              "event-runtime": 240715940,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "9733.000000",
+              "unit": "",
+              "event": "branch-misses:u",
+              "event-runtime": 240715940,
+              "pcnt-running": 100.0
+            }
+          ]
+        },
+        {
+          "counts": {
+            "cycles:u": 921239089.0,
+            "instructions:u": 2850517989.0,
+            "branches:u": 372614387.0,
+            "branch-misses:u": 10049.0
+          },
+          "raw": [
+            {
+              "counter-value": "921239089.000000",
+              "unit": "",
+              "event": "cycles:u",
+              "event-runtime": 250835565,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "2850517989.000000",
+              "unit": "",
+              "event": "instructions:u",
+              "event-runtime": 250835565,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "372614387.000000",
+              "unit": "",
+              "event": "branches:u",
+              "event-runtime": 250835565,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "10049.000000",
+              "unit": "",
+              "event": "branch-misses:u",
+              "event-runtime": 250835565,
+              "pcnt-running": 100.0
+            }
+          ]
+        },
+        {
+          "counts": {
+            "cycles:u": 918587618.0,
+            "instructions:u": 2850519038.0,
+            "branches:u": 372614712.0,
+            "branch-misses:u": 9540.0
+          },
+          "raw": [
+            {
+              "counter-value": "918587618.000000",
+              "unit": "",
+              "event": "cycles:u",
+              "event-runtime": 241700099,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "2850519038.000000",
+              "unit": "",
+              "event": "instructions:u",
+              "event-runtime": 241700099,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "372614712.000000",
+              "unit": "",
+              "event": "branches:u",
+              "event-runtime": 241700099,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "9540.000000",
+              "unit": "",
+              "event": "branch-misses:u",
+              "event-runtime": 241700099,
+              "pcnt-running": 100.0
+            }
+          ]
+        },
+        {
+          "counts": {
+            "cycles:u": 913385439.0,
+            "instructions:u": 2850518955.0,
+            "branches:u": 372614652.0,
+            "branch-misses:u": 10352.0
+          },
+          "raw": [
+            {
+              "counter-value": "913385439.000000",
+              "unit": "",
+              "event": "cycles:u",
+              "event-runtime": 247879891,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "2850518955.000000",
+              "unit": "",
+              "event": "instructions:u",
+              "event-runtime": 247879891,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "372614652.000000",
+              "unit": "",
+              "event": "branches:u",
+              "event-runtime": 247879891,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "10352.000000",
+              "unit": "",
+              "event": "branch-misses:u",
+              "event-runtime": 247879891,
+              "pcnt-running": 100.0
+            }
+          ]
+        },
+        {
+          "counts": {
+            "cycles:u": 930831258.0,
+            "instructions:u": 2850519338.0,
+            "branches:u": 372614802.0,
+            "branch-misses:u": 12443.0
+          },
+          "raw": [
+            {
+              "counter-value": "930831258.000000",
+              "unit": "",
+              "event": "cycles:u",
+              "event-runtime": 261070961,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "2850519338.000000",
+              "unit": "",
+              "event": "instructions:u",
+              "event-runtime": 261070961,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "372614802.000000",
+              "unit": "",
+              "event": "branches:u",
+              "event-runtime": 261070961,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "12443.000000",
+              "unit": "",
+              "event": "branch-misses:u",
+              "event-runtime": 261070961,
+              "pcnt-running": 100.0
+            }
+          ]
+        },
+        {
+          "counts": {
+            "cycles:u": 914229149.0,
+            "instructions:u": 2850518679.0,
+            "branches:u": 372614572.0,
+            "branch-misses:u": 9880.0
+          },
+          "raw": [
+            {
+              "counter-value": "914229149.000000",
+              "unit": "",
+              "event": "cycles:u",
+              "event-runtime": 240683723,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "2850518679.000000",
+              "unit": "",
+              "event": "instructions:u",
+              "event-runtime": 240683723,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "372614572.000000",
+              "unit": "",
+              "event": "branches:u",
+              "event-runtime": 240683723,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "9880.000000",
+              "unit": "",
+              "event": "branch-misses:u",
+              "event-runtime": 240683723,
+              "pcnt-running": 100.0
+            }
+          ]
+        },
+        {
+          "counts": {
+            "cycles:u": 911333385.0,
+            "instructions:u": 2850518278.0,
+            "branches:u": 372614423.0,
+            "branch-misses:u": 10347.0
+          },
+          "raw": [
+            {
+              "counter-value": "911333385.000000",
+              "unit": "",
+              "event": "cycles:u",
+              "event-runtime": 242347876,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "2850518278.000000",
+              "unit": "",
+              "event": "instructions:u",
+              "event-runtime": 242347876,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "372614423.000000",
+              "unit": "",
+              "event": "branches:u",
+              "event-runtime": 242347876,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "10347.000000",
+              "unit": "",
+              "event": "branch-misses:u",
+              "event-runtime": 242347876,
+              "pcnt-running": 100.0
+            }
+          ]
+        },
+        {
+          "counts": {
+            "cycles:u": 915196866.0,
+            "instructions:u": 2850519871.0,
+            "branches:u": 372615082.0,
+            "branch-misses:u": 10676.0
+          },
+          "raw": [
+            {
+              "counter-value": "915196866.000000",
+              "unit": "",
+              "event": "cycles:u",
+              "event-runtime": 250054566,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "2850519871.000000",
+              "unit": "",
+              "event": "instructions:u",
+              "event-runtime": 250054566,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "372615082.000000",
+              "unit": "",
+              "event": "branches:u",
+              "event-runtime": 250054566,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "10676.000000",
+              "unit": "",
+              "event": "branch-misses:u",
+              "event-runtime": 250054566,
+              "pcnt-running": 100.0
+            }
+          ]
+        },
+        {
+          "counts": {
+            "cycles:u": 913574235.0,
+            "instructions:u": 2850517675.0,
+            "branches:u": 372614242.0,
+            "branch-misses:u": 9922.0
+          },
+          "raw": [
+            {
+              "counter-value": "913574235.000000",
+              "unit": "",
+              "event": "cycles:u",
+              "event-runtime": 238198972,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "2850517675.000000",
+              "unit": "",
+              "event": "instructions:u",
+              "event-runtime": 238198972,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "372614242.000000",
+              "unit": "",
+              "event": "branches:u",
+              "event-runtime": 238198972,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "9922.000000",
+              "unit": "",
+              "event": "branch-misses:u",
+              "event-runtime": 238198972,
+              "pcnt-running": 100.0
+            }
+          ]
+        }
+      ],
+      "closures": [
+        {
+          "counts": {
+            "cycles:u": 1074345198.0,
+            "instructions:u": 3143592097.0,
+            "branches:u": 458128437.0,
+            "branch-misses:u": 133785.0
+          },
+          "raw": [
+            {
+              "counter-value": "1074345198.000000",
+              "unit": "",
+              "event": "cycles:u",
+              "event-runtime": 295404682,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "3143592097.000000",
+              "unit": "",
+              "event": "instructions:u",
+              "event-runtime": 295404682,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "458128437.000000",
+              "unit": "",
+              "event": "branches:u",
+              "event-runtime": 295404682,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "133785.000000",
+              "unit": "",
+              "event": "branch-misses:u",
+              "event-runtime": 295404682,
+              "pcnt-running": 100.0
+            }
+          ]
+        },
+        {
+          "counts": {
+            "cycles:u": 1068331918.0,
+            "instructions:u": 3143593011.0,
+            "branches:u": 458128729.0,
+            "branch-misses:u": 141454.0
+          },
+          "raw": [
+            {
+              "counter-value": "1068331918.000000",
+              "unit": "",
+              "event": "cycles:u",
+              "event-runtime": 280782612,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "3143593011.000000",
+              "unit": "",
+              "event": "instructions:u",
+              "event-runtime": 280782612,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "458128729.000000",
+              "unit": "",
+              "event": "branches:u",
+              "event-runtime": 280782612,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "141454.000000",
+              "unit": "",
+              "event": "branch-misses:u",
+              "event-runtime": 280782612,
+              "pcnt-running": 100.0
+            }
+          ]
+        },
+        {
+          "counts": {
+            "cycles:u": 1096062467.0,
+            "instructions:u": 3143591961.0,
+            "branches:u": 458128395.0,
+            "branch-misses:u": 466458.0
+          },
+          "raw": [
+            {
+              "counter-value": "1096062467.000000",
+              "unit": "",
+              "event": "cycles:u",
+              "event-runtime": 294912126,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "3143591961.000000",
+              "unit": "",
+              "event": "instructions:u",
+              "event-runtime": 294912126,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "458128395.000000",
+              "unit": "",
+              "event": "branches:u",
+              "event-runtime": 294912126,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "466458.000000",
+              "unit": "",
+              "event": "branch-misses:u",
+              "event-runtime": 294912126,
+              "pcnt-running": 100.0
+            }
+          ]
+        },
+        {
+          "counts": {
+            "cycles:u": 1075795079.0,
+            "instructions:u": 3143591888.0,
+            "branches:u": 458128373.0,
+            "branch-misses:u": 132864.0
+          },
+          "raw": [
+            {
+              "counter-value": "1075795079.000000",
+              "unit": "",
+              "event": "cycles:u",
+              "event-runtime": 284694783,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "3143591888.000000",
+              "unit": "",
+              "event": "instructions:u",
+              "event-runtime": 284694783,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "458128373.000000",
+              "unit": "",
+              "event": "branches:u",
+              "event-runtime": 284694783,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "132864.000000",
+              "unit": "",
+              "event": "branch-misses:u",
+              "event-runtime": 284694783,
+              "pcnt-running": 100.0
+            }
+          ]
+        },
+        {
+          "counts": {
+            "cycles:u": 1074375628.0,
+            "instructions:u": 3143592416.0,
+            "branches:u": 458128487.0,
+            "branch-misses:u": 129315.0
+          },
+          "raw": [
+            {
+              "counter-value": "1074375628.000000",
+              "unit": "",
+              "event": "cycles:u",
+              "event-runtime": 283378433,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "3143592416.000000",
+              "unit": "",
+              "event": "instructions:u",
+              "event-runtime": 283378433,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "458128487.000000",
+              "unit": "",
+              "event": "branches:u",
+              "event-runtime": 283378433,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "129315.000000",
+              "unit": "",
+              "event": "branch-misses:u",
+              "event-runtime": 283378433,
+              "pcnt-running": 100.0
+            }
+          ]
+        },
+        {
+          "counts": {
+            "cycles:u": 1091154363.0,
+            "instructions:u": 3143592529.0,
+            "branches:u": 458128549.0,
+            "branch-misses:u": 173567.0
+          },
+          "raw": [
+            {
+              "counter-value": "1091154363.000000",
+              "unit": "",
+              "event": "cycles:u",
+              "event-runtime": 289676233,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "3143592529.000000",
+              "unit": "",
+              "event": "instructions:u",
+              "event-runtime": 289676233,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "458128549.000000",
+              "unit": "",
+              "event": "branches:u",
+              "event-runtime": 289676233,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "173567.000000",
+              "unit": "",
+              "event": "branch-misses:u",
+              "event-runtime": 289676233,
+              "pcnt-running": 100.0
+            }
+          ]
+        },
+        {
+          "counts": {
+            "cycles:u": 1074499520.0,
+            "instructions:u": 3143592929.0,
+            "branches:u": 458128679.0,
+            "branch-misses:u": 133723.0
+          },
+          "raw": [
+            {
+              "counter-value": "1074499520.000000",
+              "unit": "",
+              "event": "cycles:u",
+              "event-runtime": 284955176,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "3143592929.000000",
+              "unit": "",
+              "event": "instructions:u",
+              "event-runtime": 284955176,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "458128679.000000",
+              "unit": "",
+              "event": "branches:u",
+              "event-runtime": 284955176,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "133723.000000",
+              "unit": "",
+              "event": "branch-misses:u",
+              "event-runtime": 284955176,
+              "pcnt-running": 100.0
+            }
+          ]
+        },
+        {
+          "counts": {
+            "cycles:u": 1082749776.0,
+            "instructions:u": 3143593278.0,
+            "branches:u": 458128805.0,
+            "branch-misses:u": 128613.0
+          },
+          "raw": [
+            {
+              "counter-value": "1082749776.000000",
+              "unit": "",
+              "event": "cycles:u",
+              "event-runtime": 284069465,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "3143593278.000000",
+              "unit": "",
+              "event": "instructions:u",
+              "event-runtime": 284069465,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "458128805.000000",
+              "unit": "",
+              "event": "branches:u",
+              "event-runtime": 284069465,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "128613.000000",
+              "unit": "",
+              "event": "branch-misses:u",
+              "event-runtime": 284069465,
+              "pcnt-running": 100.0
+            }
+          ]
+        },
+        {
+          "counts": {
+            "cycles:u": 1080677478.0,
+            "instructions:u": 3143593230.0,
+            "branches:u": 458128835.0,
+            "branch-misses:u": 129625.0
+          },
+          "raw": [
+            {
+              "counter-value": "1080677478.000000",
+              "unit": "",
+              "event": "cycles:u",
+              "event-runtime": 285284677,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "3143593230.000000",
+              "unit": "",
+              "event": "instructions:u",
+              "event-runtime": 285284677,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "458128835.000000",
+              "unit": "",
+              "event": "branches:u",
+              "event-runtime": 285284677,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "129625.000000",
+              "unit": "",
+              "event": "branch-misses:u",
+              "event-runtime": 285284677,
+              "pcnt-running": 100.0
+            }
+          ]
+        },
+        {
+          "counts": {
+            "cycles:u": 1103775016.0,
+            "instructions:u": 3143591712.0,
+            "branches:u": 458128287.0,
+            "branch-misses:u": 1111648.0
+          },
+          "raw": [
+            {
+              "counter-value": "1103775016.000000",
+              "unit": "",
+              "event": "cycles:u",
+              "event-runtime": 288644441,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "3143591712.000000",
+              "unit": "",
+              "event": "instructions:u",
+              "event-runtime": 288644441,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "458128287.000000",
+              "unit": "",
+              "event": "branches:u",
+              "event-runtime": 288644441,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "1111648.000000",
+              "unit": "",
+              "event": "branch-misses:u",
+              "event-runtime": 288644441,
+              "pcnt-running": 100.0
+            }
+          ]
+        },
+        {
+          "counts": {
+            "cycles:u": 1083463410.0,
+            "instructions:u": 3143592005.0,
+            "branches:u": 458128381.0,
+            "branch-misses:u": 123393.0
+          },
+          "raw": [
+            {
+              "counter-value": "1083463410.000000",
+              "unit": "",
+              "event": "cycles:u",
+              "event-runtime": 284793872,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "3143592005.000000",
+              "unit": "",
+              "event": "instructions:u",
+              "event-runtime": 284793872,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "458128381.000000",
+              "unit": "",
+              "event": "branches:u",
+              "event-runtime": 284793872,
+              "pcnt-running": 100.0
+            },
+            {
+              "counter-value": "123393.000000",
+              "unit": "",
+              "event": "branch-misses:u",
+              "event-runtime": 284793872,
+              "pcnt-running": 100.0
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "medians": {
+    "before_ast": {
+      "arithmetic": {
+        "cycles:u": 1204089989.0,
+        "instructions:u": 3383482918.0,
+        "branches:u": 479608880.0,
+        "branch-misses:u": 10732.0
+      },
+      "closures": {
+        "cycles:u": 1379089744.0,
+        "instructions:u": 3792693482.0,
+        "branches:u": 578148882.0,
+        "branch-misses:u": 19227.0
+      }
+    },
+    "before_bytecode": {
+      "arithmetic": {
+        "cycles:u": 934841944.0,
+        "instructions:u": 2876517153.0,
+        "branches:u": 374613943.0,
+        "branch-misses:u": 9852.0
+      },
+      "closures": {
+        "cycles:u": 1104127543.0,
+        "instructions:u": 3186591652.0,
+        "branches:u": 464128169.0,
+        "branch-misses:u": 198243.0
+      }
+    },
+    "after_ast": {
+      "arithmetic": {
+        "cycles:u": 1205227753.0,
+        "instructions:u": 3355483675.0,
+        "branches:u": 477609282.0,
+        "branch-misses:u": 10565.0
+      },
+      "closures": {
+        "cycles:u": 1362168911.0,
+        "instructions:u": 3751692762.0,
+        "branches:u": 575649105.0,
+        "branch-misses:u": 18647.0
+      }
+    },
+    "after_bytecode": {
+      "arithmetic": {
+        "cycles:u": 914229149.0,
+        "instructions:u": 2850518955.0,
+        "branches:u": 372614652.0,
+        "branch-misses:u": 10325.0
+      },
+      "closures": {
+        "cycles:u": 1080677478.0,
+        "instructions:u": 3143592416.0,
+        "branches:u": 458128487.0,
+        "branch-misses:u": 133723.0
+      }
+    }
+  },
+  "profiles": {
+    "before": {
+      "arithmetic": {
+        "command": [
+          "perf",
+          "record",
+          "-q",
+          "-e",
+          "cycles:u",
+          "-F",
+          "997",
+          "--user-callchains",
+          "-o",
+          "/home/thiago/src/expressa/target/clone-fastpath/perf/before-arithmetic-flat.data",
+          "--",
+          "/home/thiago/src/expressa/target/bytecode-steps/08-clone/expressa",
+          "/home/thiago/src/expressa/benchmarks/clone-fastpath/programs/arithmetic.lep"
+        ],
+        "report_command": [
+          "perf",
+          "report",
+          "--stdio",
+          "--no-children",
+          "-g",
+          "none",
+          "--sort",
+          "symbol",
+          "--percent-limit",
+          "0",
+          "-i",
+          "/home/thiago/src/expressa/target/clone-fastpath/perf/before-arithmetic-flat.data"
+        ],
+        "data_path": "/home/thiago/src/expressa/target/clone-fastpath/perf/before-arithmetic-flat.data",
+        "data_sha256": "0ba58938936deaa703412ae475b987e2fecfde683b2c2a7fe0cab3b372f40544",
+        "report": "# To display the perf.data header info, please use --header/--header-only options.\n#\n#\n# Total Lost Samples: 0\n#\n# Samples: 2K of event 'cycles:u'\n# Event count (approx.): 9339174955\n#\n# Overhead  Symbol                                                                                        IPC   [IPC Coverage]\n# ........  ............................................................................................  ....................\n#\n    22.36%  [.] <expressa::runtime::eval::bytecode::execute::Machine>::run                                -      -            \n    19.49%  [.] <std::hash::random::RandomState as core::hash::BuildHasher>::hash_one::<&str>             -      -            \n    12.70%  [.] <core::hash::sip::Hasher<core::hash::sip::Sip13Rounds> as core::hash::Hasher>::write      -      -            \n    12.36%  [.] <expressa::runtime::bindings::Bindings>::get                                              -      -            \n     6.73%  [.] <expressa::runtime::env::Env>::get                                                        -      -            \n     5.67%  [.] <expressa::runtime::bindings::Bindings>::get_mut                                          -      -            \n     4.74%  [.] __memcmp_avx2_movbe                                                                       -      -            \n     3.04%  [.] <expressa::runtime::numero::Numero>::add                                                  -      -            \n     3.03%  [.] <expressa::runtime::eval::Vm>::apply_binary                                               -      -            \n     2.75%  [.] core::ptr::drop_glue::<expressa::runtime::value::Value>                                   -      -            \n     2.72%  [.] <expressa::runtime::env::Env>::assignment_frame                                           -      -            \n     1.98%  [.] <expressa::runtime::value::Value as core::clone::Clone>::clone                            -      -            \n     1.54%  [.] <expressa::runtime::eval::Vm>::pause                                                      -      -            \n     0.58%  [.] stacker::remaining_stack                                                                  -      -            \n     0.12%  [.] <expressa::runtime::debug::NoopHook as expressa::runtime::debug::DebugHook>::before_stmt  -      -            \n     0.08%  [.] psm::stack_pointer                                                                        -      -            \n     0.05%  [k] 0000000000000000                                                                          -      -            \n     0.04%  [.] rust_psm_stack_pointer                                                                    -      -            \n\n\n#\n# (Cannot load tips.txt file, please install perf!)\n#\n",
+        "report_sha256": "89862c4f515fb3bc46931d886d4807cda065bab46470798075ebadba056b357d"
+      },
+      "closures": {
+        "command": [
+          "perf",
+          "record",
+          "-q",
+          "-e",
+          "cycles:u",
+          "-F",
+          "997",
+          "--user-callchains",
+          "-o",
+          "/home/thiago/src/expressa/target/clone-fastpath/perf/before-closures-flat.data",
+          "--",
+          "/home/thiago/src/expressa/target/bytecode-steps/08-clone/expressa",
+          "/home/thiago/src/expressa/benchmarks/clone-fastpath/programs/closures.lep"
+        ],
+        "report_command": [
+          "perf",
+          "report",
+          "--stdio",
+          "--no-children",
+          "-g",
+          "none",
+          "--sort",
+          "symbol",
+          "--percent-limit",
+          "0",
+          "-i",
+          "/home/thiago/src/expressa/target/clone-fastpath/perf/before-closures-flat.data"
+        ],
+        "data_path": "/home/thiago/src/expressa/target/clone-fastpath/perf/before-closures-flat.data",
+        "data_sha256": "ea48b1e0a852b7df09c2671b998a3f8167de1e188b71488e1dbe50c93667c39e",
+        "report": "# To display the perf.data header info, please use --header/--header-only options.\n#\n#\n# Total Lost Samples: 0\n#\n# Samples: 2K of event 'cycles:u'\n# Event count (approx.): 11018962464\n#\n# Overhead  Symbol                                                                                                                                                                                                     IPC   [IPC Coverage]\n# ........  .........................................................................................................................................................................................................  ....................\n#\n    22.03%  [.] <expressa::runtime::eval::bytecode::execute::Machine>::run                                                                                                                                             -      -            \n    11.73%  [.] <std::hash::random::RandomState as core::hash::BuildHasher>::hash_one::<&str>                                                                                                                          -      -            \n     9.69%  [.] <expressa::runtime::bindings::Bindings>::get                                                                                                                                                           -      -            \n     9.24%  [.] <core::hash::sip::Hasher<core::hash::sip::Sip13Rounds> as core::hash::Hasher>::write                                                                                                                   -      -            \n     6.42%  [.] <expressa::runtime::env::Env>::get                                                                                                                                                                     -      -            \n     4.00%  [.] __memcmp_avx2_movbe                                                                                                                                                                                    -      -            \n     3.21%  [.] <expressa::runtime::bindings::Bindings>::get_mut                                                                                                                                                       -      -            \n     3.15%  [.] cfree@GLIBC_2.2.5                                                                                                                                                                                      -      -            \n     2.83%  [.] <expressa::runtime::eval::Vm>::apply_binary                                                                                                                                                            -      -            \n     2.60%  [.] <expressa::runtime::eval::bytecode::execute::Machine>::push                                                                                                                                            -      -            \n     2.42%  [.] <expressa::runtime::numero::Numero>::add                                                                                                                                                               -      -            \n     2.33%  [.] __memmove_avx_unaligned_erms                                                                                                                                                                           -      -            \n     2.32%  [.] malloc                                                                                                                                                                                                 -      -            \n     2.04%  [.] <expressa::runtime::eval::bytecode::execute::Machine>::finish                                                                                                                                          -      -            \n     1.82%  [.] <expressa::runtime::value::Value as core::clone::Clone>::clone                                                                                                                                         -      -            \n     1.79%  [.] <expressa::runtime::eval::Vm>::pause                                                                                                                                                                   -      -            \n     1.51%  [.] core::ptr::drop_glue::<expressa::runtime::value::Value>                                                                                                                                                -      -            \n     1.37%  [.] <alloc::vec::Vec<expressa::runtime::value::Value> as alloc::vec::spec_from_iter::SpecFromIter<expressa::runtime::value::Value, alloc::vec::drain::Drain<expressa::runtime::value::Value>>>::from_iter  -      -            \n     1.36%  [.] <alloc::string::String as core::clone::Clone>::clone                                                                                                                                                   -      -            \n     1.27%  [.] <expressa::runtime::env::Env>::new                                                                                                                                                                     -      -            \n     1.27%  [.] <expressa::runtime::eval::bytecode::Chunk>::bind_parameters::<alloc::vec::drain::Drain<expressa::runtime::value::Value>>                                                                               -      -            \n     0.91%  [.] <expressa::runtime::env::Env>::assignment_frame                                                                                                                                                        -      -            \n     0.53%  [.] core::ptr::drop_glue::<core::option::Option<expressa::runtime::bindings::Parameters>>                                                                                                                  -      -            \n     0.43%  [.] <alloc::vec::drain::Drain<expressa::runtime::value::Value> as core::ops::drop::Drop>::drop                                                                                                             -      -            \n     0.42%  [.] stacker::remaining_stack                                                                                                                                                                               -      -            \n     0.42%  [.] <alloc::rc::Rc<core::cell::RefCell<expressa::runtime::env::Env>>>::drop_slow                                                                                                                           -      -            \n     0.41%  [.] rust_psm_stack_pointer                                                                                                                                                                                 -      -            \n     0.38%  [.] __rustc::__rdl_alloc                                                                                                                                                                                   -      -            \n     0.38%  [.] core::ptr::drop_glue::<expressa::runtime::value::Value>                                                                                                                                                -      -            \n     0.34%  [.] __rustc::__rdl_dealloc                                                                                                                                                                                 -      -            \n     0.28%  [.] __rustc::__rust_alloc                                                                                                                                                                                  -      -            \n     0.21%  [.] <hashbrown::raw::RawTable<(alloc::string::String, expressa::runtime::value::Value)> as core::ops::drop::Drop>::drop                                                                                    -      -            \n     0.21%  [.] <expressa::runtime::env::Env>::liberar_se_lixo                                                                                                                                                         -      -            \n     0.18%  [.] core::ptr::drop_glue::<core::option::Option<expressa::runtime::bindings::Parameters>>                                                                                                                  -      -            \n     0.14%  [.] core::ptr::drop_glue::<[expressa::runtime::eval::bytecode::execute::Loop]>                                                                                                                             -      -            \n     0.11%  [.] psm::stack_pointer                                                                                                                                                                                     -      -            \n     0.11%  [.] __rustc::__rust_dealloc                                                                                                                                                                                -      -            \n     0.10%  [.] __rustc::__rust_no_alloc_shim_is_unstable_v2                                                                                                                                                           -      -            \n     0.04%  [.] <expressa::runtime::debug::NoopHook as expressa::runtime::debug::DebugHook>::before_stmt                                                                                                               -      -            \n     0.00%  [.] check_match                                                                                                                                                                                            -      -            \n\n\n#\n# (Cannot load tips.txt file, please install perf!)\n#\n",
+        "report_sha256": "89399b12bc27f9f693176f36cda3ad4f8f52929917574f0a6fd5c523d2238fa9"
+      }
+    },
+    "after": {
+      "arithmetic": {
+        "command": [
+          "perf",
+          "record",
+          "-q",
+          "-e",
+          "cycles:u",
+          "-F",
+          "997",
+          "--user-callchains",
+          "-o",
+          "/home/thiago/src/expressa/target/clone-fastpath/perf/after-arithmetic-flat.data",
+          "--",
+          "/home/thiago/src/expressa/target/bytecode-steps/09-clone-fastpath/expressa",
+          "/home/thiago/src/expressa/benchmarks/clone-fastpath/programs/arithmetic.lep"
+        ],
+        "report_command": [
+          "perf",
+          "report",
+          "--stdio",
+          "--no-children",
+          "-g",
+          "none",
+          "--sort",
+          "symbol",
+          "--percent-limit",
+          "0",
+          "-i",
+          "/home/thiago/src/expressa/target/clone-fastpath/perf/after-arithmetic-flat.data"
+        ],
+        "data_path": "/home/thiago/src/expressa/target/clone-fastpath/perf/after-arithmetic-flat.data",
+        "data_sha256": "20138944c224c15c34499a765e40282643ddc0b8b304cd42dd28770f131372d3",
+        "report": "# To display the perf.data header info, please use --header/--header-only options.\n#\n#\n# Total Lost Samples: 0\n#\n# Samples: 2K of event 'cycles:u'\n# Event count (approx.): 9247269742\n#\n# Overhead  Symbol                                                                                                                                                                                                                               IPC   [IPC Coverage]\n# ........  ...................................................................................................................................................................................................................................  ....................\n#\n    22.86%  [.] <expressa::runtime::eval::bytecode::execute::Machine>::run                                                                                                                                                                       -      -            \n    20.15%  [.] <std::hash::random::RandomState as core::hash::BuildHasher>::hash_one::<&str>                                                                                                                                                    -      -            \n    12.18%  [.] <expressa::runtime::bindings::Bindings>::get                                                                                                                                                                                     -      -            \n    11.55%  [.] <core::hash::sip::Hasher<core::hash::sip::Sip13Rounds> as core::hash::Hasher>::write                                                                                                                                             -      -            \n     7.64%  [.] <expressa::runtime::env::Env>::get                                                                                                                                                                                               -      -            \n     5.69%  [.] <expressa::runtime::bindings::Bindings>::get_mut                                                                                                                                                                                 -      -            \n     4.88%  [.] __memcmp_avx2_movbe                                                                                                                                                                                                              -      -            \n     3.53%  [.] <expressa::runtime::eval::Vm>::apply_binary                                                                                                                                                                                      -      -            \n     2.88%  [.] core::ptr::drop_glue::<expressa::runtime::value::Value>                                                                                                                                                                          -      -            \n     2.75%  [.] <expressa::runtime::env::Env>::assignment_frame                                                                                                                                                                                  -      -            \n     2.65%  [.] <expressa::runtime::numero::Numero>::add                                                                                                                                                                                         -      -            \n     1.76%  [.] <expressa::runtime::eval::Vm>::pause                                                                                                                                                                                             -      -            \n     0.68%  [.] stacker::remaining_stack                                                                                                                                                                                                         -      -            \n     0.29%  [.] <expressa::runtime::value::cycles::REGISTRY::{K#0}::{closure#0} as core::ops::function::FnOnce<(core::option::Option<&mut core::option::Option<core::cell::RefCell<expressa::runtime::value::cycles::Registry>>>,)>>::call_once  -      -            \n     0.25%  [.] rust_psm_stack_pointer                                                                                                                                                                                                           -      -            \n     0.17%  [.] <expressa::runtime::debug::NoopHook as expressa::runtime::debug::DebugHook>::before_stmt                                                                                                                                         -      -            \n     0.08%  [.] psm::stack_pointer                                                                                                                                                                                                               -      -            \n     0.01%  [.] do_lookup_x                                                                                                                                                                                                                      -      -            \n     0.00%  [.] <hashbrown::map::HashMap<alloc::string::String, expressa::runtime::value::Value, std::hash::random::RandomState>>::insert                                                                                                        -      -            \n\n\n#\n# (Cannot load tips.txt file, please install perf!)\n#\n",
+        "report_sha256": "7e8f1124bc2aedc6ecc71cb104d02d0f0bd29735de4c6419db2c22634c4002a3"
+      },
+      "closures": {
+        "command": [
+          "perf",
+          "record",
+          "-q",
+          "-e",
+          "cycles:u",
+          "-F",
+          "997",
+          "--user-callchains",
+          "-o",
+          "/home/thiago/src/expressa/target/clone-fastpath/perf/after-closures-flat.data",
+          "--",
+          "/home/thiago/src/expressa/target/bytecode-steps/09-clone-fastpath/expressa",
+          "/home/thiago/src/expressa/benchmarks/clone-fastpath/programs/closures.lep"
+        ],
+        "report_command": [
+          "perf",
+          "report",
+          "--stdio",
+          "--no-children",
+          "-g",
+          "none",
+          "--sort",
+          "symbol",
+          "--percent-limit",
+          "0",
+          "-i",
+          "/home/thiago/src/expressa/target/clone-fastpath/perf/after-closures-flat.data"
+        ],
+        "data_path": "/home/thiago/src/expressa/target/clone-fastpath/perf/after-closures-flat.data",
+        "data_sha256": "59457a14ba45d4be855a22383fbb8cd206701a2e8c98af9d03581f646b3e385b",
+        "report": "# To display the perf.data header info, please use --header/--header-only options.\n#\n#\n# Total Lost Samples: 0\n#\n# Samples: 2K of event 'cycles:u'\n# Event count (approx.): 10718068442\n#\n# Overhead  Symbol                                                                                                                                                                                                                               IPC   [IPC Coverage]\n# ........  ...................................................................................................................................................................................................................................  ....................\n#\n    23.41%  [.] <expressa::runtime::eval::bytecode::execute::Machine>::run                                                                                                                                                                       -      -            \n    12.88%  [.] <std::hash::random::RandomState as core::hash::BuildHasher>::hash_one::<&str>                                                                                                                                                    -      -            \n    10.33%  [.] <expressa::runtime::bindings::Bindings>::get                                                                                                                                                                                     -      -            \n     8.98%  [.] <core::hash::sip::Hasher<core::hash::sip::Sip13Rounds> as core::hash::Hasher>::write                                                                                                                                             -      -            \n     7.00%  [.] <expressa::runtime::env::Env>::get                                                                                                                                                                                               -      -            \n     3.28%  [.] <expressa::runtime::eval::Vm>::apply_binary                                                                                                                                                                                      -      -            \n     2.95%  [.] malloc                                                                                                                                                                                                                           -      -            \n     2.94%  [.] cfree@GLIBC_2.2.5                                                                                                                                                                                                                -      -            \n     2.79%  [.] <expressa::runtime::bindings::Bindings>::get_mut                                                                                                                                                                                 -      -            \n     2.61%  [.] <expressa::runtime::eval::bytecode::execute::Machine>::push                                                                                                                                                                      -      -            \n     2.51%  [.] __memcmp_avx2_movbe                                                                                                                                                                                                              -      -            \n     2.32%  [.] __memmove_avx_unaligned_erms                                                                                                                                                                                                     -      -            \n     2.18%  [.] <expressa::runtime::numero::Numero>::add                                                                                                                                                                                         -      -            \n     1.77%  [.] <alloc::string::String as core::clone::Clone>::clone                                                                                                                                                                             -      -            \n     1.52%  [.] <expressa::runtime::eval::Vm>::pause                                                                                                                                                                                             -      -            \n     1.42%  [.] <expressa::runtime::eval::bytecode::execute::Machine>::finish                                                                                                                                                                    -      -            \n     1.38%  [.] <expressa::runtime::env::Env>::assignment_frame                                                                                                                                                                                  -      -            \n     1.13%  [.] <expressa::runtime::env::Env>::new                                                                                                                                                                                               -      -            \n     1.13%  [.] <alloc::vec::Vec<expressa::runtime::value::Value> as alloc::vec::spec_from_iter::SpecFromIter<expressa::runtime::value::Value, alloc::vec::drain::Drain<expressa::runtime::value::Value>>>::from_iter                            -      -            \n     1.02%  [.] <expressa::runtime::eval::bytecode::Chunk>::bind_parameters::<alloc::vec::drain::Drain<expressa::runtime::value::Value>>                                                                                                         -      -            \n     0.76%  [.] core::ptr::drop_glue::<expressa::runtime::value::Value>                                                                                                                                                                          -      -            \n     0.65%  [.] core::ptr::drop_glue::<expressa::runtime::value::Value>                                                                                                                                                                          -      -            \n     0.62%  [.] core::ptr::drop_glue::<core::option::Option<expressa::runtime::bindings::Parameters>>                                                                                                                                            -      -            \n     0.61%  [.] __rustc::__rdl_alloc                                                                                                                                                                                                             -      -            \n     0.51%  [.] <alloc::rc::Rc<core::cell::RefCell<expressa::runtime::env::Env>>>::drop_slow                                                                                                                                                     -      -            \n     0.43%  [.] stacker::remaining_stack                                                                                                                                                                                                         -      -            \n     0.36%  [.] <expressa::runtime::value::cycles::REGISTRY::{K#0}::{closure#0} as core::ops::function::FnOnce<(core::option::Option<&mut core::option::Option<core::cell::RefCell<expressa::runtime::value::cycles::Registry>>>,)>>::call_once  -      -            \n     0.29%  [.] __rustc::__rust_alloc                                                                                                                                                                                                            -      -            \n     0.26%  [.] core::ptr::drop_glue::<core::option::Option<expressa::runtime::bindings::Parameters>>                                                                                                                                            -      -            \n     0.25%  [.] core::ptr::drop_glue::<[expressa::runtime::eval::bytecode::execute::Loop]>                                                                                                                                                       -      -            \n     0.25%  [.] <expressa::runtime::value::Value as core::clone::Clone>::clone                                                                                                                                                                   -      -            \n     0.25%  [.] <hashbrown::raw::RawTable<(alloc::string::String, expressa::runtime::value::Value)> as core::ops::drop::Drop>::drop                                                                                                              -      -            \n     0.22%  [.] <alloc::vec::drain::Drain<expressa::runtime::value::Value> as core::ops::drop::Drop>::drop                                                                                                                                       -      -            \n     0.21%  [.] __rustc::__rdl_dealloc                                                                                                                                                                                                           -      -            \n     0.18%  [.] <expressa::runtime::env::Env>::liberar_se_lixo                                                                                                                                                                                   -      -            \n     0.15%  [.] <expressa::runtime::debug::NoopHook as expressa::runtime::debug::DebugHook>::before_stmt                                                                                                                                         -      -            \n     0.14%  [.] rust_psm_stack_pointer                                                                                                                                                                                                           -      -            \n     0.14%  [.] __rustc::__rust_dealloc                                                                                                                                                                                                          -      -            \n     0.11%  [.] psm::stack_pointer                                                                                                                                                                                                               -      -            \n     0.04%  [.] __rustc::__rust_no_alloc_shim_is_unstable_v2                                                                                                                                                                                     -      -            \n     0.00%  [.] strcmp                                                                                                                                                                                                                           -      -            \n\n\n#\n# (Cannot load tips.txt file, please install perf!)\n#\n",
+        "report_sha256": "f447045453a7fae39ea6c2770387aed7c3c7b388f6c27ed8abc881c863ce5cc2"
+      }
+    }
+  }
+}

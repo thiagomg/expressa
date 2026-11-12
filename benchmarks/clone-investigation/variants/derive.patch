@@ -1,0 +1,57 @@
+--- a/src/runtime/value.rs
++++ b/src/runtime/value.rs
+@@ -17,6 +17,7 @@
+ #[cfg(feature = "process")]
+ use super::processo::Processo;
+ 
++#[derive(Clone)]
+ pub enum Value {
+     Nada,
+     Numero(Numero),
+@@ -34,46 +35,6 @@
+     /// `linhas_de`: a command still running, read with `para … em`.
+     #[cfg(feature = "process")]
+     Processo(Rc<RefCell<Processo>>),
+-}
+-
+-// Pairs own their value rather than an Rc. Copy long pair chains iteratively;
+-// sharing at collection/function/image boundaries stays unchanged.
+-impl Clone for Value {
+-    #[inline]
+-    fn clone(&self) -> Self {
+-        match self {
+-            Self::Nada => Self::Nada,
+-            Self::Numero(n) => Self::Numero(*n),
+-            Self::Texto(s) => Self::Texto(s.clone()),
+-            Self::Bool(b) => Self::Bool(*b),
+-            Self::Lista(v) => Self::Lista(Rc::clone(v)),
+-            Self::Mapa(v) => Self::Mapa(Rc::clone(v)),
+-            Self::Conjunto(v) => Self::Conjunto(Rc::clone(v)),
+-            Self::Matriz(v) => Self::Matriz(Rc::clone(v)),
+-            Self::Imagem(v) => Self::Imagem(Rc::clone(v)),
+-            Self::Funcao(v) => Self::Funcao(Rc::clone(v)),
+-            Self::Builtin(n) => Self::Builtin(n),
+-            Self::Modulo(v) => Self::Modulo(Rc::clone(v)),
+-            #[cfg(feature = "process")]
+-            Self::Processo(v) => Self::Processo(Rc::clone(v)),
+-            Self::Par(key, value) => {
+-                if !matches!(value.as_ref(), Self::Par(_, _)) {
+-                    return Self::Par(key.clone(), Box::new(value.as_ref().clone()));
+-                }
+-                let mut keys = Vec::new();
+-                let mut tail = self;
+-                while let Self::Par(key, value) = tail {
+-                    keys.push(key.clone());
+-                    tail = value;
+-                }
+-                let mut result = tail.clone();
+-                for key in keys.into_iter().rev() {
+-                    result = Self::Par(key, Box::new(result));
+-                }
+-                result
+-            }
+-        }
+-    }
+ }
+ 
+ /// A list's items, shared by every copy of the list value.

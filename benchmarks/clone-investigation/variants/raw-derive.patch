@@ -1,0 +1,150 @@
+--- a/src/runtime/value.rs
++++ b/src/runtime/value.rs
+@@ -17,6 +17,7 @@
+ #[cfg(feature = "process")]
+ use super::processo::Processo;
+ 
++#[derive(Clone)]
+ pub enum Value {
+     Nada,
+     Numero(Numero),
+@@ -27,53 +28,13 @@
+     Mapa(MapaRc),
+     Conjunto(Rc<RefCell<Vec<MapKey>>>),
+     Matriz(Rc<RefCell<Vec<Vec<f64>>>>),
+-    Imagem(Rc<RefCell<Imagem>>),
++    Imagem(Imagem),
+     Funcao(Rc<Closure>),
+     Builtin(&'static str),
+     Modulo(Rc<RefCell<Env>>),
+     /// `linhas_de`: a command still running, read with `para … em`.
+     #[cfg(feature = "process")]
+     Processo(Rc<RefCell<Processo>>),
+-}
+-
+-// Pairs own their value rather than an Rc. Copy long pair chains iteratively;
+-// sharing at collection/function/image boundaries stays unchanged.
+-impl Clone for Value {
+-    #[inline]
+-    fn clone(&self) -> Self {
+-        match self {
+-            Self::Nada => Self::Nada,
+-            Self::Numero(n) => Self::Numero(*n),
+-            Self::Texto(s) => Self::Texto(s.clone()),
+-            Self::Bool(b) => Self::Bool(*b),
+-            Self::Lista(v) => Self::Lista(Rc::clone(v)),
+-            Self::Mapa(v) => Self::Mapa(Rc::clone(v)),
+-            Self::Conjunto(v) => Self::Conjunto(Rc::clone(v)),
+-            Self::Matriz(v) => Self::Matriz(Rc::clone(v)),
+-            Self::Imagem(v) => Self::Imagem(Rc::clone(v)),
+-            Self::Funcao(v) => Self::Funcao(Rc::clone(v)),
+-            Self::Builtin(n) => Self::Builtin(n),
+-            Self::Modulo(v) => Self::Modulo(Rc::clone(v)),
+-            #[cfg(feature = "process")]
+-            Self::Processo(v) => Self::Processo(Rc::clone(v)),
+-            Self::Par(key, value) => {
+-                if !matches!(value.as_ref(), Self::Par(_, _)) {
+-                    return Self::Par(key.clone(), Box::new(value.as_ref().clone()));
+-                }
+-                let mut keys = Vec::new();
+-                let mut tail = self;
+-                while let Self::Par(key, value) = tail {
+-                    keys.push(key.clone());
+-                    tail = value;
+-                }
+-                let mut result = tail.clone();
+-                for key in keys.into_iter().rev() {
+-                    result = Self::Par(key, Box::new(result));
+-                }
+-                result
+-            }
+-        }
+-    }
+ }
+ 
+ /// A list's items, shared by every copy of the list value.
+@@ -211,7 +172,7 @@
+     }
+ 
+     pub fn imagem(image: Imagem) -> Self {
+-        Value::Imagem(Rc::new(RefCell::new(image)))
++        Value::Imagem(image)
+     }
+ 
+     pub fn conjunto(items: Vec<MapKey>) -> Self {
+@@ -338,7 +299,7 @@
+             a.len() == b.len() && a.iter().all(|k| b.contains(k))
+         }
+         (Value::Matriz(a), Value::Matriz(b)) => a.borrow()[..] == b.borrow()[..],
+-        (Value::Imagem(a), Value::Imagem(b)) => *a.borrow() == *b.borrow(),
++        (Value::Imagem(a), Value::Imagem(b)) => a == b,
+         (Value::Funcao(a), Value::Funcao(b)) => Rc::ptr_eq(a, b),
+         (Value::Builtin(a), Value::Builtin(b)) => a == b,
+         (Value::Modulo(a), Value::Modulo(b)) => Rc::ptr_eq(a, b),
+@@ -428,7 +389,6 @@
+             loc.unwrap_or(NumeroLocale::PtBr),
+         )),
+         Value::Imagem(img) => {
+-            let img = img.borrow();
+             let _ = write!(out, "<imagem {}x{}>", img.largura, img.altura);
+         }
+         Value::Funcao(c) => {
+--- a/src/runtime/nativas/graf.rs
++++ b/src/runtime/nativas/graf.rs
+@@ -581,7 +581,7 @@
+ 
+ fn figura_de(v: &Value, span: Span, vm: &Vm<'_, '_>) -> Result<Imagem, EvalError> {
+     match v {
+-        Value::Imagem(img) => Ok(img.borrow().clone()),
++        Value::Imagem(img) => Ok(img.clone()),
+         Value::Mapa(_) if is_graf(v) => Ok(tela_de(v, span, vm)?.como_imagem()),
+         Value::Texto(caminho) => {
+             let path = vm.resolve_data_path(caminho, span)?;
+@@ -610,7 +610,7 @@
+         .find(|(kk, _)| *kk == k)
+         .map(|(_, v)| v)
+     {
+-        Some(Value::Imagem(img)) => Some(img.borrow().clone()),
++        Some(Value::Imagem(img)) => Some(img.clone()),
+         _ => None,
+     }
+ }
+--- a/src/runtime/nativas/imagem.rs
++++ b/src/runtime/nativas/imagem.rs
+@@ -95,9 +95,9 @@
+     v: &'a Value,
+     span: Span,
+     vm: &Vm<'_, '_>,
+-) -> Result<std::cell::Ref<'a, Imagem>, EvalError> {
++) -> Result<&'a Imagem, EvalError> {
+     match v {
+-        Value::Imagem(img) => Ok(img.borrow()),
++        Value::Imagem(img) => Ok(img),
+         other => Err(vm.err(
+             format!("esperada imagem, encontrado {}", other.type_name()),
+             span,
+--- a/src/runtime/nativas/clonagem.rs
++++ b/src/runtime/nativas/clonagem.rs
+@@ -161,7 +161,7 @@
+             Value::Mapa(v) => Some(id(1, v)),
+             Value::Conjunto(v) => Some(id(2, v)),
+             Value::Matriz(v) => Some(id(3, v)),
+-            Value::Imagem(v) => Some(id(4, v)),
++            Value::Imagem(_) => None,
+             Value::Funcao(v) => Some(id(5, v)),
+             _ => None,
+         };
+@@ -267,12 +267,7 @@
+                 }
+                 Value::matriz(result)
+             }
+-            Value::Imagem(image) => Value::imagem(
+-                image
+-                    .try_borrow()
+-                    .map_err(|_| "imagem emprestada pelo host")?
+-                    .clone(),
+-            ),
++            Value::Imagem(image) => Value::imagem(image.clone()),
+             Value::Funcao(function) => {
+                 let mut poll = || self.check_espera(span).map_err(|error| copy.stop(error));
+                 Value::Funcao(detached_function(&function, &mut poll)?)

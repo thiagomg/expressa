@@ -1,0 +1,165 @@
+{
+  "data": "benchmarks/results/perf-priorities-90.json",
+  "data_sha256": "a74eae4ba3af4837d23438675163b0f1383cc6387f9523c41ffee2f476183324",
+  "groups": {
+    "arithmetic": [
+      {
+        "hashing": 33.09,
+        "bindings": 27.88,
+        "allocator": 0,
+        "collector": 0.42,
+        "como_imagem": 0,
+        "machine_run": 23.05
+      },
+      {
+        "hashing": 31.45,
+        "bindings": 28.08,
+        "allocator": 0,
+        "collector": 0.16,
+        "como_imagem": 0,
+        "machine_run": 23.52
+      }
+    ],
+    "closures": [
+      {
+        "hashing": 22.35,
+        "bindings": 20.61,
+        "allocator": 6.97,
+        "collector": 0.36,
+        "como_imagem": 0,
+        "machine_run": 22.59
+      },
+      {
+        "hashing": 21.15,
+        "bindings": 20.42,
+        "allocator": 7.56,
+        "collector": 0.36,
+        "como_imagem": 0,
+        "machine_run": 24.06
+      }
+    ],
+    "arguments": [
+      {
+        "hashing": 10.34,
+        "bindings": 10.86,
+        "allocator": 7.41,
+        "collector": 0.34,
+        "como_imagem": 0,
+        "machine_run": 34.64
+      },
+      {
+        "hashing": 10.63,
+        "bindings": 10.97,
+        "allocator": 6.41,
+        "collector": 0.2,
+        "como_imagem": 0,
+        "machine_run": 34.97
+      }
+    ],
+    "sprites": [
+      {
+        "hashing": 9.72,
+        "bindings": 8.89,
+        "allocator": 19.05,
+        "collector": 0.65,
+        "como_imagem": 17.6,
+        "machine_run": 10.3
+      },
+      {
+        "hashing": 7.99,
+        "bindings": 8.27,
+        "allocator": 18.74,
+        "collector": 0.8,
+        "como_imagem": 18.53,
+        "machine_run": 11.72
+      }
+    ],
+    "cycles": [
+      {
+        "hashing": 9.83,
+        "bindings": 10.77,
+        "allocator": 20.9,
+        "collector": 10.3,
+        "como_imagem": 0,
+        "machine_run": 18.75
+      },
+      {
+        "hashing": 8.85,
+        "bindings": 10.09,
+        "allocator": 21.06,
+        "collector": 10.34,
+        "como_imagem": 0,
+        "machine_run": 18.74
+      }
+    ],
+    "conway_simulacao": [
+      {
+        "hashing": 24.66,
+        "bindings": 25.52,
+        "allocator": 0.18,
+        "collector": 0.09,
+        "como_imagem": 0,
+        "machine_run": 22.53
+      },
+      {
+        "hashing": 26.16,
+        "bindings": 27.3,
+        "allocator": 0.12,
+        "collector": 0,
+        "como_imagem": 0,
+        "machine_run": 20.99
+      }
+    ],
+    "conway_desenho": [
+      {
+        "hashing": 25.44,
+        "bindings": 25.67,
+        "allocator": 0.71,
+        "collector": 0.08,
+        "como_imagem": 0.91,
+        "machine_run": 21.1
+      },
+      {
+        "hashing": 24.65,
+        "bindings": 25.42,
+        "allocator": 0.51,
+        "collector": 0.12,
+        "como_imagem": 0.88,
+        "machine_run": 23.19
+      }
+    ],
+    "conway_completo": [
+      {
+        "hashing": 25.15,
+        "bindings": 26.21,
+        "allocator": 0.83,
+        "collector": 0.08,
+        "como_imagem": 1.12,
+        "machine_run": 21.67
+      },
+      {
+        "hashing": 25.64,
+        "bindings": 24.5,
+        "allocator": 0.64,
+        "collector": 0.2,
+        "como_imagem": 1.03,
+        "machine_run": 22.71
+      }
+    ]
+  },
+  "annotation": {
+    "symbol": "<expressa::runtime::graf::TelaGrafica>::como_imagem",
+    "command": "perf annotate --stdio --percent-limit 0.5 -i DATA --symbol=SYMBOL",
+    "files": {
+      "target/perf-priorities/sprites-como-imagem-annotate.txt": "dfe1f04ab3fc1a5d3bd676f1a090a9bed656ae21a0d570853d93822542939a83",
+      "target/perf-priorities/sprites-como-imagem-annotate-1.txt": "b40b8cecc47b8d0026298e8fe5060f33ddf27d7787c59a3e42a9fbe3f80ac4cf"
+    }
+  },
+  "files_sha256": {
+    "benchmarks/PERF-PRIORITIES.md": "6e70d77652c1f8ddaa505ca101e7e74ad2d625833ca1702a538b8ba010867b2f",
+    "benchmarks/perf_priorities.py": "dbaa8b4829597eff2bee4544326736f6611a3feaa98b8425ed0c093e1d1a560a",
+    "benchmarks/programs/perf-priorities/cycles.lep": "f5d27c156e4581a881118f95d59f9c38913c8e55c33f02670a7de14765a286a7",
+    "benchmarks/programs/perf-priorities/sprites.lep": "14e16ce998b655ff43cfff541b7e3f27fc90142a3fcce68198492a9518c6febf",
+    "benchmarks/programs/perf-priorities/arguments.lep": "3339dce86aeecaea92acbefe4bf5ae0f12e30e28a53c701fad89b45950859451"
+  }
+}

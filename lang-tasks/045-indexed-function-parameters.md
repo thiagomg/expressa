@@ -17,3 +17,9 @@ Regressões verificam `avalie` alterando parâmetros, captura por closure, restr
 A implementação foi medida separadamente da migração dos testes de processos. [CPU/RSS, regressões e dados brutos](../benchmarks/BYTECODE-STEP-04.md). [Patch independente](../benchmarks/bytecode-steps/04-parameter-slots.patch).
 
 Pico 2: não implica firmware pronto nem redução comprovada de SRAM; orçamento de heap, representação compacta e validação de hardware continuam pendentes.
+
+## Extensão pendente indicada por perf
+
+Os [perfis após a etapa 09](../benchmarks/PERF-PRIORITIES.md) priorizam ampliar os acessos por posição, começando por parâmetros dentro de blocos/laços quando seu binding puder ser comprovado. Isso ainda não está implementado. Exige alcançar o ambiente correto e preservar sombreamento, `avalie`, closures e depuração; não basta habilitar o opcode atual em todo bloco.
+
+O plano de implementação dessa extensão está separado na [tarefa 049](049-lexical-slot-access.md), com etapas de leitura, escrita e expansão posterior para locais. O status da entrega original desta tarefa permanece inalterado.

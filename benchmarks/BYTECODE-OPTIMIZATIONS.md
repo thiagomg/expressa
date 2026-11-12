@@ -146,3 +146,7 @@ Implementados compilação offline, carregamento validado e execução desktop d
 ## Etapa 08: referências e clone
 
 [Contrato e limites](../docs/clone.md) e [comparação antes/depois de CPU, RSS, alocações e tamanho](CLONE.md). Implementação para revisão em AST, bytecode e EXB; inclui custos observados nos cenários gráficos. Esta etapa estabelece a semântica de cópia, sem prometer aceleração geral.
+
+## Etapa 09: cópia interna de valores
+
+[Implementação, perf e comparação de CPU/memória antes/depois](clone-fastpath/README.md). O percurso de pares foi separado para permitir melhor inlining das cópias comuns; a política dos recursos não clonáveis foi mantida. Ganhos e regressões estão registrados por caso.
