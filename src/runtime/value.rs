@@ -17,7 +17,6 @@ use super::numero::Numero;
 #[cfg(feature = "process")]
 use super::processo::Processo;
 
-#[derive(Clone)]
 pub enum Value {
     Nada,
     Numero(Numero),
@@ -28,13 +27,53 @@ pub enum Value {
     Mapa(MapaRc),
     Conjunto(Rc<RefCell<Vec<MapKey>>>),
     Matriz(Rc<RefCell<Vec<Vec<f64>>>>),
-    Imagem(Imagem),
+    Imagem(Rc<RefCell<Imagem>>),
     Funcao(Rc<Closure>),
     Builtin(&'static str),
     Modulo(Rc<RefCell<Env>>),
     /// `linhas_de`: a command still running, read with `para … em`.
     #[cfg(feature = "process")]
     Processo(Rc<RefCell<Processo>>),
+}
+
+// Pairs own their value rather than an Rc. Copy long pair chains iteratively;
+// sharing at collection/function/image boundaries stays unchanged.
+impl Clone for Value {
+    #[inline]
+    fn clone(&self) -> Self {
+        match self {
+            Self::Nada => Self::Nada,
+            Self::Numero(n) => Self::Numero(*n),
+            Self::Texto(s) => Self::Texto(s.clone()),
+            Self::Bool(b) => Self::Bool(*b),
+            Self::Lista(v) => Self::Lista(Rc::clone(v)),
+            Self::Mapa(v) => Self::Mapa(Rc::clone(v)),
+            Self::Conjunto(v) => Self::Conjunto(Rc::clone(v)),
+            Self::Matriz(v) => Self::Matriz(Rc::clone(v)),
+            Self::Imagem(v) => Self::Imagem(Rc::clone(v)),
+            Self::Funcao(v) => Self::Funcao(Rc::clone(v)),
+            Self::Builtin(n) => Self::Builtin(n),
+            Self::Modulo(v) => Self::Modulo(Rc::clone(v)),
+            #[cfg(feature = "process")]
+            Self::Processo(v) => Self::Processo(Rc::clone(v)),
+            Self::Par(key, value) => {
+                if !matches!(value.as_ref(), Self::Par(_, _)) {
+                    return Self::Par(key.clone(), Box::new(value.as_ref().clone()));
+                }
+                let mut keys = Vec::new();
+                let mut tail = self;
+                while let Self::Par(key, value) = tail {
+                    keys.push(key.clone());
+                    tail = value;
+                }
+                let mut result = tail.clone();
+                for key in keys.into_iter().rev() {
+                    result = Self::Par(key, Box::new(result));
+                }
+                result
+            }
+        }
+    }
 }
 
 /// A list's items, shared by every copy of the list value.
@@ -47,12 +86,18 @@ pub type MapaRc = Rc<ItensMapa>;
 pub struct ItensLista(RefCell<Vec<Value>>);
 
 /// Storage of a map; like [`ItensLista`].
-pub struct ItensMapa(RefCell<Vec<(MapKey, Value)>>);
+pub struct ItensMapa(RefCell<Vec<(MapKey, Value)>>, bool);
 
 impl std::ops::Deref for ItensLista {
     type Target = RefCell<Vec<Value>>;
     fn deref(&self) -> &Self::Target {
         &self.0
+    }
+}
+
+impl ItensMapa {
+    pub(crate) fn recurso_nao_clonavel(&self) -> bool {
+        self.1
     }
 }
 
@@ -80,7 +125,7 @@ impl Drop for ItensMapa {
 /// emptied onto the same work list before it goes. Rust's own drop would
 /// recurse once per level, and `repita 1000000 vezes { x = [x] }` would
 /// overflow the stack when `x` is dropped.
-fn desmontar(mut pilha: Vec<Value>) {
+pub(crate) fn desmontar(mut pilha: Vec<Value>) {
     while let Some(v) = pilha.pop() {
         match v {
             Value::Lista(xs) => {
@@ -110,6 +155,7 @@ pub enum MapKey {
     Bool(bool),
 }
 
+#[derive(Clone)]
 pub enum FunctionBody {
     #[cfg(feature = "ast")]
     Ast(Rc<Block>),
@@ -146,9 +192,26 @@ impl Value {
     }
 
     pub fn mapa(entries: Vec<(MapKey, Value)>) -> Self {
-        let entries = Rc::new(ItensMapa(RefCell::new(entries)));
+        Self::mapa_com_politica(entries, false)
+    }
+
+    pub(crate) fn mapa_com_politica(entries: Vec<(MapKey, Value)>, recurso: bool) -> Self {
+        let entries = Rc::new(ItensMapa(RefCell::new(entries), recurso));
         cycles::track_map(&entries);
         Value::Mapa(entries)
+    }
+
+    /// Native resource identity survives edits to its visible map entries.
+    #[cfg(feature = "graphics")]
+    pub(crate) fn mapa_recurso(mut entries: Vec<(MapKey, Value)>) -> Self {
+        entries.push((MapKey::Texto("_clonavel".into()), Value::Bool(false)));
+        let entries = Rc::new(ItensMapa(RefCell::new(entries), true));
+        cycles::track_map(&entries);
+        Value::Mapa(entries)
+    }
+
+    pub fn imagem(image: Imagem) -> Self {
+        Value::Imagem(Rc::new(RefCell::new(image)))
     }
 
     pub fn conjunto(items: Vec<MapKey>) -> Self {
@@ -275,7 +338,7 @@ fn iguais(a: &Value, b: &Value, comparando: &mut HashSet<(usize, usize)>) -> boo
             a.len() == b.len() && a.iter().all(|k| b.contains(k))
         }
         (Value::Matriz(a), Value::Matriz(b)) => a.borrow()[..] == b.borrow()[..],
-        (Value::Imagem(a), Value::Imagem(b)) => a == b,
+        (Value::Imagem(a), Value::Imagem(b)) => *a.borrow() == *b.borrow(),
         (Value::Funcao(a), Value::Funcao(b)) => Rc::ptr_eq(a, b),
         (Value::Builtin(a), Value::Builtin(b)) => a == b,
         (Value::Modulo(a), Value::Modulo(b)) => Rc::ptr_eq(a, b),
@@ -365,6 +428,7 @@ fn escrever(
             loc.unwrap_or(NumeroLocale::PtBr),
         )),
         Value::Imagem(img) => {
+            let img = img.borrow();
             let _ = write!(out, "<imagem {}x{}>", img.largura, img.altura);
         }
         Value::Funcao(c) => {
@@ -667,7 +731,7 @@ mod tests {
         assert_eq!(Value::mapa(vec![]).type_name(), "mapa");
         assert_eq!(Value::conjunto(vec![]).type_name(), "conjunto");
         assert_eq!(
-            Value::Imagem(Imagem::nova(1, 1, vec![0, 0, 0, 255]).unwrap()).type_name(),
+            Value::imagem(Imagem::nova(1, 1, vec![0, 0, 0, 255]).unwrap()).type_name(),
             "imagem"
         );
         assert_eq!(Value::Builtin("escreva").type_name(), "funcao");

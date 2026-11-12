@@ -323,7 +323,7 @@ impl Vm<'_, '_> {
         if entries.len() == before {
             return Err(self.err(format!("chave {key} não existe no mapa"), span));
         }
-        Ok(Value::mapa(entries))
+        Ok(Value::mapa_com_politica(entries, xs.recurso_nao_clonavel()))
     }
     pub(crate) fn remova_conjunto(
         &self,

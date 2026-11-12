@@ -335,3 +335,40 @@ mod tests {
         assert!(weak.upgrade().is_none());
     }
 }
+
+#[cfg(test)]
+mod clone_failure_tests {
+    use super::*;
+    use crate::runtime::{DebugAction, DebugCtx, DebugHook, LeiaHost, run_with_hook};
+    use std::cell::Cell;
+    #[test]
+    fn failed_graph_copies_do_not_leave_partial_cycles_between_checkpoints() {
+        struct Hook {
+            baseline: usize,
+            checked: Rc<Cell<bool>>,
+        }
+        impl DebugHook for Hook {
+            fn before_stmt(&mut self, ctx: &DebugCtx<'_>) -> DebugAction {
+                let alive =
+                    || REGISTRY.with(|r| r.borrow().objects.iter().filter(|o| o.alive()).count());
+                if ctx.span.line == 1 {
+                    self.baseline = alive();
+                }
+                if ctx.span.line == 7 {
+                    assert_eq!(alive(), self.baseline + 3);
+                    self.checked.set(true);
+                }
+                DebugAction::Continue
+            }
+        }
+        struct Input;
+        impl LeiaHost for Input {
+            fn ask(&mut self, _: &str) -> Result<String, String> {
+                unreachable!()
+            }
+        }
+        let checked = Rc::new(Cell::new(false));
+        run_with_hook("a = [0]\na[0] = a\nb = mapa()\nb:_clonavel = falso\nxs = [a,b]\nrepita 100 vezes { clone(xs) se_falhar 0 }\nobserve = 0","partial.lep",Box::new(Hook {baseline:0,checked:Rc::clone(&checked)}),None,None,&mut Vec::new(),&mut Vec::new(),&mut Input,&[]).unwrap();
+        assert!(checked.get());
+    }
+}

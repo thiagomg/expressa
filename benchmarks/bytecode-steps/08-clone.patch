@@ -1,0 +1,1544 @@
+--- a/docs/nativas/nucleo.lep
++++ b/docs/nativas/nucleo.lep
+@@ -265,3 +265,12 @@
+ ///
+ /// Exemplo: termina_com("relatorio.csv", ".csv")
+ termina_com = funcao(texto, sufixo) { 0 }
++
++/// Copia recursivamente dados, preservando ciclos e aliases internos.
++/// Funções sem capturas são permitidas; módulos, processos, recursos e
++/// mapas com :_clonavel = falso impedem a cópia. Textos têm comportamento
++/// de valor. Imagens clonadas são objetos independentes com pixels que
++/// podem ser compartilhados internamente até uma escrita.
++///
++/// Exemplo: b = clone([[1, 2]])
++clone = funcao(valor) { 0 }
+--- /dev/null
++++ b/src/runtime/eval/bytecode/captures.rs
+@@ -0,0 +1,485 @@
++//! Capture analysis on executable instructions, including loaded EXB. Debug source
++//! is deliberately not parsed: it is not authoritative for serialized code.
++use super::*;
++use std::collections::VecDeque;
++
++type Names = HashSet<String>;
++#[derive(Clone, PartialEq, Eq)]
++struct LoopState {
++    id: u32,
++    scopes: usize,
++    handlers: usize,
++    active: bool,
++    values: usize,
++}
++#[derive(Clone, PartialEq, Eq)]
++struct Handler {
++    target: usize,
++    scopes: Vec<Names>,
++    loops: usize,
++    values: Vec<Option<&'static str>>,
++}
++#[derive(Clone, PartialEq, Eq)]
++struct State {
++    values: Vec<Option<&'static str>>,
++    scopes: Vec<Names>,
++    loops: Vec<LoopState>,
++    handlers: Vec<Handler>,
++}
++
++fn intersect(a: &mut [Names], b: &[Names]) -> Result<bool, String> {
++    if a.len() != b.len() {
++        return Err("fluxo não classificável para clone".into());
++    }
++    let mut changed = false;
++    for (a, b) in a.iter_mut().zip(b) {
++        let n = a.len();
++        a.retain(|name| b.contains(name));
++        changed |= a.len() != n;
++    }
++    Ok(changed)
++}
++fn merge_values(
++    a: &mut [Option<&'static str>],
++    b: &[Option<&'static str>],
++) -> Result<bool, String> {
++    if a.len() != b.len() {
++        return Err("pilha não classificável para clone".into());
++    }
++    let mut changed = false;
++    for (a, b) in a.iter_mut().zip(b) {
++        if a != b && a.is_some() {
++            *a = None;
++            changed = true;
++        }
++    }
++    Ok(changed)
++}
++fn effect(s: &mut State, pop: usize, push: usize) -> Result<(), String> {
++    let n = s
++        .values
++        .len()
++        .checked_sub(pop)
++        .ok_or("pilha inválida para clone")?;
++    s.values.truncate(n);
++    s.values.resize(n + push, None);
++    Ok(())
++}
++
++fn merge(a: &mut State, b: &State) -> Result<bool, String> {
++    if a.loops != b.loops || a.handlers.len() != b.handlers.len() {
++        return Err("fluxo não classificável para clone".into());
++    }
++    let mut changed = merge_values(&mut a.values, &b.values)?;
++    changed |= intersect(&mut a.scopes, &b.scopes)?;
++    for (a, b) in a.handlers.iter_mut().zip(&b.handlers) {
++        if a.target != b.target || a.loops != b.loops {
++            return Err("handlers não classificáveis para clone".into());
++        }
++        changed |= intersect(&mut a.scopes, &b.scopes)?;
++        changed |= merge_values(&mut a.values, &b.values)?;
++    }
++    Ok(changed)
++}
++
++/// Clone a function only after proving that its executable body and any nested
++/// prototypes depend on locals/parameters or stable núcleo natives. The new
++/// closure does not retain any frame of the original program.
++pub(crate) fn detached_function(
++    closure: &Closure,
++    poll: &mut dyn FnMut() -> Result<(), String>,
++) -> Result<Rc<Closure>, String> {
++    let root = match &closure.body {
++        FunctionBody::Bytecode(c) => Rc::clone(c),
++        #[cfg(feature = "ast")]
++        FunctionBody::Ast(body) => compiler::capture_body(&closure.params, body),
++    };
++    let mut todo = vec![(
++        root,
++        closure
++            .params
++            .iter()
++            .map(|p| p.name.clone())
++            .collect::<Names>(),
++        Names::new(),
++        0usize,
++    )];
++    let mut natives = HashMap::new();
++    let mut budget = 200_000usize;
++    let mut steps = 0usize;
++    while let Some((code, params, inherited, depth)) = todo.pop() {
++        if depth > 64 {
++            return Err("clone: funções aninhadas excedem o limite de análise (64)".into());
++        }
++        let mut queue = VecDeque::from([(
++            0usize,
++            State {
++                values: vec![],
++                scopes: vec![params],
++                loops: vec![],
++                handlers: vec![],
++            },
++        )]);
++        let mut seen: HashMap<usize, State> = HashMap::new();
++        while let Some((ip, mut s)) = queue.pop_front() {
++            budget = budget
++                .checked_sub(
++                    1 + s.values.len()
++                        + s.scopes.len()
++                        + s.scopes
++                            .iter()
++                            .flat_map(|n| n.iter())
++                            .map(|n| 1 + n.len())
++                            .sum::<usize>()
++                        + s.loops.len() * 8
++                        + s.handlers
++                            .iter()
++                            .map(|h| {
++                                1 + h.values.len()
++                                    + h.scopes
++                                        .iter()
++                                        .flat_map(|n| n.iter())
++                                        .map(|n| 1 + n.len())
++                                        .sum::<usize>()
++                            })
++                            .sum::<usize>(),
++                )
++                .ok_or("clone: análise de capturas excede o orçamento")?;
++            steps += 1;
++            if steps.is_multiple_of(64) {
++                poll()?;
++            }
++            let op = code
++                .instructions
++                .get(ip)
++                .ok_or("fluxo inválido na análise de clone")?
++                .op;
++            if matches!(
++                op,
++                Op::LoopNext(_) | Op::ParentScope | Op::LoopBody | Op::LoopEnd
++            ) && let Some(l) = s.loops.last_mut()
++            {
++                l.active = false;
++            }
++            if let Some(old) = seen.get_mut(&ip) {
++                if !merge(old, &s)? {
++                    continue;
++                }
++                s = old.clone();
++            } else {
++                seen.insert(ip, s.clone());
++            }
++            // An attempt can fail before publishing a local. Its entry bindings
++            // are a conservative lower bound on names available in the handler.
++            if let Some(h) = s.handlers.last().cloned() {
++                let mut caught = s.clone();
++                caught.scopes = h.scopes;
++                caught.values = h.values;
++                caught.loops.truncate(h.loops);
++                caught.handlers.pop();
++                queue.push_back((h.target, caught));
++            }
++            let known = |name: &str, scopes: &[Names]| {
++                inherited.contains(name) || scopes.iter().any(|n| n.contains(name))
++            };
++            // Track callable provenance from operands, not the diagnostic Call
++            // name. An EXB producer can choose arbitrary diagnostic names.
++            match op {
++                Op::Nada
++                | Op::Bool(_)
++                | Op::Constant(_)
++                | Op::Load(_)
++                | Op::LoadLocal(_)
++                | Op::Closure(_)
++                | Op::ReceiverName(_)
++                | Op::ReadDestination => effect(&mut s, 0, 1)?,
++                Op::Store(_)
++                | Op::StoreLocal(_)
++                | Op::Drop
++                | Op::WriteDestination
++                | Op::MapDestination(_) => effect(&mut s, 1, 0)?,
++                Op::Pair | Op::Binary(_) | Op::Index | Op::ReceiverIndex => effect(&mut s, 2, 1)?,
++                Op::SetLast => {
++                    let last = s
++                        .values
++                        .last()
++                        .copied()
++                        .ok_or("pilha inválida para clone")?;
++                    effect(&mut s, 2, 1)?;
++                    *s.values.last_mut().unwrap() = last;
++                }
++                Op::List(n) => effect(&mut s, n as usize, 1)?,
++                Op::Unary(_)
++                | Op::Field(_)
++                | Op::MapField(_)
++                | Op::CheckBool
++                | Op::ReceiverMap(_) => effect(&mut s, 1, 1)?,
++                Op::Index2 | Op::ReceiverIndex2 => effect(&mut s, 3, 1)?,
++                Op::Slice(end) => effect(&mut s, if end { 3 } else { 2 }, 1)?,
++                Op::IndexDestination(_) => effect(&mut s, 2, 0)?,
++                Op::MatrixDestination => effect(&mut s, 3, 0)?,
++                Op::Call { argc, .. } => {
++                    let n = (argc as usize)
++                        .checked_add(1)
++                        .ok_or("aridade inválida para clone")?;
++                    let base = s
++                        .values
++                        .len()
++                        .checked_sub(n)
++                        .ok_or("pilha inválida para clone")?;
++                    let native=s.values[base].ok_or("função tem chamada indireta; não é possível provar ausência de acesso ao ambiente")?;
++                    if matches!(native, "avalie" | "catalogo" | "catálogo" | "ordene") {
++                        return Err(format!("função pode consultar o ambiente por `{native}`"));
++                    }
++                    effect(&mut s, n, 1)?;
++                }
++                Op::LoopEnter(id) => {
++                    effect(
++                        &mut s,
++                        match code.loops[id as usize].kind {
++                            LoopKind::While => 0,
++                            LoopKind::Range => 2,
++                            _ => 1,
++                        },
++                        0,
++                    )?;
++                }
++                Op::BranchFalse(_) | Op::ShortCircuit { .. } => effect(&mut s, 1, 0)?,
++                Op::BadNumber(_) => continue,
++                _ => {}
++            }
++            match op {
++                Op::Load(id) | Op::ReceiverName(id) => {
++                    let name = &code.names[id as usize];
++                    if !known(name, &s.scopes) {
++                        let native = resolve_native(closure, name, &mut natives)?;
++                        *s.values.last_mut().unwrap() = Some(native);
++                    }
++                }
++                Op::Store(id) | Op::NameDestination(id) => {
++                    let name = &code.names[id as usize];
++                    if !known(name, &s.scopes) {
++                        // Assignment to an existing outer binding is itself an
++                        // environmental dependency (and normally an error).
++                        if has_binding(&closure.env, name) {
++                            resolve_native(closure, name, &mut natives)?;
++                        } else if matches!(op, Op::Store(_)) {
++                            s.scopes.last_mut().unwrap().insert(name.clone());
++                        }
++                    }
++                }
++                Op::Closure(id) => {
++                    let proto = &code.functions[id as usize];
++                    let mut visible = inherited.clone();
++                    for scope in &s.scopes {
++                        visible.extend(scope.iter().cloned());
++                    }
++                    todo.push((
++                        Rc::clone(&proto.code),
++                        proto.params.iter().map(|p| p.name.clone()).collect(),
++                        visible,
++                        depth + 1,
++                    ));
++                }
++                Op::Import(_) => {
++                    return Err(
++                        "função com importação não pode ser classificada sem capturas".into(),
++                    );
++                }
++                Op::EnterScope => s.scopes.push(Names::new()),
++                Op::LeaveScope => {
++                    s.scopes.pop().ok_or("escopo inválido para clone")?;
++                }
++                Op::ParentScope => {
++                    let parent = s
++                        .scopes
++                        .get(
++                            s.scopes
++                                .len()
++                                .checked_sub(2)
++                                .ok_or("escopo inválido para clone")?,
++                        )
++                        .ok_or("escopo inválido para clone")?
++                        .clone();
++                    s.scopes.push(parent);
++                }
++                Op::RestoreScope => {
++                    s.scopes.pop().ok_or("escopo inválido para clone")?;
++                }
++                Op::LoopEnter(id) => {
++                    s.loops.push(LoopState {
++                        id,
++                        scopes: s.scopes.len(),
++                        handlers: s.handlers.len(),
++                        values: s.values.len(),
++                        active: false,
++                    });
++                    s.scopes.push(Names::new());
++                }
++                Op::LoopNext(id) => {
++                    let spec = &code.loops[id as usize];
++                    queue.push_back((spec.exit as usize, s.clone()));
++                    if let Some(var) = spec.var {
++                        s.scopes
++                            .last_mut()
++                            .unwrap()
++                            .insert(code.names[var as usize].clone());
++                    }
++                }
++                Op::LoopBody => s.loops.last_mut().ok_or("laço inválido para clone")?.active = true,
++                Op::LoopEnd => {
++                    let l = s.loops.pop().ok_or("laço inválido para clone")?;
++                    s.scopes.truncate(l.scopes);
++                }
++                Op::Try(target) => s.handlers.push(Handler {
++                    target: target as usize,
++                    scopes: s.scopes.clone(),
++                    loops: s.loops.len(),
++                    values: s.values.clone(),
++                }),
++                Op::EndTry => {
++                    s.handlers.pop().ok_or("handler inválido para clone")?;
++                }
++                Op::Break | Op::Continue => {
++                    if let Some(pos) = s.loops.iter().rposition(|l| l.active) {
++                        let l = s.loops[pos].clone();
++                        let spec = &code.loops[l.id as usize];
++                        s.scopes.truncate(l.scopes + 1);
++                        s.handlers.truncate(l.handlers);
++                        s.loops.truncate(pos + 1);
++                        s.values.truncate(l.values);
++                        queue.push_back((
++                            if matches!(op, Op::Break) {
++                                spec.exit
++                            } else {
++                                spec.next
++                            } as usize,
++                            s,
++                        ));
++                    }
++                    continue;
++                }
++                Op::Return | Op::Finish => continue,
++                Op::Jump(target) => {
++                    queue.push_back((target as usize, s));
++                    continue;
++                }
++                Op::BranchFalse(target) | Op::ShortCircuit { target, .. } => {
++                    let mut jump = s.clone();
++                    if matches!(op, Op::ShortCircuit { .. }) {
++                        jump.values.push(None);
++                    }
++                    queue.push_back((target as usize, jump));
++                }
++                _ => {}
++            }
++            queue.push_back((ip + 1, s));
++        }
++    }
++    poll()?;
++    let env = Env::new(FrameKind::Builtins, None);
++    for (name, value) in natives {
++        env.borrow_mut().define(name, value);
++    }
++    Ok(Rc::new(Closure {
++        params: closure.params.clone(),
++        body: closure.body.clone(),
++        env,
++        span: closure.span,
++        file: closure.file.clone(),
++        source: Rc::clone(&closure.source),
++        doc: closure.doc.clone(),
++    }))
++}
++
++fn has_binding(env: &Rc<RefCell<Env>>, name: &str) -> bool {
++    let mut current = Some(Rc::clone(env));
++    while let Some(cell) = current {
++        let frame = cell.borrow();
++        if frame.vars.contains_key(name) {
++            return true;
++        }
++        current = frame.parent.clone();
++    }
++    false
++}
++
++fn resolve_native(
++    closure: &Closure,
++    name: &str,
++    natives: &mut HashMap<String, Value>,
++) -> Result<&'static str, String> {
++    let mut env = Some(Rc::clone(&closure.env));
++    while let Some(frame) = env {
++        let frame = frame.borrow();
++        if let Some(value) = frame.vars.get(name) {
++            if frame.kind == FrameKind::Builtins
++                && let Value::Builtin(canonical) = value
++            {
++                if matches!(*canonical, "avalie" | "catalogo" | "catálogo") {
++                    return Err(format!(
++                        "função consulta o ambiente dinamicamente por `{name}`"
++                    ));
++                }
++                natives.insert(name.into(), value.clone());
++                return Ok(canonical);
++            }
++            break;
++        }
++        env = frame.parent.clone();
++    }
++    Err(format!(
++        "função captura ou depende do nome externo `{name}`"
++    ))
++}
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++    fn function(source: &str) -> Closure {
++        let code = compiler::items(&parse(source).unwrap().items);
++        let proto = &code.functions[0];
++        Closure {
++            params: proto.params.clone(),
++            body: FunctionBody::Bytecode(Rc::clone(&proto.code)),
++            env: Env::new(FrameKind::Module, None),
++            span: proto.span,
++            file: "test.lep".into(),
++            source: "not valid Expressa source".into(),
++            doc: None,
++        }
++    }
++    #[test]
++    fn analysis_uses_instructions_and_detaches_original_environment() {
++        let f = function("f = funcao(x) { x + 1 }");
++        let weak = Rc::downgrade(&f.env);
++        let cloned = detached_function(&f, &mut || Ok(())).unwrap();
++        assert!(!Rc::ptr_eq(&f.env, &cloned.env));
++        drop(f);
++        assert!(weak.upgrade().is_none());
++    }
++    #[test]
++    fn forged_call_display_name_does_not_authorize_indirect_execution() {
++        let mut f = function("f = funcao(callback) { callback(1) }");
++        #[cfg(feature = "ast")]
++        let FunctionBody::Bytecode(code) = &mut f.body else {
++            unreachable!()
++        };
++        #[cfg(not(feature = "ast"))]
++        let FunctionBody::Bytecode(code) = &mut f.body;
++        let code = Rc::get_mut(code).unwrap();
++        code.names.push("tipo".into());
++        let name = (code.names.len() - 1) as u32;
++        for instruction in &mut code.instructions {
++            if let Op::Call { name: n, .. } = &mut instruction.op {
++                *n = name;
++            }
++        }
++        f.env = Env::new(FrameKind::Builtins, None);
++        f.env.borrow_mut().define("tipo", Value::Builtin("tipo"));
++        let Err(error) = detached_function(&f, &mut || Ok(())) else {
++            panic!("forged call accepted")
++        };
++        assert!(error.contains("chamada indireta"), "{error}");
++    }
++}
+--- a/src/runtime/eval/bytecode/compiler.rs
++++ b/src/runtime/eval/bytecode/compiler.rs
+@@ -542,6 +542,21 @@
+     Rc::new(compiler.code)
+ }
+ 
++#[cfg(feature = "ast")]
++pub(super) fn capture_body(params: &[Param], body: &Block) -> Rc<Chunk> {
++    let mut c = Compiler::new();
++    c.code.parameter_slots = Rc::new(
++        params
++            .iter()
++            .enumerate()
++            .map(|(i, p)| (p.name.clone(), i as u32))
++            .collect(),
++    );
++    c.stmts(&body.stmts);
++    c.emit(Op::Finish, body.span);
++    Rc::new(c.code)
++}
++
+ #[cfg(test)]
+ mod tests {
+     use super::*;
+--- a/src/runtime/eval/bytecode/mod.rs
++++ b/src/runtime/eval/bytecode/mod.rs
+@@ -1,4 +1,5 @@
+ //! Bytecode compilation and execution. No instruction retains an AST expression.
++mod captures;
+ mod compiler;
+ mod execute;
+ pub(super) mod format;
+@@ -148,3 +149,5 @@
+ pub(crate) fn test_function_body(items: &[Item]) -> FunctionBody {
+     FunctionBody::Bytecode(compiler::items(items))
+ }
++
++pub(crate) use captures::detached_function;
+--- a/src/runtime/nativas/cartesiano.rs
++++ b/src/runtime/nativas/cartesiano.rs
+@@ -18,7 +18,7 @@
+ impl Vm<'_, '_> {
+     pub(crate) fn bi_documento(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
+         self.expect_arity(args, 0, span)?;
+-        Ok(Value::mapa(vec![(
++        Ok(Value::mapa_recurso(vec![(
+             MapKey::Texto("graficos".into()),
+             Value::lista(vec![]),
+         )]))
+--- /dev/null
++++ b/src/runtime/nativas/clonagem.rs
+@@ -0,0 +1,297 @@
++//! Transactional graph copy. Explicit work/identity tables preserve aliases and
++//! cycles without following the Rust call stack. New shells are cleared on error.
++use super::*;
++use crate::runtime::eval::bytecode::detached_function;
++use crate::runtime::value::{ListaRc, MapKey, MapaRc, desmontar};
++
++const MAX_WORK: usize = 1_000_000;
++#[derive(Hash, PartialEq, Eq, Clone, Copy)]
++struct Id(u8, usize);
++fn id<T>(kind: u8, rc: &Rc<T>) -> Id {
++    Id(kind, Rc::as_ptr(rc) as usize)
++}
++
++enum Job {
++    Visit(Value, usize),
++    List(ListaRc, usize),
++    Map(MapaRc, usize),
++    Pair(MapKey),
++}
++struct Path {
++    parent: usize,
++    part: String,
++}
++struct Copy {
++    jobs: Vec<Job>,
++    values: Vec<Value>,
++    memo: HashMap<Id, Value>,
++    lists: Vec<ListaRc>,
++    maps: Vec<MapaRc>,
++    paths: Vec<Path>,
++    remaining: usize,
++    committed: bool,
++    stopped: Option<EvalError>,
++}
++impl Copy {
++    fn new(value: Value) -> Self {
++        Self {
++            jobs: vec![Job::Visit(value, 0)],
++            values: vec![],
++            memo: HashMap::new(),
++            lists: vec![],
++            maps: vec![],
++            paths: vec![Path {
++                parent: 0,
++                part: "$".into(),
++            }],
++            remaining: MAX_WORK,
++            committed: false,
++            stopped: None,
++        }
++    }
++    fn path(&mut self, parent: usize, part: String) -> usize {
++        let index = self.paths.len();
++        self.paths.push(Path { parent, part });
++        index
++    }
++    fn location(&self, mut path: usize) -> String {
++        let mut parts = vec![];
++        for _ in 0..24 {
++            parts.push(self.paths[path].part.as_str());
++            if path == 0 {
++                break;
++            }
++            path = self.paths[path].parent;
++        }
++        if path != 0 {
++            parts.push("$…");
++        }
++        parts.reverse();
++        parts.concat()
++    }
++    fn stop(&mut self, error: EvalError) -> String {
++        self.stopped = Some(error);
++        "clone interrompido".into()
++    }
++    fn charge(&mut self, n: usize) -> Result<(), String> {
++        self.remaining = self
++            .remaining
++            .checked_sub(n)
++            .ok_or("clone excede o orçamento de 1.000.000 unidades")?;
++        Ok(())
++    }
++}
++impl Drop for Copy {
++    fn drop(&mut self) {
++        if !self.committed {
++            // Only newly allocated objects are cleared. Originals in jobs/memo
++            // are never modified; this also releases partially built cycles.
++            for list in &self.lists {
++                desmontar(std::mem::take(&mut *list.borrow_mut()));
++            }
++            for map in &self.maps {
++                desmontar(
++                    std::mem::take(&mut *map.borrow_mut())
++                        .into_iter()
++                        .map(|(_, v)| v)
++                        .collect(),
++                );
++            }
++        }
++        let mut discarded = std::mem::take(&mut self.values);
++        for job in std::mem::take(&mut self.jobs) {
++            if let Job::Visit(value, _) = job {
++                discarded.push(value);
++            }
++        }
++        desmontar(discarded);
++    }
++}
++
++impl Vm<'_, '_> {
++    pub(crate) fn bi_clone(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
++        self.expect_arity(args, 1, span)?;
++        let mut copy = Copy::new(args[0].clone());
++        let mut steps = 0usize;
++        while let Some(job) = copy.jobs.pop() {
++            steps += 1;
++            if steps.is_multiple_of(128) {
++                self.check_espera(span)?;
++            }
++            match job {
++                Job::Pair(key) => {
++                    let value = copy.values.pop().expect("clone pair");
++                    copy.values.push(Value::Par(key, Box::new(value)));
++                }
++                Job::List(list, index) => {
++                    list.borrow_mut()[index] = copy.values.pop().expect("clone list")
++                }
++                Job::Map(map, index) => {
++                    map.borrow_mut()[index].1 = copy.values.pop().expect("clone map")
++                }
++                Job::Visit(value, path) => {
++                    let result = self.clone_visit(value, path, &mut copy, span);
++                    if let Err(message) = result {
++                        if let Some(error) = copy.stopped.take() {
++                            return Err(error);
++                        }
++                        return Err(
++                            self.err(format!("clone em {}: {message}", copy.location(path)), span)
++                        );
++                    }
++                }
++            }
++        }
++        self.check_espera(span)?;
++        let root = copy.values.pop().expect("clone result");
++        copy.committed = true;
++        Ok(root)
++    }
++
++    fn clone_visit(
++        &mut self,
++        value: Value,
++        path: usize,
++        copy: &mut Copy,
++        span: Span,
++    ) -> Result<(), String> {
++        copy.charge(1)?;
++        let identity = match &value {
++            Value::Lista(v) => Some(id(0, v)),
++            Value::Mapa(v) => Some(id(1, v)),
++            Value::Conjunto(v) => Some(id(2, v)),
++            Value::Matriz(v) => Some(id(3, v)),
++            Value::Imagem(v) => Some(id(4, v)),
++            Value::Funcao(v) => Some(id(5, v)),
++            _ => None,
++        };
++        if let Some(value) = identity.and_then(|id| copy.memo.get(&id)).cloned() {
++            copy.values.push(value);
++            return Ok(());
++        }
++        let cloned = match value {
++            Value::Lista(original) => {
++                let original = original
++                    .try_borrow()
++                    .map_err(|_| "lista emprestada pelo host")?;
++                if original.len() > copy.remaining {
++                    return Err("lista excede o orçamento de clone".into());
++                }
++                copy.charge(original.len())?;
++                let mut values = Vec::new();
++                values
++                    .try_reserve_exact(original.len())
++                    .map_err(|_| "memória insuficiente para clone")?;
++                values.resize(original.len(), Value::Nada);
++                let v = Value::lista(values);
++                let Value::Lista(list) = &v else {
++                    unreachable!()
++                };
++                copy.lists.push(Rc::clone(list));
++                copy.memo.insert(identity.unwrap(), v.clone());
++                for (i, value) in original.iter().enumerate().rev() {
++                    let child = copy.path(path, format!("[{i}]"));
++                    copy.jobs.push(Job::List(Rc::clone(list), i));
++                    copy.jobs.push(Job::Visit(value.clone(), child));
++                }
++                v
++            }
++            Value::Mapa(original) => {
++                if original.recurso_nao_clonavel() {
++                    return Err("recurso nativo não clonável".into());
++                }
++                let original = original
++                    .try_borrow()
++                    .map_err(|_| "mapa emprestado pelo host")?;
++                match original
++                    .iter()
++                    .find(|(k, _)| *k == MapKey::Texto("_clonavel".into()))
++                    .map(|(_, v)| v)
++                {
++                    Some(Value::Bool(false)) => {
++                        return Err("mapa marcado com :_clonavel = falso".into());
++                    }
++                    Some(Value::Bool(true)) | None => {}
++                    _ => return Err(":_clonavel deve ser bool".into()),
++                }
++                if original.len() > copy.remaining {
++                    return Err("mapa excede o orçamento de clone".into());
++                }
++                copy.charge(original.len())?;
++                let mut values = Vec::new();
++                values
++                    .try_reserve_exact(original.len())
++                    .map_err(|_| "memória insuficiente para clone")?;
++                values.extend(original.iter().map(|(k, _)| (k.clone(), Value::Nada)));
++                let v = Value::mapa(values);
++                let Value::Mapa(map) = &v else { unreachable!() };
++                copy.maps.push(Rc::clone(map));
++                copy.memo.insert(identity.unwrap(), v.clone());
++                for (i, (key, value)) in original.iter().enumerate().rev() {
++                    let child = copy.path(
++                        path,
++                        match key {
++                            MapKey::Texto(k) => format!(":{k}"),
++                            other => format!("[{other:?}]"),
++                        },
++                    );
++                    copy.jobs.push(Job::Map(Rc::clone(map), i));
++                    copy.jobs.push(Job::Visit(value.clone(), child));
++                }
++                v
++            }
++            Value::Conjunto(items) => {
++                let items = items
++                    .try_borrow()
++                    .map_err(|_| "conjunto emprestado pelo host")?;
++                copy.charge(items.len())?;
++                Value::conjunto(items.clone())
++            }
++            Value::Matriz(rows) => {
++                let rows = rows
++                    .try_borrow()
++                    .map_err(|_| "matriz emprestada pelo host")?;
++                let mut result = Vec::new();
++                result
++                    .try_reserve_exact(rows.len())
++                    .map_err(|_| "memória insuficiente para clone")?;
++                for row in rows.iter() {
++                    copy.charge(row.len() + 1)?;
++                    let mut cells = Vec::new();
++                    cells
++                        .try_reserve_exact(row.len())
++                        .map_err(|_| "memória insuficiente para clone")?;
++                    cells.extend_from_slice(row);
++                    result.push(cells);
++                    self.check_espera(span).map_err(|error| copy.stop(error))?;
++                }
++                Value::matriz(result)
++            }
++            Value::Imagem(image) => Value::imagem(
++                image
++                    .try_borrow()
++                    .map_err(|_| "imagem emprestada pelo host")?
++                    .clone(),
++            ),
++            Value::Funcao(function) => {
++                let mut poll = || self.check_espera(span).map_err(|error| copy.stop(error));
++                Value::Funcao(detached_function(&function, &mut poll)?)
++            }
++            Value::Par(key, value) => {
++                let child = copy.path(path, ":valor".into());
++                copy.jobs.push(Job::Pair(key));
++                copy.jobs.push(Job::Visit(*value, child));
++                return Ok(());
++            }
++            Value::Modulo(_) => return Err("módulo não suporta clone".into()),
++            #[cfg(feature = "process")]
++            Value::Processo(_) => return Err("processo não suporta clone".into()),
++            scalar => scalar,
++        };
++        if let Some(id) = identity {
++            copy.memo.insert(id, cloned.clone());
++        }
++        copy.values.push(cloned);
++        Ok(())
++    }
++}
+--- a/src/runtime/nativas/graf.rs
++++ b/src/runtime/nativas/graf.rs
+@@ -15,7 +15,7 @@
+         self.expect_arity(args, 2, span)?;
+         let largura = self.expect_graf_dim(&args[0], "largura", span)?;
+         let altura = self.expect_graf_dim(&args[1], "altura", span)?;
+-        Ok(Value::mapa(vec![
++        Ok(Value::mapa_recurso(vec![
+             (
+                 MapKey::Texto("largura".into()),
+                 Value::Numero(largura.into()),
+@@ -236,7 +236,7 @@
+             &mapa,
+             Value::mapa(vec![
+                 (MapKey::Texto("tipo".into()), Value::Texto("imagem".into())),
+-                (MapKey::Texto("figura".into()), Value::Imagem(figura)),
++                (MapKey::Texto("figura".into()), Value::imagem(figura)),
+                 (MapKey::Texto("x".into()), Value::Numero((x as i64).into())),
+                 (MapKey::Texto("y".into()), Value::Numero((y as i64).into())),
+                 (
+@@ -300,7 +300,7 @@
+     ) -> Result<Value, EvalError> {
+         self.expect_arity(args, 1, span)?;
+         let tela = tela_de(&args[0], span, self)?;
+-        Ok(Value::Imagem(tela.como_imagem()))
++        Ok(Value::imagem(tela.como_imagem()))
+     }
+ 
+     pub(crate) fn bi_graf_mostre(
+@@ -581,7 +581,7 @@
+ 
+ fn figura_de(v: &Value, span: Span, vm: &Vm<'_, '_>) -> Result<Imagem, EvalError> {
+     match v {
+-        Value::Imagem(img) => Ok(img.clone()),
++        Value::Imagem(img) => Ok(img.borrow().clone()),
+         Value::Mapa(_) if is_graf(v) => Ok(tela_de(v, span, vm)?.como_imagem()),
+         Value::Texto(caminho) => {
+             let path = vm.resolve_data_path(caminho, span)?;
+@@ -610,7 +610,7 @@
+         .find(|(kk, _)| *kk == k)
+         .map(|(_, v)| v)
+     {
+-        Some(Value::Imagem(img)) => Some(img.clone()),
++        Some(Value::Imagem(img)) => Some(img.borrow().clone()),
+         _ => None,
+     }
+ }
+--- a/src/runtime/nativas/imagem.rs
++++ b/src/runtime/nativas/imagem.rs
+@@ -19,7 +19,7 @@
+                 span,
+             )
+         })?;
+-        Ok(Value::Imagem(img))
++        Ok(Value::imagem(img))
+     }
+ 
+     pub(crate) fn bi_img_salve(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
+@@ -31,7 +31,7 @@
+         }
+         let path = self.resolve_data_path(&nome, span)?;
+         self.ensure_parent_dir(&path, span)?;
+-        imagem::salve_png(img, &path).map_err(|e| {
++        imagem::salve_png(&img, &path).map_err(|e| {
+             self.err(
+                 format!("não foi possível salvar '{}': {e}", path.display()),
+                 span,
+@@ -48,8 +48,8 @@
+         self.expect_arity(args, 2, span)?;
+         let img = expect_imagem(&args[0], span, self)?;
+         let graus = self.expect_f64(&args[1], span)?;
+-        let out = imagem::rotacione(img, graus).map_err(|e| self.err(e, span))?;
+-        Ok(Value::Imagem(out))
++        let out = imagem::rotacione(&img, graus).map_err(|e| self.err(e, span))?;
++        Ok(Value::imagem(out))
+     }
+ 
+     pub(crate) fn bi_img_redimensione(
+@@ -70,8 +70,8 @@
+         } else {
+             fx
+         };
+-        let out = imagem::escala(img, fx, fy).map_err(|e| self.err(e, span))?;
+-        Ok(Value::Imagem(out))
++        let out = imagem::escala(&img, fx, fy).map_err(|e| self.err(e, span))?;
++        Ok(Value::imagem(out))
+     }
+ 
+     pub(crate) fn bi_img_largura(
+@@ -95,9 +95,9 @@
+     v: &'a Value,
+     span: Span,
+     vm: &Vm<'_, '_>,
+-) -> Result<&'a Imagem, EvalError> {
++) -> Result<std::cell::Ref<'a, Imagem>, EvalError> {
+     match v {
+-        Value::Imagem(img) => Ok(img),
++        Value::Imagem(img) => Ok(img.borrow()),
+         other => Err(vm.err(
+             format!("esperada imagem, encontrado {}", other.type_name()),
+             span,
+--- a/src/runtime/nativas/mod.rs
++++ b/src/runtime/nativas/mod.rs
+@@ -12,6 +12,7 @@
+ mod arquivo;
+ #[cfg(feature = "graphics")]
+ mod cartesiano;
++mod clonagem;
+ mod crono;
+ #[cfg(feature = "graphics")]
+ mod graf;
+@@ -39,6 +40,10 @@
+ 
+ pub const NATIVAS: &[Nativa] = &[
+     Nativa {
++        names: &["clone"],
++        module: None,
++    },
++    Nativa {
+         names: &["escreva"],
+         module: None,
+     },
+@@ -652,6 +657,7 @@
+         env: &Rc<RefCell<Env>>,
+     ) -> Result<Value, EvalError> {
+         match name {
++            "clone" => self.bi_clone(args, span),
+             "escreva" => self.bi_escreva(args, span, env),
+             "escreva_erro" => self.bi_escreva_erro(args, span, env),
+             "saia" => self.bi_saia(args, span),
+--- a/src/runtime/nativas/nucleo.rs
++++ b/src/runtime/nativas/nucleo.rs
+@@ -323,7 +323,7 @@
+         if entries.len() == before {
+             return Err(self.err(format!("chave {key} não existe no mapa"), span));
+         }
+-        Ok(Value::mapa(entries))
++        Ok(Value::mapa_com_politica(entries, xs.recurso_nao_clonavel()))
+     }
+     pub(crate) fn remova_conjunto(
+         &self,
+--- a/src/runtime/nativas/referencia.rs
++++ b/src/runtime/nativas/referencia.rs
+@@ -122,7 +122,7 @@
+             "Coleção"
+         }
+         (None, "ambiente") => "Sistema",
+-        (None, "avalie" | "catalogo" | "ajuda" | "tipo" | "tipos") => "Linguagem",
++        (None, "clone" | "avalie" | "catalogo" | "ajuda" | "tipo" | "tipos") => "Linguagem",
+         (
+             Some("tela"),
+             "cls" | "casa" | "eh_terminal" | "colunas" | "linhas" | "posicao_cursor"
+--- a/src/runtime/value.rs
++++ b/src/runtime/value.rs
+@@ -17,7 +17,6 @@
+ #[cfg(feature = "process")]
+ use super::processo::Processo;
+ 
+-#[derive(Clone)]
+ pub enum Value {
+     Nada,
+     Numero(Numero),
+@@ -28,7 +27,7 @@
+     Mapa(MapaRc),
+     Conjunto(Rc<RefCell<Vec<MapKey>>>),
+     Matriz(Rc<RefCell<Vec<Vec<f64>>>>),
+-    Imagem(Imagem),
++    Imagem(Rc<RefCell<Imagem>>),
+     Funcao(Rc<Closure>),
+     Builtin(&'static str),
+     Modulo(Rc<RefCell<Env>>),
+@@ -37,6 +36,46 @@
+     Processo(Rc<RefCell<Processo>>),
+ }
+ 
++// Pairs own their value rather than an Rc. Copy long pair chains iteratively;
++// sharing at collection/function/image boundaries stays unchanged.
++impl Clone for Value {
++    #[inline]
++    fn clone(&self) -> Self {
++        match self {
++            Self::Nada => Self::Nada,
++            Self::Numero(n) => Self::Numero(*n),
++            Self::Texto(s) => Self::Texto(s.clone()),
++            Self::Bool(b) => Self::Bool(*b),
++            Self::Lista(v) => Self::Lista(Rc::clone(v)),
++            Self::Mapa(v) => Self::Mapa(Rc::clone(v)),
++            Self::Conjunto(v) => Self::Conjunto(Rc::clone(v)),
++            Self::Matriz(v) => Self::Matriz(Rc::clone(v)),
++            Self::Imagem(v) => Self::Imagem(Rc::clone(v)),
++            Self::Funcao(v) => Self::Funcao(Rc::clone(v)),
++            Self::Builtin(n) => Self::Builtin(n),
++            Self::Modulo(v) => Self::Modulo(Rc::clone(v)),
++            #[cfg(feature = "process")]
++            Self::Processo(v) => Self::Processo(Rc::clone(v)),
++            Self::Par(key, value) => {
++                if !matches!(value.as_ref(), Self::Par(_, _)) {
++                    return Self::Par(key.clone(), Box::new(value.as_ref().clone()));
++                }
++                let mut keys = Vec::new();
++                let mut tail = self;
++                while let Self::Par(key, value) = tail {
++                    keys.push(key.clone());
++                    tail = value;
++                }
++                let mut result = tail.clone();
++                for key in keys.into_iter().rev() {
++                    result = Self::Par(key, Box::new(result));
++                }
++                result
++            }
++        }
++    }
++}
++
+ /// A list's items, shared by every copy of the list value.
+ pub type ListaRc = Rc<ItensLista>;
+ /// A map's entries, in insertion order, shared by every copy.
+@@ -47,7 +86,7 @@
+ pub struct ItensLista(RefCell<Vec<Value>>);
+ 
+ /// Storage of a map; like [`ItensLista`].
+-pub struct ItensMapa(RefCell<Vec<(MapKey, Value)>>);
++pub struct ItensMapa(RefCell<Vec<(MapKey, Value)>>, bool);
+ 
+ impl std::ops::Deref for ItensLista {
+     type Target = RefCell<Vec<Value>>;
+@@ -56,6 +95,12 @@
+     }
+ }
+ 
++impl ItensMapa {
++    pub(crate) fn recurso_nao_clonavel(&self) -> bool {
++        self.1
++    }
++}
++
+ impl std::ops::Deref for ItensMapa {
+     type Target = RefCell<Vec<(MapKey, Value)>>;
+     fn deref(&self) -> &Self::Target {
+@@ -80,7 +125,7 @@
+ /// emptied onto the same work list before it goes. Rust's own drop would
+ /// recurse once per level, and `repita 1000000 vezes { x = [x] }` would
+ /// overflow the stack when `x` is dropped.
+-fn desmontar(mut pilha: Vec<Value>) {
++pub(crate) fn desmontar(mut pilha: Vec<Value>) {
+     while let Some(v) = pilha.pop() {
+         match v {
+             Value::Lista(xs) => {
+@@ -110,6 +155,7 @@
+     Bool(bool),
+ }
+ 
++#[derive(Clone)]
+ pub enum FunctionBody {
+     #[cfg(feature = "ast")]
+     Ast(Rc<Block>),
+@@ -146,9 +192,26 @@
+     }
+ 
+     pub fn mapa(entries: Vec<(MapKey, Value)>) -> Self {
+-        let entries = Rc::new(ItensMapa(RefCell::new(entries)));
++        Self::mapa_com_politica(entries, false)
++    }
++
++    pub(crate) fn mapa_com_politica(entries: Vec<(MapKey, Value)>, recurso: bool) -> Self {
++        let entries = Rc::new(ItensMapa(RefCell::new(entries), recurso));
+         cycles::track_map(&entries);
+         Value::Mapa(entries)
++    }
++
++    /// Native resource identity survives edits to its visible map entries.
++    #[cfg(feature = "graphics")]
++    pub(crate) fn mapa_recurso(mut entries: Vec<(MapKey, Value)>) -> Self {
++        entries.push((MapKey::Texto("_clonavel".into()), Value::Bool(false)));
++        let entries = Rc::new(ItensMapa(RefCell::new(entries), true));
++        cycles::track_map(&entries);
++        Value::Mapa(entries)
++    }
++
++    pub fn imagem(image: Imagem) -> Self {
++        Value::Imagem(Rc::new(RefCell::new(image)))
+     }
+ 
+     pub fn conjunto(items: Vec<MapKey>) -> Self {
+@@ -275,7 +338,7 @@
+             a.len() == b.len() && a.iter().all(|k| b.contains(k))
+         }
+         (Value::Matriz(a), Value::Matriz(b)) => a.borrow()[..] == b.borrow()[..],
+-        (Value::Imagem(a), Value::Imagem(b)) => a == b,
++        (Value::Imagem(a), Value::Imagem(b)) => *a.borrow() == *b.borrow(),
+         (Value::Funcao(a), Value::Funcao(b)) => Rc::ptr_eq(a, b),
+         (Value::Builtin(a), Value::Builtin(b)) => a == b,
+         (Value::Modulo(a), Value::Modulo(b)) => Rc::ptr_eq(a, b),
+@@ -365,6 +428,7 @@
+             loc.unwrap_or(NumeroLocale::PtBr),
+         )),
+         Value::Imagem(img) => {
++            let img = img.borrow();
+             let _ = write!(out, "<imagem {}x{}>", img.largura, img.altura);
+         }
+         Value::Funcao(c) => {
+@@ -667,7 +731,7 @@
+         assert_eq!(Value::mapa(vec![]).type_name(), "mapa");
+         assert_eq!(Value::conjunto(vec![]).type_name(), "conjunto");
+         assert_eq!(
+-            Value::Imagem(Imagem::nova(1, 1, vec![0, 0, 0, 255]).unwrap()).type_name(),
++            Value::imagem(Imagem::nova(1, 1, vec![0, 0, 0, 255]).unwrap()).type_name(),
+             "imagem"
+         );
+         assert_eq!(Value::Builtin("escreva").type_name(), "funcao");
+--- a/src/runtime/value/cycles.rs
++++ b/src/runtime/value/cycles.rs
+@@ -335,3 +335,40 @@
+         assert!(weak.upgrade().is_none());
+     }
+ }
++
++#[cfg(test)]
++mod clone_failure_tests {
++    use super::*;
++    use crate::runtime::{DebugAction, DebugCtx, DebugHook, LeiaHost, run_with_hook};
++    use std::cell::Cell;
++    #[test]
++    fn failed_graph_copies_do_not_leave_partial_cycles_between_checkpoints() {
++        struct Hook {
++            baseline: usize,
++            checked: Rc<Cell<bool>>,
++        }
++        impl DebugHook for Hook {
++            fn before_stmt(&mut self, ctx: &DebugCtx<'_>) -> DebugAction {
++                let alive =
++                    || REGISTRY.with(|r| r.borrow().objects.iter().filter(|o| o.alive()).count());
++                if ctx.span.line == 1 {
++                    self.baseline = alive();
++                }
++                if ctx.span.line == 7 {
++                    assert_eq!(alive(), self.baseline + 3);
++                    self.checked.set(true);
++                }
++                DebugAction::Continue
++            }
++        }
++        struct Input;
++        impl LeiaHost for Input {
++            fn ask(&mut self, _: &str) -> Result<String, String> {
++                unreachable!()
++            }
++        }
++        let checked = Rc::new(Cell::new(false));
++        run_with_hook("a = [0]\na[0] = a\nb = mapa()\nb:_clonavel = falso\nxs = [a,b]\nrepita 100 vezes { clone(xs) se_falhar 0 }\nobserve = 0","partial.lep",Box::new(Hook {baseline:0,checked:Rc::clone(&checked)}),None,None,&mut Vec::new(),&mut Vec::new(),&mut Input,&[]).unwrap();
++        assert!(checked.get());
++    }
++}
+--- /dev/null
++++ b/tests/clone.rs
+@@ -0,0 +1,335 @@
++use expressa::runtime::{
++    ExecutionBackend, ExecutionOptions, compile_exb, run_exb_with_options, run_with_options,
++};
++fn options(backend: ExecutionBackend) -> ExecutionOptions {
++    ExecutionOptions {
++        backend,
++        ..Default::default()
++    }
++}
++fn check(source: &str, expected: &str) {
++    for backend in [ExecutionBackend::Ast, ExecutionBackend::Bytecode]
++        .into_iter()
++        .filter(|b| b.is_available())
++    {
++        let out = run_with_options(source, "clone.lep", "", options(backend))
++            .unwrap_or_else(|e| panic!("{backend:?}: {e}"));
++        assert_eq!(out.stdout, expected, "{backend:?}");
++        assert_eq!(out.exit_code, 0);
++    }
++    let bytes = compile_exb(source, "clone.lep").unwrap();
++    let out =
++        run_exb_with_options(&bytes, "clone.exb", "", options(ExecutionBackend::Bytecode)).unwrap();
++    assert_eq!(out.stdout, expected, "EXB");
++}
++fn error(source: &str, part: &str) {
++    for backend in [ExecutionBackend::Ast, ExecutionBackend::Bytecode]
++        .into_iter()
++        .filter(|b| b.is_available())
++    {
++        let err = run_with_options(source, "clone.lep", "", options(backend)).unwrap_err();
++        assert!(err.message.contains(part), "{backend:?}: {err}");
++        assert_eq!(err.file, "clone.lep");
++    }
++    let bytes = compile_exb(source, "clone.lep").unwrap();
++    let err = run_exb_with_options(&bytes, "clone.exb", "", options(ExecutionBackend::Bytecode))
++        .unwrap_err();
++    assert!(err.message.contains(part), "EXB: {err}");
++}
++#[test]
++fn copies_nested_graph_preserving_aliases_and_cycles() {
++    check(
++        r#"
++xs = [1]
++a = mapa()
++a:xs = xs
++a:ys = xs
++a:self = a
++b = clone(a)
++b:xs[0] = 9
++escreva(a:xs[0], b:ys[0], b:self:xs[0])
++l = [0]
++l[0] = l
++c = clone(l)
++c[0][0] = 7
++escreva(c[0], tipo(l[0]))
++"#,
++        "1 9 9\n7 lista\n",
++    );
++}
++#[test]
++fn copies_sets_matrices_pairs_and_keeps_text_value_semantics() {
++    check(
++        r#"
++importe "matriz"
++s = conjunto([1, 2])
++m = zeros(2)
++a = [s, s, m, m]
++b = clone(a)
++b[0] = remova(b[0], 1)
++b[2][0, 0] = 9
++escreva(tamanho(s), tamanho(b[1]), m[0, 0], b[3][0, 0])
++p = :x -> [[1]]
++q = clone(p)
++q:valor[0][0] = 5
++escreva(p:valor[0][0], q:valor[0][0])
++t = ["oi"]
++u = t
++v = clone(t)
++u[0][0] = "O"
++escreva(t[0], v[0])
++vazia = funcao() { se falso { 0 } }
++escreva(clone(7), clone(verdadeiro), clone(vazia()), clone("abc"))
++"#,
++        "2 2 0 9\n1 5\nOi oi\n7 verdadeiro nada abc\n",
++    );
++}
++#[test]
++fn cloneable_marker_is_recursive_and_does_not_run_callbacks() {
++    check(
++        r#"
++a = mapa()
++a:_clonavel = falso
++escreva(clone(a) se_falhar "bloqueado")
++a:_clonavel = verdadeiro
++escreva(tipo(clone(a)))
++"#,
++        "bloqueado\nmapa\n",
++    );
++    error("a = mapa()\na:_clonavel = falso\nclone([1, a])", "[1]");
++    error("a = mapa()\na:_clonavel = 1\nclone(a)", "deve ser bool");
++    error("clone()", "argumento");
++}
++#[test]
++fn functions_without_captures_are_detached_and_keep_code_behavior() {
++    check(
++        r#"
++f = funcao(x) { y = x + 1 y * 2 }
++g = clone(f)
++f = 0
++escreva(g(3))
++h = clone(funcao(x) { escreva(tipo(x)) x })
++h(2)
++factory = clone(funcao(x) { funcao(y) { x + y } })
++escreva(factory(4)(5))
++xs = [g, g]
++ys = clone(xs)
++escreva(ys[0] == ys[1], ys[0] == g)
++escreva(tipo(clone(escreva)))
++"#,
++        "8\nnumero\n9\nverdadeiro falso\nfuncao\n",
++    );
++}
++#[test]
++fn capture_analysis_handles_control_flow_and_loop_locals() {
++    check(
++        r#"
++f = funcao(n) {
++    soma = 0
++    para i de 0 ate n { se i == 3 { continue } soma += i se i == 4 { pare } }
++    se n > 0 { local = 7 soma += local } senao { local = 2 soma += local }
++    soma
++}
++escreva(clone(f)(8))
++g = funcao(n) { x = 0 enquanto x < n { x += 1 } (1 / 0) se_falhar x }
++escreva(clone(g)(3))
++"#,
++        "14\n3\n",
++    );
++}
++#[test]
++fn captured_bindings_recursion_and_dynamic_environment_are_rejected() {
++    error(
++        "fator = 2\nf = funcao(x) { x * fator }\nclone([f])",
++        "fator",
++    );
++    error(
++        "f = funcao(n) { se n == 0 { 0 } senao { f(n - 1) } }\nclone(f)",
++        "`f`",
++    );
++    error(
++        "f = funcao() { avalie(\"1 + 2\") }\nclone(f)",
++        "dinamicamente",
++    );
++    error("f = funcao() { catalogo() }\nclone(f)", "dinamicamente");
++    error(
++        "outer = funcao(x) { funcao() { x } }\nclone(outer(2))",
++        "`x`",
++    );
++    error(
++        "f = funcao(callback) { callback(\"segredo\") }\nclone(f)",
++        "chamada indireta",
++    );
++    error(
++        "f = funcao(xs, callback) { ordene(xs, callback) }\nclone(f)",
++        "ordene",
++    );
++}
++#[test]
++fn modules_cannot_be_cloned_even_inside_a_collection() {
++    error("m = importe \"matriz\"\nclone([m])", "módulo");
++}
++#[test]
++#[cfg(feature = "graphics")]
++fn native_resources_cannot_be_enabled_by_editing_the_visible_marker() {
++    check(
++        r#"
++g = importe "tela_grafica"
++c = importe "cartesiano"
++t = g::nova(8, 8)
++escreva(t:_clonavel)
++t:_clonavel = verdadeiro
++escreva(clone(t) se_falhar "recurso")
++u = remova(t, :_clonavel)
++escreva(clone([u]) se_falhar "aninhado")
++d = c::documento()
++escreva(clone(d) se_falhar "documento")
++"#,
++        "falso\nrecurso\naninhado\ndocumento\n",
++    );
++}
++#[test]
++#[cfg(feature = "graphics")]
++fn image_snapshots_remain_independent_after_canvas_changes() {
++    check(
++        r#"
++g = importe "tela_grafica"
++t = g::nova(2, 2)
++g::cor(t, :vermelho)
++g::retangulo(t, 0, 0, 1, 1)
++a = g::como_imagem(t)
++b = clone(a)
++g::apague(t)
++g::cor(t, :azul)
++g::retangulo(t, 0, 0, 1, 1)
++c = g::como_imagem(t)
++escreva(a == b, a == c)
++"#,
++        "verdadeiro falso\n",
++    );
++}
++#[test]
++fn clone_cancellation_unwinds_and_does_not_run_following_code() {
++    use expressa::runtime::{DebugAction, DebugCtx, DebugHook, LeiaHost, run_with_hook};
++    use std::{cell::Cell, rc::Rc};
++    struct Hook(Rc<Cell<bool>>);
++    impl DebugHook for Hook {
++        fn before_stmt(&mut self, ctx: &DebugCtx<'_>) -> DebugAction {
++            if ctx.span.line == 3 {
++                self.0.set(true);
++            }
++            DebugAction::Continue
++        }
++        fn interrupted(&mut self) -> bool {
++            self.0.get()
++        }
++    }
++    struct Input;
++    impl LeiaHost for Input {
++        fn ask(&mut self, _: &str) -> Result<String, String> {
++            unreachable!()
++        }
++    }
++    let armed = Rc::new(Cell::new(false));
++    let mut out = Vec::new();
++    let code = run_with_hook(
++        "a = [0]\nrepita 3000 vezes { a = [a] }\nclone(a)\nescreva(99)",
++        "cancel.lep",
++        Box::new(Hook(Rc::clone(&armed))),
++        None,
++        None,
++        &mut out,
++        &mut Vec::new(),
++        &mut Input,
++        &[],
++    )
++    .unwrap();
++    assert!(armed.get());
++    assert_eq!(code, 0);
++    assert!(out.is_empty());
++}
++
++#[test]
++fn images_have_shared_object_identity_and_independent_clone_buffers() {
++    use expressa::runtime::{
++        DebugAction, DebugCtx, DebugHook, Imagem, LEIA_MARKER, Value, run_with_hook,
++    };
++    use std::{cell::Cell, rc::Rc, sync::Arc};
++    struct Hook {
++        done: Rc<Cell<bool>>,
++    }
++    impl DebugHook for Hook {
++        fn before_stmt(&mut self, ctx: &DebugCtx<'_>) -> DebugAction {
++            if ctx.span.line == 1 {
++                ctx.env.borrow_mut().define(
++                    "a",
++                    Value::imagem(Imagem::nova(1, 1, vec![1, 2, 3, 255]).unwrap()),
++                );
++            }
++            if ctx.span.line == 3 {
++                let env = ctx.env.borrow();
++                let Value::Imagem(a) = env.vars.get("a").unwrap() else {
++                    panic!()
++                };
++                let Value::Imagem(b) = env.vars.get("b").unwrap() else {
++                    panic!()
++                };
++                let Value::Imagem(c) = env.vars.get("c").unwrap() else {
++                    panic!()
++                };
++                assert!(Rc::ptr_eq(a, b));
++                assert!(!Rc::ptr_eq(a, c));
++                assert!(Arc::ptr_eq(&a.borrow().px, &c.borrow().px));
++                Arc::make_mut(&mut a.borrow_mut().px)[0] = 9;
++                assert_eq!(b.borrow().px[0], 9);
++                assert_eq!(c.borrow().px[0], 1);
++                self.done.set(true);
++            }
++            DebugAction::Continue
++        }
++    }
++    struct Input;
++    impl expressa::runtime::LeiaHost for Input {
++        fn ask(&mut self, _prompt: &str) -> Result<String, String> {
++            Err(LEIA_MARKER.into())
++        }
++    }
++    let done = Rc::new(Cell::new(false));
++    run_with_hook(
++        "b = a\nc = clone(a)\n0",
++        "image.lep",
++        Box::new(Hook {
++            done: Rc::clone(&done),
++        }),
++        None,
++        None,
++        &mut Vec::new(),
++        &mut Vec::new(),
++        &mut Input,
++        &[],
++    )
++    .unwrap();
++    assert!(done.get());
++}
++
++#[test]
++#[cfg(all(unix, feature = "process"))]
++fn a_running_process_cannot_be_cloned() {
++    error(
++        "p = importe \"processo\"\nx = p::linhas_de(\"printf x\")\nclone([x])",
++        "processo",
++    );
++}
++
++#[test]
++fn clone_work_budget_rejects_an_oversized_matrix() {
++    let err = run_with_options(
++        "m = importe \"matriz\"\na = m::zeros(1024)\nclone(a)",
++        "budget.lep",
++        "",
++        options(ExecutionBackend::Bytecode),
++    )
++    .unwrap_err();
++    assert!(err.message.contains("orçamento"), "{err}");
++    assert_eq!(err.span.line, 3);
++}

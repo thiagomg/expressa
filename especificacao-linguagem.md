@@ -289,7 +289,7 @@ linhas[0][1] = "x"             // se linhas[0] é texto, reescreve o caractere
 
 ### 9.1. Cópias e referências
 
-`a = b` e a passagem de argumentos compartilham listas, mapas e matrizes; alterar um elemento por uma referência aparece nas demais. Texto é um valor: trocar um caractere reatribui o texto e preserva as cópias anteriores. Operações que devolvem uma cópia de coleção (`+`, `remova`, `ordene`) copiam seus elementos superficialmente; objetos mutáveis aninhados continuam compartilhados. Ler uma linha com `A[i]` devolve uma lista independente da matriz. Não confunda uma cópia superficial com uma cópia profunda.
+`a = b` e a passagem de argumentos compartilham listas, mapas, conjuntos, matrizes e imagens; alterar um elemento por uma referência aparece nas demais. Texto é um valor: trocar um caractere reatribui o texto e preserva as cópias anteriores. Operações que devolvem uma cópia de coleção (`+`, `remova`, `ordene`) copiam seus elementos superficialmente; objetos mutáveis aninhados continuam compartilhados. Ler uma linha com `A[i]` devolve uma lista independente da matriz. Não confunda uma cópia superficial com uma cópia profunda. `clone(valor)` faz a cópia profunda dos dados clonáveis, preservando ciclos e aliases internos. Funções precisam ser classificadas sem capturas; módulos, processos e recursos não são clonáveis. Textos mantêm comportamento de valor. Consulte o [contrato completo de clone](docs/clone.md), incluindo limites e classificação conservadora de funções.
 
 ```text
 xs = [[1]]

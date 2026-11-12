@@ -18,7 +18,7 @@ pub(crate) const AMOSTRAS: usize = 400;
 impl Vm<'_, '_> {
     pub(crate) fn bi_documento(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
         self.expect_arity(args, 0, span)?;
-        Ok(Value::mapa(vec![(
+        Ok(Value::mapa_recurso(vec![(
             MapKey::Texto("graficos".into()),
             Value::lista(vec![]),
         )]))

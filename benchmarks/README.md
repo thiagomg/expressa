@@ -76,3 +76,7 @@ The [EXB v1 review](EXB-V1-REVIEW.md) compares the preceding accepted binary on 
 O [exemplo Conway](programs/conway/README.md) fica em uma subpasta para não entrar automaticamente nos workloads curtos. Oferece simulação, desenho pré-calculado e execução completa, com destino janela ou rasterização sem janela. Ainda não fornece métricas por frame nem confirmação de apresentação do viewer; seu README distingue preparação, execução e custos de memória.
 
 A [comparação Conway AST × bytecode](CONWAY.md) registra CPU, tempo e RSS do processo completo, com rasterização sem janela e verificações independentes de correção. O runner dedicado é `benchmarks/conway.py`; ele não altera a seleção nem as saídas esperadas dos benchmarks curtos.
+
+## Etapa 08: referências e clone
+
+[Contrato e limites](../docs/clone.md) e [comparação antes/depois de CPU, RSS, alocações e tamanho](CLONE.md). Implementação para revisão em AST, bytecode e EXB; inclui custos observados nos cenários gráficos. Esta etapa estabelece a semântica de cópia, sem prometer aceleração geral.

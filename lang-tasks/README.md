@@ -64,7 +64,7 @@ Task 036 owns the VM migration; 034–035, 037, and 039–043 define its target 
 | 020 | [Define what float arithmetic mode promises](020-float-mode-contract.md) | Decision · reproduced limitation |
 | 021 | [Remove ambiguity between locale input and source numbers](021-locale-number-parsing.md) | Decision · code finding |
 | 022 | [Specify supported integer ranges in restricted contexts](022-integer-context-limits.md) | Decision · code finding |
-| 023 | [Document copying, aliasing, and binding immutability together](023-copy-and-alias-contract.md) | Decision · observed behavior |
+| 023 | [Document copying, aliasing, and binding immutability together](023-copy-and-alias-contract.md) | Implementado para revisão · clone e referências |
 | 024 | [Define resource and import paths inside imported functions](024-module-relative-paths.md) | Decision · code finding |
 | 025 | [Consider structured error information for recovery](025-structured-error-recovery.md) | Proposal · language improvement |
 | 026 | [Split evaluator responsibilities into cohesive modules](026-split-evaluator.md) | Organization · proposal |

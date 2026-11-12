@@ -122,7 +122,7 @@ pub fn tema_de(module: Option<&str>, name: &str) -> &'static str {
             "Coleção"
         }
         (None, "ambiente") => "Sistema",
-        (None, "avalie" | "catalogo" | "ajuda" | "tipo" | "tipos") => "Linguagem",
+        (None, "clone" | "avalie" | "catalogo" | "ajuda" | "tipo" | "tipos") => "Linguagem",
         (
             Some("tela"),
             "cls" | "casa" | "eh_terminal" | "colunas" | "linhas" | "posicao_cursor"
