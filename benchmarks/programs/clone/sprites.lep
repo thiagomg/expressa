@@ -1,0 +1,27 @@
+// Mesmo programa nas versões anterior/candidata. Não usa clone.
+// Exercita snapshots de imagens, comandos de sprites e rasterização.
+graf = importe "tela_grafica"
+s = graf::nova(4, 4)
+graf::cor(s, :vermelho)
+graf::retangulo(s, 0, 0, 3, 3)
+sprite = graf::como_imagem(s)
+t = graf::nova(64, 64)
+resultado = sprite
+repita 100 vezes {
+    graf::apague(t)
+    para y de 0 ate 7 {
+        para x de 0 ate 7 {
+            graf::imagem(t, sprite, x * 8 + 2, y * 8 + 2)
+        }
+    }
+    resultado = graf::como_imagem(t)
+}
+// Referência independente do stamping: retângulos nas mesmas posições.
+esperada = graf::nova(64, 64)
+graf::cor(esperada, :vermelho)
+para y de 0 ate 7 {
+    para x de 0 ate 7 {
+        graf::retangulo(esperada, x * 8, y * 8, x * 8 + 3, y * 8 + 3)
+    }
+}
+escreva(resultado == graf::como_imagem(esperada))

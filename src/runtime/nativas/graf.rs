@@ -15,7 +15,7 @@ impl Vm<'_, '_> {
         self.expect_arity(args, 2, span)?;
         let largura = self.expect_graf_dim(&args[0], "largura", span)?;
         let altura = self.expect_graf_dim(&args[1], "altura", span)?;
-        Ok(Value::mapa(vec![
+        Ok(Value::mapa_recurso(vec![
             (
                 MapKey::Texto("largura".into()),
                 Value::Numero(largura.into()),
@@ -236,7 +236,7 @@ impl Vm<'_, '_> {
             &mapa,
             Value::mapa(vec![
                 (MapKey::Texto("tipo".into()), Value::Texto("imagem".into())),
-                (MapKey::Texto("figura".into()), Value::Imagem(figura)),
+                (MapKey::Texto("figura".into()), Value::imagem(figura)),
                 (MapKey::Texto("x".into()), Value::Numero((x as i64).into())),
                 (MapKey::Texto("y".into()), Value::Numero((y as i64).into())),
                 (
@@ -300,7 +300,7 @@ impl Vm<'_, '_> {
     ) -> Result<Value, EvalError> {
         self.expect_arity(args, 1, span)?;
         let tela = tela_de(&args[0], span, self)?;
-        Ok(Value::Imagem(tela.como_imagem()))
+        Ok(Value::imagem(tela.como_imagem()))
     }
 
     pub(crate) fn bi_graf_mostre(
@@ -581,7 +581,7 @@ fn get_lista(mapa: &MapaRc, chave: &str) -> Option<ListaRc> {
 
 fn figura_de(v: &Value, span: Span, vm: &Vm<'_, '_>) -> Result<Imagem, EvalError> {
     match v {
-        Value::Imagem(img) => Ok(img.clone()),
+        Value::Imagem(img) => Ok(img.borrow().clone()),
         Value::Mapa(_) if is_graf(v) => Ok(tela_de(v, span, vm)?.como_imagem()),
         Value::Texto(caminho) => {
             let path = vm.resolve_data_path(caminho, span)?;
@@ -610,7 +610,7 @@ fn get_imagem(mapa: &MapaRc, chave: &str) -> Option<Imagem> {
         .find(|(kk, _)| *kk == k)
         .map(|(_, v)| v)
     {
-        Some(Value::Imagem(img)) => Some(img.clone()),
+        Some(Value::Imagem(img)) => Some(img.borrow().clone()),
         _ => None,
     }
 }

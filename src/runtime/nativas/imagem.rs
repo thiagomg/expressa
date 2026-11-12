@@ -19,7 +19,7 @@ impl Vm<'_, '_> {
                 span,
             )
         })?;
-        Ok(Value::Imagem(img))
+        Ok(Value::imagem(img))
     }
 
     pub(crate) fn bi_img_salve(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
@@ -31,7 +31,7 @@ impl Vm<'_, '_> {
         }
         let path = self.resolve_data_path(&nome, span)?;
         self.ensure_parent_dir(&path, span)?;
-        imagem::salve_png(img, &path).map_err(|e| {
+        imagem::salve_png(&img, &path).map_err(|e| {
             self.err(
                 format!("não foi possível salvar '{}': {e}", path.display()),
                 span,
@@ -48,8 +48,8 @@ impl Vm<'_, '_> {
         self.expect_arity(args, 2, span)?;
         let img = expect_imagem(&args[0], span, self)?;
         let graus = self.expect_f64(&args[1], span)?;
-        let out = imagem::rotacione(img, graus).map_err(|e| self.err(e, span))?;
-        Ok(Value::Imagem(out))
+        let out = imagem::rotacione(&img, graus).map_err(|e| self.err(e, span))?;
+        Ok(Value::imagem(out))
     }
 
     pub(crate) fn bi_img_redimensione(
@@ -70,8 +70,8 @@ impl Vm<'_, '_> {
         } else {
             fx
         };
-        let out = imagem::escala(img, fx, fy).map_err(|e| self.err(e, span))?;
-        Ok(Value::Imagem(out))
+        let out = imagem::escala(&img, fx, fy).map_err(|e| self.err(e, span))?;
+        Ok(Value::imagem(out))
     }
 
     pub(crate) fn bi_img_largura(
@@ -95,9 +95,9 @@ pub(crate) fn expect_imagem<'a>(
     v: &'a Value,
     span: Span,
     vm: &Vm<'_, '_>,
-) -> Result<&'a Imagem, EvalError> {
+) -> Result<std::cell::Ref<'a, Imagem>, EvalError> {
     match v {
-        Value::Imagem(img) => Ok(img),
+        Value::Imagem(img) => Ok(img.borrow()),
         other => Err(vm.err(
             format!("esperada imagem, encontrado {}", other.type_name()),
             span,

@@ -64,7 +64,7 @@ Task 036 owns the VM migration; 034–035, 037, and 039–043 define its target 
 | 020 | [Define what float arithmetic mode promises](020-float-mode-contract.md) | Decision · reproduced limitation |
 | 021 | [Remove ambiguity between locale input and source numbers](021-locale-number-parsing.md) | Decision · code finding |
 | 022 | [Specify supported integer ranges in restricted contexts](022-integer-context-limits.md) | Decision · code finding |
-| 023 | [Document copying, aliasing, and binding immutability together](023-copy-and-alias-contract.md) | Decision · observed behavior |
+| 023 | [Document copying, aliasing, and binding immutability together](023-copy-and-alias-contract.md) | Implementado para revisão · clone e referências |
 | 024 | [Define resource and import paths inside imported functions](024-module-relative-paths.md) | Decision · code finding |
 | 025 | [Consider structured error information for recovery](025-structured-error-recovery.md) | Proposal · language improvement |
 | 026 | [Split evaluator responsibilities into cohesive modules](026-split-evaluator.md) | Organization · proposal |
@@ -90,3 +90,12 @@ Task 036 owns the VM migration; 034–035, 037, and 039–043 define its target 
 | 046 | [Instruções compactas em memória](046-compact-bytecode-instructions.md) | Descartado e revertido; dados e patch preservados |
 | 047 | [Formato EXB v1 e carregamento desktop](047-exb-file-format-and-loader.md) | Implementado para revisão; CPU/RSS medidos |
 | 048 | [Primeiro perfil mínimo do runtime desktop](048-minimal-desktop-runtime-profile.md) | Implementado para revisão; tamanho/CPU/RSS medidos; núcleo portátil pendente |
+| 049 | [Extend lexical access by position](049-lexical-slot-access.md) | Planned · largest VM opportunity |
+| 050 | [Direct palette conversion and opaque pixels](050-palette-and-opaque-pixel-paths.md) | Planned · next small performance increment |
+| 051 | [Avoid temporary graphics lookup keys](051-borrowed-graphics-map-lookups.md) | Planned · graphics allocations |
+| 052 | [Reduce per-call metadata and temporary allocations](052-function-call-allocation-costs.md) | Planned · function-call costs |
+| 053 | [Reduce temporary work in cycle collection](053-cycle-collector-scratch-storage.md) | Conditional plan · allocation/cycle pressure |
+
+## Performance plans after stage 09
+
+[Shared implementation order, correctness requirements and benchmark/adoption protocol](PERFORMANCE-PLAN.md) for tasks 049–053. Each task is planning only and should be implemented and measured in separate increments. The existing noncloneable-resource policy is retained. The first suggested small change is 050-A (direct palette-to-RGBA conversion); the largest VM opportunity is 049, beginning with parameters in nested scopes.

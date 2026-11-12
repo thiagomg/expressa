@@ -1,0 +1,107 @@
+{
+  "scope": "stage09 internal Value clone optimization; resource policy unchanged",
+  "references": {
+    "before": {
+      "source_sha256": "14a26d21bbf5fc543a033a8c5995e9da09390f2079db9776a08739b11e5d6472",
+      "binary_sha256": "142e4f6196a5b199c59e71905243b4d0848cfc2065cf78f213522a85675abbe7",
+      "archive_sha256": "ca1c77f2d7328e8e9a5c2efb8061d42e5ee0e4f772ed875715b478cea8b038e7",
+      "local_artifacts": "target/bytecode-steps/08-clone",
+      "build": "cargo build -p expressa --release --bin expressa --offline --locked",
+      "git_head": "7c4745f2f3d1d5f6b9d03191626ededcb715b71b",
+      "binary_bytes": 4488648,
+      "stripped": false
+    },
+    "after": {
+      "source_sha256": "72512a755aad50ec2985d8775129f9be7aa2b117b0705e44033fe66d0b971e2e",
+      "binary_sha256": "6ac5548d05e8da11ca95022bbd111fe95bd1237049767bb78fca596c33fe3a0d",
+      "archive_sha256": "3b89cf4c2285c0d734389e4f69e299c06af4b657f76b4a9fbcd4fba7e7284aba",
+      "local_artifacts": "target/bytecode-steps/09-clone-fastpath",
+      "build": "cargo build -p expressa --release --bin expressa --offline --locked",
+      "git_head": "f709c0a2ee378dde3a2cd9c1b4d8951e5b91ae49",
+      "binary_bytes": 4474528,
+      "stripped": false
+    }
+  },
+  "implementation_patch": {
+    "path": "benchmarks/bytecode-steps/09-clone-fastpath.patch",
+    "sha256": "534f8623a84122b3abe5238bcef2adc064b3fadec443dfe3b46ccf312426d916",
+    "verified": "git apply --check/apply against stage08 source archive; resulting Value source matches candidate"
+  },
+  "allocation_probe": {
+    "probe_source": "benchmarks/clone_allocations.rs",
+    "probe_source_sha256": "5817d1ee5a9e493a4e391d2ac25b2c571f4d3fef9673597f793d51a642ab0557",
+    "libraries": {
+      "before": {
+        "path": "target/clone-fastpath/allocations/libexpressa-before.rlib",
+        "sha256": "3698c098c21f9c5a8545b5c45dc0b73616b9df7ad3395c1d4b53a6f1f5fb5e7d",
+        "probe_path": "target/clone-fastpath/allocations/before",
+        "probe_sha256": "4efc5838ba8ac9ee9bf930a13df985bbf477047fef9c47b3e16683f97c7c1314"
+      },
+      "after": {
+        "path": "target/clone-fastpath/allocations/libexpressa-after.rlib",
+        "sha256": "c093b1c017f1ab674fc6679d8dc14efb9e42995bc18455a7c6ee211593d27c83",
+        "probe_path": "target/clone-fastpath/allocations/after",
+        "probe_sha256": "ba4a6f953cad78d3e0dd52e391df773164f835332ab1fde23a3bcf6b98b06910"
+      }
+    },
+    "before_source_sha256": "14a26d21bbf5fc543a033a8c5995e9da09390f2079db9776a08739b11e5d6472",
+    "after_source_sha256": "72512a755aad50ec2985d8775129f9be7aa2b117b0705e44033fe66d0b971e2e"
+  },
+  "profile": "release, default features, decimal/en, CPU 0; user-only perf events with paranoid=2",
+  "measurement_counts": {
+    "standard": 2232,
+    "graphics": 176,
+    "hardware_counter_processes": 88,
+    "cycle_profiles": 4,
+    "allocation_probes": 72
+  },
+  "warmup_counts": {
+    "standard": 216,
+    "graphics": 48,
+    "hardware_counter_processes": 16
+  },
+  "validation": {
+    "workspace_passed_excluding_three_subprocess_helpers": 648,
+    "workspace_intentionally_ignored_helpers": 4,
+    "minimal_passed": 334,
+    "release_focused_pair": 1,
+    "release_clone_integration": 13,
+    "clippy_workspace_all_targets": "passed -D warnings",
+    "clippy_minimal_all_targets": "passed -D warnings",
+    "format": "cargo fmt --all --check",
+    "whitespace": "git diff --check"
+  },
+  "files_sha256": {
+    "benchmarks/clone-fastpath/README.md": "a88b1984e11c345182e099aad30dcfa7776caf6a6d9e4fd8a81a6d1e3454c665",
+    "benchmarks/clone-fastpath/allocations.py": "a269dac8d54c4f76c66761f3faf92c95b542e4aa0c3a078ab7270a3ff0675cd9",
+    "benchmarks/clone-fastpath/perf.py": "6d2c19f4697022c13981ae6ab4690823d92dea0f67fd4bc5b533213dc0be8b11",
+    "benchmarks/clone-fastpath/programs/arithmetic.lep": "e5fbc7be50a03b910719ddb7b6594cda7695dde124dfd4138071f57393ff15f7",
+    "benchmarks/clone-fastpath/programs/closures.lep": "6de871c9043c8e9cea095c334deac7be98c930ee3dfc4a00e9cdce08c302bed4",
+    "benchmarks/clone-investigation/programs/arithmetic.lep": "1b8f002be7293c50e939670b8798726bc7cb71ec49280a7cea8d87be15b7eac7",
+    "benchmarks/clone-investigation/programs/closures.lep": "f4aef8eac2ecf7720f7916d788bd6821b86c50d41c177c9aac1e70785f15e519",
+    "benchmarks/clone_allocations.rs": "5817d1ee5a9e493a4e391d2ac25b2c571f4d3fef9673597f793d51a642ab0557",
+    "benchmarks/clone_graphics.py": "1c5d48299c4f9ecbae3ac053398e4fb1dc213e8f0ed37a20cfedccd3e46509de",
+    "benchmarks/conway.py": "9b2a2ece00160a80ea29a9ae25b07219e67037eb34d144da684369b264da7ac7",
+    "benchmarks/measure.c": "530470fe318106f53355e4e91940ee24065574088fdc3b4a524ad1fc1431cb05",
+    "benchmarks/programs/arguments.lep": "df439d177483fcdda2a9fa636c6189d5c605f8a597c860808f774fdb4ea4e331",
+    "benchmarks/programs/arithmetic.lep": "4b36da25faeb7017aec4e53c90062c9640b149690d6ca17a73b5e7c5093e2b23",
+    "benchmarks/programs/avalie.lep": "0454852f6ce14f4691e207aa4fcfeed27cfdccfa7c0acf1bfe8650734a28e409",
+    "benchmarks/programs/clone/graph.lep": "53b26e5f1ea75789fbe8861ef7f35eb8fd5503b2d8d1bae8647aa1d0c0ba1540",
+    "benchmarks/programs/clone/sprites.lep": "38df56569a026678af1f8ff155ca2b70fdb51e07214e9fe4c5b11267927e3fca",
+    "benchmarks/programs/closures.lep": "c81ab69465b6a0625850dd83cd8d82bcec15d97537582c54cc5540d35e188932",
+    "benchmarks/programs/collections.lep": "713a9def517641d49ff6e4957a7027943012a88ca8c388e74ed271ae59baac06",
+    "benchmarks/programs/conway/conway.lep": "6f43ad41cc2d0301639b0d578c481fd6d565ab1688113af2d9b59182537ef26d",
+    "benchmarks/programs/cycles.lep": "484412f963ff1eb4a15d0426d03a6b47cd02698675e58c5c78f749ccef589437",
+    "benchmarks/programs/matrix.lep": "6ccf3bcccc6d6262af584995ec405f583beb1ff84a8581af5885ba998dc3e32a",
+    "benchmarks/programs/recursion.lep": "03d1e19ca59d011f340ec79f957df2e00b6e8dbbf0e0dc1151e699f4e081d616",
+    "benchmarks/programs/startup.lep": "6804257581d1a4684f949b093f286c6d957e1615640e5380130c473846cb647a",
+    "benchmarks/results/clone-fastpath-85.json": "f63a95684d1c2cec09020cc476cc6d6f4594f57a6b69a2bb78b4b00316242bf3",
+    "benchmarks/results/clone-fastpath-86.json": "892416507a0ffad8f7b9e45bb7b455cd9c2821ab3cfac5965de57e8fe8ca1738",
+    "benchmarks/results/clone-fastpath-allocations.json": "16c8900a5aabe6a4fdc0af67310452e81385da2b35813df15d5eea6b16295252",
+    "benchmarks/results/clone-fastpath-graphics-87.json": "34dec66256512ffaf65b3d3118b03c2ebb176bad2839a785eacdbae17eba47c6",
+    "benchmarks/results/clone-fastpath-graphics-88.json": "cd5a5866b59af4d425eaf63c415612a0b6255fe810edfb6431016c382b3be640",
+    "benchmarks/results/clone-fastpath-perf-89.json": "ac54084ded0eb10e26319c982565b400c46891ead5d2c707e632620a2c040837",
+    "benchmarks/run.py": "9a8aa7b9cd13f8236b015be59fb2d4b416a4ceacd57f5a532c0df31ba71820e5",
+    "benchmarks/clone-fastpath/validate.py": "e434502690ac93caa5eaacad3ccb08b1cfc4111adcd53bc12808e27b9a11d30e"
+  }
+}

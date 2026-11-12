@@ -142,3 +142,11 @@ Implementados compilação offline, carregamento validado e execução desktop d
 ## Etapa 07: perfil mínimo desktop
 
 [Features e limites](../docs/runtime-profiles.md) e [comparação de tamanho/CPU/RSS](MINIMAL-PROFILE.md). O mesmo código gera um executável completo e outro sem executor AST, gráficos, processos e terminal interativo. O frontend e `avalie` são mantidos. A referência é a etapa 06 aceita, sem restauração da compactação da etapa 05.
+
+## Etapa 08: referências e clone
+
+[Contrato e limites](../docs/clone.md) e [comparação antes/depois de CPU, RSS, alocações e tamanho](CLONE.md). Implementação para revisão em AST, bytecode e EXB; inclui custos observados nos cenários gráficos. Esta etapa estabelece a semântica de cópia, sem prometer aceleração geral.
+
+## Etapa 09: cópia interna de valores
+
+[Implementação, perf e comparação de CPU/memória antes/depois](clone-fastpath/README.md). O percurso de pares foi separado para permitir melhor inlining das cópias comuns; a política dos recursos não clonáveis foi mantida. Ganhos e regressões estão registrados por caso.

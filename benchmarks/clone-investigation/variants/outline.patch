@@ -1,0 +1,39 @@
+--- a/src/runtime/value.rs
++++ b/src/runtime/value.rs
+@@ -57,23 +57,28 @@
+             #[cfg(feature = "process")]
+             Self::Processo(v) => Self::Processo(Rc::clone(v)),
+             Self::Par(key, value) => {
+-                if !matches!(value.as_ref(), Self::Par(_, _)) {
+-                    return Self::Par(key.clone(), Box::new(value.as_ref().clone()));
++                clone_pair(self, key, value)
++            }
++        }
++    }
++}
++
++#[inline(never)]
++fn clone_pair(original: &Value, key: &MapKey, value: &Value) -> Value {
++                if !matches!(value, Value::Par(_, _)) {
++                    return Value::Par(key.clone(), Box::new(value.clone()));
+                 }
+                 let mut keys = Vec::new();
+-                let mut tail = self;
+-                while let Self::Par(key, value) = tail {
++                let mut tail = original;
++                while let Value::Par(key, value) = tail {
+                     keys.push(key.clone());
+                     tail = value;
+                 }
+                 let mut result = tail.clone();
+                 for key in keys.into_iter().rev() {
+-                    result = Self::Par(key, Box::new(result));
++                    result = Value::Par(key, Box::new(result));
+                 }
+                 result
+-            }
+-        }
+-    }
+ }
+ 
+ /// A list's items, shared by every copy of the list value.

@@ -265,3 +265,12 @@ comeca_com = funcao(texto, prefixo) { 0 }
 ///
 /// Exemplo: termina_com("relatorio.csv", ".csv")
 termina_com = funcao(texto, sufixo) { 0 }
+
+/// Copia recursivamente dados, preservando ciclos e aliases internos.
+/// Funções sem capturas são permitidas; módulos, processos, recursos e
+/// mapas com :_clonavel = falso impedem a cópia. Textos têm comportamento
+/// de valor. Imagens clonadas são objetos independentes com pixels que
+/// podem ser compartilhados internamente até uma escrita.
+///
+/// Exemplo: b = clone([[1, 2]])
+clone = funcao(valor) { 0 }

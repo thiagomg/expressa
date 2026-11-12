@@ -1,4 +1,5 @@
 //! Bytecode compilation and execution. No instruction retains an AST expression.
+mod captures;
 mod compiler;
 mod execute;
 pub(super) mod format;
@@ -148,3 +149,5 @@ struct LoopSpec {
 pub(crate) fn test_function_body(items: &[Item]) -> FunctionBody {
     FunctionBody::Bytecode(compiler::items(items))
 }
+
+pub(crate) use captures::detached_function;

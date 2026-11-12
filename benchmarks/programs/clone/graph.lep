@@ -1,0 +1,14 @@
+// Caso específico da API nova; não entra no glob dos benchmarks antigos.
+compartilhada = [1, 2, 3]
+a = mapa()
+a:primeira = compartilhada
+a:segunda = compartilhada
+a:self = a
+a:callback = funcao(x) { x + 1 }
+correto = verdadeiro
+repita 200 vezes {
+    b = clone(a)
+    b:primeira[0] = 9
+    correto = correto e a:primeira[0] == 1 e b:segunda[0] == 9 e b:self:primeira[0] == 9 e b:callback(1) == 2
+}
+escreva(correto)

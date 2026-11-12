@@ -12,6 +12,7 @@ use super::value::{Value, format_numero};
 mod arquivo;
 #[cfg(feature = "graphics")]
 mod cartesiano;
+mod clonagem;
 mod crono;
 #[cfg(feature = "graphics")]
 mod graf;
@@ -38,6 +39,10 @@ pub struct Nativa {
 }
 
 pub const NATIVAS: &[Nativa] = &[
+    Nativa {
+        names: &["clone"],
+        module: None,
+    },
     Nativa {
         names: &["escreva"],
         module: None,
@@ -652,6 +657,7 @@ impl Vm<'_, '_> {
         env: &Rc<RefCell<Env>>,
     ) -> Result<Value, EvalError> {
         match name {
+            "clone" => self.bi_clone(args, span),
             "escreva" => self.bi_escreva(args, span, env),
             "escreva_erro" => self.bi_escreva_erro(args, span, env),
             "saia" => self.bi_saia(args, span),

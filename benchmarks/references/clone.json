@@ -1,0 +1,109 @@
+{
+  "before": {
+    "source_sha256": "091efe536767009002f93865008286fac6a139fb122cfd6f6680101a4ecc448a",
+    "binary_sha256": "59391cc99a46ed269ce7b455f7b1ff29503a2cc3ab2fd106bbccebe46a7c52de",
+    "archive_sha256": "ef86a9dc9222954385832e9a6573a356aaa1d7f93722e485976c52ba231e0cff",
+    "local_artifacts": "target/bytecode-steps/08-before-clone",
+    "build": "cargo build -p expressa --release --bin expressa --offline --locked",
+    "git_head": "7c4745f2f3d1d5f6b9d03191626ededcb715b71b",
+    "binary_bytes": 4373720,
+    "stripped": false
+  },
+  "after": {
+    "source_sha256": "14a26d21bbf5fc543a033a8c5995e9da09390f2079db9776a08739b11e5d6472",
+    "binary_sha256": "142e4f6196a5b199c59e71905243b4d0848cfc2065cf78f213522a85675abbe7",
+    "archive_sha256": "ca1c77f2d7328e8e9a5c2efb8061d42e5ee0e4f772ed875715b478cea8b038e7",
+    "local_artifacts": "target/bytecode-steps/08-clone",
+    "build": "cargo build -p expressa --release --bin expressa --offline --locked",
+    "git_head": "7c4745f2f3d1d5f6b9d03191626ededcb715b71b",
+    "binary_bytes": 4488648,
+    "stripped": false
+  },
+  "implementation_patch": {
+    "path": "benchmarks/bytecode-steps/08-clone.patch",
+    "sha256": "b32ea1d016fb2088417041e2dbe380dc0ac3ed50352fabfe08cec876099857b6",
+    "verified": "git apply --check/apply against before source archive; resulting Cargo/src/tests/docs-nativas match candidate"
+  },
+  "allocation_probe": {
+    "metadata": {
+      "probe_source": "benchmarks/clone_allocations.rs",
+      "probe_source_sha256": "5817d1ee5a9e493a4e391d2ac25b2c571f4d3fef9673597f793d51a642ab0557",
+      "build": "rustc --edition=2024 -O benchmarks/clone_allocations.rs --extern expressa=LIBRARY -L dependency=target/release/deps -o PROBE",
+      "libraries": {
+        "before": {
+          "path": "target/benchmarks/clone-allocations/libexpressa-before.rlib",
+          "sha256": "8d102f44b0b59aa87205a77acdc6ab29729a1cbf56d237fdd9eb07f32918bf44",
+          "probe_path": "target/benchmarks/clone-allocations/before",
+          "probe_sha256": "cde31c3103b66017301802cd902bc2cc3c7beb4a3a7e2f037985c3d9a6bf0562"
+        },
+        "after": {
+          "path": "target/benchmarks/clone-allocations/libexpressa-after.rlib",
+          "sha256": "3698c098c21f9c5a8545b5c45dc0b73616b9df7ad3395c1d4b53a6f1f5fb5e7d",
+          "probe_path": "target/benchmarks/clone-allocations/after",
+          "probe_sha256": "4efc5838ba8ac9ee9bf930a13df985bbf477047fef9c47b3e16683f97c7c1314"
+        }
+      },
+      "baseline_build": "git archive of HEAD in /tmp; cargo build --lib --release --offline --locked; library copied before rebuilding candidate",
+      "candidate_build": "cargo build -p expressa --lib --bin expressa --release --offline --locked"
+    },
+    "runner": "benchmarks/clone_allocations.py",
+    "runner_sha256": "e3136893f2585431fd13f051b29f590a3b7618df4e071b0f625d3493ee19adfb",
+    "results": "benchmarks/results/clone-allocations.json",
+    "results_sha256": "754c9d72e1faf6238f70639d6e127e22d8474425163431a173194fe8d45be4ab"
+  },
+  "protocol": {
+    "repeat": 31,
+    "warmup": 3,
+    "seeds": [
+      70,
+      71
+    ],
+    "cpu_affinity": [
+      0
+    ],
+    "engines": {
+      "before_ast": "before binary, AST",
+      "before_vm": "before binary, bytecode",
+      "after_ast": "after binary, AST",
+      "after_vm": "after binary, bytecode"
+    },
+    "inputs": "same nine existing .lep workloads; whole-process timings, no clone-specific case in before/after comparison"
+  },
+  "graphics_protocol": {
+    "repeat": 11,
+    "warmup": 3,
+    "seeds": [
+      72,
+      73
+    ],
+    "cpu_affinity": [
+      0
+    ],
+    "inputs": "sprites 100 frames x 64 stamps; Conway completo 64 x 64, 25 generations + 3 warmup, raster; before/after x AST/bytecode"
+  },
+  "files_sha256": {
+    "benchmarks/clone_allocations.py": "e3136893f2585431fd13f051b29f590a3b7618df4e071b0f625d3493ee19adfb",
+    "benchmarks/clone_allocations.rs": "5817d1ee5a9e493a4e391d2ac25b2c571f4d3fef9673597f793d51a642ab0557",
+    "benchmarks/clone_graphics.py": "1c5d48299c4f9ecbae3ac053398e4fb1dc213e8f0ed37a20cfedccd3e46509de",
+    "benchmarks/conway.py": "9b2a2ece00160a80ea29a9ae25b07219e67037eb34d144da684369b264da7ac7",
+    "benchmarks/measure.c": "530470fe318106f53355e4e91940ee24065574088fdc3b4a524ad1fc1431cb05",
+    "benchmarks/programs/arguments.lep": "df439d177483fcdda2a9fa636c6189d5c605f8a597c860808f774fdb4ea4e331",
+    "benchmarks/programs/arithmetic.lep": "4b36da25faeb7017aec4e53c90062c9640b149690d6ca17a73b5e7c5093e2b23",
+    "benchmarks/programs/avalie.lep": "0454852f6ce14f4691e207aa4fcfeed27cfdccfa7c0acf1bfe8650734a28e409",
+    "benchmarks/programs/clone/graph.lep": "53b26e5f1ea75789fbe8861ef7f35eb8fd5503b2d8d1bae8647aa1d0c0ba1540",
+    "benchmarks/programs/clone/sprites.lep": "38df56569a026678af1f8ff155ca2b70fdb51e07214e9fe4c5b11267927e3fca",
+    "benchmarks/programs/closures.lep": "c81ab69465b6a0625850dd83cd8d82bcec15d97537582c54cc5540d35e188932",
+    "benchmarks/programs/collections.lep": "713a9def517641d49ff6e4957a7027943012a88ca8c388e74ed271ae59baac06",
+    "benchmarks/programs/conway/conway.lep": "6f43ad41cc2d0301639b0d578c481fd6d565ab1688113af2d9b59182537ef26d",
+    "benchmarks/programs/cycles.lep": "484412f963ff1eb4a15d0426d03a6b47cd02698675e58c5c78f749ccef589437",
+    "benchmarks/programs/matrix.lep": "6ccf3bcccc6d6262af584995ec405f583beb1ff84a8581af5885ba998dc3e32a",
+    "benchmarks/programs/recursion.lep": "03d1e19ca59d011f340ec79f957df2e00b6e8dbbf0e0dc1151e699f4e081d616",
+    "benchmarks/programs/startup.lep": "6804257581d1a4684f949b093f286c6d957e1615640e5380130c473846cb647a",
+    "benchmarks/results/clone-70.json": "3b8ade8568fb1cff174c819f20216e622ce2b1fb72357a1447a503d88ea96916",
+    "benchmarks/results/clone-71.json": "1488bc51582b3bbde700ff806ec966c24b93c9837b8a5889eaca8bf158d58b73",
+    "benchmarks/results/clone-allocations.json": "754c9d72e1faf6238f70639d6e127e22d8474425163431a173194fe8d45be4ab",
+    "benchmarks/results/clone-graphics-72.json": "13cfa2516b292d8fd8706764d79cad4305bb5bf94ba6983fc4f7be6fcfc01883",
+    "benchmarks/results/clone-graphics-73.json": "a0b922cbbab2adde9649da6fb032e23aea62b90ddf2280d403a5a681b2497af6",
+    "benchmarks/run.py": "9a8aa7b9cd13f8236b015be59fb2d4b416a4ceacd57f5a532c0df31ba71820e5"
+  }
+}

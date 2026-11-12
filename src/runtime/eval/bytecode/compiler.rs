@@ -542,6 +542,21 @@ pub(super) fn module(items: &[Item]) -> Rc<Chunk> {
     Rc::new(compiler.code)
 }
 
+#[cfg(feature = "ast")]
+pub(super) fn capture_body(params: &[Param], body: &Block) -> Rc<Chunk> {
+    let mut c = Compiler::new();
+    c.code.parameter_slots = Rc::new(
+        params
+            .iter()
+            .enumerate()
+            .map(|(i, p)| (p.name.clone(), i as u32))
+            .collect(),
+    );
+    c.stmts(&body.stmts);
+    c.emit(Op::Finish, body.span);
+    Rc::new(c.code)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

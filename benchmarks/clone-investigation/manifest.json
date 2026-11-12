@@ -1,0 +1,231 @@
+{
+  "scope": "investigation only; runtime source/binary unchanged; no variants adopted",
+  "git_head": "f709c0a2ee378dde3a2cd9c1b4d8951e5b91ae49",
+  "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)",
+  "platform": "Linux-7.3.0-10-generic-x86_64-with-glibc2.44",
+  "objdump": "GNU objdump (GNU Binutils for Ubuntu) 2.47",
+  "build": {
+    "head_for_workspace": "f709c0a2ee378dde3a2cd9c1b4d8951e5b91ae49",
+    "candidate_manifest": {
+      "source_sha256": "14a26d21bbf5fc543a033a8c5995e9da09390f2079db9776a08739b11e5d6472",
+      "binary_sha256": "142e4f6196a5b199c59e71905243b4d0848cfc2065cf78f213522a85675abbe7",
+      "archive_sha256": "ca1c77f2d7328e8e9a5c2efb8061d42e5ee0e4f772ed875715b478cea8b038e7",
+      "local_artifacts": "target/bytecode-steps/08-clone",
+      "build": "cargo build -p expressa --release --bin expressa --offline --locked",
+      "git_head": "7c4745f2f3d1d5f6b9d03191626ededcb715b71b"
+    },
+    "generator_sha256": "1fcce3a952bee2158ec4b41e065a963b95fc5f0c0d1dbc0f47c3facb9b9bd0d8",
+    "variants": {
+      "control": {
+        "binary": {
+          "path": "/home/thiago/src/expressa/target/clone-investigation/control/expressa",
+          "sha256": "65bb872bee035f00c3414000d52f94484a3520b8932f1ea1c9f90c0024556b0d",
+          "bytes": 4488672
+        },
+        "library": {
+          "path": "/home/thiago/src/expressa/target/clone-investigation/control/libexpressa.rlib",
+          "sha256": "a5cdabdbd6ace80a5247d9e8eaf20ddebb815d35276783636508cf48aea8383f",
+          "bytes": 7191016
+        },
+        "allocations": {
+          "path": "/home/thiago/src/expressa/target/clone-investigation/control/allocations",
+          "sha256": "882659b6b2340bdd3eaaae2f7446a4ed10581b3a7f7329e31a1da00afe9dfd75",
+          "bytes": 6956064
+        },
+        "patch": {
+          "path": "/home/thiago/src/expressa/target/clone-investigation/control/variant.patch",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "bytes": 0
+        }
+      },
+      "derive": {
+        "binary": {
+          "path": "/home/thiago/src/expressa/target/clone-investigation/derive/expressa",
+          "sha256": "00170624f575426b442b393f235a8b8ca0da0a86e13027f8c8ed315ade8b5d4b",
+          "bytes": 4482280
+        },
+        "library": {
+          "path": "/home/thiago/src/expressa/target/clone-investigation/derive/libexpressa.rlib",
+          "sha256": "aad0bfe0d51235c503b89c310d02d3aeeaab4863ed69b1cb3f82e7eb6cbf4376",
+          "bytes": 7214802
+        },
+        "allocations": {
+          "path": "/home/thiago/src/expressa/target/clone-investigation/derive/allocations",
+          "sha256": "b8dffa1ae7a9c9993165eb2f752cb466e2be94e2e8c1f61ef3a240afafb539fb",
+          "bytes": 6950128
+        },
+        "patch": {
+          "path": "/home/thiago/src/expressa/target/clone-investigation/derive/variant.patch",
+          "sha256": "e684ee0952d14d5cf8b4c919f0869d64b02ea41331369827aa483697733ba9fd",
+          "bytes": 2131
+        }
+      },
+      "outline": {
+        "binary": {
+          "path": "/home/thiago/src/expressa/target/clone-investigation/outline/expressa",
+          "sha256": "a8bfa584713bfd5f6017c3347c034c051d380408d26a4cbb8cc4e53047537829",
+          "bytes": 4474416
+        },
+        "library": {
+          "path": "/home/thiago/src/expressa/target/clone-investigation/outline/libexpressa.rlib",
+          "sha256": "b5893de6e00a8c29e2693c146d56892b6909c19f959f25ff3860a03a8bb3bdea",
+          "bytes": 7262170
+        },
+        "allocations": {
+          "path": "/home/thiago/src/expressa/target/clone-investigation/outline/allocations",
+          "sha256": "b0ab10cc44a64cc7428ca930f2e4a97544a8afdf5d5c30d16bf4bd46ad346154",
+          "bytes": 6943760
+        },
+        "patch": {
+          "path": "/home/thiago/src/expressa/target/clone-investigation/outline/variant.patch",
+          "sha256": "0250f5420a02c57dd076c684e1c1c68ba3d50b914c3ec359e02cc5992e7ad936",
+          "bytes": 1411
+        }
+      },
+      "raw-manual": {
+        "binary": {
+          "path": "/home/thiago/src/expressa/target/clone-investigation/raw-manual/expressa",
+          "sha256": "9bf5f6cfe0a92f9ab2e9a34c6f59646e61b5984793c97a8e56e5d141f97ea17c",
+          "bytes": 4498568
+        },
+        "library": {
+          "path": "/home/thiago/src/expressa/target/clone-investigation/raw-manual/libexpressa.rlib",
+          "sha256": "3c81c476b02cf57dc1bcef8bcb186afdcf84d33095b34f77c72e43a9ae9a64e7",
+          "bytes": 7226072
+        },
+        "allocations": {
+          "path": "/home/thiago/src/expressa/target/clone-investigation/raw-manual/allocations",
+          "sha256": "73a916926c1464fe2343c7d1e8974ff8281da6e0dc4e57c757b7f8e36004dad6",
+          "bytes": 6955208
+        },
+        "patch": {
+          "path": "/home/thiago/src/expressa/target/clone-investigation/raw-manual/variant.patch",
+          "sha256": "963ec3318deff717831ea7336cfbb097680e41b881ce5a07f52df78285c42628",
+          "bytes": 3984
+        }
+      },
+      "raw-derive": {
+        "binary": {
+          "path": "/home/thiago/src/expressa/target/clone-investigation/raw-derive/expressa",
+          "sha256": "a861e725c923fe9820b9e3d68199c8c6a5982d7eb55d25b7d3e51a1f0d73fdb5",
+          "bytes": 4474296
+        },
+        "library": {
+          "path": "/home/thiago/src/expressa/target/clone-investigation/raw-derive/libexpressa.rlib",
+          "sha256": "0767335fa025b2dd06da0000e4d3f0047c2d7b714a72b56d3a1b8a8e8aec604c",
+          "bytes": 7223196
+        },
+        "allocations": {
+          "path": "/home/thiago/src/expressa/target/clone-investigation/raw-derive/allocations",
+          "sha256": "1ad7ef95d6b36ae1600b612154092d3dbdc018a9768de4c9dc82b16f232ebb17",
+          "bytes": 6941168
+        },
+        "patch": {
+          "path": "/home/thiago/src/expressa/target/clone-investigation/raw-derive/variant.patch",
+          "sha256": "502ee4cea2cf5cf9db1bc1add16db606603ac7ab48c589e05435089050bd0537",
+          "bytes": 5558
+        }
+      }
+    }
+  },
+  "references": {
+    "before": {
+      "source_sha256": "091efe536767009002f93865008286fac6a139fb122cfd6f6680101a4ecc448a",
+      "binary_sha256": "59391cc99a46ed269ce7b455f7b1ff29503a2cc3ab2fd106bbccebe46a7c52de",
+      "archive_sha256": "ef86a9dc9222954385832e9a6573a356aaa1d7f93722e485976c52ba231e0cff",
+      "local_artifacts": "target/bytecode-steps/08-before-clone",
+      "build": "cargo build -p expressa --release --bin expressa --offline --locked",
+      "git_head": "7c4745f2f3d1d5f6b9d03191626ededcb715b71b"
+    },
+    "candidate": {
+      "source_sha256": "14a26d21bbf5fc543a033a8c5995e9da09390f2079db9776a08739b11e5d6472",
+      "binary_sha256": "142e4f6196a5b199c59e71905243b4d0848cfc2065cf78f213522a85675abbe7",
+      "archive_sha256": "ca1c77f2d7328e8e9a5c2efb8061d42e5ee0e4f772ed875715b478cea8b038e7",
+      "local_artifacts": "target/bytecode-steps/08-clone",
+      "build": "cargo build -p expressa --release --bin expressa --offline --locked",
+      "git_head": "7c4745f2f3d1d5f6b9d03191626ededcb715b71b"
+    },
+    "historical": {
+      "git_head": "bd654b597e873d1cf266636a88ecc98fad54db5e",
+      "binary_sha256": "32ff26b98c199b3baa906f42da8de997d35e2cb7cb44b85cc53c855c827aa5f7",
+      "build": "cargo build -p expressa --release --bin expressa --offline --locked",
+      "source_archive": "target/ast-reference-bd654b5/source.tar"
+    }
+  },
+  "variant_patches": {
+    "derive": {
+      "path": "benchmarks/clone-investigation/variants/derive.patch",
+      "sha256": "e684ee0952d14d5cf8b4c919f0869d64b02ea41331369827aa483697733ba9fd"
+    },
+    "outline": {
+      "path": "benchmarks/clone-investigation/variants/outline.patch",
+      "sha256": "0250f5420a02c57dd076c684e1c1c68ba3d50b914c3ec359e02cc5992e7ad936"
+    },
+    "raw-manual": {
+      "path": "benchmarks/clone-investigation/variants/raw-manual.patch",
+      "sha256": "963ec3318deff717831ea7336cfbb097680e41b881ce5a07f52df78285c42628"
+    },
+    "raw-derive": {
+      "path": "benchmarks/clone-investigation/variants/raw-derive.patch",
+      "sha256": "502ee4cea2cf5cf9db1bc1add16db606603ac7ab48c589e05435089050bd0537"
+    }
+  },
+  "assembly": {
+    "command": "objdump -d -C BINARY; extract clone_paths::main; count direct call sites to Value::clone",
+    "observations": {
+      "control": {
+        "calls_to_Value_clone_in_probe_main": [
+          "   421cd:\te8 1e 01 00 00       \tcall   422f0 <<expressa::runtime::value::Value as core::clone::Clone>::clone>"
+        ],
+        "note": "one static call site inside the common loop; this is the host microbenchmark, not the interpreter",
+        "binary_sha256": "a2b3d765f694b21ec896fa7bdce9808699d219ec134813f15f611da1b17b8db3",
+        "main_assembly_sha256": "5c87c2f2bfcf2870c9296c59a15cd95a5905cd2dab5730ecebb2be87f233f21a"
+      },
+      "outline": {
+        "calls_to_Value_clone_in_probe_main": [],
+        "note": "one static call site inside the common loop; this is the host microbenchmark, not the interpreter",
+        "binary_sha256": "0312652b9134636c81e4e70e48dd273c6c7f6e67e8b2d0f1a9f28b634af5ce07",
+        "main_assembly_sha256": "61672d38b8fe64fc0e2437dbcc1262d8b9a5da4ff444140aded1bf5a231c6199"
+      }
+    }
+  },
+  "files_sha256": {
+    "benchmarks/clone-investigation/README.md": "a48adba896cd53b23ad4c76b77248f264ada74a3f84dd270efd60aba50b60512",
+    "benchmarks/clone-investigation/clone_paths.rs": "5ef4fade69317e26dbf37ec205f7ec57021d8c61354d3a6d95c75395a2f28edc",
+    "benchmarks/clone-investigation/diagnostics.py": "d3095b16d136f42f18a03dbcf5945b27186e8041b7239482e5c2dec2a8b35f4a",
+    "benchmarks/clone-investigation/layout.rs": "0a5b58be5f501060edb97536daf77ec4e39d018fd516ee6b33d6b40743d1d826",
+    "benchmarks/clone-investigation/measure.py": "82fa8dbede281e80e88e64e90c620dd713771f36f30e3be3b7ad90a7955734a1",
+    "benchmarks/clone-investigation/measure_long.py": "d604f53c49ccb92c7160ca58ee1185f9c8bd20715ad0e67c4bcde1ab252ace03",
+    "benchmarks/clone-investigation/prepare.py": "1fcce3a952bee2158ec4b41e065a963b95fc5f0c0d1dbc0f47c3facb9b9bd0d8",
+    "benchmarks/clone-investigation/programs/arithmetic.lep": "1b8f002be7293c50e939670b8798726bc7cb71ec49280a7cea8d87be15b7eac7",
+    "benchmarks/clone-investigation/programs/closures.lep": "f4aef8eac2ecf7720f7916d788bd6821b86c50d41c177c9aac1e70785f15e519",
+    "benchmarks/clone-investigation/variants/derive.patch": "e684ee0952d14d5cf8b4c919f0869d64b02ea41331369827aa483697733ba9fd",
+    "benchmarks/clone-investigation/variants/outline.patch": "0250f5420a02c57dd076c684e1c1c68ba3d50b914c3ec359e02cc5992e7ad936",
+    "benchmarks/clone-investigation/variants/raw-derive.patch": "502ee4cea2cf5cf9db1bc1add16db606603ac7ab48c589e05435089050bd0537",
+    "benchmarks/clone-investigation/variants/raw-manual.patch": "963ec3318deff717831ea7336cfbb097680e41b881ce5a07f52df78285c42628",
+    "benchmarks/results/clone-investigation-80.json": "624a635634feff3c3ea8d526b64d636d83393263aaf08b396c65e14d49cc12a5",
+    "benchmarks/results/clone-investigation-81.json": "eff7b5cf2eda2af1090b06befbe542f19c959de105140fad111e3450e1b9475b",
+    "benchmarks/results/clone-investigation-diagnostics.json": "a99c65b05b7fe3c92692b3e09bc1043b4c0cc04906a99d994c1c45144d4963d9",
+    "benchmarks/results/clone-investigation-long-83.json": "f492d782286cf777f376a6c9d3bf1c0be8a528e70fd5abde60c2d906cf75b36c",
+    "benchmarks/results/clone-investigation-long-84.json": "f3da929e96237b64836a007e55877b0f0f862c44cd48e03bfcda1c32baeed4cd",
+    "benchmarks/clone-investigation/validate.py": "5904f8717e5bcb53043968fd1313e8a7291d91308bc745382659eee9eb1fa785"
+  },
+  "measured_samples": {
+    "short_processes": 2790,
+    "long_processes": 352,
+    "host_micro_processes": 315,
+    "allocation_probes": 126
+  },
+  "warmup_processes": {
+    "short": 270,
+    "long": 64,
+    "host_micro": 63
+  },
+  "limits": [
+    "No perf event access: perf_event_paranoid=4",
+    "No full control of clock/temperature/other processes",
+    "Out-of-line symbol sizes exclude inlined call sites",
+    "Raw image and derive variants deliberately relax approved guarantees; diagnostic only",
+    "Allocator byte requests are not RSS or malloc usable sizes"
+  ]
+}

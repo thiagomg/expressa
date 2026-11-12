@@ -1,0 +1,529 @@
+{
+  "metadata": {
+    "probe_source": "benchmarks/clone_allocations.rs",
+    "probe_source_sha256": "5817d1ee5a9e493a4e391d2ac25b2c571f4d3fef9673597f793d51a642ab0557",
+    "build": "rustc --edition=2024 -O benchmarks/clone_allocations.rs --extern expressa=LIBRARY -L dependency=target/release/deps -o PROBE",
+    "libraries": {
+      "before": {
+        "path": "target/benchmarks/clone-allocations/libexpressa-before.rlib",
+        "sha256": "8d102f44b0b59aa87205a77acdc6ab29729a1cbf56d237fdd9eb07f32918bf44",
+        "probe_path": "target/benchmarks/clone-allocations/before",
+        "probe_sha256": "cde31c3103b66017301802cd902bc2cc3c7beb4a3a7e2f037985c3d9a6bf0562"
+      },
+      "after": {
+        "path": "target/benchmarks/clone-allocations/libexpressa-after.rlib",
+        "sha256": "3698c098c21f9c5a8545b5c45dc0b73616b9df7ad3395c1d4b53a6f1f5fb5e7d",
+        "probe_path": "target/benchmarks/clone-allocations/after",
+        "probe_sha256": "4efc5838ba8ac9ee9bf930a13df985bbf477047fef9c47b3e16683f97c7c1314"
+      }
+    },
+    "baseline_build": "git archive of HEAD in /tmp; cargo build --lib --release --offline --locked; library copied before rebuilding candidate",
+    "candidate_build": "cargo build -p expressa --lib --bin expressa --release --offline --locked",
+    "scope": "instrumented captured API, warmed once per process; includes parse/compile, execution, output validation and cleanup; excludes source file read; requested allocation bytes, not RSS or malloc metadata",
+    "repeat": 3,
+    "arithmetic": "decimal",
+    "locale": "en",
+    "runner_sha256": "e3136893f2585431fd13f051b29f590a3b7618df4e071b0f625d3493ee19adfb",
+    "clone_graph_note": "new feature only: before runtime does not implement clone"
+  },
+  "workloads": {
+    "arithmetic": {
+      "source": "benchmarks/programs/arithmetic.lep",
+      "source_sha256": "4b36da25faeb7017aec4e53c90062c9640b149690d6ca17a73b5e7c5093e2b23",
+      "engines": {
+        "before_ast": [
+          {
+            "allocations": 600341,
+            "reallocations": 5,
+            "deallocations": 600341,
+            "requested_bytes": 1839248,
+            "peak_live_delta_bytes": 22728,
+            "retained_delta_bytes": 0
+          },
+          {
+            "allocations": 600341,
+            "reallocations": 5,
+            "deallocations": 600341,
+            "requested_bytes": 1839248,
+            "peak_live_delta_bytes": 22728,
+            "retained_delta_bytes": 0
+          },
+          {
+            "allocations": 600341,
+            "reallocations": 5,
+            "deallocations": 600341,
+            "requested_bytes": 1839248,
+            "peak_live_delta_bytes": 22728,
+            "retained_delta_bytes": 0
+          }
+        ],
+        "before_bytecode": [
+          {
+            "allocations": 364,
+            "reallocations": 11,
+            "deallocations": 364,
+            "requested_bytes": 44540,
+            "peak_live_delta_bytes": 25367,
+            "retained_delta_bytes": 0
+          },
+          {
+            "allocations": 364,
+            "reallocations": 11,
+            "deallocations": 364,
+            "requested_bytes": 44540,
+            "peak_live_delta_bytes": 25367,
+            "retained_delta_bytes": 0
+          },
+          {
+            "allocations": 364,
+            "reallocations": 11,
+            "deallocations": 364,
+            "requested_bytes": 44540,
+            "peak_live_delta_bytes": 25367,
+            "retained_delta_bytes": 0
+          }
+        ],
+        "after_ast": [
+          {
+            "allocations": 600342,
+            "reallocations": 5,
+            "deallocations": 600342,
+            "requested_bytes": 1839253,
+            "peak_live_delta_bytes": 22733,
+            "retained_delta_bytes": 0
+          },
+          {
+            "allocations": 600342,
+            "reallocations": 5,
+            "deallocations": 600342,
+            "requested_bytes": 1839253,
+            "peak_live_delta_bytes": 22733,
+            "retained_delta_bytes": 0
+          },
+          {
+            "allocations": 600342,
+            "reallocations": 5,
+            "deallocations": 600342,
+            "requested_bytes": 1839253,
+            "peak_live_delta_bytes": 22733,
+            "retained_delta_bytes": 0
+          }
+        ],
+        "after_bytecode": [
+          {
+            "allocations": 365,
+            "reallocations": 11,
+            "deallocations": 365,
+            "requested_bytes": 44545,
+            "peak_live_delta_bytes": 25372,
+            "retained_delta_bytes": 0
+          },
+          {
+            "allocations": 365,
+            "reallocations": 11,
+            "deallocations": 365,
+            "requested_bytes": 44545,
+            "peak_live_delta_bytes": 25372,
+            "retained_delta_bytes": 0
+          },
+          {
+            "allocations": 365,
+            "reallocations": 11,
+            "deallocations": 365,
+            "requested_bytes": 44545,
+            "peak_live_delta_bytes": 25372,
+            "retained_delta_bytes": 0
+          }
+        ]
+      }
+    },
+    "collections": {
+      "source": "benchmarks/programs/collections.lep",
+      "source_sha256": "713a9def517641d49ff6e4957a7027943012a88ca8c388e74ed271ae59baac06",
+      "engines": {
+        "before_ast": [
+          {
+            "allocations": 700398,
+            "reallocations": 6,
+            "deallocations": 700398,
+            "requested_bytes": 3545797,
+            "peak_live_delta_bytes": 25261,
+            "retained_delta_bytes": 0
+          },
+          {
+            "allocations": 700398,
+            "reallocations": 6,
+            "deallocations": 700398,
+            "requested_bytes": 3545797,
+            "peak_live_delta_bytes": 25261,
+            "retained_delta_bytes": 0
+          },
+          {
+            "allocations": 700398,
+            "reallocations": 6,
+            "deallocations": 700398,
+            "requested_bytes": 3545797,
+            "peak_live_delta_bytes": 25261,
+            "retained_delta_bytes": 0
+          }
+        ],
+        "before_bytecode": [
+          {
+            "allocations": 400431,
+            "reallocations": 18,
+            "deallocations": 400431,
+            "requested_bytes": 1158306,
+            "peak_live_delta_bytes": 30733,
+            "retained_delta_bytes": 0
+          },
+          {
+            "allocations": 400431,
+            "reallocations": 18,
+            "deallocations": 400431,
+            "requested_bytes": 1158306,
+            "peak_live_delta_bytes": 30733,
+            "retained_delta_bytes": 0
+          },
+          {
+            "allocations": 400431,
+            "reallocations": 18,
+            "deallocations": 400431,
+            "requested_bytes": 1158306,
+            "peak_live_delta_bytes": 30733,
+            "retained_delta_bytes": 0
+          }
+        ],
+        "after_ast": [
+          {
+            "allocations": 700399,
+            "reallocations": 6,
+            "deallocations": 700399,
+            "requested_bytes": 3545810,
+            "peak_live_delta_bytes": 25274,
+            "retained_delta_bytes": 0
+          },
+          {
+            "allocations": 700399,
+            "reallocations": 6,
+            "deallocations": 700399,
+            "requested_bytes": 3545810,
+            "peak_live_delta_bytes": 25274,
+            "retained_delta_bytes": 0
+          },
+          {
+            "allocations": 700399,
+            "reallocations": 6,
+            "deallocations": 700399,
+            "requested_bytes": 3545810,
+            "peak_live_delta_bytes": 25274,
+            "retained_delta_bytes": 0
+          }
+        ],
+        "after_bytecode": [
+          {
+            "allocations": 400432,
+            "reallocations": 18,
+            "deallocations": 400432,
+            "requested_bytes": 1158319,
+            "peak_live_delta_bytes": 30738,
+            "retained_delta_bytes": 0
+          },
+          {
+            "allocations": 400432,
+            "reallocations": 18,
+            "deallocations": 400432,
+            "requested_bytes": 1158319,
+            "peak_live_delta_bytes": 30738,
+            "retained_delta_bytes": 0
+          },
+          {
+            "allocations": 400432,
+            "reallocations": 18,
+            "deallocations": 400432,
+            "requested_bytes": 1158319,
+            "peak_live_delta_bytes": 30738,
+            "retained_delta_bytes": 0
+          }
+        ]
+      }
+    },
+    "arguments": {
+      "source": "benchmarks/programs/arguments.lep",
+      "source_sha256": "df439d177483fcdda2a9fa636c6189d5c605f8a597c860808f774fdb4ea4e331",
+      "engines": {
+        "before_ast": [
+          {
+            "allocations": 1650443,
+            "reallocations": 10,
+            "deallocations": 1650443,
+            "requested_bytes": 124112900,
+            "peak_live_delta_bytes": 34382,
+            "retained_delta_bytes": 0
+          },
+          {
+            "allocations": 1650443,
+            "reallocations": 10,
+            "deallocations": 1650443,
+            "requested_bytes": 124112900,
+            "peak_live_delta_bytes": 34382,
+            "retained_delta_bytes": 0
+          },
+          {
+            "allocations": 1650443,
+            "reallocations": 10,
+            "deallocations": 1650443,
+            "requested_bytes": 124112900,
+            "peak_live_delta_bytes": 34382,
+            "retained_delta_bytes": 0
+          }
+        ],
+        "before_bytecode": [
+          {
+            "allocations": 550531,
+            "reallocations": 34,
+            "deallocations": 550531,
+            "requested_bytes": 37882751,
+            "peak_live_delta_bytes": 40113,
+            "retained_delta_bytes": 0
+          },
+          {
+            "allocations": 550531,
+            "reallocations": 34,
+            "deallocations": 550531,
+            "requested_bytes": 37882751,
+            "peak_live_delta_bytes": 40113,
+            "retained_delta_bytes": 0
+          },
+          {
+            "allocations": 550531,
+            "reallocations": 34,
+            "deallocations": 550531,
+            "requested_bytes": 37882751,
+            "peak_live_delta_bytes": 40113,
+            "retained_delta_bytes": 0
+          }
+        ],
+        "after_ast": [
+          {
+            "allocations": 1650444,
+            "reallocations": 10,
+            "deallocations": 1650444,
+            "requested_bytes": 124112905,
+            "peak_live_delta_bytes": 34387,
+            "retained_delta_bytes": 0
+          },
+          {
+            "allocations": 1650444,
+            "reallocations": 10,
+            "deallocations": 1650444,
+            "requested_bytes": 124112905,
+            "peak_live_delta_bytes": 34387,
+            "retained_delta_bytes": 0
+          },
+          {
+            "allocations": 1650444,
+            "reallocations": 10,
+            "deallocations": 1650444,
+            "requested_bytes": 124112905,
+            "peak_live_delta_bytes": 34387,
+            "retained_delta_bytes": 0
+          }
+        ],
+        "after_bytecode": [
+          {
+            "allocations": 550532,
+            "reallocations": 34,
+            "deallocations": 550532,
+            "requested_bytes": 37882756,
+            "peak_live_delta_bytes": 40118,
+            "retained_delta_bytes": 0
+          },
+          {
+            "allocations": 550532,
+            "reallocations": 34,
+            "deallocations": 550532,
+            "requested_bytes": 37882756,
+            "peak_live_delta_bytes": 40118,
+            "retained_delta_bytes": 0
+          },
+          {
+            "allocations": 550532,
+            "reallocations": 34,
+            "deallocations": 550532,
+            "requested_bytes": 37882756,
+            "peak_live_delta_bytes": 40118,
+            "retained_delta_bytes": 0
+          }
+        ]
+      }
+    },
+    "clone_graph": {
+      "source": "benchmarks/programs/clone/graph.lep",
+      "source_sha256": "53b26e5f1ea75789fbe8861ef7f35eb8fd5503b2d8d1bae8647aa1d0c0ba1540",
+      "engines": {
+        "after_ast": [
+          {
+            "allocations": 21697,
+            "reallocations": 2024,
+            "deallocations": 21697,
+            "requested_bytes": 1768264,
+            "peak_live_delta_bytes": 226551,
+            "retained_delta_bytes": 0
+          },
+          {
+            "allocations": 21697,
+            "reallocations": 2024,
+            "deallocations": 21697,
+            "requested_bytes": 1768264,
+            "peak_live_delta_bytes": 226551,
+            "retained_delta_bytes": 0
+          },
+          {
+            "allocations": 21697,
+            "reallocations": 2024,
+            "deallocations": 21697,
+            "requested_bytes": 1768264,
+            "peak_live_delta_bytes": 226551,
+            "retained_delta_bytes": 0
+          }
+        ],
+        "after_bytecode": [
+          {
+            "allocations": 16386,
+            "reallocations": 1844,
+            "deallocations": 16386,
+            "requested_bytes": 1461680,
+            "peak_live_delta_bytes": 225194,
+            "retained_delta_bytes": 0
+          },
+          {
+            "allocations": 16386,
+            "reallocations": 1844,
+            "deallocations": 16386,
+            "requested_bytes": 1461680,
+            "peak_live_delta_bytes": 225194,
+            "retained_delta_bytes": 0
+          },
+          {
+            "allocations": 16386,
+            "reallocations": 1844,
+            "deallocations": 16386,
+            "requested_bytes": 1461680,
+            "peak_live_delta_bytes": 225194,
+            "retained_delta_bytes": 0
+          }
+        ]
+      }
+    },
+    "sprites": {
+      "source": "benchmarks/programs/clone/sprites.lep",
+      "source_sha256": "38df56569a026678af1f8ff155ca2b70fdb51e07214e9fe4c5b11267927e3fca",
+      "engines": {
+        "before_ast": [
+          {
+            "allocations": 182231,
+            "reallocations": 6842,
+            "deallocations": 182231,
+            "requested_bytes": 10373319,
+            "peak_live_delta_bytes": 175864,
+            "retained_delta_bytes": 0
+          },
+          {
+            "allocations": 182231,
+            "reallocations": 6842,
+            "deallocations": 182231,
+            "requested_bytes": 10373319,
+            "peak_live_delta_bytes": 175864,
+            "retained_delta_bytes": 0
+          },
+          {
+            "allocations": 182231,
+            "reallocations": 6842,
+            "deallocations": 182231,
+            "requested_bytes": 10373319,
+            "peak_live_delta_bytes": 175864,
+            "retained_delta_bytes": 0
+          }
+        ],
+        "before_bytecode": [
+          {
+            "allocations": 147949,
+            "reallocations": 6861,
+            "deallocations": 147949,
+            "requested_bytes": 10181253,
+            "peak_live_delta_bytes": 159283,
+            "retained_delta_bytes": 0
+          },
+          {
+            "allocations": 147949,
+            "reallocations": 6861,
+            "deallocations": 147949,
+            "requested_bytes": 10181253,
+            "peak_live_delta_bytes": 159283,
+            "retained_delta_bytes": 0
+          },
+          {
+            "allocations": 147949,
+            "reallocations": 6861,
+            "deallocations": 147949,
+            "requested_bytes": 10181253,
+            "peak_live_delta_bytes": 159283,
+            "retained_delta_bytes": 0
+          }
+        ],
+        "after_ast": [
+          {
+            "allocations": 188737,
+            "reallocations": 6844,
+            "deallocations": 188737,
+            "requested_bytes": 10739223,
+            "peak_live_delta_bytes": 187831,
+            "retained_delta_bytes": 0
+          },
+          {
+            "allocations": 188737,
+            "reallocations": 6844,
+            "deallocations": 188737,
+            "requested_bytes": 10739223,
+            "peak_live_delta_bytes": 187831,
+            "retained_delta_bytes": 0
+          },
+          {
+            "allocations": 188737,
+            "reallocations": 6844,
+            "deallocations": 188737,
+            "requested_bytes": 10739223,
+            "peak_live_delta_bytes": 187831,
+            "retained_delta_bytes": 0
+          }
+        ],
+        "after_bytecode": [
+          {
+            "allocations": 154455,
+            "reallocations": 6863,
+            "deallocations": 154455,
+            "requested_bytes": 10547157,
+            "peak_live_delta_bytes": 171250,
+            "retained_delta_bytes": 0
+          },
+          {
+            "allocations": 154455,
+            "reallocations": 6863,
+            "deallocations": 154455,
+            "requested_bytes": 10547157,
+            "peak_live_delta_bytes": 171250,
+            "retained_delta_bytes": 0
+          },
+          {
+            "allocations": 154455,
+            "reallocations": 6863,
+            "deallocations": 154455,
+            "requested_bytes": 10547157,
+            "peak_live_delta_bytes": 171250,
+            "retained_delta_bytes": 0
+          }
+        ]
+      }
+    }
+  }
+}
