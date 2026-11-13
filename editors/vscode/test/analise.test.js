@@ -43,7 +43,7 @@ test('definitions', () => {
     '}',
     'x = 1',
     'x == 2',
-    'para i de 1 ate 3 {}',
+    'para i em 1..=3 {}',
     'm = importe "mat"',
     '// comentado = 2',
     'velocidade_média = função() { 3 }',

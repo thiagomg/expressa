@@ -62,7 +62,7 @@ fn indexed_parameters_share_storage_with_eval_and_closures() {
         ),
         ("f = funcao(a) { { a = 8 } a }\nescreva(f(1))", "8\n"),
         (
-            "f = funcao(a) { para a de 1 ate 3 { escreva(a) } a }\nescreva(f(9))",
+            "f = funcao(a) { para a em 1..=3 { escreva(a) } a }\nescreva(f(9))",
             "1\n2\n3\n9\n",
         ),
         (
@@ -154,7 +154,7 @@ fn expression_and_statement_value_rules_match() {
         "escreva(avalie(\"10\\nx = 2\"))",
         "escreva({ 10 se falso { 20 } })",
         "escreva(nao falso e (verdadeiro ou (1 / 0 == 1)))",
-        "escreva([1, 2, 3][1..])\nescreva(\"olá\"[1])",
+        "escreva([1, 2, 3][1..3])\nescreva(\"olá\"[1])",
     ] {
         equivalent(source);
     }
@@ -176,10 +176,10 @@ fn dynamic_eval_updates_existing_and_later_bindings_and_escaping_closures() {
 #[test]
 fn loop_control_and_error_handlers_unwind_the_same_scopes() {
     for source in [
-        "n = 0\npara i de 1 ate 5 { { se i == 3 { continue } n += i } se_falhar 0 }\nescreva(n)",
-        "f = funcao() { para i de 1 ate 5 { { retorne i } se_falhar 99 } 0 }\nescreva(f())",
-        "n = 0\n{ para i de 1 ate 3 { n += 1 1 / 0 } } se_falhar { n += 10 }\nescreva(n)",
-        "n = 0\npara i de 1 ate 3 { enquanto { pare verdadeiro } { n += 100 } n += 1 }\nescreva(n)",
+        "n = 0\npara i em 1..=5 { { se i == 3 { continue } n += i } se_falhar 0 }\nescreva(n)",
+        "f = funcao() { para i em 1..=5 { { retorne i } se_falhar 99 } 0 }\nescreva(f())",
+        "n = 0\n{ para i em 1..=3 { n += 1 1 / 0 } } se_falhar { n += 10 }\nescreva(n)",
+        "n = 0\npara i em 1..=3 { enquanto { pare verdadeiro } { n += 100 } n += 1 }\nescreva(n)",
         "f = funcao() { { pare } se_falhar 42 }\nescreva(f() se_falhar 7)",
         "f = funcao() { avalie(\"retorne 1\") }\nescreva(f() se_falhar 7)",
         "n = 0\npara x em \"olá\" { n += 1 }\npara x em conjunto([1, 2]) { n += x }\nescreva(n)",
@@ -199,8 +199,8 @@ fn error_messages_spans_and_stacks_match() {
         "f = funcao() { continue }\nf()",
         "avalie(\"1 / 0\")",
         "repita -1 vezes { 1 }",
-        "para i de 1.5 ate 2 { 1 }",
-        "para i de 1 ate 2.5 { 1 }",
+        "para i em 1.5..=2 { 1 }",
+        "para i em 1..=2.5 { 1 }",
         "para i em 42 { 1 }",
         "enquanto 1 { 1 }",
         "f = funcao(a, a) { a }",
@@ -249,9 +249,9 @@ fn recursion_uses_vm_frames_and_still_obeys_the_language_limit() {
 }
 
 #[test]
-fn range_start_is_validated_before_evaluating_the_end() {
+fn faixa_bounds_are_evaluated_then_validated() {
     equivalent(
-        "m = mapa([:n -> 0])\n{ para i de 1.5 ate { m:n = 9 2 } { 0 } } se_falhar 0\nescreva(m:n)",
+        "m = mapa([:n -> 0])\n{ para i em 1.5..{ m:n = 9 2 } { 0 } } se_falhar 0\nescreva(m:n)",
     );
 }
 

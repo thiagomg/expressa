@@ -27,16 +27,7 @@ pub enum Stmt {
         span: Span,
     },
 
-    /// `para i de a ate b inicio ... fim`
-    ParaRange {
-        var: String,
-        from: Expr,
-        to: Expr,
-        body: Block,
-        span: Span,
-    },
-
-    /// `para x em lista inicio ... fim`
+    /// `para x em lista` / `para i em 0..n`
     ParaIn {
         var: String,
         iter: Expr,
@@ -91,7 +82,6 @@ impl Stmt {
             Stmt::Expr { span, .. }
             | Stmt::Assign { span, .. }
             | Stmt::Repita { span, .. }
-            | Stmt::ParaRange { span, .. }
             | Stmt::ParaIn { span, .. }
             | Stmt::Enquanto { span, .. }
             | Stmt::Retorne { span, .. }

@@ -126,7 +126,7 @@ fn capture_analysis_handles_control_flow_and_loop_locals() {
         r#"
 f = funcao(n) {
     soma = 0
-    para i de 0 ate n { se i == 3 { continue } soma += i se i == 4 { pare } }
+    para i em 0..=n { se i == 3 { continue } soma += i se i == 4 { pare } }
     se n > 0 { local = 7 soma += local } senao { local = 2 soma += local }
     soma
 }

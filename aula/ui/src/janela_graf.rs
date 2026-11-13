@@ -149,14 +149,14 @@ impl Painel {
                 self.telas
                     .borrow()
                     .get(&id)
-                    .map(|t| t.largura as i32)
+                    .map(|t| t.janela_largura() as i32)
                     .unwrap_or(320),
             );
             win.set_default_height(
                 self.telas
                     .borrow()
                     .get(&id)
-                    .map(|t| t.altura as i32)
+                    .map(|t| t.janela_altura() as i32)
                     .unwrap_or(200),
             );
             {

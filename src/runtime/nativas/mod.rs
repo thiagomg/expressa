@@ -108,7 +108,11 @@ pub const NATIVAS: &[Nativa] = &[
         module: None,
     },
     Nativa {
-        names: &["ultimo"],
+        names: &["ultimo", "último"],
+        module: None,
+    },
+    Nativa {
+        names: &["infinito"],
         module: None,
     },
     Nativa {
@@ -735,7 +739,8 @@ impl Vm<'_, '_> {
             "tipos" => self.bi_tipos(args, span),
             "tamanho" => self.bi_tamanho(args, span),
             "primeiro" => self.bi_primeiro(args, span),
-            "ultimo" => self.bi_ultimo(args, span),
+            "ultimo" | "último" => self.bi_ultimo(args, span),
+            "infinito" => self.bi_infinito(args, span),
             "maiuscula" => self.bi_maiuscula(args, span),
             "minuscula" => self.bi_minuscula(args, span),
             "sem_acento" => self.bi_sem_acento(args, span),
@@ -1099,9 +1104,9 @@ escreva(tipo(f))"#),
         assert_eq!(
             run(r#"escreva(tipos())"#),
             if cfg!(feature = "process") {
-                "[\"numero\", \"texto\", \"bool\", \"lista\", \"par\", \"mapa\", \"conjunto\", \"matriz\", \"imagem\", \"funcao\", \"modulo\", \"processo\", \"nada\"]\n"
+                "[\"numero\", \"faixa\", \"texto\", \"bool\", \"lista\", \"par\", \"mapa\", \"conjunto\", \"matriz\", \"imagem\", \"funcao\", \"modulo\", \"processo\", \"nada\"]\n"
             } else {
-                "[\"numero\", \"texto\", \"bool\", \"lista\", \"par\", \"mapa\", \"conjunto\", \"matriz\", \"imagem\", \"funcao\", \"modulo\", \"nada\"]\n"
+                "[\"numero\", \"faixa\", \"texto\", \"bool\", \"lista\", \"par\", \"mapa\", \"conjunto\", \"matriz\", \"imagem\", \"funcao\", \"modulo\", \"nada\"]\n"
             }
         );
         assert_eq!(run(r#"escreva(tipos() contem "numero")"#), "verdadeiro\n");
@@ -1210,7 +1215,7 @@ escreva(aleatorio(5, 5))
         assert_eq!(
             run(r#"
 semente(3)
-para i de 1 ate 40
+para i em 1..=40
 inicio
     n = aleatorio(1, 6)
     se n < 1 ou n > 6 { escreva("fora") }
@@ -1303,11 +1308,11 @@ escreva(m::cosseno(0))"#),
 xs = [10, 20, 30, 40]
 escreva(xs.remova(1))
 escreva(xs)
-escreva(xs.remova(1, 2))
+escreva(xs.remova(1..3))
 "#),
             "[10, 30, 40]\n[10, 20, 30, 40]\n[10, 40]\n"
         );
-        assert_eq!(run(r#"escreva("abcd".remova(1, 2))"#), "ad\n");
+        assert_eq!(run(r#"escreva("abcd".remova(1..3))"#), "ad\n");
         assert_eq!(run(r#"escreva("olá".remova(1))"#), "oá\n");
         assert_eq!(
             run(r#"
@@ -1323,8 +1328,8 @@ escreva(p:nome)
         );
         assert_eq!(run(r#"escreva([10].remova(2))"#), "[10]\n");
         assert!(run_err(r#"mapa(["a" -> 1]).remova("b")"#).contains("não existe"));
-        assert!(run_err(r#"[1, 2].remova(2, 1)"#).contains("maior que o fim"));
-        assert!(run_err(r#"mapa(["a" -> 1]).remova("a", "b")"#).contains("chave"));
+        assert_eq!(run(r#"escreva([1, 2].remova(2..1))"#), "[1, 2]\n");
+        assert!(run_err(r#"mapa(["a" -> 1]).remova("a", "b")"#).contains("dois índices"));
     }
 
     #[test]
@@ -1661,7 +1666,9 @@ escreva(A == cheia(2, 3, 7))
             run(r#"escreva(tamanho(mapa(["a" -> 1, "b" -> 2])))"#),
             "2\n"
         );
-        assert!(run_err("tamanho(10)").contains("espera texto, lista, mapa, conjunto ou matriz"));
+        assert!(
+            run_err("tamanho(10)").contains("espera texto, lista, mapa, conjunto, matriz ou faixa")
+        );
     }
 
     #[test]

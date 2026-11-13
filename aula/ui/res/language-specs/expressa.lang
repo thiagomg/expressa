@@ -75,9 +75,6 @@
       <keyword>funcao</keyword>
       <keyword>função</keyword>
       <keyword>para</keyword>
-      <keyword>de</keyword>
-      <keyword>ate</keyword>
-      <keyword>até</keyword>
       <keyword>em</keyword>
       <keyword>repita</keyword>
       <keyword>enquanto</keyword>
@@ -172,6 +169,8 @@
       <keyword>tamanho</keyword>
       <keyword>primeiro</keyword>
       <keyword>ultimo</keyword>
+      <keyword>último</keyword>
+      <keyword>infinito</keyword>
       <keyword>maiuscula</keyword>
       <keyword>minuscula</keyword>
       <keyword>sem_acento</keyword>

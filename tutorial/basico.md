@@ -224,7 +224,7 @@ A tabuada do 7 e a do 3 são semelhantes, só muda o número. Em vez de copiar o
 
 ```text
 tabuada = função(n) {
-    para i de 1 até 10 {
+    para i em 1..=10 {
         escreva(n + " x " + i + " = " + (n * i))
     }
 }
@@ -233,7 +233,7 @@ tabuada(7)
 tabuada(3)
 ```
 
-`n` é o número que você passa entre parênteses. `para i de 1 até 10` conta 1, 2, … 10.
+`n` é o número que você passa entre parênteses. `para i em 1..=10` conta 1, 2, … 10.
 
 O mesmo programa está em `../exemplos/linguagem/tabuada.lep` (lá usa `funcao` e `inicio`/`fim` — mesma coisa).
 
@@ -256,7 +256,7 @@ repete = função(pedaco, n) {
     s
 }
 
-para i de 1 até 6 {
+para i em 1..=6 {
     escreva(repete("*", i))
 }
 ```

@@ -8,6 +8,6 @@ repete = função(pedaco, n) {
     s
 }
 
-para i de 1 até 6 {
+para i em 1..=6 {
     escreva(repete("*", i))
 }

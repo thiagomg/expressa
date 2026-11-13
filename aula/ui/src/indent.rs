@@ -411,7 +411,7 @@ mod tests {
 
     #[test]
     fn block_pairs() {
-        let src = "se a {\n    x // {\n    s = \"}\"\n}\npara i de 1 ate 2\ninicio\n    y\nfim\n";
+        let src = "se a {\n    x // {\n    s = \"}\"\n}\npara i em 1..=2\ninicio\n    y\nfim\n";
         let at = |needle: &str, nth: usize| src.match_indices(needle).nth(nth).unwrap().0;
         let brace_open = at("{", 0);
         let brace_close = at("}\n", 0);
@@ -556,7 +556,7 @@ mod tests {
             0
         );
         assert_eq!(
-            want_indent(&["para i de 0 até n {", "    escreva(i+1, ts[i])",], "}"),
+            want_indent(&["para i em 0..=n {", "    escreva(i+1, ts[i])",], "}"),
             0
         );
         assert_eq!(

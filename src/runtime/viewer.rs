@@ -137,6 +137,7 @@ pub fn run_live_viewer() -> Result<(), String> {
     let mut id = 0u64;
     let mut largura = 320u32;
     let mut altura = 200u32;
+    let mut tamanho_pixel = 1u32;
     let mut fundo = "branco".to_string();
     let mut tela = None;
     let mut window: Option<minifb::Window> = None;
@@ -159,11 +160,13 @@ pub fn run_live_viewer() -> Result<(), String> {
                     id: nid,
                     largura: w,
                     altura: h,
+                    tamanho_pixel: n,
                     fundo: f,
                 }) => {
                     id = nid;
                     largura = w.max(1);
                     altura = h.max(1);
+                    tamanho_pixel = n.max(1);
                     fundo = f;
                 }
                 Ok(Msg::CarregueFigura {
@@ -179,7 +182,13 @@ pub fn run_live_viewer() -> Result<(), String> {
                 Ok(Msg::Mostre { id: nid, ops }) => {
                     id = nid;
                     tela = Some(graf_proto::tela_de_mostre(
-                        nid, largura, altura, &fundo, &ops, &figuras,
+                        nid,
+                        largura,
+                        altura,
+                        tamanho_pixel,
+                        &fundo,
+                        &ops,
+                        &figuras,
                     ));
                     pixels_ok = false;
                 }
@@ -201,7 +210,7 @@ pub fn run_live_viewer() -> Result<(), String> {
         if window.is_none()
             && let Some(t) = tela.as_ref()
         {
-            window = Some(abre_janela(t.largura, t.altura)?);
+            window = Some(abre_janela(t.janela_largura(), t.janela_altura())?);
             ja_apareceu = false;
         }
 

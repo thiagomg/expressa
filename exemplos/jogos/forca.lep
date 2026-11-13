@@ -81,7 +81,7 @@ figura = função(erros) {
 /// Letras certas viram visíveis; o resto fica _
 mostra_palavra = função(palavra, acertos) {
     s = ""
-    para i de 0 até palavra.tamanho() - 1 {
+    para i em 0..palavra.tamanho() {
         se i > 0 {
             s += " "
         }
@@ -98,7 +98,7 @@ mostra_palavra = função(palavra, acertos) {
 
 /// Verdadeiro se cada letra da palavra já foi acertada (C vale Ç)
 ganhou = função(palavra, acertos) {
-    para i de 0 até palavra.tamanho() - 1 {
+    para i em 0..palavra.tamanho() {
         se nao (acertos contem sem_acento(palavra[i])) {
             retorne falso
         }
@@ -126,7 +126,7 @@ desenha_teclado = função(linha, coluna, cores_teclado) {
     // Desenha uma linha do teclado
     linha_teclado = função(letras, recuo, cores_teclado) {
         s = recuo
-        para i de 0 até letras.tamanho() - 1 {
+        para i em 0..letras.tamanho() {
             se i > 0 {
                 s += " "
             }
@@ -141,7 +141,7 @@ desenha_teclado = função(linha, coluna, cores_teclado) {
     // Ao inves de começar na coluna da esquerda, começa na
     // linha e coluna definidas no bloco
     b = bloco(linha, coluna)
-    para i de 0 até teclas.tamanho() - 1 {
+    para i em 0..teclas.tamanho() {
         b.escreva_em(linha_teclado(teclas[i], recuos[i], cores_teclado))
     }
 }

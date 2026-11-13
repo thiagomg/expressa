@@ -11,7 +11,7 @@ inicio
 fim
 
 escreva("triângulo")
-para i de 1 ate 6
+para i em 1..=6
 inicio
     escreva(repete(" ", 6 - i) + repete("*", i * 2 - 1))
 fim

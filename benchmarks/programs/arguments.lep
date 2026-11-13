@@ -1,5 +1,5 @@
 sum8 = funcao(p1, p2, p3, p4, p5, p6, p7, p8) { p1 + p2 + p3 + p4 + p5 + p6 + p7 + p8 }
 zero = funcao() { 1 }
 soma = 0
-para i de 1 ate 50000 { soma += sum8(i, 2, 3, 4, 5, 6, 7, 8) + zero() }
+para i em 1..=50000 { soma += sum8(i, 2, 3, 4, 5, 6, 7, 8) + zero() }
 escreva(soma == 1251825000)

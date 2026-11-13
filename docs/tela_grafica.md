@@ -61,7 +61,7 @@ VM → visor:
 
 | recado | quando |
 |---|---|
-| `ABRA id largura altura fundo` | primeiro `mostre` (ou `evento`) da instância |
+| `ABRA id largura altura tamanho_pixel fundo` | primeiro `mostre` (ou `evento`) da instância |
 | `CARREGUE_FIGURA handle largura altura rgba` | primeira vez que aquele bitmap (mesmo `Arc` de pixels) aparece nas ops |
 | `MOSTRE id [ops…]` | cada `mostre`; ops de imagem citam `handle`, sem RGBA |
 | `ESPERE id timeout_ms` | cada `evento`; `-1` até acontecer, `0` olha e segue, `50` = 50 ms |
@@ -92,7 +92,7 @@ sequenceDiagram
     Aluno->>VM: apague + imagem(nave, 40, 100, 0)
     Aluno->>VM: mostre()
     VM->>Pipe: nasce expressa-grafico --ao-vivo
-    VM->>Pipe: ABRA id=g 320 200
+    VM->>Pipe: ABRA id=g 320 200 1
     VM->>Pipe: CARREGUE_FIGURA 1  (bytes RGBA, uma vez)
     VM->>Pipe: MOSTRE [imagem 1  40  100  0]
     Note over Visor: textura 1; apresenta
@@ -139,7 +139,7 @@ Todos os inteiros little-endian. Depois do `u32` de tamanho, o primeiro byte é 
 
 | byte | recado |
 |---|---|
-| 1 | `ABRA` — `u64 id`, `u32 w`, `u32 h`, fundo (`u16` len + UTF-8) |
+| 1 | `ABRA` — `u64 id`, `u32 w`, `u32 h`, `u32 tamanho_pixel`, fundo (`u16` len + UTF-8) |
 | 2 | `CARREGUE_FIGURA` — `u32 handle`, `u32 w`, `u32 h`, `u32 n`, `n` bytes RGBA |
 | 3 | `MOSTRE` — `u64 id`, `u32 nops`, ops |
 | 4 | `ESPERE` — `u64 id`, `i32 timeout_ms` |

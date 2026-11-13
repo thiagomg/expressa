@@ -53,7 +53,8 @@ Arquivo: `exemplos/10_texto.lep`
 ```text
 s = "Expressa"
 escreva(s[0])          // E
-escreva(s[0..3])       // Expr
+escreva(s[0..4])       // Expr
+escreva(s[4..])        // essa
 escreva(s contem "press")
 escreva(procure(s, "s"))   // 5;  -1 se não achar
 ```

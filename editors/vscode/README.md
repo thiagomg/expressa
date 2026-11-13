@@ -12,7 +12,7 @@ Suporte à linguagem [Expressa](https://github.com/thiagomg/expressa) (arquivos 
   - dentro de `importe "` lista os módulos nativos e os `.lep` da pasta.
 - **Ajuda** ao passar o mouse e enquanto digita os argumentos (`pinte(texto, frente, fundo)`).
 - **Ir para a definição** (F12) de funções e variáveis, inclusive em arquivos importados, e do próprio `importe "lib/arquivo"`.
-- Trechos prontos: `se`, `se senao`, `para de`, `para em`, `repita`, `enquanto`, `funcao`.
+- Trechos prontos: `se`, `se senao`, `para faixa`, `para em`, `repita`, `enquanto`, `funcao`.
 - Enter depois de `{`, `[`, `(` ou `inicio` indenta; `}`, `]`, `)` e `fim` voltam.
 
 ## Gerar e instalar

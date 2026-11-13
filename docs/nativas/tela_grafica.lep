@@ -1,10 +1,16 @@
+/// nova(largura, altura)
+/// nova(largura, altura, tamanho_pixel)
+///
 /// Tela de pixels. A janela abre no primeiro mostre().
 ///
 /// largura e altura são inteiros de 1 a 2048. Origem no canto superior
-/// esquerdo, y para baixo, (0, 0) no primeiro pixel.
+/// esquerdo, y para baixo, (0, 0) no primeiro pixel. tamanho_pixel (1 a 16,
+/// padrão 1) é o lado do quadrado na janela para cada pixel da tela:
+/// 2 vira 2×2. Clique, pixel e PNG continuam no tamanho lógico.
 ///
-/// Exemplo: g = nova(320, 200)
+/// Exemplo: g = nova(160, 144, 4)
 nova = funcao(largura, altura) { mapa() }
+nova = funcao(largura, altura, tamanho_pixel) { mapa() }
 
 /// Caneta atual. Cores: as da tela (azul, vermelho, …) e transparente.
 /// Padrão: preto.

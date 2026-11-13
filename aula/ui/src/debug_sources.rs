@@ -74,11 +74,6 @@ fn stmt(s: &Stmt, lines: &mut BTreeSet<u32>) {
             expr(count, lines);
             block(body, lines);
         }
-        Stmt::ParaRange { from, to, body, .. } => {
-            expr(from, lines);
-            expr(to, lines);
-            block(body, lines);
-        }
         Stmt::ParaIn { iter, body, .. } => {
             expr(iter, lines);
             block(body, lines);
@@ -150,10 +145,7 @@ fn expr(e: &Expr, lines: &mut BTreeSet<u32>) {
             expr(row, lines);
             expr(col, lines);
         }
-        Expr::Slice {
-            object, start, end, ..
-        } => {
-            expr(object, lines);
+        Expr::Faixa { start, end, .. } => {
             expr(start, lines);
             if let Some(e) = end {
                 expr(e, lines);

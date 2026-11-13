@@ -16,6 +16,8 @@ use super::imagem::{Imagem, carimbar, carimbar_rgba};
 pub const LARGURA_MAX: u32 = 2048;
 #[cfg(feature = "graphics")]
 pub const ALTURA_MAX: u32 = 2048;
+/// Cada pixel lógico vira um quadrado `n`×`n` na janela (1…16).
+pub const TAMANHO_PIXEL_MAX: u32 = 16;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum OpGraf {
@@ -71,6 +73,8 @@ pub struct TelaGrafica {
     pub id: u64,
     pub largura: u32,
     pub altura: u32,
+    /// Lado do quadrado na janela para cada pixel do canvas. 1 = 1:1.
+    pub tamanho_pixel: u32,
     pub fundo: String,
     pub ops: Vec<OpGraf>,
 }
@@ -104,6 +108,18 @@ pub fn nome_cor(idx: u8) -> &'static str {
 }
 
 impl TelaGrafica {
+    pub fn tamanho_pixel_efetivo(&self) -> u32 {
+        self.tamanho_pixel.clamp(1, TAMANHO_PIXEL_MAX)
+    }
+
+    pub fn janela_largura(&self) -> u32 {
+        self.largura.saturating_mul(self.tamanho_pixel_efetivo())
+    }
+
+    pub fn janela_altura(&self) -> u32 {
+        self.altura.saturating_mul(self.tamanho_pixel_efetivo())
+    }
+
     pub fn raster(&self) -> Raster {
         let w = self.largura.max(1);
         let h = self.altura.max(1);
@@ -487,6 +503,7 @@ mod tests {
             id: 1,
             largura: 16,
             altura: 16,
+            tamanho_pixel: 1,
             fundo: "branco".into(),
             ops: vec![OpGraf::Linha {
                 x1: 0,
@@ -518,6 +535,7 @@ mod tests {
             id: 1,
             largura: 16,
             altura: 16,
+            tamanho_pixel: 1,
             fundo: "branco".into(),
             ops: vec![OpGraf::Imagem {
                 x: 8,
@@ -545,6 +563,7 @@ mod tests {
             id: 1,
             largura: 64,
             altura: 16,
+            tamanho_pixel: 1,
             fundo: "branco".into(),
             ops: vec![OpGraf::Texto {
                 x: 0,
@@ -574,6 +593,7 @@ mod tests {
             id: 1,
             largura: 4,
             altura: 4,
+            tamanho_pixel: 1,
             fundo: "transparente".into(),
             ops: vec![OpGraf::Ponto {
                 x: 1,
@@ -593,5 +613,21 @@ mod tests {
         let volta = imagem::decode_png(&bytes).unwrap();
         assert_eq!(volta.pixel(0, 0), Some([0, 0, 0, 0]));
         assert_eq!(volta.pixel(1, 2).unwrap()[3], 255);
+    }
+
+    #[test]
+    fn tamanho_pixel_so_muda_a_janela() {
+        let t = TelaGrafica {
+            id: 1,
+            largura: 160,
+            altura: 144,
+            tamanho_pixel: 4,
+            fundo: "branco".into(),
+            ops: vec![],
+        };
+        assert_eq!(t.janela_largura(), 640);
+        assert_eq!(t.janela_altura(), 576);
+        assert_eq!(t.raster().largura, 160);
+        assert_eq!(t.raster().altura, 144);
     }
 }

@@ -13,9 +13,9 @@ inicio
     inicio
         copia = copia + [x]
     fim
-    para i de 1 ate tam
+    para i em 1..=tam
     inicio
-        para j de 0 ate tam - 2
+        para j em 0..=tam - 2
         inicio
             se copia[j] > copia[j + 1]
             inicio

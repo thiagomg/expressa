@@ -1,5 +1,5 @@
 x = 0
 soma = 0
 f = avalie("funcao(n) { n + 1 }")
-para i de 1 ate 2000 { avalie("x += 1") soma += f(i) }
+para i em 1..=2000 { avalie("x += 1") soma += f(i) }
 escreva(x == 2000 e soma == 2003000)
