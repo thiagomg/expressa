@@ -29,7 +29,7 @@ início
         padrão = args:pos[0]
         
         // Pulando o arg 1, já que ele é o padrão a ser procurado
-        para i de 1 até args:pos.tamanho() - 1
+        para i em 1..args:pos.tamanho()
         inicio
             arg = args:pos[i]
             prefixo = se args:op contém "h" ou args:op contém "humanos"

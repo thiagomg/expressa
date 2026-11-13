@@ -20,6 +20,11 @@ use super::processo::Processo;
 pub enum Value {
     Nada,
     Numero(Numero),
+    /// Half-open integer generator `start..end` (`end` is `None` if unbounded).
+    Faixa {
+        start: i64,
+        end: Option<i64>,
+    },
     Texto(String),
     Bool(bool),
     Lista(ListaRc),
@@ -44,6 +49,10 @@ impl Clone for Value {
         match self {
             Self::Nada => Self::Nada,
             Self::Numero(n) => Self::Numero(*n),
+            Self::Faixa { start, end } => Self::Faixa {
+                start: *start,
+                end: *end,
+            },
             Self::Texto(s) => Self::Texto(s.clone()),
             Self::Bool(b) => Self::Bool(*b),
             Self::Lista(v) => Self::Lista(Rc::clone(v)),
@@ -246,6 +255,7 @@ impl Value {
     /// Nomes que `tipo()` devolve e `tipos()` lista (iguais às mensagens de erro).
     pub const NOMES_DE_TIPO: &'static [&'static str] = &[
         "numero",
+        "faixa",
         "texto",
         "bool",
         "lista",
@@ -265,6 +275,7 @@ impl Value {
         match self {
             Value::Nada => "nada",
             Value::Numero(_) => "numero",
+            Value::Faixa { .. } => "faixa",
             Value::Texto(_) => "texto",
             Value::Bool(_) => "bool",
             Value::Lista(_) => "lista",
@@ -300,6 +311,9 @@ fn iguais(a: &Value, b: &Value, comparando: &mut HashSet<(usize, usize)>) -> boo
     stacker::maybe_grow(PILHA_RESERVA, PILHA_SEGMENTO, || match (a, b) {
         (Value::Nada, Value::Nada) => true,
         (Value::Numero(a), Value::Numero(b)) => a == b,
+        (Value::Faixa { start: a, end: ae }, Value::Faixa { start: b, end: be }) => {
+            a == b && ae == be
+        }
         (Value::Texto(a), Value::Texto(b)) => a == b,
         (Value::Bool(a), Value::Bool(b)) => a == b,
         (Value::Lista(a), Value::Lista(b)) => {
@@ -373,6 +387,14 @@ fn escrever(
     use std::fmt::Write as _;
     stacker::maybe_grow(PILHA_RESERVA, PILHA_SEGMENTO, || match v {
         Value::Nada => out.push_str("nada"),
+        Value::Faixa { start, end } => match end {
+            Some(end) => {
+                let _ = write!(out, "{start}..{end}");
+            }
+            None => {
+                let _ = write!(out, "{start}..");
+            }
+        },
         Value::Numero(n) => match loc {
             Some(loc) => out.push_str(&loc.format(*n)),
             None => out.push_str(&format_numero(*n)),

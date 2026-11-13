@@ -215,7 +215,7 @@ pub(crate) fn detached_function(
                 | Op::CheckBool
                 | Op::ReceiverMap(_) => effect(&mut s, 1, 1)?,
                 Op::Index2 | Op::ReceiverIndex2 => effect(&mut s, 3, 1)?,
-                Op::Slice(end) => effect(&mut s, if end { 3 } else { 2 }, 1)?,
+                Op::Slice(end) => effect(&mut s, if end { 2 } else { 1 }, 1)?,
                 Op::IndexDestination(_) => effect(&mut s, 2, 0)?,
                 Op::MatrixDestination => effect(&mut s, 3, 0)?,
                 Op::Call { argc, .. } => {

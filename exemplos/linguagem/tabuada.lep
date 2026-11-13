@@ -2,7 +2,7 @@
 
 tabuada = funcao(n)
 inicio
-    para i de 1 ate 10
+    para i em 1..=10
     inicio
         escreva(n + " x " + i + " = " + (n * i))
     fim

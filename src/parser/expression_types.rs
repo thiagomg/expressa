@@ -77,11 +77,11 @@ pub enum Expr {
         col: Box<Expr>,
         span: Span,
     },
-    /// `a[i..j]` or `a[i..]` (to the last item).
-    Slice {
-        object: Box<Expr>,
+    /// `a..b`, `a..`, `..b` or `..`. `..=` is desugared to exclusive `..`.
+    /// `start` is always present (`..3` becomes `0..3`). `end` is `None` when
+    /// the range has no upper bound (`0..`).
+    Faixa {
         start: Box<Expr>,
-        /// `None` = `a[i..]` through the end.
         end: Option<Box<Expr>>,
         span: Span,
     },
@@ -147,7 +147,7 @@ impl Expr {
             | Expr::Call { span, .. }
             | Expr::Index { span, .. }
             | Expr::Index2 { span, .. }
-            | Expr::Slice { span, .. }
+            | Expr::Faixa { span, .. }
             | Expr::Unary { span, .. }
             | Expr::Binary { span, .. }
             | Expr::If { span, .. }

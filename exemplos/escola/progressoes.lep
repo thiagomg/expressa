@@ -26,7 +26,7 @@ escreva("PA  a1=" + a1_pa + "  r=" + razao_pa + "  n=" + n_pa)
 escreva("  10º termo: " + an_pa)
 escreva("  soma dos 10 termos: " + soma_pa)
 escreva("  sequência:")
-para i de 1 ate n_pa
+para i em 1..=n_pa
 inicio
     escreva("    a" + i + " = " + (a1_pa + (i - 1) * razao_pa))
 fim
@@ -45,7 +45,7 @@ escreva("PG  a1=" + a1_pg + "  q=" + q + "  n=" + n_pg)
 escreva("  6º termo: " + an_pg)
 escreva("  soma dos 6 termos: " + soma_pg)
 escreva("  sequência:")
-para i de 1 ate n_pg
+para i em 1..=n_pg
 inicio
     escreva("    a" + i + " = " + (a1_pg * potencia(q, i - 1)))
 fim

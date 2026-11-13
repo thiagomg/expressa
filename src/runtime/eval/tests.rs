@@ -262,7 +262,7 @@ g = t:tela
 escreva(ultimo(g:ops):tipo)
 n = tamanho(g:ops)
 escreva(n)
-g:ops = remova(g:ops, n - 1, n - 1)
+g:ops = remova(g:ops, n - 1)
 escreva(tamanho(g:ops))
 escreva(g.tela_grafica::pixel(10, 10))
 escreva(g.tela_grafica::pixel(10, 4))
@@ -338,14 +338,14 @@ escreva(x)
 fim
 "#,
     );
-    assert!(msg.contains("lista, texto ou conjunto"), "{msg}");
+    assert!(msg.contains("lista, texto, conjunto ou faixa"), "{msg}");
 }
 
 #[test]
 fn pare_and_continue_in_loops() {
     assert_eq!(
         run(r#"
-para i de 1 ate 5
+para i em 1..=5
 inicio
 se i == 3 { pare }
 escreva(i)
@@ -355,7 +355,7 @@ fim
     );
     assert_eq!(
         run(r#"
-para i de 1 ate 5
+para i em 1..=5
 inicio
 se i == 3 { continue }
 escreva(i)
@@ -513,7 +513,7 @@ xs -= [1]"#
     assert_eq!(
         run(r#"
 tentativas = []
-para i de 1 ate 6 {
+para i em 1..=6 {
 tentativas += [["", "", "", "", ""]]
 }
 escreva(tamanho(tentativas))
@@ -697,7 +697,7 @@ escreva(f())
 fn loop_closure_keeps_last_i() {
     let src = r#"
 f = 0
-para i de 1 ate 3 {
+para i em 1..=3 {
 f = funcao() { i }
 }
 escreva(f())
@@ -709,7 +709,7 @@ escreva(f())
 fn para_range_and_para_in() {
     let src = r#"
 s = 0
-para i de 1 ate 3
+para i em 1..=3
 inicio
 s = s + i
 fim
@@ -729,7 +729,7 @@ fn list_index_is_zero_based() {
     let src = r#"
 a = [10, 20, 30, 40]
 escreva(a[0])
-escreva(a[1..2])
+escreva(a[1..3])
 a[0] = 99
 escreva(a[0])
 "#;
@@ -761,20 +761,79 @@ escreva(m[0], m[1])"#),
 }
 
 #[test]
-fn zero_based_slices_and_removal_keep_inclusive_ends() {
+fn zero_based_slices_and_removal_are_exclusive() {
     assert_eq!(
         run(r#"
 xs = [10, 20, 30]
-escreva(xs[0..0], xs[1..2], xs[3..], xs[2..0], [][0..])
+escreva(xs[0..1], xs[1..3], xs[3..tamanho(xs)], xs[2..0])
 escreva(xs[0..9223372036854775807])
-escreva(xs.remova(0), xs.remova(2), xs.remova(0, 2))
-escreva("ação"[0..1], "ação".remova(0), "ação".remova(3))
+escreva(xs.remova(0), xs.remova(2), xs.remova(0..=2))
+escreva("ação"[0..2], "ação".remova(0), "ação".remova(3))
 "#),
-        "[10] [20, 30] [] [] []\n[10, 20, 30]\n[20, 30] [10, 20] []\naç ção açã\n"
+        "[10] [20, 30] [] []\n[10, 20, 30]\n[20, 30] [10, 20] []\naç ção açã\n"
     );
     for source in ["[10][-1..0]", "[10][0..-1]", "[10].remova(-1)"] {
         assert!(run_err(source).contains(">= 0"), "{source}");
     }
+    assert_eq!(run("xs = [10]\nescreva(xs[0..])"), "[10]\n");
+}
+
+#[test]
+fn open_slice_runs_through_the_end() {
+    assert_eq!(
+        run(r#"
+l = "thiago"
+escreva(l[0..])
+escreva(l[2..])
+escreva(l[..])
+xs = [10, 20, 30]
+escreva(xs[1..])
+escreva(xs[3..])
+r = 2..
+escreva(l[r])
+escreva("ação"[1..])
+escreva("ação"[4..])
+"#),
+        "thiago\niago\nthiago\n[20, 30]\n[]\niago\nção\n\n"
+    );
+    assert!(run_err(r#""thiago"[-1..]"#).contains(">= 0"));
+}
+
+#[test]
+fn faixa_gera_inteiros_sem_prealocar() {
+    assert_eq!(
+        run(r#"
+escreva(tipo(0..3), 0..3, 0..=2, ..3, 1..3 == 1..=2, 3..3 == 5..5)
+escreva(tamanho(0..3), tamanho(3..5), tamanho(0..=2), tamanho(3..3), tamanho(5..=5))
+escreva(primeiro(3..5), ultimo(3..5), primeiro(0..), infinito(0..), infinito(..3))
+s = ""
+para i em 0..3 { s = s + i }
+escreva(s)
+"#),
+        "faixa 0..3 0..3 0..3 verdadeiro falso\n3 2 3 0 1\n3 4 0 verdadeiro falso\n012\n"
+    );
+    assert_eq!(run("escreva(0..)"), "0..\n");
+    assert_eq!(
+        run("r = 5..\nescreva(r, primeiro(r), infinito(r))"),
+        "5.. 5 verdadeiro\n"
+    );
+    assert_eq!(
+        run("xs = [10, 20, 30, 40, 50]\nescreva(xs[0..1000], xs[3..1000], xs[5..1000])"),
+        "[10, 20, 30, 40, 50] [40, 50] []\n"
+    );
+    assert!(run_err("tamanho(0..)").contains("sem teto"));
+    assert!(run_err("ultimo(0..)").contains("sem teto"));
+    assert!(run_err("primeiro(3..3)").contains("vazia"));
+    assert!(run_err("ultimo(3..3)").contains("vazia"));
+    assert!(run_err("(0..5)[2]").contains("indexar faixa"));
+    assert!(run_err("0..3 contem 1").contains("contem"));
+    assert!(run_err("(0..3) + (3..5)").contains("'+'"));
+    assert!(run_err("0..3 < 1..2").contains("comparação"));
+    assert!(run_err("para i em 5 { 0 }").contains("0..n"));
+    assert_eq!(run("r = 0..\nxs = [1]\nescreva(xs[r])"), "[1]\n");
+    assert!(run_err("xs = [1]\nxs.remova(1..)").contains("teto"));
+    assert!(run_err("infinito(1)").contains("faixa"));
+    assert!(run_err("0..=9223372036854775807").contains("64 bits"));
 }
 
 #[test]
@@ -978,10 +1037,10 @@ fim
 #[test]
 fn text_index_and_slice_are_zero_based() {
     assert_eq!(run(r#"escreva("abc"[0])"#), "a\n");
-    assert_eq!(run(r#"escreva("abc"[1..2])"#), "bc\n");
+    assert_eq!(run(r#"escreva("abc"[1..3])"#), "bc\n");
     assert_eq!(run(r#"escreva("b"[0..2])"#), "b\n");
-    assert_eq!(run(r#"escreva("bacia"[1..])"#), "acia\n");
-    assert_eq!(run(r#"escreva("abc"[4..])"#), "\n");
+    assert_eq!(run(r#"escreva("bacia"[1..tamanho("bacia")])"#), "acia\n");
+    assert_eq!(run(r#"escreva("abc"[4..10])"#), "\n");
     assert_eq!(run(r#"escreva([10, 20][0..8])"#), "[10, 20]\n");
     assert!(run_err(r#"escreva("b"[1])"#).contains("fora do intervalo"));
 }
@@ -1481,7 +1540,7 @@ fn devolve_recursiva(chamadas: usize) -> String {
          \x20   retorne g\n\
          }}\n\
          s = 0\n\
-         para i de 1 ate {chamadas} {{ s += faz(i)(2) }}\n\
+         para i em 1..={chamadas} {{ s += faz(i)(2) }}\n\
          escreva(s)\n"
     )
 }

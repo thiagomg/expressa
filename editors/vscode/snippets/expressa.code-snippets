@@ -14,10 +14,10 @@
     "body": ["se ${1:condicao}", "inicio", "\t$0", "fim"],
     "description": "se … inicio … fim"
   },
-  "para de ate": {
-    "prefix": ["para de", "para ate"],
-    "body": ["para ${1:i} de ${2:1} ate ${3:10} {", "\t$0", "}"],
-    "description": "para i de 1 ate n { }"
+  "para faixa": {
+    "prefix": ["para faixa", "para de", "para ate"],
+    "body": ["para ${1:i} em ${2:1}..=${3:10} {", "\t$0", "}"],
+    "description": "para i em 1..=n { }"
   },
   "para em": {
     "prefix": "para em",

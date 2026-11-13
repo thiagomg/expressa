@@ -2,7 +2,8 @@
 
 s = "Expressa"
 escreva(s[0])
-escreva(s[0..3])
+escreva(s[0..4])
+escreva(s[4..])
 escreva(tamanho(s))
 escreva(s contem "press")
 escreva(procure(s, "s"))

@@ -45,6 +45,7 @@ pub enum Msg {
         id: u64,
         largura: u32,
         altura: u32,
+        tamanho_pixel: u32,
         fundo: String,
     },
     CarregueFigura {
@@ -151,6 +152,7 @@ pub fn mensagens_de(
             id: tela.id,
             largura: tela.largura,
             altura: tela.altura,
+            tamanho_pixel: tela.tamanho_pixel_efetivo(),
             fundo: tela.fundo.clone(),
         });
     }
@@ -241,6 +243,7 @@ pub fn tela_de_mostre(
     id: u64,
     largura: u32,
     altura: u32,
+    tamanho_pixel: u32,
     fundo: &str,
     ops: &[OpMsg],
     figuras: &HashMap<u32, Imagem>,
@@ -319,6 +322,7 @@ pub fn tela_de_mostre(
         id,
         largura,
         altura,
+        tamanho_pixel: tamanho_pixel.clamp(1, crate::runtime::graf::TAMANHO_PIXEL_MAX),
         fundo: cor_ok(fundo),
         ops: out,
     }
@@ -369,12 +373,14 @@ fn encode(buf: &mut Vec<u8>, msg: &Msg) {
             id,
             largura,
             altura,
+            tamanho_pixel,
             fundo,
         } => {
             buf.push(ABRA);
             put_u64(buf, *id);
             put_u32(buf, *largura);
             put_u32(buf, *altura);
+            put_u32(buf, *tamanho_pixel);
             put_str(buf, fundo);
         }
         Msg::CarregueFigura {
@@ -502,6 +508,7 @@ fn decode(p: &[u8]) -> Option<Msg> {
             id: get_u64(p, &mut i)?,
             largura: get_u32(p, &mut i)?,
             altura: get_u32(p, &mut i)?,
+            tamanho_pixel: get_u32(p, &mut i)?,
             fundo: get_str(p, &mut i)?,
         }),
         CARREGUE => {
@@ -676,6 +683,7 @@ mod tests {
             id: 9,
             largura: 320,
             altura: 200,
+            tamanho_pixel: 2,
             fundo: "branco".into(),
         });
         roundtrip(&Msg::Espere {
@@ -736,6 +744,7 @@ mod tests {
             id: 3,
             largura: 8,
             altura: 8,
+            tamanho_pixel: 1,
             fundo: "branco".into(),
             ops: vec![OpGraf::Imagem {
                 x: 4,

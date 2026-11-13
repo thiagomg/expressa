@@ -32,7 +32,7 @@ Pasta = para que o arquivo existe. Depois do tutorial: `linguagem/` → `texto/`
 | Arquivo | O que mostra |
 |---------|----------------|
 | `media.lep` | laço, `se`, lista, `escreva` |
-| `tabuada.lep` | função + `para i de 1 ate 10` |
+| `tabuada.lep` | função + `para i em 1..=10` |
 | `fatorial.lep` | recursão (`fatorial`, `combinacoes`) |
 | `erros.lep` | `se_falhar` (arquivo, divisão, índice) |
 | `filtra.lep` | função que recebe função (filtrar / mapear / reduzir) |

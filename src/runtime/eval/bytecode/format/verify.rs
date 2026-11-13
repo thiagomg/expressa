@@ -283,7 +283,7 @@ fn chunk(
                 s.effect(1, 1, 0, 0)?
             }
             Op::Index2 => s.effect(3, 1, 0, 0)?,
-            Op::Slice(end) => s.effect(if end { 3 } else { 2 }, 1, 0, 0)?,
+            Op::Slice(end) => s.effect(if end { 2 } else { 1 }, 1, 0, 0)?,
             Op::Call { argc, .. } => s.effect(
                 (argc as usize)
                     .checked_add(1)

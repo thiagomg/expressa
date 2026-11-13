@@ -112,7 +112,7 @@ function parseDefinitions(text, keywords = []) {
   };
   const fnRe = new RegExp(`^([ \\t]*)(${IDENT})[ \\t]*=[ \\t]*(?:funcao|função)[ \\t]*\\(([^)]*)\\)`, 'u');
   const varRe = new RegExp(`^([ \\t]*)(${IDENT})[ \\t]*=(?!=)`, 'u');
-  const loopRe = new RegExp(`(?:^|[^\\p{L}\\p{N}_])para[ \\t]+(${IDENT})[ \\t]+(?:de|em)(?![\\p{L}\\p{N}_])`, 'u');
+  const loopRe = new RegExp(`(?:^|[^\\p{L}\\p{N}_])para[ \\t]+(${IDENT})[ \\t]+em(?![\\p{L}\\p{N}_])`, 'u');
   lines.forEach((line, i) => {
     let m = line.match(fnRe);
     if (m) {

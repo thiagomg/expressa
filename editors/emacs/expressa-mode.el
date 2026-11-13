@@ -17,7 +17,7 @@
   '("se_falhar" "se" "senao" "senão" "ou" "e" "nao" "não"
     "retorne" "pare" "continue" "continua"
     "inicio" "início" "fim" "funcao" "função"
-    "para" "de" "ate" "até" "em" "repita" "enquanto" "vezes"
+    "para" "em" "repita" "enquanto" "vezes"
     "importe" "contem" "contém"))
 
 (defconst expressa-builtins
@@ -30,7 +30,7 @@
     "radianos" "graus" "exp" "log" "log10" "potencia" "piso" "teto" "arredonde"
     "mapa" "conjunto" "matriz"
     "transposta" "det" "identidade" "zeros" "uns" "cheia" "nlinhas" "ncolunas"
-    "tamanho" "primeiro" "ultimo"
+    "tamanho" "primeiro" "ultimo" "último" "infinito"
     "maiuscula" "minuscula" "sem_acento" "remova" "substitua" "procure" "separe" "junte" "limpe"
     "leia_arquivo" "salve_arquivo" "adicione_arquivo"
     "leia_csv" "salve_csv"

@@ -23,12 +23,13 @@ Todo bloco (`inicio`/`fim` ou `{`/`}`) é uma expressão; seu resultado é o val
 | `numero` | `10`, `3.14`, `-8`, `0` (decimal; `formato("float")` liga IEEE-754) |
 | `texto`  | `"olá"`, `"123"`                  |
 | `bool`   | `verdadeiro`, `falso`             |
+| `faixa`  | `0..3`, `1..=2`, `5..`            |
 
-Tipos compostos: **lista**, **par**, **mapa**, **conjunto**, **matriz** e **imagem**.
+Tipos compostos: **lista**, **par**, **mapa**, **conjunto**, **matriz**, **imagem** e **faixa**.
 
 Os contextos que exigem inteiro (chaves numéricas, elementos numéricos de conjuntos, contadores e índices) usam inteiros com sinal de 64 bits: −9223372036854775808…9223372036854775807. O tipo `numero` aceita valores fora desse intervalo; ser matematicamente inteiro não garante que um valor seja aceito nesses contextos. Dimensões e índices também devem caber no tamanho de endereço da plataforma e nos limites do host. Conversões fora do intervalo numérico produzem erro, nunca substituem o valor por zero.
 
-`tipo(valor)` devolve o nome do tipo como texto (`"numero"`, `"texto"`, `"bool"`, `"lista"`, `"par"`, `"mapa"`, `"conjunto"`, `"matriz"`, `"imagem"`, `"funcao"`, `"modulo"`, `"processo"`, `"nada"`). Os nomes são os mesmos das mensagens de erro (sem acento). `escreva` e funções do aluno são `"funcao"`. `tipos()` lista esses nomes.
+`tipo(valor)` devolve o nome do tipo como texto (`"numero"`, `"faixa"`, `"texto"`, `"bool"`, `"lista"`, `"par"`, `"mapa"`, `"conjunto"`, `"matriz"`, `"imagem"`, `"funcao"`, `"modulo"`, `"processo"`, `"nada"`). Os nomes são os mesmos das mensagens de erro (sem acento). `escreva` e funções do aluno são `"funcao"`. `tipos()` lista esses nomes.
 
 ---
 
@@ -179,7 +180,7 @@ inicio
 fim
 
 // Contador
-para i de 1 ate 5
+para i em 1..=5
 inicio
     escreva(i)
 fim
@@ -201,7 +202,9 @@ fim
 
 A condição de `enquanto` tem que ser `verdadeiro` ou `falso`. O corpo usa `inicio`/`fim` ou `{`/`}`.
 
-`para x em` percorre **lista** ou **texto** (um caractere por vez):
+`para x em` percorre **lista**, **texto** (um caractere por vez), **conjunto** ou **faixa**. `para i em 5` é erro (use `0..5` ou `1..=5`). `para i em 0..` é um laço sem teto (saia com `pare` ou o tempo-limite da VM).
+
+O antigo `para i de … até …` saiu da linguagem.
 
 ```text
 para ch em "olá"
@@ -264,12 +267,13 @@ numeros[0]                     // 10
 numeros + [50]                 // [10, 20, 30, 40, 50]
 numeros += [50]                // igual a numeros = numeros + [50]
 numeros.remova(1)              // sem o 2º item (cópia)
-numeros.remova(2, 3)           // sem os índices 2 e 3
+numeros.remova(2..4)           // sem os índices 2 e 3 (fim exclusivo)
+numeros.remova(2..=3)          // igual a remova(2..4)
 numeros contem 20              // verdadeiro
 primeiro(numeros)              // 10
 ultimo(numeros)                // 40
-numeros[1..2]                  // [20, 30]
-numeros[1..]                   // do índice 1 até o fim
+numeros[1..3]                  // [20, 30]
+numeros[1..]                   // do índice 1 até o fim: [20, 30, 40]
 "b"[0..2]                      // "b" (corta no tamanho)
 ordene([3, 1, 2])              // [1, 2, 3] (cópia)
 ordene(pessoas, funcao(p) { p:idade })   // por chave
@@ -296,6 +300,24 @@ xs = [[1]]
 ys = xs + []
 ys[0][0] = 2
 escreva(xs[0][0])    // 2: o elemento aninhado é compartilhado
+```
+
+### 9.2. Faixas
+
+`0..3` é um gerador de inteiros, não uma lista. O fim de `..` é **exclusivo**: `0..3` gera 0, 1, 2. `..=` e o começo omitido são açúcar: `0..=2` e `..3` viram `0..3`; `0..` e `..` são infinitos a partir de 0; `5..` a partir de 5. `1..3 == 1..=2`. `escreva` imprime a forma exclusiva (`escreva(0..=2)` é `0..3`).
+
+Limites são inteiros de 64 bits, avaliados uma vez. `n..=m` é `n..(m+1)`; se `m+1` não cabe em i64, é erro. Não há passo. Faixas vazias (`3..3`, `3..1`) não geram nada. O teto, se houver, fica na mesma linha do `..` (`r = 5..` na linha seguinte começa outro comando).
+
+Núcleo: `tamanho(3..5)` é 2; `tamanho(0..)` é erro (`se_falhar`). `primeiro(3..5)` é 3; `ultimo(3..5)` é 4 (último gerado). `primeiro(0..)` é 0; `ultimo(0..)` é erro. `infinito(r)` é verdadeiro só sem teto; em outro tipo é erro. Reconstrua uma faixa finita não vazia com `primeiro(r)..(ultimo(r)+1)`.
+
+Igualdade é canônica (começo + teto exclusivo): `3..3 != 5..5`. Só `==` e `!=`. Indexar uma faixa, `contem` e `+` entre faixas são erro.
+
+Fatia e `remova` usam a mesma faixa. `xs[0..2]` são os índices 0 e 1. Teto além do tamanho corta: `xs[0..1000]` numa lista de 5 devolve os 5. Sem teto, a fatia vai até o fim da lista ou do texto: `"thiago"[0..]` é `"thiago"`, `"thiago"[2..]` é `"iago"`, `xs[..]` é a coleção inteira. Vale também com a faixa guardada (`r = 2..; xs[r]`). Começo negativo é erro; começo além do tamanho devolve vazio. `xs.remova(1..)` continua erro: `remova` exige teto. `tamanho(0..)` também: a faixa sem teto não tem tamanho; quem limita a fatia é a coleção.
+
+```text
+para i em 0..tamanho(xs) { escreva(xs[i]) }
+para i em 1..=10 { escreva(i) }
+xs[0..=2]                      // [10, 20, 30]
 ```
 
 ## 10. Pares e mapas
@@ -354,8 +376,8 @@ Lista e mapa **não** viram conjunto sozinhos. `remova` no conjunto é o element
 ```text
 nome = "  Maria Silva  "
 nome[0]                    // um caractere
-nome[1..3]                 // inclusive; se o fim passar do tamanho, corta
-nome[1..]                  // até o último
+nome[1..3]                 // teto exclusivo; se passar do tamanho, corta
+nome[1..]                  // do índice 1 até o fim
 
 tamanho(nome)
 maiuscula(nome)
@@ -429,7 +451,7 @@ Com `importe "crono"`: `agora()` é a data e a hora locais: mapa `:ano`, `:mes`,
 
 Com `importe "cartesiano"`: `documento()` é a identidade da janela (um mapa `:graficos`). `grafico()` é um plano xy (`:xmin`… e `:curvas`). `eixos(g, xmin, xmax, ymin, ymax)` grava os limites (y para cima). `plote(g, função, cor)` amostra ~400 pontos de xmin a xmax; y não finito vira um furo na linha. Cores: as da `tela`. `adicione(c, g)` copia o gráfico para a folha (congela). `mostre(c)` abre ou atualiza a janela daquele documento e traz o foco; não espera fechar. Folha vazia é erro. Dois `documento()` são duas janelas. `tipo(g)` continua `"mapa"`. Sem display, `mostre` falha (`se_falhar`). O CLI abre `expressa-grafico` (ou `expressa --grafico`). Na Aula o painel Gráficos (Destacar vira janela irmã).
 
-Com `importe "tela_grafica"`: `nova(largura, altura)` é uma tela de pixels (mapa `:largura`, `:altura`, `:cor`, `:fundo`, `:ops`). Origem no canto superior esquerdo, y para baixo, (0,0) no primeiro pixel. Inteiros 1…2048. `cor`, `fundo`, `linha`, `circulo`, `ponto`, `retangulo`, `texto`, `apague` acumulam ou limpam comandos. Cores: as da `tela` e `transparente` (furo no sprite). `fundo(g, cor)` é o papel (padrão branco). `retangulo(g, x1, y1, x2, y2)` preenche o retângulo (cantos inclusivos, recorta). `como_imagem(g)` devolve uma `imagem` (cópia; transparente vira alpha 0). `texto(g, x, y, t)` / `texto(g, x, y, t, tamanho)` desenha t na caneta; (x, y) é o canto superior esquerdo, tamanho é a altura da célula (padrão 8), `\\n` desce uma linha. `imagem(g, caminho|img|tela, x, y, angulo)` carimba pixels (PNG lido uma vez, ou outra tela via `como_imagem`). `pixel(g, x, y)` devolve o nome da cor (fora da tela é erro). `salve(g, "a.png")` grava PNG com transparência, sem janela. `mostre(g)` abre ou atualiza a janela daquela instância (não acopla na Aula). `evento(g)` / `evento(g, segundos)` espera clique, tecla ou fechar naquela janela (mapa `:tipo`, `:x`, `:y`, `:botao`, `:tecla`). Cada `nova()` é uma janela. `tipo(g)` continua `"mapa"`. Cores: as da `tela`. Protocolo da janela: `docs/tela_grafica.md`.
+Com `importe "tela_grafica"`: `nova(largura, altura)` ou `nova(largura, altura, tamanho_pixel)` é uma tela de pixels (mapa `:largura`, `:altura`, `:tamanho_pixel`, `:cor`, `:fundo`, `:ops`). Origem no canto superior esquerdo, y para baixo, (0,0) no primeiro pixel. Inteiros 1…2048. `tamanho_pixel` (1…16, padrão 1) é o lado do quadrado na janela para cada pixel lógico (`2` = 2×2); `evento`, `pixel` e `salve` usam o canvas. `cor`, `fundo`, `linha`, `circulo`, `ponto`, `retangulo`, `texto`, `apague` acumulam ou limpam comandos. Cores: as da `tela` e `transparente` (furo no sprite). `fundo(g, cor)` é o papel (padrão branco). `retangulo(g, x1, y1, x2, y2)` preenche o retângulo (cantos inclusivos, recorta). `como_imagem(g)` devolve uma `imagem` (cópia; transparente vira alpha 0). `texto(g, x, y, t)` / `texto(g, x, y, t, tamanho)` desenha t na caneta; (x, y) é o canto superior esquerdo, tamanho é a altura da célula (padrão 8), `\\n` desce uma linha. `imagem(g, caminho|img|tela, x, y, angulo)` carimba pixels (PNG lido uma vez, ou outra tela via `como_imagem`). `pixel(g, x, y)` devolve o nome da cor (fora da tela é erro). `salve(g, "a.png")` grava PNG com transparência, sem janela. `mostre(g)` abre ou atualiza a janela daquela instância (não acopla na Aula). `evento(g)` / `evento(g, segundos)` espera clique, tecla ou fechar naquela janela (mapa `:tipo`, `:x`, `:y`, `:botao`, `:tecla`). Cada `nova()` é uma janela. `tipo(g)` continua `"mapa"`. Cores: as da `tela`. Protocolo da janela: `docs/tela_grafica.md`.
 
 Com `importe "imagem"`: `carregue("a.png")` lê um PNG e devolve um valor `tipo` `"imagem"` (pixels em memória, até 2048×2048). `salve(img, "b.png")` grava PNG com transparência. `rotacione(img, graus)` gira no sentido horário e devolve uma imagem nova (90/180/270 são exatos). `redimensione(img, fator)` ou `redimensione(img, fx, fy)` redimensiona (vizinho mais próximo). `largura(img)` e `altura(img)` são o tamanho em pixels.
 

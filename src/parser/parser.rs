@@ -22,6 +22,8 @@ pub fn parse(source: &str) -> Result<Program, ParseError> {
 /// that walks the tree (checks, evaluation, copies, even dropping it) is
 /// recursive, so a deeper tree would overflow the stack and abort.
 const PROFUNDIDADE_MAXIMA: usize = 1000;
+/// Right binding power of `..` / `..=` (`0..n-1` is `0..(n-1)`).
+const FAIXA_RIGHT_BP: u8 = 9;
 
 /// Stack left before the parser moves to a new segment, and its size.
 const PILHA_RESERVA: usize = 128 * 1024;
@@ -316,20 +318,6 @@ impl<'a> Parser<'a> {
         };
 
         match self.peek_kind() {
-            TokenKind::De => {
-                self.remove();
-                let from = self.parse_expr()?;
-                self.expect_kind(|k| matches!(k, TokenKind::Ate), "esperado 'ate' no 'para'")?;
-                let to = self.parse_expr()?;
-                let body = self.parse_block()?;
-                Ok(Stmt::ParaRange {
-                    var,
-                    from,
-                    to,
-                    span: start.join(body.span),
-                    body,
-                })
-            }
             TokenKind::Em => {
                 self.remove();
                 let iter = self.parse_expr()?;
@@ -341,7 +329,14 @@ impl<'a> Parser<'a> {
                     body,
                 })
             }
-            _ => Err(self.err("esperado 'de' ou 'em' após variável do 'para'")),
+            TokenKind::Ident(name) if matches!(name.as_str(), "de" | "ate" | "até") => {
+                let tok = self.remove();
+                Err(self.err_at(
+                    "use 'para i em 1..=n' ou 'para i em 0..n' (o 'para i de … até …' saiu da linguagem)",
+                    tok.span,
+                ))
+            }
+            _ => Err(self.err("esperado 'em' após variável do 'para'")),
         }
     }
 
@@ -484,7 +479,22 @@ impl<'a> Parser<'a> {
             // Commit to this operator, then parse its right-hand side.
             // We pass *right_bp* as the new min_bp so the RHS only
             // absorbs *tighter* operators (see infix_info docs).
-            self.remove();
+            let op_tok = self.remove();
+            if matches!(op_kind, TokenKind::DotDot | TokenKind::DotDotEq) {
+                let inclusive = matches!(op_kind, TokenKind::DotDotEq);
+                let end = self.parse_faixa_end(inclusive, op_tok.span)?;
+                let span = match &end {
+                    Some(e) => lhs.span().join(e.span()),
+                    None => lhs.span().join(op_tok.span),
+                };
+                self.descer()?;
+                lhs = Expr::Faixa {
+                    start: Box::new(lhs),
+                    end: end.map(Box::new),
+                    span,
+                };
+                continue;
+            }
             if matches!(op_kind, TokenKind::Arrow) {
                 if matches!(lhs, Expr::Par { .. }) {
                     return Err(self.err_at(
@@ -535,6 +545,7 @@ impl<'a> Parser<'a> {
     /// Unary still binds tighter than infix: `nao a e b` → `(nao a) e b`.
     fn parse_unary(&mut self) -> Result<Expr, ParseError> {
         match self.peek_kind() {
+            TokenKind::DotDot | TokenKind::DotDotEq => self.parse_prefix_faixa(),
             TokenKind::Minus => {
                 let start = self.remove().span;
                 let expr = self.aninhado(Self::parse_unary)?;
@@ -557,6 +568,82 @@ impl<'a> Parser<'a> {
             }
             _ => self.parse_postfix(),
         }
+    }
+
+    fn parse_prefix_faixa(&mut self) -> Result<Expr, ParseError> {
+        let op_tok = self.remove();
+        let inclusive = matches!(op_tok.kind, TokenKind::DotDotEq);
+        let start = Expr::Number {
+            raw: "0".into(),
+            span: op_tok.span,
+        };
+        let end = self.parse_faixa_end(inclusive, op_tok.span)?;
+        let span = match &end {
+            Some(e) => op_tok.span.join(e.span()),
+            None => op_tok.span,
+        };
+        Ok(Expr::Faixa {
+            start: Box::new(start),
+            end: end.map(Box::new),
+            span,
+        })
+    }
+
+    fn parse_faixa_end(
+        &mut self,
+        inclusive: bool,
+        op_span: Span,
+    ) -> Result<Option<Expr>, ParseError> {
+        let same_line = self.peek().span.line == op_span.line;
+        if inclusive {
+            if !same_line || !self.can_start_expr() {
+                let kind = if matches!(self.peek_kind(), TokenKind::Eof) {
+                    ParseErrorKind::UnexpectedEof
+                } else {
+                    ParseErrorKind::Syntax
+                };
+                return Err(ParseError {
+                    kind,
+                    message: "esperado teto após '..='".into(),
+                    span: self.peek_span(),
+                });
+            }
+            let end = self.parse_bp(FAIXA_RIGHT_BP)?;
+            Ok(Some(plus_one(end, op_span)))
+        } else if same_line && self.can_start_expr() {
+            Ok(Some(self.parse_bp(FAIXA_RIGHT_BP)?))
+        } else {
+            Ok(None)
+        }
+    }
+
+    fn can_start_expr(&self) -> bool {
+        matches!(
+            self.peek_kind(),
+            TokenKind::Number(_)
+                | TokenKind::String(_)
+                | TokenKind::Ident(_)
+                | TokenKind::Verdadeiro
+                | TokenKind::Falso
+                | TokenKind::Colon
+                | TokenKind::LParen
+                | TokenKind::LBracket
+                | TokenKind::LBrace
+                | TokenKind::Inicio
+                | TokenKind::Se
+                | TokenKind::Funcao
+                | TokenKind::Minus
+                | TokenKind::Nao
+                | TokenKind::DotDot
+                | TokenKind::DotDotEq
+        )
+    }
+
+    fn peek_span(&self) -> Span {
+        self.tokens
+            .get(self.pos)
+            .map(|t| t.span)
+            .unwrap_or_default()
     }
 
     /// `f(a)[i].campo` — postfix attaches to the primary, not to a prefix op.
@@ -718,21 +805,7 @@ impl<'a> Parser<'a> {
         let start = object.span();
         self.remove(); // [
         let first = self.parse_expr()?;
-        if matches!(self.peek_kind(), TokenKind::DotDot) {
-            self.remove();
-            let end_expr = if matches!(self.peek_kind(), TokenKind::RBracket) {
-                None
-            } else {
-                Some(Box::new(self.parse_expr()?))
-            };
-            let end = self.expect_kind(|k| matches!(k, TokenKind::RBracket), "esperado ']'")?;
-            Ok(Expr::Slice {
-                object: Box::new(object),
-                start: Box::new(first),
-                end: end_expr,
-                span: start.join(end.span),
-            })
-        } else if matches!(self.peek_kind(), TokenKind::Comma) {
+        if matches!(self.peek_kind(), TokenKind::Comma) {
             self.remove();
             let col = self.parse_expr()?;
             let end = self.expect_kind(|k| matches!(k, TokenKind::RBracket), "esperado ']'")?;
@@ -1010,6 +1083,7 @@ fn expr_can_start(kind: &TokenKind) -> bool {
 ///    ou         (3,4)
 ///    e          (5,6)
 ///    compare    (7,8)
+///    .. ..=     (8,9)
 ///    + -        (9,10)
 ///    * / %      (11,12) strongest infix
 ///    ```
@@ -1058,6 +1132,7 @@ fn infix_info(kind: &TokenKind) -> Option<(TokenKind, u8, u8)> {
         | TokenKind::LtEq
         | TokenKind::GtEq
         | TokenKind::Contem => (7, 8),
+        TokenKind::DotDot | TokenKind::DotDotEq => (8, 9),
         TokenKind::Plus | TokenKind::Minus => (9, 10),
         TokenKind::Star | TokenKind::Slash | TokenKind::Percent => (11, 12),
         _ => return None,
@@ -1102,6 +1177,19 @@ fn is_comparison_op(op: BinaryOp) -> bool {
         op,
         BinaryOp::Eq | BinaryOp::Ne | BinaryOp::Lt | BinaryOp::Le | BinaryOp::Gt | BinaryOp::Ge
     )
+}
+
+fn plus_one(end: Expr, op_span: Span) -> Expr {
+    let span = end.span().join(op_span);
+    Expr::Binary {
+        left: Box::new(end),
+        op: BinaryOp::Add,
+        right: Box::new(Expr::Number {
+            raw: "1".into(),
+            span: op_span,
+        }),
+        span,
+    }
 }
 
 fn expr_to_assign_target(expr: Expr) -> Result<AssignTarget, Span> {
@@ -1354,10 +1442,12 @@ mod tests {
             expr_stmt(&parse_ok("xs[\n0,\n1\n]")),
             Expr::Index2 { .. }
         ));
-        assert!(matches!(
-            expr_stmt(&parse_ok("xs[\n0..\n]")),
-            Expr::Slice { .. }
-        ));
+        match expr_stmt(&parse_ok("xs[\n0..\n]")) {
+            Expr::Index { index, .. } => {
+                assert!(matches!(index.as_ref(), Expr::Faixa { end: None, .. }));
+            }
+            other => panic!("{other:?}"),
+        }
         assert!(matches!(
             expr_stmt(&parse_ok("f(\n[1,\n2]\n)[0]")),
             Expr::Index { .. }
@@ -1482,12 +1572,58 @@ fim
         let p = parse_ok("xs[1]");
         assert!(matches!(expr_stmt(&p), Expr::Index { .. }));
         let p = parse_ok("xs[1..3]");
-        assert!(matches!(expr_stmt(&p), Expr::Slice { .. }));
-        let p = parse_ok("xs[2..]");
         match expr_stmt(&p) {
-            Expr::Slice { end: None, .. } => {}
+            Expr::Index { index, .. } => {
+                assert!(matches!(index.as_ref(), Expr::Faixa { end: Some(_), .. }));
+            }
             other => panic!("{other:?}"),
         }
+        match expr_stmt(&parse_ok("xs[2..]")) {
+            Expr::Index { index, .. } => {
+                assert!(matches!(index.as_ref(), Expr::Faixa { end: None, .. }));
+            }
+            other => panic!("{other:?}"),
+        }
+        match expr_stmt(&parse_ok("xs[..]")) {
+            Expr::Index { index, .. } => {
+                assert!(matches!(index.as_ref(), Expr::Faixa { end: None, .. }));
+            }
+            other => panic!("{other:?}"),
+        }
+        match expr_stmt(&parse_ok("0..3")) {
+            Expr::Faixa { end: Some(end), .. } => {
+                assert!(matches!(end.as_ref(), Expr::Number { raw, .. } if raw == "3"));
+            }
+            other => panic!("{other:?}"),
+        }
+        match expr_stmt(&parse_ok("0..")) {
+            Expr::Faixa { end: None, .. } => {}
+            other => panic!("{other:?}"),
+        }
+        match first_stmt(&parse_ok("r = 5..\nescreva(r)")) {
+            Stmt::Assign { value, .. } => {
+                assert!(matches!(value, Expr::Faixa { end: None, .. }));
+            }
+            other => panic!("{other:?}"),
+        }
+        match expr_stmt(&parse_ok("..3")) {
+            Expr::Faixa { .. } => {}
+            other => panic!("{other:?}"),
+        }
+        match expr_stmt(&parse_ok("1..=2")) {
+            Expr::Faixa { end: Some(end), .. } => {
+                assert!(matches!(
+                    end.as_ref(),
+                    Expr::Binary {
+                        op: BinaryOp::Add,
+                        ..
+                    }
+                ));
+            }
+            other => panic!("{other:?}"),
+        }
+        let err = parse("0..=").unwrap_err();
+        assert!(err.message.contains("teto"), "{err}");
     }
 
     #[test]
@@ -1614,12 +1750,17 @@ fim
         assert!(matches!(first_stmt(&parse_ok(src)), Stmt::Repita { .. }));
 
         let src = r#"
-para i de 1 ate 5
+para i em 1..=5
 inicio
     escreva(i)
 fim
 "#;
-        assert!(matches!(first_stmt(&parse_ok(src)), Stmt::ParaRange { .. }));
+        assert!(matches!(first_stmt(&parse_ok(src)), Stmt::ParaIn { .. }));
+        let err = parse("para i de 1 ate 5 { x }").unwrap_err();
+        assert!(
+            err.message.contains("em") || err.message.contains("até"),
+            "{err}"
+        );
 
         let src = r#"
 para x em xs

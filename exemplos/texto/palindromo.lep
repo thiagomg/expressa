@@ -4,7 +4,7 @@ inverta = funcao(texto)
 inicio
     saida = ""
     n = tamanho(texto)
-    para i de 0 ate n - 1
+    para i em 0..n
     inicio
         saida = saida + texto[n - i - 1]
     fim

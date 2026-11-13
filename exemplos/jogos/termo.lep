@@ -5,9 +5,9 @@ remove_letra = função(palavra, posição) {
     se posição == 0 {
         palavra[1..]
     } ou se posição == palavra.tamanho() - 1 {
-        palavra[0..(posição-1)]
+        palavra[0..posição]
     } senão {
-        palavra[0..(posição-1)] + palavra[(posição+1)..]
+        palavra[0..posição] + palavra[(posição+1)..]
     }
 }
 
@@ -20,7 +20,7 @@ procura_sem_acento = função(palavra, letra) {
 /// Transforma um texto em uma lista de caracteres
 como_lista = função(s) {
     t = []
-    para i de 0 até s.tamanho() - 1 {
+    para i em 0..s.tamanho() {
         t += [s[i]]
     }
     t
@@ -33,7 +33,7 @@ compara_palavra = função(palavra, tentativa) {
     p = palavra
     res = como_lista(tentativa)
     // Troca cada caractere por um par caractere -> :normal
-    para i de 0 até res.tamanho() - 1 {
+    para i em 0..res.tamanho() {
         res[i] = res[i] -> :normal
     }
 
@@ -41,7 +41,7 @@ compara_palavra = função(palavra, tentativa) {
     // e remover elas da palavra e da tentativa. Assim se outra aparecer
     // em outra posição e somente uma letra estiver na palavra, ela
     // aparecerá em preto, não amarelo
-    para i de 0 até t.tamanho() - 1 {
+    para i em 0..t.tamanho() {
         // C e Ç são a mesma tecla; á/ã/â valem como A (sem_acento).
         se sem_acento(t[i]) == sem_acento(p[i]) {
             res[i] = t[i] -> :verde
@@ -52,7 +52,7 @@ compara_palavra = função(palavra, tentativa) {
 
     // Agora vamos marcar os amarelos. Como os verdes já foram retirados
     // não vamos olhar duas vezes a mesma letra
-    para i de 0 até t.tamanho() - 1 {
+    para i em 0..t.tamanho() {
         se t[i] == " " {
             continue
         }
@@ -76,10 +76,10 @@ completa_tentativas = funcao(ts, total, num_letras) {
     }
 
     l = ""
-    para i de 1 até num_letras {
+    para i em 1..=num_letras {
         l += " "
     }
-    para i de 1 até faltando {
+    para i em 1..=faltando {
         ts += [l]
     }
     ts
@@ -87,7 +87,7 @@ completa_tentativas = funcao(ts, total, num_letras) {
 
 /// Atualiza as cores to teclado dando preferencia para o verde, quando encontrado
 atualiza_teclado = função(cores_teclado, res) {
-    para i de 0 até res.tamanho() - 1 {
+    para i em 0..res.tamanho() {
         tok = res[i]
         letra = sem_acento(tok:chave)
         se letra == " " {
@@ -125,7 +125,7 @@ desenha_teclado = função(linha, coluna, cores_teclado) {
     // Desenha uma linha do teclado
     linha_teclado = função(letras, recuo, cores_teclado) {
         s = recuo
-        para i de 0 até letras.tamanho() - 1 {
+        para i em 0..letras.tamanho() {
             se i > 0 {
                 s += " "
             }
@@ -140,7 +140,7 @@ desenha_teclado = função(linha, coluna, cores_teclado) {
     // Ao inves de começar na coluna da esqueda, começa na
     // linha e coluna definidas no bloco
     b = bloco(linha, coluna)
-    para i de 0 até teclas.tamanho() - 1 {
+    para i em 0..teclas.tamanho() {
         b.escreva_em(linha_teclado(teclas[i], recuos[i], cores_teclado))
     }
 }
@@ -148,7 +148,7 @@ desenha_teclado = função(linha, coluna, cores_teclado) {
 /// Desenha o quadro de tentativas
 desenha_tentativa = função(palavra, ts, cores_teclado) {
     borda = " +"
-    para i de 0 até palavra.tamanho() - 1 {
+    para i em 0..palavra.tamanho() {
         borda += "---+"
     }
     largura = borda.tamanho()
@@ -157,11 +157,11 @@ desenha_tentativa = função(palavra, ts, cores_teclado) {
     tamanho_palavra = palavra.tamanho()
     tela = borda + nova_linha
 
-    para l de 0 até ts.tamanho() - 1 {
+    para l em 0..ts.tamanho() {
         res = compara_palavra(palavra, ts[l])
 
         linha = " "
-        para i de 0 até tamanho_palavra - 1 {
+        para i em 0..tamanho_palavra {
             linha += "|".negrito()
 
             tok = res[i]

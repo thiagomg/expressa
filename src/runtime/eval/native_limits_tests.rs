@@ -53,7 +53,7 @@ fn stop_is_polled_inside_matrix_multiplication() {
 #[test]
 fn stop_is_polled_inside_sorting() {
     let (code, out, polls) = stopped(
-        "xs = []\npara i de 1 ate 100 { xs += [101 - i] }\nescreva(ordene(xs))",
+        "xs = []\npara i em 1..=100 { xs += [101 - i] }\nescreva(ordene(xs))",
         103,
         None,
     );

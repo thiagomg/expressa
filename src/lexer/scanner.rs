@@ -260,7 +260,12 @@ impl<'src> Scanner<'src> {
                 self.remove();
                 if self.peek() == Some('.') {
                     self.remove();
-                    token!(TokenKind::DotDot)
+                    if self.peek() == Some('=') {
+                        self.remove();
+                        token!(TokenKind::DotDotEq)
+                    } else {
+                        token!(TokenKind::DotDot)
+                    }
                 } else {
                     token!(TokenKind::Dot)
                 }
@@ -679,27 +684,28 @@ mod tests {
     #[test]
     fn operators_assignment_comparison_arrow_range() {
         // Space-separated so each operator is its own token.
-        let src = r#"= += -= == != < > <= >= -> .. + - * / %"#;
+        let src = r#"= += -= == != < > <= >= -> .. ..= + - * / %"#;
 
         assert_eq!(
             kinds(src),
             vec![
-                TokenKind::Eq,      // =
-                TokenKind::PlusEq,  // +=
-                TokenKind::MinusEq, // -=
-                TokenKind::EqEq,    // ==
-                TokenKind::BangEq,  // !=
-                TokenKind::Lt,      // <
-                TokenKind::Gt,      // >
-                TokenKind::LtEq,    // <=
-                TokenKind::GtEq,    // >=
-                TokenKind::Arrow,   // ->
-                TokenKind::DotDot,  // ..
-                TokenKind::Plus,    // +
-                TokenKind::Minus,   // -
-                TokenKind::Star,    // *
-                TokenKind::Slash,   // /
-                TokenKind::Percent, // %
+                TokenKind::Eq,       // =
+                TokenKind::PlusEq,   // +=
+                TokenKind::MinusEq,  // -=
+                TokenKind::EqEq,     // ==
+                TokenKind::BangEq,   // !=
+                TokenKind::Lt,       // <
+                TokenKind::Gt,       // >
+                TokenKind::LtEq,     // <=
+                TokenKind::GtEq,     // >=
+                TokenKind::Arrow,    // ->
+                TokenKind::DotDot,   // ..
+                TokenKind::DotDotEq, // ..=
+                TokenKind::Plus,     // +
+                TokenKind::Minus,    // -
+                TokenKind::Star,     // *
+                TokenKind::Slash,    // /
+                TokenKind::Percent,  // %
                 TokenKind::Eof,
             ]
         );
@@ -774,6 +780,15 @@ mod tests {
                 TokenKind::Eof,
             ]
         );
+        assert_eq!(
+            kinds("n..=m"),
+            vec![
+                TokenKind::Ident("n".into()),
+                TokenKind::DotDotEq,
+                TokenKind::Ident("m".into()),
+                TokenKind::Eof,
+            ]
+        );
     }
 
     #[test]
@@ -837,7 +852,7 @@ mod tests {
     fn all_reserved_words_ascii() {
         // One source with every ASCII keyword from the language (space-separated).
         let src = "\
-se senao ou e nao inicio fim funcao para de ate em \
+se senao ou e nao inicio fim funcao para em \
 repita enquanto vezes importe contem verdadeiro falso se_falhar retorne \
 pare continue";
 
@@ -853,8 +868,6 @@ pare continue";
                 TokenKind::Fim,
                 TokenKind::Funcao,
                 TokenKind::Para,
-                TokenKind::De,
-                TokenKind::Ate,
                 TokenKind::Em,
                 TokenKind::Repita,
                 TokenKind::Enquanto,
@@ -875,7 +888,7 @@ pare continue";
     #[test]
     fn reserved_words_with_accents() {
         // Accented spellings accepted by keyword().
-        let src = "senão não início função até contém continua";
+        let src = "senão não início função contém continua";
 
         assert_eq!(
             kinds(src),
@@ -884,7 +897,6 @@ pare continue";
                 TokenKind::Nao,
                 TokenKind::Inicio,
                 TokenKind::Funcao,
-                TokenKind::Ate,
                 TokenKind::Contem,
                 TokenKind::Continue,
                 TokenKind::Eof,

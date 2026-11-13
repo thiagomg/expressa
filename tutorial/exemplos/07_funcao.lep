@@ -1,7 +1,7 @@
 // Função: um pedaço com nome, para não copiar o mesmo código.
 
 tabuada = função(n) {
-    para i de 1 até 10 {
+    para i em 1..=10 {
         escreva(n + " x " + i + " = " + (n * i))
     }
 }

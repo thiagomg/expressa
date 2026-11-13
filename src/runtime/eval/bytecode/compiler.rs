@@ -170,25 +170,6 @@ impl Compiler {
                 self.expr(count);
                 self.loop_body(LoopKind::Repeat, None, count.span(), span, body, None);
             }
-            Stmt::ParaRange {
-                var,
-                from,
-                to,
-                body,
-                ..
-            } => {
-                self.expr(from);
-                self.emit(Op::CheckInt, from.span());
-                self.expr(to);
-                self.loop_body(
-                    LoopKind::Range,
-                    Some(var),
-                    from.span(),
-                    to.span(),
-                    body,
-                    None,
-                );
-            }
             Stmt::ParaIn {
                 var, iter, body, ..
             } => {
@@ -361,10 +342,7 @@ impl Compiler {
                 self.expr(col);
                 self.emit(Op::Index2, span);
             }
-            Expr::Slice {
-                object, start, end, ..
-            } => {
-                self.expr(object);
+            Expr::Faixa { start, end, .. } => {
                 self.expr(start);
                 if let Some(end) = end {
                     self.expr(end);

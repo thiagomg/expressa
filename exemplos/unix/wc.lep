@@ -90,7 +90,7 @@ exec_wc = função(args)
     {
         // Pulando o arg 1, já que ele é o padrão a ser procurado
         total_geral = 0
-        para i de 0 até args:pos.tamanho() - 1
+        para i em 0..args:pos.tamanho()
         {
             arg = args:pos[i]
             total = função_contagem(leia_arquivo(arg))

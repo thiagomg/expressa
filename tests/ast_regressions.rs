@@ -9,13 +9,13 @@ fn run(source: &str) -> String {
 fn inclusive_ranges_at_integer_limits_terminate() {
     assert_eq!(
         run(
-            "n = 0\npara i de 9223372036854775806 ate 9223372036854775807 { n += 1 continue }\nescreva(n)"
+            "n = 0\npara i em 9223372036854775805..=9223372036854775806 { n += 1 continue }\nescreva(n)"
         ),
         "2\n"
     );
     assert_eq!(
         run(
-            "n = 0\npara i de -9223372036854775808 ate -9223372036854775808 { n += 1 }\npara i de 2 ate 1 { n += 100 }\nescreva(n)"
+            "n = 0\npara i em -9223372036854775808..=-9223372036854775808 { n += 1 }\npara i em 2..=1 { n += 100 }\nescreva(n)"
         ),
         "1\n"
     );

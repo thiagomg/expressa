@@ -118,9 +118,11 @@ pub fn tema_de(module: Option<&str>, name: &str) -> &'static str {
             "formate" | "maiuscula" | "minuscula" | "sem_acento" | "substitua" | "procure"
             | "separe" | "junte" | "limpe" | "comeca_com" | "termina_com",
         ) => "Texto",
-        (None, "mapa" | "conjunto" | "tamanho" | "primeiro" | "ultimo" | "remova" | "ordene") => {
-            "Coleção"
-        }
+        (
+            None,
+            "mapa" | "conjunto" | "tamanho" | "primeiro" | "ultimo" | "infinito" | "remova"
+            | "ordene",
+        ) => "Coleção",
         (None, "ambiente") => "Sistema",
         (None, "clone" | "avalie" | "catalogo" | "ajuda" | "tipo" | "tipos") => "Linguagem",
         (

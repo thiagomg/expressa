@@ -25,8 +25,6 @@ pub enum TokenKind {
     Fim,        // fim
     Funcao,     // funcao
     Para,       // para
-    De,         // de
-    Ate,        // ate
     Em,         // em
     Repita,     // repita
     Enquanto,   // enquanto
@@ -62,7 +60,8 @@ pub enum TokenKind {
     Arrow,   // ->
 
     // ── Range / access ────────────────────────────────────────────
-    DotDot,     // ..   (only used inside [i..j])
+    DotDot,     // ..
+    DotDotEq,   // ..=
     Dot,        // .    (UFCS: xs.tamanho())
     Colon,      // :    (mapa key: pessoa:nome)
     ColonColon, // ::   (módulo: mat::soma)
@@ -91,8 +90,6 @@ pub fn keyword(s: &str) -> Option<TokenKind> {
         "fim" => TokenKind::Fim,
         "funcao" | "função" => TokenKind::Funcao,
         "para" => TokenKind::Para,
-        "de" => TokenKind::De,
-        "ate" | "até" => TokenKind::Ate,
         "em" => TokenKind::Em,
         "repita" => TokenKind::Repita,
         "enquanto" => TokenKind::Enquanto,

@@ -1028,34 +1028,6 @@ impl<'a, 'c> Vm<'a, 'c> {
                     Ok(Value::Nada)
                 })
             }
-            Stmt::ParaRange {
-                var,
-                from,
-                to,
-                body,
-                ..
-            } => {
-                let from_v = self.eval_expr(from, env)?;
-                let start = self.expect_int(&from_v, from.span())?;
-                let to_v = self.eval_expr(to, env)?;
-                let end = self.expect_int(&to_v, to.span())?;
-                self.eval_in_child(env, FrameKind::Block, |vm, loop_env| {
-                    let mut i = start;
-                    while i <= end {
-                        loop_env
-                            .borrow_mut()
-                            .define(var.clone(), Value::Numero(Numero::from_i64(i)));
-                        if vm.eval_loop_body(&body.stmts, loop_env)? {
-                            break;
-                        }
-                        if i == end {
-                            break;
-                        }
-                        i += 1;
-                    }
-                    Ok(Value::Nada)
-                })
-            }
             Stmt::ParaIn {
                 var, iter, body, ..
             } => {
@@ -1077,6 +1049,12 @@ impl<'a, 'c> Vm<'a, 'c> {
                     });
                     p.borrow_mut().encerre();
                     return r;
+                }
+                if let Value::Faixa { start, end } = seq {
+                    let span = iter.span();
+                    return self.eval_in_child(env, FrameKind::Block, |vm, loop_env| {
+                        vm.para_faixa(var, start, end, &body.stmts, span, loop_env)
+                    });
                 }
                 let items = self.iter_items(&seq, iter.span())?;
                 self.eval_in_child(env, FrameKind::Block, |vm, loop_env| {
@@ -1119,6 +1097,38 @@ impl<'a, 'c> Vm<'a, 'c> {
         }
     }
 
+    #[cfg(feature = "ast")]
+    fn para_faixa(
+        &mut self,
+        var: &str,
+        start: i64,
+        end: Option<i64>,
+        stmts: &[Stmt],
+        span: Span,
+        loop_env: &Rc<RefCell<Env>>,
+    ) -> Result<Value, EvalError> {
+        let mut i = start;
+        loop {
+            self.check_deadline(span)?;
+            if let Some(end) = end
+                && i >= end
+            {
+                break;
+            }
+            loop_env
+                .borrow_mut()
+                .define(var.to_string(), Value::Numero(Numero::from_i64(i)));
+            if self.eval_loop_body(stmts, loop_env)? {
+                break;
+            }
+            let Some(next) = i.checked_add(1) else {
+                return Err(self.err("faixa passou do maior inteiro", span));
+            };
+            i = next;
+        }
+        Ok(Value::Nada)
+    }
+
     /// `true` = `pare` left the loop.
     #[cfg(feature = "ast")]
     fn eval_loop_body(
@@ -1138,13 +1148,20 @@ impl<'a, 'c> Vm<'a, 'c> {
             Value::Lista(xs) => Ok(xs.borrow().clone()),
             Value::Texto(s) => Ok(s.chars().map(|c| Value::Texto(c.to_string())).collect()),
             Value::Conjunto(xs) => Ok(xs.borrow().iter().map(|k| k.to_value()).collect()),
-            other => Err(self.err(
-                format!(
-                    "'para … em' espera lista, texto ou conjunto, encontrado {}",
-                    other.type_name()
-                ),
-                span,
-            )),
+            other => {
+                let extra = if matches!(other, Value::Numero(_)) {
+                    " — use 'para i em 0..n' ou 'para i em 1..=n'"
+                } else {
+                    ""
+                };
+                Err(self.err(
+                    format!(
+                        "'para … em' espera lista, texto, conjunto ou faixa, encontrado {}{extra}",
+                        other.type_name()
+                    ),
+                    span,
+                ))
+            }
         }
     }
 
@@ -1322,19 +1339,13 @@ impl<'a, 'c> Vm<'a, 'c> {
                 let j = self.eval_expr(col, env)?;
                 self.index_get2(&obj, &i, &j, *span)
             }
-            Expr::Slice {
-                object,
-                start,
-                end,
-                span,
-            } => {
-                let obj = self.eval_expr(object, env)?;
+            Expr::Faixa { start, end, span } => {
                 let s = self.eval_expr(start, env)?;
                 let e = match end {
                     Some(e) => Some(self.eval_expr(e, env)?),
                     None => None,
                 };
-                self.slice_get(&obj, &s, e.as_ref(), *span)
+                self.make_faixa(&s, e.as_ref(), *span)
             }
             Expr::Unary { op, expr, span } => {
                 let v = self.eval_expr(expr, env)?;
@@ -1659,6 +1670,19 @@ impl<'a, 'c> Vm<'a, 'c> {
     }
 
     fn index_get(&self, obj: &Value, index: &Value, span: Span) -> Result<Value, EvalError> {
+        if let Value::Faixa { start, end } = index {
+            // Sem teto, o fim da fatia é o tamanho da lista ou do texto.
+            let end_n = end.map(|n| Value::Numero(Numero::from_i64(n)));
+            return self.slice_get(
+                obj,
+                &Value::Numero(Numero::from_i64(*start)),
+                end_n.as_ref(),
+                span,
+            );
+        }
+        if matches!(obj, Value::Faixa { .. }) {
+            return Err(self.err("não é possível indexar faixa", span));
+        }
         match obj {
             Value::Lista(xs) => {
                 let i = self.to_index(index, xs.borrow().len(), span)?;
@@ -1697,6 +1721,20 @@ impl<'a, 'c> Vm<'a, 'c> {
                 span,
             )),
         }
+    }
+
+    pub(crate) fn make_faixa(
+        &self,
+        start: &Value,
+        end: Option<&Value>,
+        span: Span,
+    ) -> Result<Value, EvalError> {
+        let start = self.expect_int(start, span)?;
+        let end = match end {
+            Some(v) => Some(self.expect_int(v, span)?),
+            None => None,
+        };
+        Ok(Value::Faixa { start, end })
     }
 
     fn slice_get(
@@ -1763,6 +1801,9 @@ impl<'a, 'c> Vm<'a, 'c> {
         value: Value,
         span: Span,
     ) -> Result<(), EvalError> {
+        if matches!(index, Value::Faixa { .. }) {
+            return Err(self.err("não é possível atribuir uma faixa", span));
+        }
         match obj {
             Value::Lista(xs) => {
                 let i = self.to_index(index, xs.borrow().len(), span)?;
@@ -1834,7 +1875,7 @@ impl<'a, 'c> Vm<'a, 'c> {
                 if e < 0 {
                     return Err(self.err("índices de fatia devem ser >= 0", span));
                 }
-                e.saturating_add(1)
+                e
             }
         };
         if len == 0 || s >= len as i64 {

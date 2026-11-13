@@ -11,7 +11,7 @@ tarefa_texto = funcao(t) {
 mostre = funcao(ts, tudo) {
     escreva("Lista de tarefas")
     escreva("----------------")
-    para i de 0 até ts.tamanho() - 1 {
+    para i em 0..ts.tamanho() {
         se ts[i]:completo == verdadeiro e tudo == falso {
             continua
         }

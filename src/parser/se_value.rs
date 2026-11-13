@@ -42,11 +42,6 @@ fn check_stmt(stmt: &Stmt, use_: Use) -> Result<(), ParseError> {
             check_expr(count, Use::Value)?;
             check_block(body, Use::Effect)
         }
-        Stmt::ParaRange { from, to, body, .. } => {
-            check_expr(from, Use::Value)?;
-            check_expr(to, Use::Value)?;
-            check_block(body, Use::Effect)
-        }
         Stmt::ParaIn { iter, body, .. } => {
             check_expr(iter, Use::Value)?;
             check_block(body, Use::Effect)
@@ -165,10 +160,7 @@ fn check_expr_inner(expr: &Expr, use_: Use) -> Result<(), ParseError> {
             check_expr(row, Use::Value)?;
             check_expr(col, Use::Value)
         }
-        Expr::Slice {
-            object, start, end, ..
-        } => {
-            check_expr(object, Use::Value)?;
+        Expr::Faixa { start, end, .. } => {
             check_expr(start, Use::Value)?;
             if let Some(end) = end {
                 check_expr(end, Use::Value)?;

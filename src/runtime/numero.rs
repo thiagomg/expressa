@@ -56,7 +56,11 @@ impl Numero {
     }
 
     pub fn from_usize(n: usize) -> Self {
-        Self(Decimal::from(n as u64))
+        Self::from_u64(n as u64)
+    }
+
+    pub fn from_u64(n: u64) -> Self {
+        Self(Decimal::from(n))
     }
 
     pub fn from_f64(n: f64) -> Option<Self> {

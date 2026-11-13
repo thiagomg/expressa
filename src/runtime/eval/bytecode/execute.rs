@@ -26,7 +26,7 @@ enum Iteration {
     Repeat(i64),
     Range {
         next: Option<i64>,
-        end: i64,
+        end: Option<i64>,
     },
     Items(std::vec::IntoIter<Value>),
     #[cfg(feature = "process")]
@@ -207,9 +207,7 @@ impl Machine {
             Op::Slice(has_end) => {
                 let end = if has_end { Some(pop!()) } else { None };
                 let start = pop!();
-                let object = pop!();
-                self.values
-                    .push(vm.slice_get(&object, &start, end.as_ref(), span)?);
+                self.values.push(vm.make_faixa(&start, end.as_ref(), span)?);
             }
             Op::Closure(id) => {
                 let prototype = &frame.code.functions[id as usize];
@@ -309,8 +307,8 @@ impl Machine {
                         let from = vm.expect_int(&from, spec.first_span)?;
                         let to = vm.expect_int(&to, spec.second_span)?;
                         Iteration::Range {
-                            next: (from <= to).then_some(from),
-                            end: to,
+                            next: (from < to).then_some(from),
+                            end: Some(to),
                         }
                     }
                     LoopKind::Items => {
@@ -318,6 +316,14 @@ impl Machine {
                         match seq {
                             #[cfg(feature = "process")]
                             Value::Processo(p) => Iteration::Process(p),
+                            Value::Faixa { start, end } => Iteration::Range {
+                                next: match end {
+                                    None => Some(start),
+                                    Some(e) if start < e => Some(start),
+                                    _ => None,
+                                },
+                                end,
+                            },
                             other => Iteration::Items(
                                 vm.iter_items(&other, spec.first_span)?.into_iter(),
                             ),
@@ -351,12 +357,23 @@ impl Machine {
                             Some(Value::Nada)
                         }
                     }
-                    Iteration::Range { next, end } => next.take().map(|n| {
-                        if n < *end {
-                            *next = Some(n + 1);
+                    Iteration::Range { next, end } => match next.take() {
+                        None => None,
+                        Some(n) => {
+                            let following = n.checked_add(1);
+                            *next = match (*end, following) {
+                                (Some(end), Some(n1)) if n1 < end => Some(n1),
+                                (None, Some(n1)) => Some(n1),
+                                (None, None) => {
+                                    return Err(
+                                        vm.err("faixa passou do maior inteiro", spec.first_span)
+                                    );
+                                }
+                                _ => None,
+                            };
+                            Some(Value::Numero(n.into()))
                         }
-                        Value::Numero(n.into())
-                    }),
+                    },
                     Iteration::Items(items) => items.next(),
                     #[cfg(feature = "process")]
                     Iteration::Process(p) => vm

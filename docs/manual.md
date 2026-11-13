@@ -12,7 +12,7 @@ Documentação para quem **usa** a linguagem. Exemplos curtos, uma função de c
 
 Na Aula, **F1** (ou `ajuda("escreva")`) mostra a mesma ficha que está em `docs/nativas/`. O REPL: `ajuda escreva`.
 
-Arquivos de programa: `.lep`. Índices começam em **0**. O último índice é `tamanho - 1`; índices negativos são erros. Fatias mantêm o fim inclusivo: `[0..2]` contém três itens. Veja a [migração para base zero](migracao-base-zero.md).
+Arquivos de programa: `.lep`. Índices começam em **0**. O último índice é `tamanho - 1`; índices negativos são erros. Fatias têm teto exclusivo: `[0..2]` contém os índices 0 e 1. Sem teto, `[2..]` vai até o fim. Veja a [migração para base zero](migracao-base-zero.md).
 
 ---
 
@@ -102,7 +102,7 @@ se n < 0 { escreva("negativo") }     // senão opcional neste caso
 ou se nota == 10 { escreva("gabaritou") }
 
 repita 3 vezes { escreva("olá") }
-para i de 1 até 5 { escreva(i) }
+para i em 1..=5 { escreva(i) }
 para nome em ["Ana", "Bruno"] { escreva(nome) }
 para ch em "olá" { escreva(ch) }
 
@@ -358,12 +358,13 @@ Tira acento e cedilha (`ã`/`á`→`a`, `ç`→`c`). Não muda maiúscula/minús
 sem_acento("São Paulo")
 ```
 
-### `remova(lista, i)` / `remova(lista, a, b)` / `remova(mapa, chave)`
+### `remova(lista, i)` / `remova(lista, r)` / `remova(mapa, chave)`
 
-Cópia sem o índice (faixa inclusiva) ou sem a chave. No conjunto, some o elemento.
+Cópia sem o índice, sem a faixa (teto exclusivo) ou sem a chave. No conjunto, some o elemento.
 
 ```text
 xs = xs.remova(2)
+xs = xs.remova(2..4)    // tira os índices 2 e 3
 ```
 
 ### `substitua(texto, antigo, novo)`
@@ -427,11 +428,13 @@ Variável de ambiente. Não existe → erro: `ambiente("EDITOR") se_falhar "vim"
 ```text
 xs = [10, 20, 30, 40]
 xs[0]           // 10
-xs[1..2]        // [20, 30]
+xs[1..3]        // [20, 30]
 xs[1..]         // até o fim
 xs + [50]
 xs += [50]
-"abc"[0..1]     // "ab"
+"abc"[0..2]     // "ab"
+"abc"[1..]      // "bc"
+0..3            // faixa 0, 1, 2; 0..=2 é o mesmo
 t[1] = "x"      // um caractere; reatribui t
 ```
 
@@ -567,7 +570,7 @@ g.tela_grafica::mostre()
 g.tela_grafica::salve("casa.png")
 ```
 
-`(0, 0)` é o canto superior esquerdo; y cresce para baixo. Cada `nova()` é uma janela; o `mostre` da mesma instância só atualiza. `texto(g, x, y, t)` escreve na caneta a partir de `(x, y)` (células de 8 pixels; `texto(..., 16)` dobra). `evento(g)` espera um clique ou tecla nessa janela; `evento(g, 0.05)` espera até 50 ms. Na Aula a janela é irmã (não entra no painel Gráficos). `pixel(g, x, y)` devolve a cor daquele ponto. Detalhe do protocolo com o visor: `docs/tela_grafica.md`.
+`(0, 0)` é o canto superior esquerdo; y cresce para baixo. Cada `nova()` é uma janela; o `mostre` da mesma instância só atualiza. `nova(160, 144, 4)` desenha em 160×144 e abre a janela em 640×576 (`tamanho_pixel` 4 = cada pixel vira 4×4). `texto(g, x, y, t)` escreve na caneta a partir de `(x, y)` (células de 8 pixels; `texto(..., 16)` dobra). `evento(g)` espera um clique ou tecla nessa janela; `evento(g, 0.05)` espera até 50 ms. Na Aula a janela é irmã (não entra no painel Gráficos). `pixel(g, x, y)` devolve a cor daquele ponto. Detalhe do protocolo com o visor: `docs/tela_grafica.md`.
 
 ## `importe "imagem"`
 

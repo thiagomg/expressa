@@ -153,7 +153,7 @@ conjunto = funcao(xs) { 0 }
 
 /// Quantidade de caracteres, itens, pares ou linhas.
 ///
-/// Nome do tipo do valor: numero, texto, bool, lista, par, mapa,
+/// Nome do tipo do valor: numero, faixa, texto, bool, lista, par, mapa,
 /// conjunto, matriz, imagem, funcao, modulo ou nada.
 ///
 /// Serve para uma função aceitar mais de um tipo (se tipo(x) == "numero").
@@ -168,19 +168,25 @@ tipo = funcao(valor) { 0 }
 tipos = funcao() { 0 }
 
 /// Texto usa caracteres Unicode, não bytes. Para colunas de matriz, use ncolunas.
+/// Quantos inteiros a faixa gera: tamanho(0..3) é 3. Faixa sem teto (0..) é erro.
 ///
 /// Exemplo: tamanho("olá")
 tamanho = funcao(valor) { 0 }
 
-/// Primeiro elemento da lista (índice 0). Erro se vazia.
+/// Primeiro elemento da lista (índice 0) ou primeiro número da faixa. Erro se vazia.
 ///
 /// Exemplo: primeiro([10, 20])
 primeiro = funcao(lista) { 0 }
 
-/// Último elemento da lista. Erro se vazia.
+/// Último elemento da lista ou último número gerado da faixa. Erro se vazia ou sem teto.
 ///
 /// Exemplo: ultimo([10, 20])
 ultimo = funcao(lista) { 0 }
+
+/// verdadeiro se a faixa não tem teto (0..). Só vale para faixa.
+///
+/// Exemplo: infinito(0..)
+infinito = funcao(r) { 0 }
 
 /// Copia o texto em letras maiúsculas.
 ///
@@ -199,11 +205,12 @@ sem_acento = funcao(texto) { 0 }
 
 /// Devolve uma cópia sem o índice/faixa (0…n−1) ou sem a chave do mapa.
 ///
-/// Índices começam em 0; a faixa é inclusiva. No conjunto, o elemento some.
+/// Índices começam em 0. A faixa é exclusiva no fim: remova(xs, 1..3) tira os
+/// índices 1 e 2. Use remova(xs, 1..=2) para incluir o 2. No conjunto, o elemento some.
 ///
 /// Exemplo: xs = xs.remova(2)
 remova = funcao(lista, i) { 0 }
-remova = funcao(lista, a, b) { 0 }
+remova = funcao(lista, r) { 0 }
 remova = funcao(mapa, chave) { 0 }
 
 /// Troca todas as ocorrências de antigo por novo.

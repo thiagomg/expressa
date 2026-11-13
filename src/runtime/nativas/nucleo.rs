@@ -11,7 +11,7 @@ use crate::parser::parse;
 use super::super::env::Env;
 use super::super::error::{CallFrame, EvalError};
 use super::super::eval::Vm;
-use super::super::numero::NumeroAritmetica;
+use super::super::numero::{Numero, NumeroAritmetica};
 use super::super::value::{MapKey, NumeroLocale, Value, conjunto_insert};
 use super::{builtin_args, builtin_doc_summary, builtin_modulo, lookup_ficha, sem_acento};
 
@@ -215,38 +215,90 @@ impl Vm<'_, '_> {
     pub(crate) fn bi_tamanho(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
         self.expect_arity(args, 1, span)?;
         let n = match &args[0] {
-            Value::Texto(s) => s.chars().count(),
-            Value::Lista(xs) => xs.borrow().len(),
-            Value::Mapa(xs) => xs.borrow().len(),
-            Value::Conjunto(xs) => xs.borrow().len(),
-            Value::Matriz(m) => m.borrow().len(),
+            Value::Texto(s) => s.chars().count() as u64,
+            Value::Lista(xs) => xs.borrow().len() as u64,
+            Value::Mapa(xs) => xs.borrow().len() as u64,
+            Value::Conjunto(xs) => xs.borrow().len() as u64,
+            Value::Matriz(m) => m.borrow().len() as u64,
+            Value::Faixa { end: None, .. } => {
+                return Err(self.err("tamanho() de faixa sem teto", span));
+            }
+            Value::Faixa {
+                start,
+                end: Some(end),
+            } => {
+                if start >= end {
+                    0
+                } else {
+                    (*end as i128 - *start as i128) as u64
+                }
+            }
             other => {
                 return Err(self.err(
                     format!(
-                        "tamanho() espera texto, lista, mapa, conjunto ou matriz, encontrado {}",
+                        "tamanho() espera texto, lista, mapa, conjunto, matriz ou faixa, encontrado {}",
                         other.type_name()
                     ),
                     span,
                 ));
             }
         };
-        Ok(Value::Numero(super::super::numero::Numero::from_usize(n)))
+        Ok(Value::Numero(Numero::from_u64(n)))
     }
     pub(crate) fn bi_primeiro(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
         self.expect_arity(args, 1, span)?;
-        let xs = self.expect_lista(&args[0], span)?;
-        xs.borrow()
-            .first()
-            .cloned()
-            .ok_or_else(|| self.err("primeiro() de lista vazia", span))
+        match &args[0] {
+            Value::Faixa {
+                end: Some(end),
+                start,
+            } if start >= end => Err(self.err("primeiro() de faixa vazia", span)),
+            Value::Faixa { start, .. } => Ok(Value::Numero(Numero::from_i64(*start))),
+            Value::Lista(xs) => xs
+                .borrow()
+                .first()
+                .cloned()
+                .ok_or_else(|| self.err("primeiro() de lista vazia", span)),
+            other => Err(self.err(
+                format!(
+                    "primeiro() espera lista ou faixa, encontrado {}",
+                    other.type_name()
+                ),
+                span,
+            )),
+        }
     }
     pub(crate) fn bi_ultimo(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
         self.expect_arity(args, 1, span)?;
-        let xs = self.expect_lista(&args[0], span)?;
-        xs.borrow()
-            .last()
-            .cloned()
-            .ok_or_else(|| self.err("ultimo() de lista vazia", span))
+        match &args[0] {
+            Value::Faixa { end: None, .. } => Err(self.err("ultimo() de faixa sem teto", span)),
+            Value::Faixa {
+                start,
+                end: Some(end),
+            } if start >= end => Err(self.err("ultimo() de faixa vazia", span)),
+            Value::Faixa { end: Some(end), .. } => Ok(Value::Numero(Numero::from_i64(end - 1))),
+            Value::Lista(xs) => xs
+                .borrow()
+                .last()
+                .cloned()
+                .ok_or_else(|| self.err("ultimo() de lista vazia", span)),
+            other => Err(self.err(
+                format!(
+                    "ultimo() espera lista ou faixa, encontrado {}",
+                    other.type_name()
+                ),
+                span,
+            )),
+        }
+    }
+    pub(crate) fn bi_infinito(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
+        self.expect_arity(args, 1, span)?;
+        match &args[0] {
+            Value::Faixa { end, .. } => Ok(Value::Bool(end.is_none())),
+            other => Err(self.err(
+                format!("infinito() espera faixa, encontrado {}", other.type_name()),
+                span,
+            )),
+        }
     }
     pub(crate) fn bi_maiuscula(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
         self.expect_arity(args, 1, span)?;
@@ -264,15 +316,21 @@ impl Vm<'_, '_> {
         Ok(Value::Texto(sem_acento(&s)))
     }
     pub(crate) fn bi_remova(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
-        if args.len() < 2 || args.len() > 3 {
+        if args.len() == 3 {
             return Err(self.err(
-                format!("remova espera 2 ou 3 argumentos, recebeu {}", args.len()),
+                "use remova(xs, a..b) ou remova(xs, a..=b) no lugar de dois índices",
+                span,
+            ));
+        }
+        if args.len() != 2 {
+            return Err(self.err(
+                format!("remova espera 2 argumentos, recebeu {}", args.len()),
                 span,
             ));
         }
         match &args[0] {
             Value::Mapa(_) => {
-                if args.len() != 2 {
+                if matches!(args[1], Value::Faixa { .. }) {
                     return Err(self.err(
                         "remova em mapa espera a chave (não uma faixa de índices)",
                         span,
@@ -281,7 +339,7 @@ impl Vm<'_, '_> {
                 self.remova_mapa(&args[0], &args[1], span)
             }
             Value::Conjunto(_) => {
-                if args.len() != 2 {
+                if matches!(args[1], Value::Faixa { .. }) {
                     return Err(self.err(
                         "remova em conjunto espera o elemento (não uma faixa de índices)",
                         span,
@@ -289,10 +347,32 @@ impl Vm<'_, '_> {
                 }
                 self.remova_conjunto(&args[0], &args[1], span)
             }
-            Value::Lista(_) | Value::Texto(_) => {
-                let end = if args.len() == 3 { &args[2] } else { &args[1] };
-                self.remova_faixa(&args[0], &args[1], end, span)
-            }
+            Value::Lista(_) | Value::Texto(_) => match &args[1] {
+                Value::Faixa { end: None, .. } => {
+                    Err(self.err("faixa sem teto não pode remover", span))
+                }
+                Value::Faixa {
+                    start,
+                    end: Some(end),
+                } => self.remova_faixa(
+                    &args[0],
+                    &Value::Numero(Numero::from_i64(*start)),
+                    &Value::Numero(Numero::from_i64(*end)),
+                    span,
+                ),
+                _ => {
+                    let i = self.expect_int(&args[1], span)?;
+                    let fim = i
+                        .checked_add(1)
+                        .ok_or_else(|| self.err(format!("índice {i} fora do intervalo"), span))?;
+                    self.remova_faixa(
+                        &args[0],
+                        &Value::Numero(Numero::from_i64(i)),
+                        &Value::Numero(Numero::from_i64(fim)),
+                        span,
+                    )
+                }
+            },
             other => Err(self.err(
                 format!(
                     "remova espera lista, texto, mapa ou conjunto, encontrado {}",
@@ -358,10 +438,7 @@ impl Vm<'_, '_> {
         let s = self.expect_int(start, span)?;
         let e = self.expect_int(end, span)?;
         if s > e {
-            return Err(self.err(
-                format!("faixa de remova: início {s} maior que o fim {e}"),
-                span,
-            ));
+            return Ok(coll.clone());
         }
         match coll {
             Value::Lista(xs) => {

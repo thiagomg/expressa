@@ -5,22 +5,38 @@ use super::super::fonte8x8;
 use crate::lexer::Span;
 use crate::runtime::error::EvalError;
 use crate::runtime::eval::Vm;
-use crate::runtime::graf::{ALTURA_MAX, LARGURA_MAX, OpGraf, TelaGrafica, cor_graf_conhecida};
+use crate::runtime::graf::{
+    ALTURA_MAX, LARGURA_MAX, OpGraf, TAMANHO_PIXEL_MAX, TelaGrafica, cor_graf_conhecida,
+};
 use crate::runtime::graf_host::{EventoGraf, GrafHost};
 use crate::runtime::imagem::{self, Imagem};
 use crate::runtime::value::{ListaRc, MapKey, MapaRc, Value};
 
 impl Vm<'_, '_> {
     pub(crate) fn bi_graf_nova(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
-        self.expect_arity(args, 2, span)?;
+        if args.len() != 2 && args.len() != 3 {
+            return Err(self.err(
+                format!("esperado 2 ou 3 argumento(s), recebeu {}", args.len()),
+                span,
+            ));
+        }
         let largura = self.expect_graf_dim(&args[0], "largura", span)?;
         let altura = self.expect_graf_dim(&args[1], "altura", span)?;
+        let tamanho_pixel = if args.len() == 3 {
+            self.expect_tamanho_pixel(&args[2], span)?
+        } else {
+            1
+        };
         Ok(Value::mapa_recurso(vec![
             (
                 MapKey::Texto("largura".into()),
                 Value::Numero(largura.into()),
             ),
             (MapKey::Texto("altura".into()), Value::Numero(altura.into())),
+            (
+                MapKey::Texto("tamanho_pixel".into()),
+                Value::Numero(tamanho_pixel.into()),
+            ),
             (MapKey::Texto("cor".into()), Value::Texto("preto".into())),
             (MapKey::Texto("fundo".into()), Value::Texto("branco".into())),
             (MapKey::Texto("ops".into()), Value::lista(vec![])),
@@ -391,6 +407,17 @@ impl Vm<'_, '_> {
         }
     }
 
+    fn expect_tamanho_pixel(&self, v: &Value, span: Span) -> Result<u32, EvalError> {
+        let n = self.expect_f64(v, span)?;
+        if !n.is_finite() || n < 1.0 || n.fract() != 0.0 || n > f64::from(TAMANHO_PIXEL_MAX) {
+            return Err(self.err(
+                format!("tamanho_pixel deve ser um inteiro de 1 a {TAMANHO_PIXEL_MAX}"),
+                span,
+            ));
+        }
+        Ok(n as u32)
+    }
+
     fn expect_graf_dim(&self, v: &Value, nome: &str, span: Span) -> Result<u32, EvalError> {
         let n = self.expect_f64(v, span)?;
         if !n.is_finite() || n < 1.0 || n.fract() != 0.0 {
@@ -444,10 +471,12 @@ fn tela_para_evento(v: &Value, span: Span, vm: &Vm<'_, '_>) -> Result<TelaGrafic
         get_u32(&mapa, "largura").ok_or_else(|| vm.err("tela gráfica sem :largura", span))?;
     let altura =
         get_u32(&mapa, "altura").ok_or_else(|| vm.err("tela gráfica sem :altura", span))?;
+    let tamanho_pixel = tamanho_pixel_do_mapa(&mapa, span, vm)?;
     Ok(TelaGrafica {
         id: Rc::as_ptr(xs) as u64,
         largura,
         altura,
+        tamanho_pixel,
         fundo: String::new(),
         ops: Vec::new(),
     })
@@ -463,6 +492,7 @@ fn tela_de(v: &Value, span: Span, vm: &Vm<'_, '_>) -> Result<TelaGrafica, EvalEr
     let altura =
         get_u32(&mapa, "altura").ok_or_else(|| vm.err("tela gráfica sem :altura", span))?;
     let fundo = get_texto(&mapa, "fundo").unwrap_or_else(|| "branco".into());
+    let tamanho_pixel = tamanho_pixel_do_mapa(&mapa, span, vm)?;
     let ops_v = get_lista(&mapa, "ops").ok_or_else(|| vm.err("tela gráfica sem :ops", span))?;
     let mut ops = Vec::new();
     for item in ops_v.borrow().iter() {
@@ -472,6 +502,7 @@ fn tela_de(v: &Value, span: Span, vm: &Vm<'_, '_>) -> Result<TelaGrafica, EvalEr
         id: Rc::as_ptr(xs) as u64,
         largura,
         altura,
+        tamanho_pixel,
         fundo,
         ops,
     })
@@ -558,6 +589,35 @@ fn pen(mapa: &MapaRc) -> String {
 fn push_op(mapa: &MapaRc, op: Value) {
     if let Some(ops) = get_lista(mapa, "ops") {
         ops.borrow_mut().push(op);
+    }
+}
+
+fn tamanho_pixel_do_mapa(mapa: &MapaRc, span: Span, vm: &Vm<'_, '_>) -> Result<u32, EvalError> {
+    if !tem_chave(mapa, "tamanho_pixel") {
+        return Ok(1);
+    }
+    let k = MapKey::Texto("tamanho_pixel".into());
+    match mapa
+        .borrow()
+        .iter()
+        .find(|(kk, _)| *kk == k)
+        .map(|(_, v)| v)
+    {
+        Some(Value::Numero(n)) => {
+            let f = n.to_f64();
+            if f.is_finite() && f >= 1.0 && f.fract() == 0.0 && f <= f64::from(TAMANHO_PIXEL_MAX) {
+                Ok(f as u32)
+            } else {
+                Err(vm.err(
+                    format!("tamanho_pixel deve ser um inteiro de 1 a {TAMANHO_PIXEL_MAX}"),
+                    span,
+                ))
+            }
+        }
+        _ => Err(vm.err(
+            format!("tamanho_pixel deve ser um inteiro de 1 a {TAMANHO_PIXEL_MAX}"),
+            span,
+        )),
     }
 }
 
@@ -736,9 +796,32 @@ mod tests {
 g = nova(16, 16)
 escreva(tipo(g))
 escreva(g.pixel(0, 0))
+escreva(g:tamanho_pixel)
 "#),
-            "mapa\nbranco\n"
+            "mapa\nbranco\n1\n"
         );
+    }
+
+    #[test]
+    fn nova_tamanho_pixel_fica_no_mapa_e_nao_no_canvas() {
+        assert_eq!(
+            run(r#"
+g = nova(160, 144, 4)
+escreva(g:largura)
+escreva(g:altura)
+escreva(g:tamanho_pixel)
+g.cor(:azul)
+g.ponto(0, 0)
+escreva(g.pixel(0, 0))
+img = g.como_imagem()
+escreva(tipo(img))
+"#),
+            "160\n144\n4\nazul\nimagem\n"
+        );
+        assert!(run_err("g = nova(8, 8, 0)\n").contains("tamanho_pixel"));
+        assert!(run_err("g = nova(8, 8, 17)\n").contains("tamanho_pixel"));
+        assert!(run_err("g = nova(8, 8, 1.5)\n").contains("tamanho_pixel"));
+        assert!(run_err("g = nova(8)\n").contains("2 ou 3"));
     }
 
     #[test]
@@ -880,6 +963,43 @@ g.mostre()
         assert_eq!(cap.telas[0].id, cap.telas[1].id);
         assert_eq!(cap.telas[0].ops.len(), 1);
         assert_eq!(cap.telas[1].ops.len(), 2);
+        assert_eq!(cap.telas[0].tamanho_pixel, 1);
+        assert_eq!(cap.telas[0].janela_largura(), 8);
+    }
+
+    #[test]
+    fn mostre_tamanho_pixel_abre_janela_maior() {
+        let src = r#"
+importe "tela_grafica"
+g = nova(160, 144, 4)
+g.mostre()
+"#;
+        let mut cap = CapturaGraf::default();
+        let mut input = std::io::Cursor::new(String::new());
+        let mut out = Vec::new();
+        let mut err = Vec::new();
+        run_with_io(
+            src,
+            "t.lep",
+            Box::new(NoopHook),
+            &mut input,
+            &mut out,
+            &mut err,
+            None,
+            None,
+            None,
+            None,
+            false,
+            Some(&mut cap),
+            &[],
+        )
+        .unwrap();
+        assert_eq!(cap.telas[0].largura, 160);
+        assert_eq!(cap.telas[0].altura, 144);
+        assert_eq!(cap.telas[0].tamanho_pixel, 4);
+        assert_eq!(cap.telas[0].janela_largura(), 640);
+        assert_eq!(cap.telas[0].janela_altura(), 576);
+        assert_eq!(cap.telas[0].rgb32().len(), 160 * 144);
     }
 
     #[test]

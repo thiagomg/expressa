@@ -18,5 +18,5 @@ escreva("última: " + ultimo(linhas))
 escreva("---")
 para linha em linhas
 inicio
-    escreva("• " + maiuscula(linha[0..0]) + linha[1..])
+    escreva("• " + maiuscula(linha[0..1]) + linha[1..])
 fim

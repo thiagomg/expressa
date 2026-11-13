@@ -63,7 +63,7 @@ test('grammar scopes', async () => {
     '}',
     'senão_x = 1_000.5',
     'se_falhar_não = verdadeiro',
-    'para ação de 1 até 3 { escreva(pinte("oi\\n", :verde)) }',
+    'para ação em 1..=3 { escreva(pinte("oi\\n", :verde)) }',
     'x = modulo::raiz(4) se_falhar 0',
     'p = pessoa:nome',
     'senão',
@@ -84,7 +84,7 @@ test('grammar scopes', async () => {
   assert.equal(scopeOf(t, '1_000.5'), 'constant.numeric.decimal.expressa');
   assert.equal(scopeOf(t, 'verdadeiro'), 'constant.language.boolean.expressa');
   assert.equal(scopeOf(t, 'ação'), 'source.expressa');
-  assert.equal(scopeOf(t, 'até'), 'keyword.control.expressa');
+  assert.equal(scopeOf(t, 'em'), 'keyword.control.expressa');
   assert.equal(scopeOf(t, 'pinte'), 'support.function.builtin.expressa');
   assert.equal(scopeOf(t, '\\n'), 'constant.character.escape.expressa');
   assert.equal(scopeOf(t, ':verde'), 'constant.other.symbol.expressa');

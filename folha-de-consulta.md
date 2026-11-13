@@ -93,7 +93,8 @@ retorne                            // devolve nada
 
 repita 3 vezes { escreva("olá") }
 
-para i de 1 ate 5 { escreva(i) }
+para i em 1..=5 { escreva(i) }          // 1, 2, 3, 4, 5
+para i em 0..tamanho(xs) { escreva(xs[i]) }
 para nome em ["Ana", "Bruno"] { escreva(nome) }
 para ch em "olá" { escreva(ch) }    // texto: um caractere por vez
 pare                               // sai do laço
@@ -147,14 +148,16 @@ busca = funcao(xs, alvo) {
 ```text
 xs = [10, 20, 30, 40]
 xs[0]                          // 10
-xs[1..2]                       // [20, 30]
+xs[1..3]                       // [20, 30]  (teto exclusivo)
 xs[1..]                        // até o fim
 "b"[0..2]                      // "b" (não falha)
 xs + [50]
 xs += [50]                     // xs = xs + [50]
 xs = xs.remova(2)               // sem o índice 2
-xs = xs.remova(2, 4)            // faixa inclusiva
+xs = xs.remova(2..4)            // sem 2 e 3
 tamanho(xs)  primeiro(xs)  ultimo(xs)
+0..3  1..=2  ..3               // faixa: gera 0, 1, 2
+infinito(0..)                  // verdadeiro; tamanho(0..) é erro
 
 t = "  Maria Silva  "
 t[0]  t[0..4]
@@ -274,6 +277,7 @@ c.cart::mostre()                 // mesma janela a cada mostre; não espera
 ```text
 tela_grafica = importe "tela_grafica"
 g = tela_grafica::nova(320, 200) // pixels; (0,0) canto superior esquerdo
+g = tela_grafica::nova(160, 144, 4) // janela 640×576; canvas 160×144
 g.tela_grafica::cor(:azul)
 g.tela_grafica::linha(10, 10, 310, 190)
 g.tela_grafica::circulo(160, 100, 40)

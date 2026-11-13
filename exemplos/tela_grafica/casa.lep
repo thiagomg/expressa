@@ -23,7 +23,7 @@ raio = 22
 alcance = 36
 g.tela_grafica::cor(:amarelo)
 g.tela_grafica::circulo(cx, cy, raio)
-para i de 0 ate 7
+para i em 0..=7
 inicio
     a = i * mat::pi / 4
     g.tela_grafica::linha(cx, cy, cx + alcance * mat::cosseno(a), cy + alcance * mat::seno(a))

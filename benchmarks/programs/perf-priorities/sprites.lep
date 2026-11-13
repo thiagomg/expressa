@@ -9,8 +9,8 @@ t = graf::nova(64, 64)
 resultado = sprite
 repita 20000 vezes {
     graf::apague(t)
-    para y de 0 ate 7 {
-        para x de 0 ate 7 {
+    para y em 0..=7 {
+        para x em 0..=7 {
             graf::imagem(t, sprite, x * 8 + 2, y * 8 + 2)
         }
     }
@@ -19,8 +19,8 @@ repita 20000 vezes {
 // Referência independente do stamping: retângulos nas mesmas posições.
 esperada = graf::nova(64, 64)
 graf::cor(esperada, :vermelho)
-para y de 0 ate 7 {
-    para x de 0 ate 7 {
+para y em 0..=7 {
+    para x em 0..=7 {
         graf::retangulo(esperada, x * 8, y * 8, x * 8 + 3, y * 8 + 3)
     }
 }

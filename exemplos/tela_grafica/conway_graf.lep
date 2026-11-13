@@ -4,8 +4,8 @@ importe "matriz"
 importe "mat"
 
 inicia_jogo = funcao(m) {
-    para i de 0 até m.nlinhas() - 1 {
-        para j de 0 até m.ncolunas() - 1 {
+    para i em 0..m.nlinhas() {
+        para j em 0..m.ncolunas() {
             m[i, j] = aleatorio(0, 1)
         }
     }
@@ -27,8 +27,8 @@ cria_ser = funcao(cel, cor) {
     cel.tela::cor(:transparente)
 
     ponto_grande = funcao(cel, lo, co) {
-        para l de 0 ate 1 {
-            para c de 0 ate 1 {
+        para l em 0..=1 {
+            para c em 0..=1 {
                 cel.tela::ponto(c-co, l-lo)
             }
         }
@@ -60,8 +60,8 @@ ser = funcao(w, x, y) {
 }
 
 desenha = funcao(w, m) {
-    para l de 0 até m.nlinhas() - 1 {
-        para c de 0 até m.ncolunas() - 1 {
+    para l em 0..m.nlinhas() {
+        para c em 0..m.ncolunas() {
             estado = se m[l, c] == 0 {
                 :morto
             } senao {
@@ -156,8 +156,8 @@ nova_geracao = função(m) {
     // Se eu mudar a matriz de origem, uma celula vai influenciar a outra
     nm = zeros(tl, tc)
 
-    para i de 0 até m.nlinhas() - 1 {
-        para j de 0 até m.ncolunas() - 1 {
+    para i em 0..m.nlinhas() {
+        para j em 0..m.ncolunas() {
             // Aqui vamos pegar os vizinhos de cada uma das celular da matriz de origem m
             v = m.vizinhos(i, j)
             // e vamos contas a quatidade de vizinhos para aplicar cada uma das regras

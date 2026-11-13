@@ -24,9 +24,6 @@ pub const KEYWORDS: &[&str] = &[
     "funcao",
     "função",
     "para",
-    "de",
-    "ate",
-    "até",
     "em",
     "repita",
     "enquanto",
@@ -431,7 +428,7 @@ pub fn parse_definitions(text: &str) -> Vec<Def> {
         {
             pending_doc.clear();
         }
-        // para x de / para x em
+        // para x em
         let mut rest = line;
         while let Some(i) = rest.find("para") {
             let before_ok = rest[..i].chars().last().is_none_or(|c| !is_ident_char(c));
@@ -445,7 +442,7 @@ pub fn parse_definitions(text: &str) -> Vec<Def> {
             let var = &tail[..end];
             let next = tail[end..].trim_start();
             let kw = next.split(|c: char| !is_ident_char(c)).next().unwrap_or("");
-            if is_ident(var) && (kw == "de" || kw == "em") {
+            if is_ident(var) && kw == "em" {
                 add(Def {
                     name: var.to_string(),
                     kind: DefKind::Value,
@@ -729,7 +726,7 @@ mod tests {
             );
         }
         // And nothing common is missing.
-        for k in ["se", "senão", "até", "função", "se_falhar", "contém"] {
+        for k in ["se", "senão", "em", "função", "se_falhar", "contém"] {
             assert!(KEYWORDS.contains(&k));
         }
     }
@@ -854,7 +851,7 @@ mod tests {
 
     #[test]
     fn definitions() {
-        let src = "soma = funcao(a, b) {\n    total = a + b\n}\nx = 1\nx == 2\npara i de 1 ate 3 {}\nm = importe \"mat\"\n// comentado = 2\nvelocidade_média = função() { 3 }\ns = \"y = 1\"\npara item em lista {}\n";
+        let src = "soma = funcao(a, b) {\n    total = a + b\n}\nx = 1\nx == 2\npara i em 1..=3 {}\nm = importe \"mat\"\n// comentado = 2\nvelocidade_média = função() { 3 }\ns = \"y = 1\"\npara item em lista {}\n";
         let defs = parse_definitions(src);
         let names: Vec<&str> = defs.iter().map(|d| d.name.as_str()).collect();
         assert_eq!(
