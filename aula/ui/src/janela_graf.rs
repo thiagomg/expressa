@@ -128,7 +128,40 @@ impl Painel {
                         2 => "meio",
                         _ => "esquerdo",
                     };
-                    painel.emita(EventoGraf::clique(px, py, botao));
+                    painel.emita(EventoGraf {
+                        janela: id,
+                        ..EventoGraf::clique(px, py, botao)
+                    });
+                });
+            }
+            {
+                let painel = Rc::clone(self);
+                let area_c = area.clone();
+                click.connect_released(move |g, _, x, y| {
+                    let telas = painel.telas.borrow();
+                    let Some(t) = telas.get(&id) else {
+                        return;
+                    };
+                    let lb = letterbox(
+                        area_c.width() as f64,
+                        area_c.height() as f64,
+                        t.largura as f64,
+                        t.altura as f64,
+                    );
+                    let Some((px, py)) = lb.canvas_pixel(x, y, t.largura as f64, t.altura as f64)
+                    else {
+                        return;
+                    };
+                    let botao = match g.current_button() {
+                        3 => "direito",
+                        2 => "meio",
+                        _ => "esquerdo",
+                    };
+                    painel.emita(EventoGraf {
+                        janela: id,
+                        tipo: "solte".into(),
+                        ..EventoGraf::clique(px, py, botao)
+                    });
                 });
             }
             area.add_controller(click);
@@ -136,9 +169,46 @@ impl Painel {
             let keys = EventControllerKey::new();
             {
                 let painel = Rc::clone(self);
-                keys.connect_key_pressed(move |_, key, _, _| {
-                    painel.emita(EventoGraf::tecla(tecla_gdk(key)));
+                keys.connect_key_pressed(move |controller, key, code, _| {
+                    let base = controller
+                        .widget()
+                        .and_then(|w| {
+                            w.display()
+                                .translate_key(code, gtk::gdk::ModifierType::empty(), 0)
+                        })
+                        .map(|(k, _, _, _)| k)
+                        .unwrap_or(key);
+                    let nome = tecla_gdk(base);
+                    if !nome.is_empty() {
+                        painel.emita(EventoGraf {
+                            janela: id,
+                            fisica: code.to_string(),
+                            ..EventoGraf::tecla(nome)
+                        });
+                    }
                     glib::Propagation::Proceed
+                });
+            }
+            {
+                let painel = Rc::clone(self);
+                keys.connect_key_released(move |_, _, code, _| {
+                    painel.emita(EventoGraf {
+                        janela: id,
+                        fisica: code.to_string(),
+                        ..EventoGraf::soltura("")
+                    });
+                });
+            }
+            {
+                let painel = Rc::clone(self);
+                win.connect_is_active_notify(move |w| {
+                    if !w.is_active() {
+                        painel.emita(EventoGraf {
+                            janela: id,
+                            tipo: "desfoco".into(),
+                            ..EventoGraf::nada()
+                        });
+                    }
                 });
             }
             win.add_controller(keys);
@@ -162,7 +232,10 @@ impl Painel {
             {
                 let painel = Rc::clone(self);
                 win.connect_close_request(move |_| {
-                    painel.emita(EventoGraf::sair());
+                    painel.emita(EventoGraf {
+                        janela: id,
+                        ..EventoGraf::sair()
+                    });
                     painel.fechadas.borrow_mut().insert(id);
                     painel.telas.borrow_mut().remove(&id);
                     painel.windows.borrow_mut().remove(&id);
@@ -264,45 +337,102 @@ fn surface_from_tela(tela: &TelaGrafica) -> Option<ImageSurface> {
 }
 
 fn tecla_gdk(key: Key) -> String {
-    if key == Key::Return || key == Key::KP_Enter {
-        return "Enter".into();
+    let name = key.name().map(|s| s.to_string()).unwrap_or_default();
+    let canonical = match name.as_str() {
+        "Return" | "KP_Enter" => "enter",
+        "Escape" => "escape",
+        "space" => "espaco",
+        "Tab" | "ISO_Left_Tab" => "tab",
+        "BackSpace" => "backspace",
+        "Up" | "uparrow" => "cima",
+        "Down" | "downarrow" => "baixo",
+        "Left" | "leftarrow" => "esquerda",
+        "Right" | "rightarrow" => "direita",
+        "Shift_L" | "Shift_R" => "shift",
+        "Control_L" | "Control_R" => "control",
+        "Alt_L" | "Alt_R" | "ISO_Level3_Shift" => "alt",
+        "Super_L" | "Super_R" | "Meta_L" | "Meta_R" => "super",
+        "Home" => "inicio",
+        "End" => "fim",
+        "Page_Up" => "pagina_acima",
+        "Page_Down" => "pagina_abaixo",
+        "Insert" => "insert",
+        "Delete" => "delete",
+        "Menu" => "menu",
+        "Pause" => "pause",
+        "Caps_Lock" => "caps_lock",
+        "Num_Lock" => "num_lock",
+        "Scroll_Lock" => "scroll_lock",
+        "apostrophe" => "apostrofo",
+        "grave" => "crase",
+        "backslash" => "barra_invertida",
+        "comma" => "virgula",
+        "equal" => "igual",
+        "bracketleft" => "colchete_esquerdo",
+        "bracketright" => "colchete_direito",
+        "minus" => "menos",
+        "period" => "ponto",
+        "semicolon" => "ponto_e_virgula",
+        "slash" => "barra",
+        "KP_0" | "KP_Insert" => "numerico_0",
+        "KP_1" | "KP_End" => "numerico_1",
+        "KP_2" | "KP_Down" => "numerico_2",
+        "KP_3" | "KP_Page_Down" => "numerico_3",
+        "KP_4" | "KP_Left" => "numerico_4",
+        "KP_5" | "KP_Begin" => "numerico_5",
+        "KP_6" | "KP_Right" => "numerico_6",
+        "KP_7" | "KP_Home" => "numerico_7",
+        "KP_8" | "KP_Up" => "numerico_8",
+        "KP_9" | "KP_Page_Up" => "numerico_9",
+        "KP_Decimal" | "KP_Delete" | "KP_Separator" => "numerico_ponto",
+        "KP_Divide" => "numerico_barra",
+        "KP_Multiply" => "numerico_asterisco",
+        "KP_Subtract" => "numerico_menos",
+        "KP_Add" => "numerico_mais",
+        _ => "",
+    };
+    if !canonical.is_empty() {
+        return canonical.into();
     }
-    if key == Key::Escape {
-        return "Esc".into();
+    if let Some(c) = key.to_unicode() {
+        if c.is_ascii_digit() {
+            return format!("num_{c}");
+        }
+        if c.is_alphabetic() {
+            return c.to_lowercase().to_string();
+        }
     }
-    if key == Key::space {
-        return " ".into();
+    if name
+        .strip_prefix('F')
+        .is_some_and(|n| n.parse::<u8>().is_ok_and(|n| (1..=15).contains(&n)))
+    {
+        return name.to_lowercase();
     }
-    if key == Key::Tab {
-        return "Tab".into();
-    }
-    if key == Key::BackSpace {
-        return "Backspace".into();
-    }
-    if key == Key::Up || key == Key::uparrow {
-        return "Cima".into();
-    }
-    if key == Key::Down || key == Key::downarrow {
-        return "Baixo".into();
-    }
-    if key == Key::Left || key == Key::leftarrow {
-        return "Esquerda".into();
-    }
-    if key == Key::Right || key == Key::rightarrow {
-        return "Direita".into();
-    }
-    match key.to_unicode() {
-        Some(c) if !c.is_control() => c.to_lowercase().to_string(),
-        _ => key
-            .name()
-            .map(|n| n.as_str().to_string())
-            .unwrap_or_default(),
-    }
+    String::new()
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn canonical_keyboard_names_match_cli() {
+        for (key, name) in [
+            (Key::Right, "direita"),
+            (Key::Left, "esquerda"),
+            (Key::space, "espaco"),
+            (Key::_0, "num_0"),
+            (Key::F12, "f12"),
+            (Key::Alt_R, "alt"),
+            (Key::Control_L, "control"),
+            (Key::Super_R, "super"),
+            (Key::KP_0, "numerico_0"),
+            (Key::A, "a"),
+            (Key::ISO_Level3_Shift, "alt"),
+        ] {
+            assert_eq!(tecla_gdk(key), name);
+        }
+    }
 
     #[test]
     fn rgb24_copies_little_endian_pixels_as_bytes() {

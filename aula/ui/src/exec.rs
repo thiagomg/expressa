@@ -6,11 +6,12 @@ use std::collections::HashMap;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{Receiver, Sender, SyncSender};
+#[cfg(test)]
 use std::time::Duration;
 
 use expressa::runtime::{
-    CartesianoHost, ChannelDebugger, DebugHook, DebugPaused, EventoGraf, FolhaPronta, GrafHost,
-    LeiaHost, StopHook, TelaGrafica, run_with_hosts,
+    CapturaEvento, CartesianoHost, ChannelDebugger, DebugHook, DebugPaused, EstadoEntrada,
+    EventoGraf, FolhaPronta, GrafHost, LeiaHost, StopHook, TelaGrafica, run_with_hosts,
 };
 
 use crate::store::{Expected, Files};
@@ -297,6 +298,7 @@ impl CartesianoHost for ChannelCartesiano {
 struct ChannelGraf {
     tx: SyncSender<ExecEvent>,
     eventos: Receiver<EventoGraf>,
+    estados: HashMap<u64, EstadoEntrada>,
 }
 
 impl GrafHost for ChannelGraf {
@@ -306,23 +308,13 @@ impl GrafHost for ChannelGraf {
             .map_err(|_| "IDE fechada".to_string())
     }
 
-    fn evento(
-        &mut self,
-        _tela: &TelaGrafica,
-        timeout: Option<Duration>,
-    ) -> Result<EventoGraf, String> {
-        match timeout {
-            None => self.eventos.recv().map_err(|_| "IDE fechada".to_string()),
-            Some(d) if d.is_zero() => Ok(self
-                .eventos
-                .try_recv()
-                .unwrap_or_else(|_| EventoGraf::nada())),
-            Some(d) => match self.eventos.recv_timeout(d) {
-                Ok(e) => Ok(e),
-                Err(std::sync::mpsc::RecvTimeoutError::Timeout) => Ok(EventoGraf::nada()),
-                Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => Err("IDE fechada".into()),
-            },
+    fn evento(&mut self, tela: &TelaGrafica) -> Result<CapturaEvento, String> {
+        // Route every transition by window before taking this window's snapshot.
+        while let Ok(e) = self.eventos.try_recv() {
+            let id = if e.janela == 0 { tela.id } else { e.janela };
+            self.estados.entry(id).or_default().registre(e);
         }
+        Ok(self.estados.entry(tela.id).or_default().capture())
     }
 }
 
@@ -479,6 +471,7 @@ pub fn spawn(
         let mut graf = ChannelGraf {
             tx: event_tx.clone(),
             eventos: graf_rx,
+            estados: HashMap::new(),
         };
         let mut out = ChannelOut {
             tx: event_tx.clone(),
@@ -585,6 +578,53 @@ pub fn spawn(
 mod tests {
     use super::*;
     use crate::execution_state::{Event, ExecutionState, Unavailable};
+
+    #[test]
+    fn graphical_capture_routes_windows_and_preserves_held_keys() {
+        let (tx, _rx) = std::sync::mpsc::sync_channel(1);
+        let (eventos_tx, eventos) = std::sync::mpsc::channel();
+        let mut host = ChannelGraf {
+            tx,
+            eventos,
+            estados: HashMap::new(),
+        };
+        let a = TelaGrafica {
+            id: 1,
+            largura: 8,
+            altura: 8,
+            tamanho_pixel: 1,
+            fundo: "branco".into(),
+            ops: vec![],
+        };
+        let b = TelaGrafica { id: 2, ..a.clone() };
+        eventos_tx
+            .send(EventoGraf {
+                janela: 1,
+                ..EventoGraf::tecla("direita")
+            })
+            .unwrap();
+        eventos_tx
+            .send(EventoGraf {
+                janela: 2,
+                ..EventoGraf::tecla("espaco")
+            })
+            .unwrap();
+        assert!(host.evento(&a).unwrap().apertadas.contains("direita"));
+        let ev = host.evento(&b).unwrap();
+        assert!(ev.apertadas.contains("espaco"));
+        assert!(!ev.teclas.contains("direita"));
+        eventos_tx
+            .send(EventoGraf {
+                janela: 1,
+                tipo: "desfoco".into(),
+                ..EventoGraf::nada()
+            })
+            .unwrap();
+        let ev = host.evento(&a).unwrap();
+        assert!(ev.teclas.is_empty());
+        assert!(ev.soltas.contains("direita"));
+        assert!(host.evento(&b).unwrap().teclas.contains("espaco"));
+    }
 
     struct RunProject {
         root: PathBuf,

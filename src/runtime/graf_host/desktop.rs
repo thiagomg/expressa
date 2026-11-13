@@ -1,4 +1,4 @@
-use super::super::graf_proto::{FiguraIntern, Msg, write_msg};
+use super::super::graf_proto::{self, FiguraIntern, Msg, write_msg};
 use super::*;
 use std::collections::{HashMap, HashSet};
 use std::io::BufReader;
@@ -10,6 +10,7 @@ struct Filho {
     child: Option<Child>,
     rx: Receiver<Result<Msg, String>>,
     enviadas: HashSet<u32>,
+    teclas: BTreeSet<String>,
 }
 
 impl Drop for Filho {
@@ -34,6 +35,23 @@ pub struct CliGrafHost {
 impl CliGrafHost {
     fn vivo(filho: &mut Filho) -> bool {
         matches!(filho.child.as_mut().map(|c| c.try_wait()), Some(Ok(None)))
+    }
+
+    fn fim(&mut self, id: u64) -> CapturaEvento {
+        let soltas = self
+            .filhos
+            .remove(&id)
+            .map(|f| f.teclas.clone())
+            .unwrap_or_default();
+        CapturaEvento {
+            sair: true,
+            soltas,
+            eventos: vec![EventoGraf {
+                janela: id,
+                ..EventoGraf::sair()
+            }],
+            ..Default::default()
+        }
     }
 
     fn ensure(&mut self, tela: &TelaGrafica) -> Result<&mut Filho, String> {
@@ -78,11 +96,7 @@ impl GrafHost for CliGrafHost {
         Ok(())
     }
 
-    fn evento(
-        &mut self,
-        tela: &TelaGrafica,
-        timeout: Option<Duration>,
-    ) -> Result<EventoGraf, String> {
+    fn evento(&mut self, tela: &TelaGrafica) -> Result<CapturaEvento, String> {
         let morto = match self.filhos.get_mut(&tela.id) {
             Some(f) => !Self::vivo(f),
             None => {
@@ -91,47 +105,27 @@ impl GrafHost for CliGrafHost {
             }
         };
         if morto {
-            self.filhos.remove(&tela.id);
-            return Ok(EventoGraf::sair());
+            return Ok(self.fim(tela.id));
         }
-        let timeout_ms = match timeout {
-            None => -1,
-            Some(d) => i32::try_from(d.as_millis().min(i32::MAX as u128)).unwrap_or(i32::MAX),
-        };
         let filho = self.filhos.get_mut(&tela.id).unwrap();
         let stdin = filho
             .stdin
             .as_mut()
             .ok_or_else(|| "visor sem stdin".to_string())?;
-        if write_msg(
-            stdin,
-            &Msg::Espere {
-                id: tela.id,
-                timeout_ms,
-            },
-        )
-        .is_err()
-        {
-            self.filhos.remove(&tela.id);
-            return Ok(EventoGraf::sair());
+        if write_msg(stdin, &Msg::Espere { id: tela.id }).is_err() {
+            return Ok(self.fim(tela.id));
         }
-        let wait = match timeout {
-            None => Duration::from_secs(3600),
-            Some(d) => d.saturating_add(Duration::from_millis(400)),
-        };
-        match filho.rx.recv_timeout(wait) {
-            Ok(Ok(Msg::Evento {
-                tipo,
-                x,
-                y,
-                botao,
-                tecla,
-                ..
-            })) => Ok(EventoGraf::from_msg(tipo, x, y, botao, tecla)),
-            Ok(Ok(_)) => Ok(EventoGraf::nada()),
-            Ok(Err(_)) => Ok(EventoGraf::sair()),
-            Err(mpsc::RecvTimeoutError::Timeout) => Ok(EventoGraf::nada()),
-            Err(mpsc::RecvTimeoutError::Disconnected) => Ok(EventoGraf::sair()),
+        // Wait only for transport, never for user input. The viewer answers each capture.
+        match filho.rx.recv_timeout(std::time::Duration::from_millis(400)) {
+            Ok(Ok(Msg::Evento { id, captura })) if id == tela.id => {
+                filho.teclas = captura.teclas.clone();
+                Ok(captura)
+            }
+            Ok(Ok(_)) => Err("resposta gráfica inesperada".into()),
+            Ok(Err(_)) | Err(mpsc::RecvTimeoutError::Disconnected) => Ok(self.fim(tela.id)),
+            Err(mpsc::RecvTimeoutError::Timeout) => {
+                Err("visor não respondeu à captura de eventos".into())
+            }
         }
     }
 }
@@ -179,6 +173,7 @@ fn spawn_live() -> Result<Filho, String> {
         child: Some(child),
         rx,
         enviadas: HashSet::new(),
+        teclas: BTreeSet::new(),
     })
 }
 
