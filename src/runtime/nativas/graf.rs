@@ -399,7 +399,7 @@ pub(crate) fn is_graf(v: &Value) -> bool {
     tem_chave(xs, "largura") && tem_chave(xs, "altura") && tem_chave(xs, "ops")
 }
 
-fn expect_graf(v: &Value, span: Span, vm: &Vm<'_, '_>) -> Result<MapaRc, EvalError> {
+pub(super) fn expect_graf(v: &Value, span: Span, vm: &Vm<'_, '_>) -> Result<MapaRc, EvalError> {
     match v {
         Value::Mapa(xs) if is_graf(v) => Ok(Rc::clone(xs)),
         Value::Mapa(_) => Err(vm.err("não é uma tela gráfica (tela_grafica::nova())", span)),

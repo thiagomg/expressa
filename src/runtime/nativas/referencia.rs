@@ -71,14 +71,15 @@ pub fn builtin_docs() -> &'static [BuiltinDoc] {
 }
 
 pub fn lookup_builtin_doc(name: &str) -> Option<&'static BuiltinDoc> {
-    let canon = NATIVAS
-        .iter()
-        .find(|n| n.names.contains(&name))
-        .map(|n| n.names[0])
-        .unwrap_or(name);
-    builtin_docs()
-        .iter()
-        .find(|d| d.name == canon || d.name == name)
+    if name.contains("::") {
+        return lookup_alvo(name);
+    }
+    if let Some(nativa) = NATIVAS.iter().find(|n| n.names.contains(&name)) {
+        return builtin_docs()
+            .iter()
+            .find(|d| d.name == nativa.names[0] && d.module.as_deref() == nativa.module);
+    }
+    builtin_docs().iter().find(|d| d.name == name)
 }
 
 /// `escreva`, `matriz::zeros`, aliases.

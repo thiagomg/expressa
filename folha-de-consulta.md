@@ -296,6 +296,17 @@ escreva(g.tela_grafica::pixel(10, 10))
 ```
 
 ```text
+l = g.tela_grafica::laço_grafico()
+config = mapa([
+    :fps -> 30,
+    :eventos -> eventos, // função(ev, dt): entrada e movimento; dt em segundos
+    :desenho -> desenhe, // função(g): o laço apaga antes e apresenta depois
+])
+l.tela_grafica::execute(config) // inicia e espera terminar
+// Dentro de um callback: l.tela_grafica::pare()
+```
+
+```text
 importe "processo"               // só na linha de comando
 r = execute("ls", [filtro, ".txt"], ["wc", "-l"])   // filtro(linha, ".txt")
 r:saida  r:erro  r:codigo  r:ok  // linhas, linhas, número, bool

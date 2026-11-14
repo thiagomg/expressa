@@ -835,6 +835,11 @@ impl<'a> Parser<'a> {
                 field,
                 span: start.join(field_tok.span),
             }),
+            TokenKind::Pare => Ok(Expr::Field {
+                object: Box::new(object),
+                field: "pare".into(),
+                span: start.join(field_tok.span),
+            }),
             _ => Err(self.err_at("esperado nome após '::'", field_tok.span)),
         }
     }
@@ -859,8 +864,10 @@ impl<'a> Parser<'a> {
         let start = object.span();
         self.remove(); // .
         let field_tok = self.remove();
-        let TokenKind::Ident(name) = field_tok.kind else {
-            return Err(self.err_at("esperado nome de função após '.'", field_tok.span));
+        let name = match field_tok.kind {
+            TokenKind::Ident(name) => name,
+            TokenKind::Pare => "pare".into(),
+            _ => return Err(self.err_at("esperado nome de função após '.'", field_tok.span)),
         };
         let mut callee = Expr::Ident {
             name,

@@ -1,3 +1,6 @@
+#[cfg(feature = "graphics")]
+mod laco_grafico;
+
 use super::*;
 use crate::runtime::debug::DebugAction;
 

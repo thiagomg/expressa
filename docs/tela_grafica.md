@@ -4,7 +4,65 @@ A VM Expressa monta uma `TelaGrafica` e conversa com um host. O CLI usa
 `expressa-grafico --ao-vivo`; a Aula usa janelas GTK. `mostre()` apresenta
 sem esperar interação. `salve`, `pixel` e `como_imagem` rasterizam na VM.
 
-## API
+## Laço gráfico
+
+Para animações e jogos 2D, o laço controla entrada, atualização, desenho e espera:
+
+```expressa
+tela_grafica = importe "tela_grafica"
+g = tela_grafica::nova(160, 144, 4)
+l = g.tela_grafica::laço_grafico()
+personagem = mapa([:x -> 20])
+
+eventos = função(ev, dt) {
+    se ev:teclas contem :direita { personagem:x += 60 * dt }
+    se ev:apertadas contem :escape { l.tela_grafica::pare() }
+}
+
+desenhe = função(tela) {
+    tela.tela_grafica::retangulo(personagem:x, 80, personagem:x + 8, 88)
+}
+
+config = mapa([
+    :fps -> 30,
+    :eventos -> eventos,
+    :desenho -> desenhe,
+])
+l.tela_grafica::execute(config)
+```
+
+`laço_grafico()` (também `laco_grafico()`) cria o recurso sem abrir janela.
+`execute(config)` valida as três opções obrigatórias e inicia a execução,
+bloqueando até o encerramento. Opções desconhecidas dão erro. O `execute` deste
+módulo é independente de `processo::execute`.
+
+A cada quadro, captura a entrada e chama `eventos(ev, dt)`, mesmo sem novos
+acontecimentos. `ev` tem exatamente os campos descritos abaixo para `evento()`.
+`dt` mede o tempo real entre chamadas, em segundos, com relógio monotônico;
+na primeira chamada é zero. Use velocidade em pixels por segundo multiplicada
+por `dt`. Depois o laço apaga o desenho, chama `desenhe(g)` e apresenta o quadro.
+Não é necessário chamar `evento()`, `apague()`, `mostre()` ou `durma()` nos callbacks.
+Os mapas compartilhados, como `personagem`, permitem que ambos os callbacks
+acessem o estado do programa sem alterar variáveis externas à função.
+
+O tempo gasto na captura, nos callbacks e na apresentação é descontado da
+espera até o próximo quadro. Um quadro lento não cria uma fila de atualizações
+para recuperar o atraso: o próximo começa sem espera, com o tempo real em `dt`.
+`:fps` é uma frequência desejada; o programa e o visor podem limitar o resultado.
+A configuração é capturada ao iniciar, não é relida a cada quadro.
+
+Fechar a janela entrega uma última chamada com `ev:sair` verdadeiro e termina
+sem desenhar outro quadro. `l.tela_grafica::pare()` solicita terminar depois do
+callback atual, sem apresentar outro quadro e sem fechar a janela. Também são
+aceitos `pare_laco()` e `pare_laço()`. Erros dos callbacks são propagados; o
+botão Parar da Aula e os limites de tempo continuam funcionando durante a espera.
+
+`execute()` devolve o laço. É possível executá-lo novamente após terminar,
+inclusive após tratar uma falha com `se_falhar`. Um laço não pode ser clonado;
+somente um laço pode estar ativo por tela. `g.evento()` continua disponível
+para programas que controlam seu próprio ciclo.
+
+## Captura manual de eventos
 
 ```expressa
 tela_grafica = importe "tela_grafica"
@@ -115,6 +173,10 @@ Um filho por tela no CLI; na Aula, eventos de cada janela viajam com seu id
 por um canal para a thread da VM. Os hosts usam o mesmo acumulador de estado.
 O CLI captura as transições de teclado por callback do minifb, preservando
 pressionamentos e solturas que chegam na mesma atualização da janela.
+O visor consulta a entrada independentemente da renderização: pausa de 2 ms
+entre ciclos e apresentação a até 60 quadros por segundo, reutilizando
+os pixels enquanto o desenho não muda. Cada ciclo processa no máximo 64
+mensagens da VM antes de atender o teclado e o mouse, evitando que uma sequência de quadros adie a soltura.
 
 Mensagens com prefixo de tamanho (`u32` little-endian + payload), limite
 32 MiB. O pipe é do processo gráfico e não interfere em `leia`.

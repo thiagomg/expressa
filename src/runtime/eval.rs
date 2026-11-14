@@ -102,6 +102,8 @@ pub(crate) struct Vm<'a, 'c> {
     #[cfg(feature = "graphics")]
     pub(crate) cli_graf: CliGrafHost,
     #[cfg(feature = "graphics")]
+    pub(crate) lacos_graficos: HashMap<usize, Rc<nativas::LacoGrafico>>,
+    #[cfg(feature = "graphics")]
     pub(crate) abrir_cartesiano: bool,
     pub(crate) numero_locale: NumeroLocale,
     pub(crate) numero_aritmetica: NumeroAritmetica,
@@ -625,6 +627,8 @@ impl<'a, 'c> Vm<'a, 'c> {
             graf_host,
             #[cfg(feature = "graphics")]
             cli_graf: CliGrafHost::default(),
+            #[cfg(feature = "graphics")]
+            lacos_graficos: HashMap::new(),
             #[cfg(feature = "graphics")]
             abrir_cartesiano,
             numero_locale: default_numero_locale(),

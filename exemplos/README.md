@@ -76,7 +76,7 @@ Tela de pixels (`importe "tela_grafica"`). Rode no terminal ou no Aula (F5): abr
 | `casa.lep` | casinha e sol (`cor`, `linha`, `circulo`, `mat::seno`) |
 | `clique.lep` | `evento`: clique desenha círculo |
 | `gira.lep` | figura andando e girando (`evento()`) |
-| `movimento.lep` | setas simultâneas, Shift para acelerar e espaço para trocar a cor |
+| `movimento.lep` | laço gráfico a 30 FPS, movimento por tempo, setas simultâneas, Shift e espaço |
 | `sprite.lep` | telinha com `fundo(:transparente)` carimbada na janela |
 
 ### `jogos/`

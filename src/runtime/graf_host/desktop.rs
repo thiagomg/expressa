@@ -80,7 +80,12 @@ impl CliGrafHost {
 impl GrafHost for CliGrafHost {
     fn mostre(&mut self, tela: TelaGrafica) -> Result<(), String> {
         let id = tela.id;
-        if self.filhos.get_mut(&id).map(Self::vivo).unwrap_or(false) {
+        if let Some(filho) = self.filhos.get_mut(&id) {
+            // Preserve a close that happened during the drawing callback.
+            // evento() must deliver :sair before any subsequent frame reopens it.
+            if !Self::vivo(filho) {
+                return Ok(());
+            }
             let intern = &mut self.intern;
             let filho = self.filhos.get_mut(&id).unwrap();
             for msg in graf_proto::mensagens_de(&tela, intern, &mut filho.enviadas, false) {
@@ -88,7 +93,11 @@ impl GrafHost for CliGrafHost {
                     .stdin
                     .as_mut()
                     .ok_or_else(|| "visor sem stdin".to_string())?;
-                write_msg(stdin, &msg).map_err(|e| format!("não falou com o visor: {e}"))?;
+                if write_msg(stdin, &msg).is_err() {
+                    // The viewer may close between try_wait and this write.
+                    // Let the next capture report its exit normally.
+                    return Ok(());
+                }
             }
             return Ok(());
         }
@@ -184,4 +193,40 @@ fn live_command() -> Result<Command, String> {
     let mut cmd = Command::new(exe);
     cmd.arg("--ao-vivo");
     Ok(cmd)
+}
+
+#[cfg(test)]
+mod loop_tests {
+    use super::*;
+
+    #[test]
+    fn presenting_after_close_keeps_exit_pending_instead_of_reopening() {
+        let (_tx, rx) = mpsc::channel();
+        let mut host = CliGrafHost::default();
+        host.filhos.insert(
+            1,
+            Filho {
+                stdin: None,
+                child: None,
+                rx,
+                enviadas: HashSet::new(),
+                teclas: BTreeSet::from(["direita".into()]),
+            },
+        );
+        let tela = TelaGrafica {
+            id: 1,
+            largura: 8,
+            altura: 8,
+            tamanho_pixel: 1,
+            fundo: "branco".into(),
+            ops: vec![],
+        };
+        host.mostre(tela.clone()).unwrap();
+        assert!(host.filhos.contains_key(&1));
+        let ev = host.evento(&tela).unwrap();
+        assert!(ev.sair);
+        assert!(ev.teclas.is_empty());
+        assert!(ev.soltas.contains("direita"));
+        assert!(!host.filhos.contains_key(&1));
+    }
 }

@@ -1468,6 +1468,44 @@
       "doc": "Abre ou atualiza a janela desta tela. Não espera fechar.\n\nO primeiro mostre abre; os seguintes só atualizam a mesma janela.\nCada nova() é uma janela. Não acopla na IDE.\n\nExemplo: g.mostre()"
     },
     {
+      "name": "laco_grafico",
+      "aliases": [
+        "laço_grafico"
+      ],
+      "module": "tela_grafica",
+      "kind": "funcao",
+      "signatures": [
+        "laco_grafico(g)"
+      ],
+      "summary": "Cria um laço associado à tela, sem abrir janela nem iniciar a execução. Também laço_grafico(). O recurso não pode ser clonado; pode ser executado novamente depois de terminar. Cada tela admite somente um laço ativo.",
+      "doc": "Cria um laço associado à tela, sem abrir janela nem iniciar a execução.\nTambém laço_grafico(). O recurso não pode ser clonado; pode ser executado\nnovamente depois de terminar. Cada tela admite somente um laço ativo.\n\nExemplo: l = g.tela_grafica::laço_grafico()"
+    },
+    {
+      "name": "execute",
+      "aliases": [],
+      "module": "tela_grafica",
+      "kind": "funcao",
+      "signatures": [
+        "execute(l, config)"
+      ],
+      "summary": "Inicia o laço e espera seu encerramento. config é um mapa com as três opções obrigatórias :fps, :eventos e :desenho. Outras opções dão erro. :fps deve ser um número positivo e finito com período representável. :eventos é função(ev, dt); :desenho é função(g). A configuração é capturada no início da execução; alterá-la depois não muda o laço ativo.",
+      "doc": "Inicia o laço e espera seu encerramento. config é um mapa com as três\nopções obrigatórias :fps, :eventos e :desenho. Outras opções dão erro.\n:fps deve ser um número positivo e finito com período representável.\n:eventos é função(ev, dt); :desenho é função(g). A configuração é\ncapturada no início da execução; alterá-la depois não muda o laço ativo.\n\nA cada quadro: captura a entrada, chama eventos(ev, dt), apaga o desenho,\nchama desenho(g) e apresenta. Usa o mesmo mapa de evento(): :teclas,\n:apertadas, :soltas, :eventos e :sair. eventos é chamada mesmo sem novos\nacontecimentos. Não chame evento(), mostre() ou durma() nos callbacks.\n\ndt é o tempo real em segundos entre chamadas de eventos, medido por\nrelógio monotônico; na primeira chamada é 0. Movimento: x += 90 * dt.\nO tempo dos callbacks e da apresentação é descontado da espera até o\npróximo quadro. Se um quadro demora demais, o seguinte começa sem espera;\nnão há uma fila de atualizações para recuperar o atraso. A frequência\ndesejada depende da capacidade do programa e do visor.\n\nFechar a janela entrega uma última chamada de eventos com ev:sair\nverdadeiro e termina sem chamar desenho. l.tela_grafica::pare() termina\ndepois do callback atual, sem apresentar outro quadro. Erros nos callbacks\nsão propagados. O botão Parar e o limite de tempo continuam funcionando.\nDevolve o próprio laço; ele pode ser executado novamente após terminar.\n\nExemplo: l.tela_grafica::execute(mapa([:fps -> 30, :eventos -> eventos, :desenho -> desenhe]))"
+    },
+    {
+      "name": "pare_laco",
+      "aliases": [
+        "pare_laço",
+        "pare"
+      ],
+      "module": "tela_grafica",
+      "kind": "funcao",
+      "signatures": [
+        "pare_laco(l)"
+      ],
+      "summary": "Solicita encerrar o laço depois do callback atual. Não fecha a janela. Use l.tela_grafica::pare(); pare_laco() e pare_laço() são equivalentes. Fora da execução não faz nada; execute() inicia uma nova execução.",
+      "doc": "Solicita encerrar o laço depois do callback atual. Não fecha a janela.\nUse l.tela_grafica::pare(); pare_laco() e pare_laço() são equivalentes.\nFora da execução não faz nada; execute() inicia uma nova execução.\n\nExemplo: se ev:apertadas contem :escape { l.tela_grafica::pare() }"
+    },
+    {
       "name": "evento",
       "aliases": [],
       "module": "tela_grafica",
