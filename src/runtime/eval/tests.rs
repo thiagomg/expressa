@@ -1,3 +1,8 @@
+#[cfg(feature = "graphics")]
+mod jogos_2d;
+#[cfg(feature = "graphics")]
+mod laco_grafico;
+
 use super::*;
 use crate::runtime::debug::DebugAction;
 

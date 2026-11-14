@@ -266,6 +266,13 @@ pub(crate) fn iniciar_execucao(
     // Taken when the run ends, to send back what the program wrote.
     let mut ws = Some(ws);
     glib::timeout_add_local(std::time::Duration::from_millis(16), move || {
+        let mut have_frames = false;
+        let show_frames = || {
+            let frames = run.quadros_graf.lock().unwrap().retire();
+            for tela in frames {
+                telas_graf.mostrar(tela);
+            }
+        };
         for _ in 0..EVENTS_PER_TICK {
             match run.events.try_recv() {
                 Ok(ExecEvent::Stdout(s)) => console.stdout(&s),
@@ -324,10 +331,9 @@ pub(crate) fn iniciar_execucao(
                 Ok(ExecEvent::Folha(folha)) => {
                     graficos.mostrar(folha);
                 }
-                Ok(ExecEvent::TelaGraf(tela)) => {
-                    telas_graf.mostrar(tela);
-                }
+                Ok(ExecEvent::TelaGraf) => have_frames = true,
                 Ok(ExecEvent::Finished(f)) => {
+                    show_frames();
                     console.cancel_input();
                     telas_graf.set_eventos(None);
                     set_debug_buttons(&ui_ev, false, false);
@@ -391,6 +397,7 @@ pub(crate) fn iniciar_execucao(
                 }
                 Err(std::sync::mpsc::TryRecvError::Empty) => break,
                 Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                    show_frames();
                     // The run thread ended without `Finished`: clean up the
                     // same way, and say it instead of stopping silently.
                     console.cancel_input();
@@ -410,6 +417,10 @@ pub(crate) fn iniciar_execucao(
                     return glib::ControlFlow::Break;
                 }
             }
+        }
+        // Paint at most once per GTK tick, even if the producer is faster.
+        if have_frames {
+            show_frames();
         }
         glib::ControlFlow::Continue
     });

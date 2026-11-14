@@ -212,9 +212,10 @@ enquanto verdadeiro {
     w.desenha(m)
     w.tela::mostre()
     
-    ev = w.tela::evento(0.05)
-    se ev:tipo == :sair { pare }
-    se ev:tipo == :tecla e ev:tecla == "q" { pare }
+    ev = w.tela::evento()
+    se ev:sair { pare }
+    se ev:apertadas contem :q { pare }
+    durma(0.05)
 }
 
 w.tela::mostre()

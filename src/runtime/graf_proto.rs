@@ -6,14 +6,15 @@ use std::io::{self, Read, Write};
 
 use super::graf::OpGraf;
 use super::graf::{TelaGrafica, cor_graf_conhecida};
+use super::graf_host::{CapturaEvento, EventoGraf};
 use super::imagem::Imagem;
+use std::collections::BTreeSet;
 
 pub const MAX_PAYLOAD: u32 = 32 * 1024 * 1024;
 
 const ABRA: u8 = 1;
 const CARREGUE: u8 = 2;
 const MOSTRE: u8 = 3;
-const ESPERE: u8 = 4;
 const EVENTO: u8 = 5;
 
 const OP_PONTO: u8 = 1;
@@ -22,22 +23,6 @@ const OP_CIRCULO: u8 = 3;
 const OP_IMAGEM: u8 = 4;
 const OP_TEXTO: u8 = 5;
 const OP_RETANGULO: u8 = 6;
-
-pub const TIPO_NADA: u8 = 0;
-pub const TIPO_CLIQUE: u8 = 1;
-pub const TIPO_SOLTE: u8 = 2;
-#[allow(dead_code)]
-pub const TIPO_MOVA: u8 = 3;
-pub const TIPO_TECLA: u8 = 4;
-pub const TIPO_SAIR: u8 = 5;
-
-#[allow(dead_code)]
-pub const BOTAO_NENHUM: u8 = 0;
-pub const BOTAO_ESQUERDO: u8 = 1;
-#[allow(dead_code)]
-pub const BOTAO_DIREITO: u8 = 2;
-#[allow(dead_code)]
-pub const BOTAO_MEIO: u8 = 3;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Msg {
@@ -58,17 +43,9 @@ pub enum Msg {
         id: u64,
         ops: Vec<OpMsg>,
     },
-    Espere {
-        id: u64,
-        timeout_ms: i32,
-    },
     Evento {
         id: u64,
-        tipo: u8,
-        x: i32,
-        y: i32,
-        botao: u8,
-        tecla: String,
+        captura: CapturaEvento,
     },
 }
 
@@ -404,26 +381,24 @@ fn encode(buf: &mut Vec<u8>, msg: &Msg) {
                 encode_op(buf, op);
             }
         }
-        Msg::Espere { id, timeout_ms } => {
-            buf.push(ESPERE);
-            put_u64(buf, *id);
-            put_i32(buf, *timeout_ms);
-        }
-        Msg::Evento {
-            id,
-            tipo,
-            x,
-            y,
-            botao,
-            tecla,
-        } => {
+        Msg::Evento { id, captura } => {
             buf.push(EVENTO);
             put_u64(buf, *id);
-            buf.push(*tipo);
-            put_i32(buf, *x);
-            put_i32(buf, *y);
-            buf.push(*botao);
-            put_str(buf, tecla);
+            put_teclas(buf, &captura.teclas);
+            put_teclas(buf, &captura.apertadas);
+            put_teclas(buf, &captura.soltas);
+            buf.push(u8::from(captura.sair));
+            put_u32(buf, captura.eventos.len() as u32);
+            for e in &captura.eventos {
+                put_str(buf, &e.tipo);
+                put_i32(buf, e.x);
+                put_i32(buf, e.y);
+                put_str(buf, &e.botao);
+                put_str(buf, &e.tecla);
+                put_str(buf, &e.fisica);
+                put_teclas(buf, &e.modificadores);
+                buf.push(u8::from(e.repeticao));
+            }
         }
     }
 }
@@ -533,18 +508,43 @@ fn decode(p: &[u8]) -> Option<Msg> {
             }
             Some(Msg::Mostre { id, ops })
         }
-        ESPERE => Some(Msg::Espere {
-            id: get_u64(p, &mut i)?,
-            timeout_ms: get_i32(p, &mut i)?,
-        }),
-        EVENTO => Some(Msg::Evento {
-            id: get_u64(p, &mut i)?,
-            tipo: get_u8(p, &mut i)?,
-            x: get_i32(p, &mut i)?,
-            y: get_i32(p, &mut i)?,
-            botao: get_u8(p, &mut i)?,
-            tecla: get_str(p, &mut i)?,
-        }),
+        EVENTO => {
+            let id = get_u64(p, &mut i)?;
+            let teclas = get_teclas(p, &mut i)?;
+            let apertadas = get_teclas(p, &mut i)?;
+            let soltas = get_teclas(p, &mut i)?;
+            let sair = get_u8(p, &mut i)? != 0;
+            let n = get_u32(p, &mut i)? as usize;
+            // Every event occupies at least 21 bytes; do not allocate from an unchecked count.
+            if n > p.len().saturating_sub(i) / 21 {
+                return None;
+            }
+            let mut eventos = Vec::new();
+            for _ in 0..n {
+                eventos.push(EventoGraf {
+                    janela: id,
+                    tipo: get_str(p, &mut i)?,
+                    x: get_i32(p, &mut i)?,
+                    y: get_i32(p, &mut i)?,
+                    botao: get_str(p, &mut i)?,
+                    tecla: get_str(p, &mut i)?,
+                    fisica: get_str(p, &mut i)?,
+                    modificadores: get_teclas(p, &mut i)?,
+                    repeticao: get_u8(p, &mut i)? != 0,
+                    ..EventoGraf::nada()
+                });
+            }
+            Some(Msg::Evento {
+                id,
+                captura: CapturaEvento {
+                    teclas,
+                    apertadas,
+                    soltas,
+                    sair,
+                    eventos,
+                },
+            })
+        }
         _ => None,
     }
 }
@@ -602,6 +602,20 @@ fn decode_op(p: &[u8], i: &mut usize) -> Option<OpMsg> {
         }),
         _ => None,
     }
+}
+
+fn put_teclas(buf: &mut Vec<u8>, teclas: &BTreeSet<String>) {
+    put_u32(buf, teclas.len() as u32);
+    for tecla in teclas {
+        put_str(buf, tecla);
+    }
+}
+fn get_teclas(p: &[u8], i: &mut usize) -> Option<BTreeSet<String>> {
+    let n = get_u32(p, i)? as usize;
+    if n > p.len().saturating_sub(*i) / 2 {
+        return None;
+    }
+    (0..n).map(|_| get_str(p, i)).collect()
 }
 
 fn put_u32(buf: &mut Vec<u8>, v: u32) {
@@ -686,17 +700,19 @@ mod tests {
             tamanho_pixel: 2,
             fundo: "branco".into(),
         });
-        roundtrip(&Msg::Espere {
-            id: 9,
-            timeout_ms: 50,
-        });
         roundtrip(&Msg::Evento {
             id: 9,
-            tipo: TIPO_CLIQUE,
-            x: 10,
-            y: 20,
-            botao: BOTAO_ESQUERDO,
-            tecla: String::new(),
+            captura: CapturaEvento {
+                teclas: BTreeSet::from(["direita".into(), "control".into()]),
+                apertadas: BTreeSet::from(["direita".into()]),
+                soltas: BTreeSet::from(["espaco".into()]),
+                eventos: vec![EventoGraf {
+                    janela: 9,
+                    modificadores: BTreeSet::from(["control".into()]),
+                    ..EventoGraf::clique(10, 20, "esquerdo")
+                }],
+                sair: true,
+            },
         });
         roundtrip(&Msg::Mostre {
             id: 1,

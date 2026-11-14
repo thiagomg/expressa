@@ -1,0 +1,32 @@
+/// Segure as setas para mover. Shift acelera; espaço troca a cor. Esc sai.
+tela_grafica = importe "tela_grafica"
+g = tela_grafica::nova(160, 144, 4)
+l = g.tela_grafica::laço_grafico()
+personagem = mapa([:x -> 76, :y -> 68, :azul -> verdadeiro])
+
+eventos = função(ev, dt) {
+    se ev:apertadas contem :escape { l.tela_grafica::pare() }
+    velocidade = se ev:teclas contem :shift { 180 } senao { 60 }
+    passo = velocidade * dt
+    se ev:teclas contem :esquerda { personagem:x -= passo }
+    se ev:teclas contem :direita { personagem:x += passo }
+    se ev:teclas contem :cima { personagem:y -= passo }
+    se ev:teclas contem :baixo { personagem:y += passo }
+    se ev:apertadas contem :espaco { personagem:azul = nao personagem:azul }
+    se personagem:x < 0 { personagem:x = 0 }
+    se personagem:x > 151 { personagem:x = 151 }
+    se personagem:y < 0 { personagem:y = 0 }
+    se personagem:y > 135 { personagem:y = 135 }
+}
+
+desenhe = função(tela) {
+    tela.tela_grafica::cor(se personagem:azul { :azul } senao { :vermelho })
+    tela.tela_grafica::retangulo(personagem:x, personagem:y, personagem:x + 8, personagem:y + 8)
+}
+
+config = mapa([
+    :fps -> 30,
+    :eventos -> eventos,
+    :desenho -> desenhe,
+])
+l.tela_grafica::execute(config)

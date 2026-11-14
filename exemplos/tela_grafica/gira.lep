@@ -46,9 +46,10 @@ inicio
     g.espaco(estrelas)
     g.tela_grafica::imagem(nave, x, y, angulo)
     g.tela_grafica::mostre()
-    ev = g.tela_grafica::evento(0.05)
-    se ev:tipo == :sair { pare }
-    se ev:tipo == :tecla e ev:tecla == "q" { pare }
+    ev = g.tela_grafica::evento()
+    se ev:sair { pare }
+    se ev:apertadas contem :q { pare }
+    durma(0.05)
     angulo += 6
     x += 2
     se x > 300 { x = 20 }

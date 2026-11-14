@@ -315,6 +315,7 @@ fn cada_pixel_do_carimbo(
 
 /// Stamp `sprite` centered on `(cx, cy)`. `angulo` is degrees clockwise;
 /// 0 keeps the top of the image pointing up.
+#[cfg(all(test, feature = "graphics"))]
 pub fn carimbar(buf: &mut [u32], w: u32, h: u32, cx: i32, cy: i32, angulo: f64, sprite: &Imagem) {
     cada_pixel_do_carimbo(cx, cy, angulo, sprite, |dx, dy, i| {
         if dx < 0 || dy < 0 || dx as u32 >= w || dy as u32 >= h {
@@ -339,7 +340,7 @@ pub fn carimbar(buf: &mut [u32], w: u32, h: u32, cx: i32, cy: i32, angulo: f64, 
     });
 }
 
-/// Same stamp as [`carimbar`], onto packed RGBA (`4` bytes per pixel).
+/// Stamp onto packed RGBA (`4` bytes per pixel), preserving command order.
 pub fn carimbar_rgba(
     buf: &mut [u8],
     w: u32,

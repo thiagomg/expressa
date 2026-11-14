@@ -19,6 +19,7 @@ mod numero;
 mod pilha;
 #[cfg(feature = "process")]
 mod processo;
+mod quadros;
 #[cfg(feature = "terminal")]
 mod repl;
 mod rng;
@@ -27,6 +28,10 @@ mod terminal;
 mod value;
 #[cfg(feature = "graphics")]
 mod viewer;
+#[cfg(feature = "graphics")]
+mod viewer_inbox;
+#[cfg(feature = "graphics")]
+mod viewer_live;
 
 #[cfg(feature = "graphics")]
 pub use cartesiano_host::CliCartesianoHost;
@@ -48,7 +53,7 @@ pub use eval::{
 };
 pub use folha::{CurvaPronta, FolhaPronta, GraficoPronto, pintar};
 pub use graf::{OpGraf, TelaGrafica, cor_tela_rgb32};
-pub use graf_host::{CapturaGraf, EventoGraf, GrafHost, NullGraf};
+pub use graf_host::{CapturaEvento, CapturaGraf, EstadoEntrada, EventoGraf, GrafHost, NullGraf};
 pub use imagem::Imagem;
 pub use leia::{CLEAR_SCREEN, CURSOR_HOME, LEIA_MARKER, LeiaHost};
 pub use letterbox::{Letterbox, blit_letterbox, letterbox};
@@ -84,3 +89,5 @@ mod tests {
         assert_eq!(err.file, "t.lep");
     }
 }
+
+pub use quadros::QuadrosPendentes;

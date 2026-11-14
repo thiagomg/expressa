@@ -75,15 +75,22 @@ Tela de pixels (`importe "tela_grafica"`). Rode no terminal ou no Aula (F5): abr
 | `texto.lep` | `texto` na caneta (acento, tamanho 16) |
 | `casa.lep` | casinha e sol (`cor`, `linha`, `circulo`, `mat::seno`) |
 | `clique.lep` | `evento`: clique desenha círculo |
-| `gira.lep` | figura andando e girando (`evento(0.05)`) |
+| `gira.lep` | figura andando e girando (`evento()`) |
+| `movimento.lep` | laço gráfico a 30 FPS, movimento por tempo, setas simultâneas, Shift e espaço |
 | `sprite.lep` | telinha com `fundo(:transparente)` carimbada na janela |
 
 ### `jogos/`
+
+`explorador.lep` é um exemplo gráfico completo. Setas movem, Shift corre,
+R reinicia e Esc termina. Colete os três cristais; `--validar` executa o
+roteiro automático e `--30fps` permite comparar com os 60 FPS padrão.
+O mapa, a simulação e o roteiro ficam em `jogos/explorador/`.
 
 | Arquivo | O que mostra |
 |---------|----------------|
 | `adivinhe_o_numero.lep` | adivinhe o número |
 | `conway_jogo_da_vida.lep` | Jogo da Vida |
+| `explorador.lep` | sprites animados, mapa, câmera, colisão e validação automática |
 | `forca.lep` | Forca |
 | `termo.lep` | Termo |
 | `tartaruga_quadrado.lep` | Logo: `ande` + `vire(90)` (`importe "../lib/tartaruga"`) |

@@ -18,6 +18,10 @@ mod crono;
 mod graf;
 #[cfg(feature = "graphics")]
 mod imagem;
+#[cfg(feature = "graphics")]
+mod laco_grafico;
+#[cfg(feature = "graphics")]
+pub(crate) use laco_grafico::LacoGrafico;
 mod mat;
 mod matriz;
 mod nucleo;
@@ -568,6 +572,21 @@ pub const NATIVAS: &[Nativa] = &[
     },
     #[cfg(feature = "graphics")]
     Nativa {
+        names: &["laco_grafico", "laço_grafico"],
+        module: Some("tela_grafica"),
+    },
+    #[cfg(feature = "graphics")]
+    Nativa {
+        names: &["execute"],
+        module: Some("tela_grafica"),
+    },
+    #[cfg(feature = "graphics")]
+    Nativa {
+        names: &["pare_laco", "pare_laço", "pare"],
+        module: Some("tela_grafica"),
+    },
+    #[cfg(feature = "graphics")]
+    Nativa {
         names: &["evento"],
         module: Some("tela_grafica"),
     },
@@ -631,7 +650,10 @@ pub fn make_native_modules() -> HashMap<String, Rc<RefCell<Env>>> {
         let env = map
             .entry(mod_name.to_string())
             .or_insert_with(|| Env::new(FrameKind::Module, None));
-        let canon = n.names[0];
+        let canon = match (mod_name, n.names[0]) {
+            ("tela_grafica", "execute") => "tela_grafica::execute",
+            _ => n.names[0],
+        };
         for name in n.names {
             env.borrow_mut().define(*name, Value::Builtin(canon));
         }
@@ -754,6 +776,12 @@ impl Vm<'_, '_> {
             "apague" => self.bi_graf_limpe(args, span),
             #[cfg(feature = "graphics")]
             "evento" => self.bi_graf_evento(args, span),
+            #[cfg(feature = "graphics")]
+            "laco_grafico" => self.bi_laco_grafico(args, span),
+            #[cfg(feature = "graphics")]
+            "tela_grafica::execute" => self.bi_graf_execute(args, span, env),
+            #[cfg(feature = "graphics")]
+            "pare_laco" => self.bi_graf_pare(args, span),
             "leia_arquivo" => self.bi_leia_arquivo(args, span),
             "salve_arquivo" => self.bi_salve_arquivo(args, span),
             "adicione_arquivo" => self.bi_adicione_arquivo(args, span),
@@ -905,6 +933,9 @@ fn strip_diacritic(c: char) -> char {
 }
 
 pub(crate) fn builtin_modulo(name: &str) -> &'static str {
+    if name == "tela_grafica::execute" {
+        return "tela_grafica";
+    }
     NATIVAS
         .iter()
         .find(|n| n.names.contains(&name))

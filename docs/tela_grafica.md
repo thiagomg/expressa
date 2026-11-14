@@ -1,150 +1,283 @@
-# Tela gráfica: janela, mensagens e `evento`
+# Tela gráfica: janela e captura de eventos
 
-A VM Expressa **não abre janela**. Ela monta um mapa (`TelaGrafica`: tamanho, fundo, lista de ops) e fala com um **host**. Quem pinta e ouve o mouse é o processo `expressa-grafico` (CLI) ou o GTK da Aula.
+A VM Expressa monta uma `TelaGrafica` e conversa com um host. O CLI usa
+`expressa-grafico --ao-vivo`; a Aula usa janelas GTK. `mostre()` apresenta
+sem esperar interação. `salve`, `pixel` e `como_imagem` rasterizam na VM.
 
-`mostre()` não espera. `evento()` / `evento(segundos)` espera um recado de volta. `salve` / `pixel` rasterizam **na VM**, sem o visor.
+## Laço gráfico
 
-## O que o aluno escreve
+Para animações e jogos 2D, o laço controla entrada, atualização, desenho e espera:
 
-```
+```expressa
 tela_grafica = importe "tela_grafica"
-imagem = importe "imagem"
+g = tela_grafica::nova(160, 144, 4)
+l = g.tela_grafica::laço_grafico()
+personagem = mapa([:x -> 20])
 
-g = tela_grafica::nova(320, 200)
-nave = imagem::carregue("nave.png")
+eventos = função(ev, dt) {
+    se ev:teclas contem :direita { personagem:x += 60 * dt }
+    se ev:apertadas contem :escape { l.tela_grafica::pare() }
+}
 
-angulo = 0
-x = 40
-y = 100
+desenhe = função(tela) {
+    tela.tela_grafica::retangulo(personagem:x, 80, personagem:x + 8, 88)
+}
+
+config = mapa([
+    :fps -> 30,
+    :eventos -> eventos,
+    :desenho -> desenhe,
+])
+l.tela_grafica::execute(config)
+```
+
+`laço_grafico()` (também `laco_grafico()`) cria o recurso sem abrir janela.
+`execute(config)` valida as três opções obrigatórias e inicia a execução,
+bloqueando até o encerramento. Opções desconhecidas dão erro. O `execute` deste
+módulo é independente de `processo::execute`.
+
+A cada quadro, captura a entrada e chama `eventos(ev, dt)`, mesmo sem novos
+acontecimentos. `ev` tem exatamente os campos descritos abaixo para `evento()`.
+`dt` mede o tempo real entre chamadas, em segundos, com relógio monotônico;
+na primeira chamada é zero. Use velocidade em pixels por segundo multiplicada
+por `dt`. Depois o laço apaga o desenho, chama `desenhe(g)` e apresenta o quadro.
+Não é necessário chamar `evento()`, `apague()`, `mostre()` ou `durma()` nos callbacks.
+Os mapas compartilhados, como `personagem`, permitem que ambos os callbacks
+acessem o estado do programa sem alterar variáveis externas à função.
+
+O tempo gasto na captura, nos callbacks e na apresentação é descontado da
+espera até o próximo quadro. Um quadro lento não cria uma fila de atualizações
+para recuperar o atraso: o próximo começa sem espera, com o tempo real em `dt`.
+`:fps` é uma frequência desejada; o programa e o visor podem limitar o resultado.
+A configuração é capturada ao iniciar, não é relida a cada quadro.
+
+Fechar a janela entrega uma última chamada com `ev:sair` verdadeiro e termina
+sem desenhar outro quadro. `l.tela_grafica::pare()` solicita terminar depois do
+callback atual, sem apresentar outro quadro e sem fechar a janela. Também são
+aceitos `pare_laco()` e `pare_laço()`. Erros dos callbacks são propagados; o
+botão Parar da Aula e os limites de tempo continuam funcionando durante a espera.
+
+`execute()` devolve o laço. É possível executá-lo novamente após terminar,
+inclusive após tratar uma falha com `se_falhar`. Um laço não pode ser clonado;
+somente um laço pode estar ativo por tela. `g.evento()` continua disponível
+para programas que controlam seu próprio ciclo.
+
+## Captura manual de eventos
+
+```expressa
+tela_grafica = importe "tela_grafica"
+g = tela_grafica::nova(160, 144, 4)
+x = 80
+g.tela_grafica::mostre()
 
 enquanto verdadeiro {
-    g.apague()
-    g.imagem(nave, x, y, angulo)
-    g.mostre()
-    ev = g.evento(0.05)
-    se ev:tipo == :sair { pare }
-    se ev:tipo == :tecla e ev:tecla == "q" { pare }
-    se ev:tipo == :clique {
-        // ev:x ev:y em pixels da tela (origem canto superior esquerdo)
-    }
-    angulo += 6
-    x += 2
+    ev = g.tela_grafica::evento()
+    se ev:sair ou ev:apertadas contem :escape { pare }
+    se ev:teclas contem :esquerda { x -= 2 }
+    se ev:teclas contem :direita { x += 2 }
+    g.tela_grafica::apague()
+    g.tela_grafica::retangulo(x, 100, x + 8, 108)
+    g.tela_grafica::mostre()
+    durma(0.02)
 }
 ```
 
-`carregue` lê o PNG na VM (sandbox, pasta do `.lep`). `nova` não abre janela. O handle da figura é do **protocolo**, não da linguagem: o aluno continua com `Value::Imagem`.
+`evento()` captura o estado e consome todos os acontecimentos pendentes da
+janela, sem esperar interação. Chame uma vez por quadro e reutilize o mapa.
+Não recebe mais um tempo de espera: controle o ritmo do programa com `durma`.
+Chame `mostre()` antes; no CLI, a primeira captura também pode abrir a janela.
 
-`g.evento()` espera até clique, tecla ou fechar. `g.evento(0.05)` espera até 50 ms. `g.evento(0)` olha uma vez. Sem janela: `se_falhar`.
-
-Mapa devolvido:
-
-| chave | valores |
+| Campo | Conteúdo |
 |---|---|
-| `:tipo` | `clique`, `tecla`, `sair`, `nada` (`solte` / `mova` depois) |
-| `:x`, `:y` | pixel, y para baixo, 0-based (janela em letterbox: um fator, faixas nas sobras; clique nas faixas não gera evento) |
-| `:botao` | `esquerdo`, `direito`, `meio`, `nenhum` |
-| `:tecla` | `"q"`, `"Enter"`, `"Esc"`, `" "`, `"Cima"`, … |
+| `:teclas` | conjunto das teclas apertadas agora |
+| `:apertadas` | conjunto das teclas apertadas desde a captura anterior, sem repetição automática |
+| `:soltas` | conjunto das teclas soltas desde a captura anterior |
+| `:eventos` | lista dos acontecimentos, em ordem |
+| `:sair` | verdadeiro se houve pedido para fechar |
 
-Dois `nova()` são duas janelas; `g.evento()` escuta a de `g`. Parar na Aula desbloqueia como o `leia` (evento `:sair`).
+| Ação com direita | `:teclas` | `:apertadas` | `:soltas` |
+|---|---|---|---|
+| Aperta | direita | direita | — |
+| Continua segurando | direita | — | — |
+| Solta | — | — | direita |
+| Continua solta | — | — | — |
 
-## Transporte
+Um toque completo entre duas capturas aparece em `:apertadas` e `:soltas`,
+mas não em `:teclas`; `:eventos` preserva sua ordem. A repetição automática do
+sistema é ignorada. Ao perder foco ou fechar, o estado das teclas é limpo e
+as teclas que estavam apertadas aparecem em `:soltas`. Cada janela tem estado
+e acontecimentos independentes. Modificar um mapa retornado não altera o host.
 
-Mensagens com **prefixo de tamanho** (`u32` little-endian + payload). Stream nos pipes stdin/stdout **do filho**, não no terminal do aluno (`leia` continua no stdin do programa). Sem nng: o 64 KiB do pipe é buffer, não teto de recado.
+### Teclas e modificadores
 
-Um filho por `nova()`. A Aula usa os mesmos recados em `mpsc` (a VM já corre numa thread; o GTK pinta).
+Todos os nomes são textos em minúsculas: `:direita == "direita"`.
 
-`MOSTRE` **não** espera ACK. `ESPERE` é o único pedido que tem resposta (`EVENTO`).
-
-## Recados
-
-VM → visor:
-
-| recado | quando |
+| Grupo | Nomes |
 |---|---|
-| `ABRA id largura altura tamanho_pixel fundo` | primeiro `mostre` (ou `evento`) da instância |
-| `CARREGUE_FIGURA handle largura altura rgba` | primeira vez que aquele bitmap (mesmo `Arc` de pixels) aparece nas ops |
-| `MOSTRE id [ops…]` | cada `mostre`; ops de imagem citam `handle`, sem RGBA |
-| `ESPERE id timeout_ms` | cada `evento`; `-1` até acontecer, `0` olha e segue, `50` = 50 ms |
+| Letras | `:a` a `:z` |
+| Números | `:num_0` a `:num_9` |
+| Funções | `:f1` a `:f15` |
+| Direções | `:esquerda`, `:direita`, `:cima`, `:baixo` |
+| Ações | `:espaco`, `:enter`, `:escape`, `:tab`, `:backspace` |
+| Navegação | `:inicio`, `:fim`, `:pagina_acima`, `:pagina_abaixo`, `:insert`, `:delete` |
+| Pontuação | `:apostrofo`, `:crase`, `:barra_invertida`, `:virgula`, `:igual`, `:colchete_esquerdo`, `:colchete_direito`, `:menos`, `:ponto`, `:ponto_e_virgula`, `:barra` |
+| Outras | `:menu`, `:pause`, `:caps_lock`, `:num_lock`, `:scroll_lock` |
+| Teclado numérico | `:numerico_0` a `:numerico_9`, `:numerico_ponto`, `:numerico_barra`, `:numerico_asterisco`, `:numerico_menos`, `:numerico_mais`; Enter usa `:enter` |
 
-Visor → VM:
-
-| recado | quando |
+| Modificador | Tecla no teclado |
 |---|---|
-| `EVENTO id tipo x y botao tecla` | resposta de `ESPERE` |
+| `:shift` | Shift de qualquer lado |
+| `:control` | Control/Ctrl de qualquer lado |
+| `:alt` | Alt de qualquer lado; Option no macOS; AltGr na Aula |
+| `:super` | Windows/Super; Command no macOS |
 
-O **handle** é um `u32` escolhido pela VM (contador, identidade = ponteiro do `Arc` de pixels). O visor não escolhe id. `CARREGUE` também não espera ACK: no mesmo pipe, `CARREGUE` imediatamente antes do `MOSTRE` que usa o handle chega em ordem.
+Os modificadores participam dos mesmos conjuntos. Soltar um Shift não remove
+`:shift` enquanto o outro estiver apertado. A disponibilidade de teclas e
+atalhos depende do sistema, teclado e backend. Caps Lock, Num Lock e Scroll
+Lock representam pressionamento físico, não uma consulta da trava ligada.
+Letras não mudam com Shift/Caps Lock. Esta API é para controles e atalhos,
+não para digitação de texto; o CLI usa os nomes de teclas do SDL e acompanha cada tecla
+física para reconhecer sua soltura. A Aula usa o mapa de teclado do sistema
+e também reconhece letras locais.
 
-Ops no `MOSTRE`: `ponto`, `linha`, `circulo` (cor pelo nome, inclusive `transparente`), `retangulo x1 y1 x2 y2` (preenchido, cantos inclusivos), `texto x y tamanho cor t` e `imagem handle x y angulo` (graus, horário, 0 = topo para cima). O visor preenche o fundo (transparente na janela vira papel branco), replay das ops, apresenta. `apague` no Expressa esvazia `:ops`; o handle da figura **continua** válido. `como_imagem` rasteriza na VM (RGBA) e não vai no pipe.
+### Acontecimentos em ordem
 
-## Fluxo: abrir figura, girar, andar
+Cada item de `:eventos` contém `:tipo`, `:tecla`, `:x`, `:y`, `:botao`,
+`:modificadores` (conjunto) e `:repeticao` (falso, pois repetições são ignoradas).
+Tipos: `:tecla`, `:tecla_solta`, `:clique`, `:solte`, `:desfoco` e `:sair`.
+`solte` é soltura de mouse; `tecla_solta` é soltura de teclado. `desfoco` e
+`sair` também sinalizam a liberação de todas as teclas pelo campo `:soltas`.
 
-```mermaid
-sequenceDiagram
-    participant Aluno
-    participant VM
-    participant Pipe
-    participant Visor
-
-    Aluno->>VM: nova(320, 200)
-    Aluno->>VM: carregue("nave.png")
-    Note over VM: Value::Imagem; sem janela
-
-    Aluno->>VM: apague + imagem(nave, 40, 100, 0)
-    Aluno->>VM: mostre()
-    VM->>Pipe: nasce expressa-grafico --ao-vivo
-    VM->>Pipe: ABRA id=g 320 200 1
-    VM->>Pipe: CARREGUE_FIGURA 1  (bytes RGBA, uma vez)
-    VM->>Pipe: MOSTRE [imagem 1  40  100  0]
-    Note over Visor: textura 1; apresenta
-    Note over VM: mostre volta na hora
-
-    loop cada quadro
-        Aluno->>VM: apague + imagem(nave, x, y, angulo)
-        Aluno->>VM: mostre()
-        VM->>Pipe: MOSTRE [imagem 1  x  y  ang]
-        Note over Visor: fundo, carimba handle 1
-        Aluno->>VM: evento(0.05)
-        VM->>Pipe: ESPERE id=g  50
-        alt ninguém mexeu
-            Visor->>Pipe: EVENTO nada
-        else clique / tecla / X
-            Visor->>Pipe: EVENTO clique ou tecla ou sair
-        end
-        Note over Aluno: angulo += 6, x += 2
-    end
-
-    Note over VM: fim do .lep ou :sair
-    VM->>Pipe: fecha stdin
-    Note over Visor: último quadro fica até o X
+```expressa
+para acontecimento em ev:eventos {
+    se acontecimento:tipo == :tecla e acontecimento:tecla == :s {
+        se acontecimento:modificadores contem :control {
+            // Control estava apertado quando S foi apertado,
+            // mesmo que Control já tenha sido solto antes da captura.
+            salve_jogo()
+        }
+    }
+}
 ```
 
-Volume típico: um PNG (ou RGBA) **uma vez**; depois dezenas de bytes por quadro + uma linha de `ESPERE`/`EVENTO`. 20–30 fps em 320×200–640×480 não satura o pipe. O teto visível é o `durma` / `evento(0.05)` e os ~30 fps do minifb.
+Os eventos de mouse têm `:x` e `:y` em pixels lógicos, origem no canto
+superior esquerdo, y para baixo. `:botao` é `:esquerdo`, `:direito` ou `:meio`
+(`:nenhum` nos demais eventos). As faixas de letterbox não geram cliques.
 
-## Quem implementa o host
+Veja [o exemplo de movimento](../exemplos/tela_grafica/movimento.lep) e a
+[referência completa de nativas](nativas/tela_grafica.lep), também usada pela
+ajuda da linguagem e pelos editores.
 
-| Host | `mostre` | `evento` |
-|---|---|---|
-| testes `NullGraf` | silêncio | erro (sem janela) |
-| testes `CapturaGraf` | guarda a tela | fila de mapas |
-| CLI `CliGrafHost` | pipe `ABRA`/`CARREGUE`/`MOSTRE` | `ESPERE` / lê `EVENTO` |
-| Aula `ChannelGraf` | `ExecEvent::TelaGraf` (ops + `Arc` da figura, mesmo processo) | clique/tecla/fechar no `DrawingArea` → canal, como o `leia` |
+## Hosts e transporte
 
-No CLI o visor é o único lugar com minifb. A lib e a Aula não criam `Window`. Cartesiano continua no modo arquivo (`.cart` + `expressa-grafico <arquivo>`), sem clique.
+Um filho por tela no CLI; na Aula, eventos de cada janela viajam com seu id
+por um canal para a thread da VM. Os hosts usam o mesmo acumulador de estado.
+O visor ao vivo do CLI usa SDL2: captura as transições de teclado em ordem
+e apresenta o quadro completo por uma textura ARGB com VSync. A apresentação
+usa o backbuffer do renderizador acelerado, com escala por vizinho mais próximo.
+Os pixels da textura são reutilizados enquanto o desenho não muda. O backend
+de vídeo é escolhido pelo SDL (incluindo Wayland nativo quando disponível);
+o caminho ao vivo não força mais X11 nem usa `XPutImage`.
 
-Fim do programa: EOF no stdin do filho. A janela **permanece** com o último quadro até o aluno fechar o X (o mesmo hábito do visor mudo). Filho morto no próximo `mostre` / `evento` nasce de novo (`ABRA` + `CARREGUE` do que ainda está nas ops).
+VSync é solicitado na criação, ativado explicitamente e confirmado no renderer.
+Em OpenGL/GLES, o intervalo nativo de troca também é consultado: o temporizador
+de emulação do SDL não é aceito como confirmação de VSync.
+Se estiver indisponível, o visor informa o erro; não troca silenciosamente para
+uma apresentação sem sincronização. O relógio de apresentação segue o display,
+sem um segundo limitador fixo de 60 FPS. `:fps` continua sendo a frequência
+desejada dos callbacks, limitada também pelo visor e pelo hardware.
 
-## Formato binário
+O visor publica as mudanças de entrada espontaneamente, antes de apresentar.
+Uma thread no processo principal recebe os lotes e acumula as transições por
+janela. `evento()` consulta esse estado local imediatamente, sem enviar pedidos,
+ler o pipe ou esperar pelo VSync. Teclas mantidas usam o estado mais recente;
+pressionamentos, solturas e acontecimentos permanecem até a próxima consulta.
+A consulta pode retornar vazia enquanto a janela ainda está inicializando.
 
-Todos os inteiros little-endian. Depois do `u32` de tamanho, o primeiro byte é o tipo:
+A coleta no SDL ainda ocorre na thread de apresentação: uma mudança física pode
+esperar o ciclo atual de VSync para ser coletada. Isso não bloqueia a simulação.
+A pausa de 2 ms fica apenas para janelas ocultas ou sem quadro.
+Teclas, modificadores, soltura, foco, mouse e letterbox preservam a mesma API.
+A Aula continua usando a apresentação do GTK. Os visualizadores estáticos de
+arquivos `.cart`/PNG continuam em minifb.
 
-| byte | recado |
+### Quadros pendentes
+
+Há somente **um quadro completo pendente por janela**, além do quadro em
+exibição e dos buffers limitados do transporte. Um novo `mostre()` substitui
+o quadro ainda não apresentado. A substituição acontece antes da conversão
+e rasterização; não é necessário desenhar os quadros descartados.
+
+No CLI, a thread que lê o pipe guarda o último `MOSTRE` e mantém uma fila
+limitada a oito comandos de controle. Abertura, carregamento de imagens e
+pedidos de entrada continuam ordenados. O visor retira os controles e o
+quadro sob o mesmo bloqueio, garantindo que suas imagens já estejam
+carregadas. Fechar o pipe preserva o último quadro pendente.
+
+Na Aula, a VM publica o quadro em uma caixa compartilhada. Uma única
+notificação avisa o GTK de que há quadros pendentes. O GTK apresenta no máximo
+um lote por ciclo de sua interface, inclusive quando o produtor é mais rápido.
+O último lote é apresentado antes de concluir a execução. Console, depuração
+e término continuam em seu canal ordenado; eventos de entrada não são
+substituídos junto com os desenhos.
+
+### Composição
+
+Imagens, formas e texto respeitam a ordem dos comandos. Um texto ou retângulo
+após uma imagem aparece sobre ela. O mesmo compositor é usado no CLI, na
+Aula, em `como_imagem()` e na exportação PNG.
+
+### Validação com um jogo
+
+[Explorador](../exemplos/jogos/explorador.lep) inclui mapa sólido, câmera,
+12 sprites de personagem, animação ao andar, colisão com deslizamento nas
+paredes, movimento diagonal normalizado e coleta de cristais. O mapa e os
+sprites viram imagens uma vez, reutilizadas nos quadros seguintes.
+
+```sh
+target/release/expressa exemplos/jogos/explorador.lep
+target/release/expressa exemplos/jogos/explorador.lep --validar
+target/release/expressa exemplos/jogos/explorador.lep --validar --30fps
+```
+
+Setas movem, Shift corre, R reinicia e Esc termina. `--validar` usa o relógio
+real e o mesmo laço/renderizador, conduzindo automaticamente o personagem
+até uma parede, soltando os controles, passando por uma abertura e parando.
+O resultado no terminal verifica colisão, imobilidade ao soltar e os dois
+quadros de caminhada; também informa duração, quadros e maior `dt` observado.
+Esse roteiro simula os controles: não substitui a verificação manual do
+teclado físico e do foco em cada sistema.
+
+As medições e o procedimento estão em [Validação do caminho 2D](validacao-jogos-2d.md).
+
+Os testes automatizados também cobrem 30/60 atualizações por segundo,
+colisão em quadros lentos, câmera, coleta, reinício por toque rápido,
+fechamento da janela e um consumidor que só retira o último quadro no fim.
+
+Mensagens com prefixo de tamanho (`u32` little-endian + payload), limite
+32 MiB. O pipe é do processo gráfico e não interfere em `leia`.
+
+| Byte | Mensagem |
 |---|---|
-| 1 | `ABRA` — `u64 id`, `u32 w`, `u32 h`, `u32 tamanho_pixel`, fundo (`u16` len + UTF-8) |
-| 2 | `CARREGUE_FIGURA` — `u32 handle`, `u32 w`, `u32 h`, `u32 n`, `n` bytes RGBA |
-| 3 | `MOSTRE` — `u64 id`, `u32 nops`, ops |
-| 4 | `ESPERE` — `u64 id`, `i32 timeout_ms` |
-| 5 | `EVENTO` — `u64 id`, `u8 tipo`, `i32 x`, `i32 y`, `u8 botao`, tecla (`u16` len + UTF-8) |
+| 1 | `ABRA`: `u64 id`, `u32 largura`, `u32 altura`, `u32 tamanho_pixel`, texto fundo |
+| 2 | `CARREGUE_FIGURA`: `u32 handle`, `u32 largura`, `u32 altura`, `u32 n`, n bytes RGBA |
+| 3 | `MOSTRE`: `u64 id`, `u32 nops`, operações |
+| 5 | `EVENTO`: `u64 id`, conjuntos teclas/apertadas/soltas, `u8 sair`, `u32 n`, n acontecimentos |
 
-Op: `u8` (`1` ponto, `2` linha, `3` circulo, `4` imagem, `5` texto, `6` retangulo) e campos `i32` / `f64` / cor UTF-8 / `u32` handle. Tipo de evento: `0` nada, `1` clique, `2` solte, `3` mova, `4` tecla, `5` sair. Botão: `0` nenhum, `1` esquerdo, `2` direito, `3` meio.
+Texto: `u16 tamanho` + UTF-8. Conjunto: `u32 quantidade` + textos.
+Acontecimento: texto tipo, `i32 x`, `i32 y`, texto botão, texto tecla,
+texto identidade física, conjunto modificadores, `u8 repeticao`.
+A identidade física é interna; o mapa da linguagem não a expõe.
 
-Teto de payload: 32 MiB (cabe um PNG no máximo da API, 2048² RGBA).
+`MOSTRE` não espera ACK. `EVENTO` é enviado espontaneamente quando há mudanças,
+com as transições desde o último envio e o estado atual. O processo principal
+une as transições recebidas até `evento()` consumi-las, mantendo o último estado
+de teclas. O antigo pedido `ESPERE` (byte 4) foi removido.
+A primeira aparição de cada imagem envia seus pixels; os quadros seguintes
+reutilizam o handle.
+Operações: ponto, linha, círculo, imagem, texto e retângulo.
+
+Fim do programa: EOF no stdin do filho. A janela mantém o último quadro até
+fechar. Parar na Aula interrompe a execução; fechar uma janela limpa seu
+estado. `NullGraf` rejeita capturas sem janela; `CapturaGraf` permite injetar
+transições em testes.

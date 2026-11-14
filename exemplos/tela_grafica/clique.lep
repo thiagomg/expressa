@@ -9,11 +9,12 @@ g.tela_grafica::mostre()
 enquanto verdadeiro
 inicio
     ev = g.tela_grafica::evento()
-    se ev:tipo == :sair { pare }
-    se ev:tipo == :tecla e ev:tecla == "q" { pare }
-    se ev:tipo == :clique
-    inicio
-        g.tela_grafica::circulo(ev:x, ev:y, 8)
-        g.tela_grafica::mostre()
-    fim
+    se ev:sair ou ev:apertadas contem :q { pare }
+    para acontecimento em ev:eventos {
+        se acontecimento:tipo == :clique {
+            g.tela_grafica::circulo(acontecimento:x, acontecimento:y, 8)
+            g.tela_grafica::mostre()
+        }
+    }
+    durma(0.02)
 fim

@@ -286,10 +286,24 @@ g.tela_grafica::fundo(:transparente)
 sprite = g.tela_grafica::como_imagem()
 g.tela_grafica::texto(8, 8, "olá")  // canto superior esquerdo; tamanho 8
 g.tela_grafica::mostre()         // janela irmã; o próximo mostre atualiza
-ev = g.tela_grafica::evento(0.05) // clique / tecla / sair / nada
+ev = g.tela_grafica::evento() // captura sem esperar interação
+se ev:teclas contem :direita { x += 3 } // estado atual
+se ev:apertadas contem :espaco { pule() } // novos pressionamentos
+// ev:soltas, ev:eventos (em ordem), ev:sair; modificadores: shift/control/alt/super
 g.tela_grafica::apague()        // zera o desenho
 g.tela_grafica::salve("casa.png")
 escreva(g.tela_grafica::pixel(10, 10))
+```
+
+```text
+l = g.tela_grafica::laço_grafico()
+config = mapa([
+    :fps -> 30,
+    :eventos -> eventos, // função(ev, dt): entrada e movimento; dt em segundos
+    :desenho -> desenhe, // função(g): o laço apaga antes e apresenta depois
+])
+l.tela_grafica::execute(config) // inicia e espera terminar
+// Dentro de um callback: l.tela_grafica::pare()
 ```
 
 ```text
