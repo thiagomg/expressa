@@ -8,7 +8,7 @@ use std::path::Path;
 use std::rc::Rc;
 use std::sync::mpsc;
 use std::thread;
-use std::time::{Duration, SystemTime};
+use std::time::{Duration, Instant, SystemTime};
 
 use super::folha::{FolhaPronta, pintar};
 use super::graf::{cor_tela_rgb32, png_to_rgb32};
@@ -156,9 +156,11 @@ pub fn run_live_viewer() -> Result<(), String> {
     let mut pixels_ok = false;
     let mut buf_w = 0usize;
     let mut buf_h = 0usize;
+    let mut last_frame: Option<Instant> = None;
 
     loop {
-        while let Ok(msg) = rx.try_recv() {
+        // A producer streaming frames must not starve OS input processing.
+        for msg in rx.try_iter().take(64) {
             match msg {
                 Ok(Msg::Abra {
                     id: nid,
@@ -219,26 +221,36 @@ pub fn run_live_viewer() -> Result<(), String> {
             let (ww, wh) = win.get_size();
             let ww = ww.max(1);
             let wh = wh.max(1);
-            if !pixels_ok || buf_w != ww || buf_h != wh {
-                if let Some(t) = tela.as_ref() {
-                    let pixels = t.rgb32();
-                    buffer = blit_letterbox(
-                        &pixels,
-                        t.largura,
-                        t.altura,
-                        ww as u32,
-                        wh as u32,
-                        cor_tela_rgb32(&t.fundo),
-                    );
-                } else if buffer.len() != ww * wh {
-                    buffer = vec![0x00FFFFFF; ww * wh];
+            let dirty = !pixels_ok || buf_w != ww || buf_h != wh;
+            let redraw =
+                last_frame.is_none_or(|t| t.elapsed() >= Duration::from_secs_f64(1.0 / 60.0));
+            if redraw {
+                if dirty {
+                    if let Some(t) = tela.as_ref() {
+                        let pixels = t.rgb32();
+                        buffer = blit_letterbox(
+                            &pixels,
+                            t.largura,
+                            t.altura,
+                            ww as u32,
+                            wh as u32,
+                            cor_tela_rgb32(&t.fundo),
+                        );
+                    } else if buffer.len() != ww * wh {
+                        buffer = vec![0x00FFFFFF; ww * wh];
+                    }
+                    pixels_ok = true;
+                    buf_w = ww;
+                    buf_h = wh;
                 }
-                pixels_ok = true;
-                buf_w = ww;
-                buf_h = wh;
-            }
-            if let Err(e) = win.update_with_buffer(&buffer, ww, wh) {
-                return Err(e.to_string());
+                // Present the cached buffer too: an exposed X11 window may
+                // need repainting even when the program has not drawn again.
+                win.update_with_buffer(&buffer, ww, wh)
+                    .map_err(|e| e.to_string())?;
+                last_frame = Some(Instant::now());
+            } else {
+                // Poll input between presentations instead of waiting for a frame.
+                win.update();
             }
             if focada && !win.is_active() {
                 entrada.borrow_mut().registre(EventoGraf {
@@ -280,9 +292,9 @@ pub fn run_live_viewer() -> Result<(), String> {
                 break;
             }
         }
-        if window.is_none() && !pending && !stdin_fim {
-            thread::sleep(Duration::from_millis(15));
-        }
+        // Input is independent of rendering (60 Hz). Keep idle CPU usage low
+        // without putting each snapshot behind minifb's frame limiter.
+        thread::sleep(Duration::from_millis(2));
     }
     Ok(())
 }
@@ -411,7 +423,8 @@ fn abre_janela(largura: u32, altura: u32) -> Result<minifb::Window, String> {
         }
         Err(e) => return Err(format!("não abriu a janela: {e}")),
     };
-    win.set_target_fps(30);
+    // The live loop paces rendering separately so keyboard polling stays fast.
+    win.set_target_fps(0);
     Ok(win)
 }
 
@@ -572,5 +585,24 @@ mod input_tests {
         ] {
             assert_eq!(tecla_minifb(key), name);
         }
+    }
+
+    #[test]
+    fn release_is_not_queued_behind_auto_repeat() {
+        let state = Rc::new(RefCell::new(EstadoEntrada::default()));
+        let mut callback = TecladoCallback(Rc::clone(&state));
+        callback.set_key_state(Key::Right, true);
+        assert!(state.borrow_mut().capture().teclas.contains("direita"));
+        for _ in 0..10_000 {
+            callback.set_key_state(Key::Right, true);
+        }
+        callback.set_key_state(Key::Right, false);
+        let capture = state.borrow_mut().capture();
+        assert!(capture.teclas.is_empty());
+        assert!(capture.apertadas.is_empty());
+        assert!(capture.soltas.contains("direita"));
+        assert_eq!(capture.eventos.len(), 1);
+        assert_eq!(capture.eventos[0].tipo, "tecla_solta");
+        assert!(state.borrow_mut().capture().teclas.is_empty());
     }
 }
