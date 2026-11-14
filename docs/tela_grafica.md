@@ -136,8 +136,9 @@ Os modificadores participam dos mesmos conjuntos. Soltar um Shift não remove
 atalhos depende do sistema, teclado e backend. Caps Lock, Num Lock e Scroll
 Lock representam pressionamento físico, não uma consulta da trava ligada.
 Letras não mudam com Shift/Caps Lock. Esta API é para controles e atalhos,
-não para digitação de texto; o CLI usa as posições de teclas do minifb e a
-Aula usa o mapa de teclado do sistema. A Aula também reconhece letras locais.
+não para digitação de texto; o CLI usa os nomes de teclas do SDL e acompanha cada tecla
+física para reconhecer sua soltura. A Aula usa o mapa de teclado do sistema
+e também reconhece letras locais.
 
 ### Acontecimentos em ordem
 
@@ -171,12 +172,87 @@ ajuda da linguagem e pelos editores.
 
 Um filho por tela no CLI; na Aula, eventos de cada janela viajam com seu id
 por um canal para a thread da VM. Os hosts usam o mesmo acumulador de estado.
-O CLI captura as transições de teclado por callback do minifb, preservando
-pressionamentos e solturas que chegam na mesma atualização da janela.
-O visor consulta a entrada independentemente da renderização: pausa de 2 ms
-entre ciclos e apresentação a até 60 quadros por segundo, reutilizando
-os pixels enquanto o desenho não muda. Cada ciclo processa no máximo 64
-mensagens da VM antes de atender o teclado e o mouse, evitando que uma sequência de quadros adie a soltura.
+O visor ao vivo do CLI usa SDL2: captura as transições de teclado em ordem
+e apresenta o quadro completo por uma textura ARGB com VSync. A apresentação
+usa o backbuffer do renderizador acelerado, com escala por vizinho mais próximo.
+Os pixels da textura são reutilizados enquanto o desenho não muda. O backend
+de vídeo é escolhido pelo SDL (incluindo Wayland nativo quando disponível);
+o caminho ao vivo não força mais X11 nem usa `XPutImage`.
+
+VSync é solicitado na criação, ativado explicitamente e confirmado no renderer.
+Em OpenGL/GLES, o intervalo nativo de troca também é consultado: o temporizador
+de emulação do SDL não é aceito como confirmação de VSync.
+Se estiver indisponível, o visor informa o erro; não troca silenciosamente para
+uma apresentação sem sincronização. O relógio de apresentação segue o display,
+sem um segundo limitador fixo de 60 FPS. `:fps` continua sendo a frequência
+desejada dos callbacks, limitada também pelo visor e pelo hardware.
+
+O visor publica as mudanças de entrada espontaneamente, antes de apresentar.
+Uma thread no processo principal recebe os lotes e acumula as transições por
+janela. `evento()` consulta esse estado local imediatamente, sem enviar pedidos,
+ler o pipe ou esperar pelo VSync. Teclas mantidas usam o estado mais recente;
+pressionamentos, solturas e acontecimentos permanecem até a próxima consulta.
+A consulta pode retornar vazia enquanto a janela ainda está inicializando.
+
+A coleta no SDL ainda ocorre na thread de apresentação: uma mudança física pode
+esperar o ciclo atual de VSync para ser coletada. Isso não bloqueia a simulação.
+A pausa de 2 ms fica apenas para janelas ocultas ou sem quadro.
+Teclas, modificadores, soltura, foco, mouse e letterbox preservam a mesma API.
+A Aula continua usando a apresentação do GTK. Os visualizadores estáticos de
+arquivos `.cart`/PNG continuam em minifb.
+
+### Quadros pendentes
+
+Há somente **um quadro completo pendente por janela**, além do quadro em
+exibição e dos buffers limitados do transporte. Um novo `mostre()` substitui
+o quadro ainda não apresentado. A substituição acontece antes da conversão
+e rasterização; não é necessário desenhar os quadros descartados.
+
+No CLI, a thread que lê o pipe guarda o último `MOSTRE` e mantém uma fila
+limitada a oito comandos de controle. Abertura, carregamento de imagens e
+pedidos de entrada continuam ordenados. O visor retira os controles e o
+quadro sob o mesmo bloqueio, garantindo que suas imagens já estejam
+carregadas. Fechar o pipe preserva o último quadro pendente.
+
+Na Aula, a VM publica o quadro em uma caixa compartilhada. Uma única
+notificação avisa o GTK de que há quadros pendentes. O GTK apresenta no máximo
+um lote por ciclo de sua interface, inclusive quando o produtor é mais rápido.
+O último lote é apresentado antes de concluir a execução. Console, depuração
+e término continuam em seu canal ordenado; eventos de entrada não são
+substituídos junto com os desenhos.
+
+### Composição
+
+Imagens, formas e texto respeitam a ordem dos comandos. Um texto ou retângulo
+após uma imagem aparece sobre ela. O mesmo compositor é usado no CLI, na
+Aula, em `como_imagem()` e na exportação PNG.
+
+### Validação com um jogo
+
+[Explorador](../exemplos/jogos/explorador.lep) inclui mapa sólido, câmera,
+12 sprites de personagem, animação ao andar, colisão com deslizamento nas
+paredes, movimento diagonal normalizado e coleta de cristais. O mapa e os
+sprites viram imagens uma vez, reutilizadas nos quadros seguintes.
+
+```sh
+target/release/expressa exemplos/jogos/explorador.lep
+target/release/expressa exemplos/jogos/explorador.lep --validar
+target/release/expressa exemplos/jogos/explorador.lep --validar --30fps
+```
+
+Setas movem, Shift corre, R reinicia e Esc termina. `--validar` usa o relógio
+real e o mesmo laço/renderizador, conduzindo automaticamente o personagem
+até uma parede, soltando os controles, passando por uma abertura e parando.
+O resultado no terminal verifica colisão, imobilidade ao soltar e os dois
+quadros de caminhada; também informa duração, quadros e maior `dt` observado.
+Esse roteiro simula os controles: não substitui a verificação manual do
+teclado físico e do foco em cada sistema.
+
+As medições e o procedimento estão em [Validação do caminho 2D](validacao-jogos-2d.md).
+
+Os testes automatizados também cobrem 30/60 atualizações por segundo,
+colisão em quadros lentos, câmera, coleta, reinício por toque rápido,
+fechamento da janela e um consumidor que só retira o último quadro no fim.
 
 Mensagens com prefixo de tamanho (`u32` little-endian + payload), limite
 32 MiB. O pipe é do processo gráfico e não interfere em `leia`.
@@ -186,7 +262,6 @@ Mensagens com prefixo de tamanho (`u32` little-endian + payload), limite
 | 1 | `ABRA`: `u64 id`, `u32 largura`, `u32 altura`, `u32 tamanho_pixel`, texto fundo |
 | 2 | `CARREGUE_FIGURA`: `u32 handle`, `u32 largura`, `u32 altura`, `u32 n`, n bytes RGBA |
 | 3 | `MOSTRE`: `u64 id`, `u32 nops`, operações |
-| 4 | `ESPERE`: `u64 id` — pede uma captura, sem timeout |
 | 5 | `EVENTO`: `u64 id`, conjuntos teclas/apertadas/soltas, `u8 sair`, `u32 n`, n acontecimentos |
 
 Texto: `u16 tamanho` + UTF-8. Conjunto: `u32 quantidade` + textos.
@@ -194,10 +269,12 @@ Acontecimento: texto tipo, `i32 x`, `i32 y`, texto botão, texto tecla,
 texto identidade física, conjunto modificadores, `u8 repeticao`.
 A identidade física é interna; o mapa da linguagem não a expõe.
 
-`MOSTRE` não espera ACK. `ESPERE` recebe exatamente uma resposta `EVENTO`
-com todos os acontecimentos pendentes e o estado atual. O nome interno
-`ESPERE` não indica espera por entrada do usuário. A primeira aparição de
-cada imagem envia seus pixels; os quadros seguintes reutilizam o handle.
+`MOSTRE` não espera ACK. `EVENTO` é enviado espontaneamente quando há mudanças,
+com as transições desde o último envio e o estado atual. O processo principal
+une as transições recebidas até `evento()` consumi-las, mantendo o último estado
+de teclas. O antigo pedido `ESPERE` (byte 4) foi removido.
+A primeira aparição de cada imagem envia seus pixels; os quadros seguintes
+reutilizam o handle.
 Operações: ponto, linha, círculo, imagem, texto e retângulo.
 
 Fim do programa: EOF no stdin do filho. A janela mantém o último quadro até

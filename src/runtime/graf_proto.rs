@@ -15,7 +15,6 @@ pub const MAX_PAYLOAD: u32 = 32 * 1024 * 1024;
 const ABRA: u8 = 1;
 const CARREGUE: u8 = 2;
 const MOSTRE: u8 = 3;
-const ESPERE: u8 = 4;
 const EVENTO: u8 = 5;
 
 const OP_PONTO: u8 = 1;
@@ -43,9 +42,6 @@ pub enum Msg {
     Mostre {
         id: u64,
         ops: Vec<OpMsg>,
-    },
-    Espere {
-        id: u64,
     },
     Evento {
         id: u64,
@@ -385,10 +381,6 @@ fn encode(buf: &mut Vec<u8>, msg: &Msg) {
                 encode_op(buf, op);
             }
         }
-        Msg::Espere { id } => {
-            buf.push(ESPERE);
-            put_u64(buf, *id);
-        }
         Msg::Evento { id, captura } => {
             buf.push(EVENTO);
             put_u64(buf, *id);
@@ -516,9 +508,6 @@ fn decode(p: &[u8]) -> Option<Msg> {
             }
             Some(Msg::Mostre { id, ops })
         }
-        ESPERE => Some(Msg::Espere {
-            id: get_u64(p, &mut i)?,
-        }),
         EVENTO => {
             let id = get_u64(p, &mut i)?;
             let teclas = get_teclas(p, &mut i)?;
@@ -711,7 +700,6 @@ mod tests {
             tamanho_pixel: 2,
             fundo: "branco".into(),
         });
-        roundtrip(&Msg::Espere { id: 9 });
         roundtrip(&Msg::Evento {
             id: 9,
             captura: CapturaEvento {

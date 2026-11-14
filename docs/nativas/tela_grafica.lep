@@ -94,12 +94,17 @@ salve = funcao(g, caminho) { 0 }
 ///
 /// O primeiro mostre abre; os seguintes só atualizam a mesma janela.
 /// Cada nova() é uma janela. Não acopla na IDE.
+/// Mantém somente o último quadro completo pendente por janela. Se o visor
+/// for mais lento, quadros antigos ainda não apresentados são substituídos.
+/// Imagens, formas e texto são compostos na ordem dos comandos.
 ///
 /// Exemplo: g.mostre()
 mostre = funcao(g) { 0 }
 
 /// Captura o teclado e consome todos os acontecimentos pendentes desta janela.
 /// Não espera interação. Chame mostre() antes e evento() uma vez por quadro.
+/// No CLI, consulta o estado recebido em segundo plano, sem esperar o visor
+/// ou o VSync. Durante a inicialização da janela, esse estado pode estar vazio.
 ///
 /// Devolve um mapa:
 /// :teclas — conjunto das teclas apertadas agora;

@@ -1,0 +1,4 @@
+# The bundled SDL2 still declares an older CMake policy baseline. CMake 4
+# requires this compatibility floor; CMake 3 ignores this environment setting.
+[env]
+CMAKE_POLICY_VERSION_MINIMUM = "3.5"

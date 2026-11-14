@@ -9,8 +9,5 @@ aula-data/
 /deps/protoc/
 /deps/_download/
 
-# Caminhos absolutos desta máquina. No Linux esse arquivo quebraria o build.
-/.cargo/config.toml
-
 # Pasta e zip gerados por empacotar.ps1.
 /dist/

@@ -19,6 +19,7 @@ mod numero;
 mod pilha;
 #[cfg(feature = "process")]
 mod processo;
+mod quadros;
 #[cfg(feature = "terminal")]
 mod repl;
 mod rng;
@@ -27,6 +28,10 @@ mod terminal;
 mod value;
 #[cfg(feature = "graphics")]
 mod viewer;
+#[cfg(feature = "graphics")]
+mod viewer_inbox;
+#[cfg(feature = "graphics")]
+mod viewer_live;
 
 #[cfg(feature = "graphics")]
 pub use cartesiano_host::CliCartesianoHost;
@@ -84,3 +89,5 @@ mod tests {
         assert_eq!(err.file, "t.lep");
     }
 }
+
+pub use quadros::QuadrosPendentes;

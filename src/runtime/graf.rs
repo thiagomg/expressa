@@ -10,7 +10,7 @@ use super::folha::cor_rgb;
 use super::fonte8x8;
 #[cfg(feature = "graphics")]
 use super::imagem;
-use super::imagem::{Imagem, carimbar, carimbar_rgba};
+use super::imagem::{Imagem, carimbar_rgba};
 
 #[cfg(feature = "graphics")]
 pub const LARGURA_MAX: u32 = 2048;
@@ -107,6 +107,48 @@ pub fn nome_cor(idx: u8) -> &'static str {
     PALETA.get(idx as usize).copied().unwrap_or("normal")
 }
 
+impl OpGraf {
+    fn rasterize(&self, idx: &mut [u8], w: u32, h: u32) -> bool {
+        match self {
+            OpGraf::Ponto { x, y, cor } => {
+                plot_idx(idx, w, h, *x, *y, idx_cor(cor));
+            }
+            OpGraf::Linha {
+                x1,
+                y1,
+                x2,
+                y2,
+                cor,
+            } => {
+                linha_idx(idx, w, h, *x1, *y1, *x2, *y2, idx_cor(cor));
+            }
+            OpGraf::Circulo { x, y, r, cor } => {
+                circulo_idx(idx, w, h, *x, *y, *r, idx_cor(cor));
+            }
+            OpGraf::Texto {
+                x,
+                y,
+                tamanho,
+                cor,
+                texto,
+            } => {
+                texto_idx(idx, w, h, *x, *y, *tamanho, texto, idx_cor(cor));
+            }
+            OpGraf::Retangulo {
+                x1,
+                y1,
+                x2,
+                y2,
+                cor,
+            } => {
+                retangulo_idx(idx, w, h, *x1, *y1, *x2, *y2, idx_cor(cor));
+            }
+            OpGraf::Imagem { .. } => return false,
+        }
+        true
+    }
+}
+
 impl TelaGrafica {
     pub fn tamanho_pixel_efetivo(&self) -> u32 {
         self.tamanho_pixel.clamp(1, TAMANHO_PIXEL_MAX)
@@ -126,42 +168,7 @@ impl TelaGrafica {
         let fundo = idx_cor(&self.fundo);
         let mut idx = vec![fundo; (w * h) as usize];
         for op in &self.ops {
-            match op {
-                OpGraf::Ponto { x, y, cor } => {
-                    plot_idx(&mut idx, w, h, *x, *y, idx_cor(cor));
-                }
-                OpGraf::Linha {
-                    x1,
-                    y1,
-                    x2,
-                    y2,
-                    cor,
-                } => {
-                    linha_idx(&mut idx, w, h, *x1, *y1, *x2, *y2, idx_cor(cor));
-                }
-                OpGraf::Circulo { x, y, r, cor } => {
-                    circulo_idx(&mut idx, w, h, *x, *y, *r, idx_cor(cor));
-                }
-                OpGraf::Texto {
-                    x,
-                    y,
-                    tamanho,
-                    cor,
-                    texto,
-                } => {
-                    texto_idx(&mut idx, w, h, *x, *y, *tamanho, texto, idx_cor(cor));
-                }
-                OpGraf::Retangulo {
-                    x1,
-                    y1,
-                    x2,
-                    y2,
-                    cor,
-                } => {
-                    retangulo_idx(&mut idx, w, h, *x1, *y1, *x2, *y2, idx_cor(cor));
-                }
-                OpGraf::Imagem { .. } => {}
-            }
+            op.rasterize(&mut idx, w, h);
         }
         Raster {
             largura: w,
@@ -170,64 +177,53 @@ impl TelaGrafica {
         }
     }
 
-    /// Palette drawing, then any `imagem` stamps in true color.
-    /// `:transparente` shows the window paper (`:fundo`, or white if the
-    /// paper itself is transparent).
+    /// Composite in command order, flattening transparency onto the window paper.
     pub fn rgb32(&self) -> Vec<u32> {
-        let papel = if self.fundo == "transparente" {
-            rgb32_de_nome("branco")
+        let papel = rgba_de_nome(if self.fundo == "transparente" {
+            "branco"
         } else {
-            rgb32_de_nome(&self.fundo)
-        };
-        let raster = self.raster();
-        let mut buf: Vec<u32> = raster
-            .idx
-            .iter()
-            .map(|&i| {
-                let n = nome_cor(i);
-                if n == "transparente" {
-                    papel
-                } else {
-                    rgb32_de_nome(n)
-                }
+            &self.fundo
+        });
+        self.como_imagem()
+            .px
+            .chunks_exact(4)
+            .map(|p| {
+                let a = p[3] as u32;
+                let channel = |i: usize| (p[i] as u32 * a + papel[i] as u32 * (255 - a)) / 255;
+                (channel(0) << 16) | (channel(1) << 8) | channel(2)
             })
-            .collect();
-        for op in &self.ops {
-            let OpGraf::Imagem {
-                x,
-                y,
-                angulo,
-                figura,
-            } = op
-            else {
-                continue;
-            };
-            carimbar(&mut buf, self.largura, self.altura, *x, *y, *angulo, figura);
-        }
-        buf
+            .collect()
     }
 
-    /// Snapshot for `como_imagem`: palette plus stamps, with alpha 0 on
-    /// `:transparente`.
+    /// Palette primitives and image stamps share the same ordered RGBA composition.
     pub fn como_imagem(&self) -> Imagem {
         let w = self.largura.max(1);
         let h = self.altura.max(1);
-        let raster = self.raster();
-        let mut px = Vec::with_capacity((w * h * 4) as usize);
-        for &i in &raster.idx {
-            px.extend_from_slice(&rgba_de_nome(nome_cor(i)));
-        }
+        let fundo = rgba_de_nome(&self.fundo);
+        let mut px = fundo.repeat((w * h) as usize);
+        // 255 means untouched, unlike the actual :transparente drawing color.
+        let mut camada = vec![u8::MAX; (w * h) as usize];
+        let mut suja = false;
         for op in &self.ops {
-            let OpGraf::Imagem {
+            if let OpGraf::Imagem {
                 x,
                 y,
                 angulo,
                 figura,
             } = op
-            else {
-                continue;
-            };
-            carimbar_rgba(&mut px, w, h, *x, *y, *angulo, figura);
+            {
+                if suja {
+                    aplique_camada(&mut px, &camada);
+                    camada.fill(u8::MAX);
+                    suja = false;
+                }
+                carimbar_rgba(&mut px, w, h, *x, *y, *angulo, figura);
+            } else {
+                suja |= op.rasterize(&mut camada, w, h);
+            }
+        }
+        if suja {
+            aplique_camada(&mut px, &camada);
         }
         Imagem {
             largura: w,
@@ -244,6 +240,14 @@ impl TelaGrafica {
     #[cfg(feature = "graphics")]
     pub fn write_png(&self, path: &Path) -> Result<(), String> {
         std::fs::write(path, self.png_bytes()?).map_err(|e| e.to_string())
+    }
+}
+
+fn aplique_camada(px: &mut [u8], camada: &[u8]) {
+    for (pixel, &cor) in px.chunks_exact_mut(4).zip(camada) {
+        if cor != u8::MAX {
+            pixel.copy_from_slice(&rgba_de_nome(nome_cor(cor)));
+        }
     }
 }
 
@@ -629,5 +633,65 @@ mod tests {
         assert_eq!(t.janela_altura(), 576);
         assert_eq!(t.raster().largura, 160);
         assert_eq!(t.raster().altura, 144);
+    }
+    #[test]
+    fn images_shapes_text_and_transparent_erasures_follow_command_order() {
+        let background = Imagem::nova(16, 16, [255, 0, 0, 255].repeat(16 * 16)).unwrap();
+        let blue = Imagem::nova(1, 1, vec![0, 0, 255, 255]).unwrap();
+        let tela = TelaGrafica {
+            id: 1,
+            largura: 16,
+            altura: 16,
+            tamanho_pixel: 1,
+            fundo: "branco".into(),
+            ops: vec![
+                OpGraf::Imagem {
+                    x: 8,
+                    y: 8,
+                    angulo: 0.0,
+                    figura: background,
+                },
+                OpGraf::Retangulo {
+                    x1: 0,
+                    y1: 0,
+                    x2: 15,
+                    y2: 7,
+                    cor: "preto".into(),
+                },
+                OpGraf::Texto {
+                    x: 0,
+                    y: 0,
+                    tamanho: 8,
+                    texto: "A".into(),
+                    cor: "branco".into(),
+                },
+                OpGraf::Imagem {
+                    x: 15,
+                    y: 15,
+                    angulo: 0.0,
+                    figura: blue,
+                },
+                OpGraf::Ponto {
+                    x: 15,
+                    y: 15,
+                    cor: "verde".into(),
+                },
+                OpGraf::Ponto {
+                    x: 12,
+                    y: 12,
+                    cor: "transparente".into(),
+                },
+            ],
+        };
+        let image = tela.como_imagem();
+        assert_eq!(image.pixel(0, 0), Some([0, 0, 0, 255]));
+        assert_eq!(image.pixel(2, 0), Some([255, 255, 255, 255]));
+        assert_eq!(image.pixel(12, 10), Some([255, 0, 0, 255]));
+        assert_eq!(image.pixel(12, 12), Some([0, 0, 0, 0]));
+        let pixels = tela.rgb32();
+        assert_eq!(pixels[12 * 16 + 12], 0x00FFFFFF);
+        assert_eq!(pixels[15 * 16 + 15], cor_tela_rgb32("verde"));
+        let png = imagem::decode_png(&tela.png_bytes().unwrap()).unwrap();
+        assert_eq!(png.px, image.px);
     }
 }

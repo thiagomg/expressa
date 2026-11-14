@@ -50,7 +50,7 @@ workspace = true
 default = ["ast", "graphics", "process", "terminal"]
 # AST is a reference evaluator; parser/compiler remain in every profile.
 ast = []
-graphics = ["terminal", "dep:minifb", "dep:png"]
+graphics = ["terminal", "dep:minifb", "dep:sdl2", "dep:png"]
 process = []
 terminal = ["dep:rustyline"]
 
@@ -58,6 +58,7 @@ terminal = ["dep:rustyline"]
 rustyline = { version = "15", optional = true }
 rust_decimal = "1"
 minifb = { version = "0.28", optional = true }
+sdl2 = { version = "0.38", optional = true, features = ["bundled", "static-link"] }
 png = { version = "0.17", optional = true }
 stacker = "0.1"
 

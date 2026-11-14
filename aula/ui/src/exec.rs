@@ -11,7 +11,8 @@ use std::time::Duration;
 
 use expressa::runtime::{
     CapturaEvento, CartesianoHost, ChannelDebugger, DebugHook, DebugPaused, EstadoEntrada,
-    EventoGraf, FolhaPronta, GrafHost, LeiaHost, StopHook, TelaGrafica, run_with_hosts,
+    EventoGraf, FolhaPronta, GrafHost, LeiaHost, QuadrosPendentes, StopHook, TelaGrafica,
+    run_with_hosts,
 };
 
 use crate::store::{Expected, Files};
@@ -42,7 +43,7 @@ pub enum ExecEvent {
     Leia(String),
     CursorPosition(std::sync::mpsc::Sender<(i64, i64)>),
     Folha(FolhaPronta),
-    TelaGraf(TelaGrafica),
+    TelaGraf,
     Source(std::sync::Arc<crate::debug_sources::Source>),
     Paused(DebugPaused),
     Finished(Finished),
@@ -299,13 +300,18 @@ struct ChannelGraf {
     tx: SyncSender<ExecEvent>,
     eventos: Receiver<EventoGraf>,
     estados: HashMap<u64, EstadoEntrada>,
+    quadros: std::sync::Arc<std::sync::Mutex<QuadrosPendentes<TelaGrafica>>>,
 }
 
 impl GrafHost for ChannelGraf {
     fn mostre(&mut self, tela: TelaGrafica) -> Result<(), String> {
-        self.tx
-            .send(ExecEvent::TelaGraf(tela))
-            .map_err(|_| "IDE fechada".to_string())
+        let notify = self.quadros.lock().unwrap().publique(tela.id, tela);
+        if notify {
+            self.tx
+                .send(ExecEvent::TelaGraf)
+                .map_err(|_| "IDE fechada".to_string())?;
+        }
+        Ok(())
     }
 
     fn evento(&mut self, tela: &TelaGrafica) -> Result<CapturaEvento, String> {
@@ -348,6 +354,7 @@ pub struct RunHandle {
     pub lines: Sender<String>,
     /// Clique / tecla / fechar da janela gráfica.
     pub graf_eventos: Sender<EventoGraf>,
+    pub quadros_graf: std::sync::Arc<std::sync::Mutex<QuadrosPendentes<TelaGrafica>>>,
     /// continuar | proximo | entrar | sair | terminar
     pub debug_cmd: Sender<String>,
 }
@@ -409,6 +416,8 @@ pub fn spawn(
     args: Vec<String>,
 ) -> RunHandle {
     let (event_tx, events) = std::sync::mpsc::sync_channel(EVENT_BACKLOG);
+    let quadros_graf = std::sync::Arc::new(std::sync::Mutex::new(QuadrosPendentes::default()));
+    let quadros_worker = std::sync::Arc::clone(&quadros_graf);
     let (lines, line_rx) = std::sync::mpsc::channel::<String>();
     let (graf_eventos, graf_rx) = std::sync::mpsc::channel::<EventoGraf>();
     let (debug_cmd, ui_cmd_rx) = std::sync::mpsc::channel::<String>();
@@ -472,6 +481,7 @@ pub fn spawn(
             tx: event_tx.clone(),
             eventos: graf_rx,
             estados: HashMap::new(),
+            quadros: quadros_worker,
         };
         let mut out = ChannelOut {
             tx: event_tx.clone(),
@@ -570,6 +580,7 @@ pub fn spawn(
         events,
         lines,
         graf_eventos,
+        quadros_graf,
         debug_cmd,
     }
 }
@@ -580,6 +591,54 @@ mod tests {
     use crate::execution_state::{Event, ExecutionState, Unavailable};
 
     #[test]
+    fn slow_graphical_consumer_receives_one_notice_and_the_latest_frame_per_window() {
+        let (tx, rx) = std::sync::mpsc::sync_channel(1);
+        let (_input, eventos) = std::sync::mpsc::channel();
+        let quadros = std::sync::Arc::new(std::sync::Mutex::new(QuadrosPendentes::default()));
+        let mut host = ChannelGraf {
+            tx,
+            eventos,
+            estados: HashMap::new(),
+            quadros: quadros.clone(),
+        };
+        for n in 0..10_000 {
+            host.mostre(TelaGrafica {
+                id: 1,
+                largura: 8,
+                altura: 8,
+                tamanho_pixel: 1,
+                fundo: "branco".into(),
+                ops: vec![expressa::runtime::OpGraf::Ponto {
+                    x: n,
+                    y: 0,
+                    cor: "azul".into(),
+                }],
+            })
+            .unwrap();
+        }
+        host.mostre(TelaGrafica {
+            id: 2,
+            largura: 8,
+            altura: 8,
+            tamanho_pixel: 1,
+            fundo: "branco".into(),
+            ops: vec![],
+        })
+        .unwrap();
+        assert!(matches!(rx.try_recv().unwrap(), ExecEvent::TelaGraf));
+        assert!(rx.try_recv().is_err());
+        let mut frames = quadros.lock().unwrap().retire();
+        frames.sort_by_key(|t| t.id);
+        assert_eq!(frames.len(), 2);
+        assert!(matches!(
+            frames[0].ops[0],
+            expressa::runtime::OpGraf::Ponto { x: 9_999, .. }
+        ));
+        host.mostre(frames.remove(1)).unwrap();
+        assert!(matches!(rx.try_recv().unwrap(), ExecEvent::TelaGraf));
+    }
+
+    #[test]
     fn graphical_capture_routes_windows_and_preserves_held_keys() {
         let (tx, _rx) = std::sync::mpsc::sync_channel(1);
         let (eventos_tx, eventos) = std::sync::mpsc::channel();
@@ -587,6 +646,7 @@ mod tests {
             tx,
             eventos,
             estados: HashMap::new(),
+            quadros: std::sync::Arc::new(std::sync::Mutex::new(QuadrosPendentes::default())),
         };
         let a = TelaGrafica {
             id: 1,
