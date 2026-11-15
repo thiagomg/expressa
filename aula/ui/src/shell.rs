@@ -181,6 +181,7 @@ pub(crate) fn install_menubar(
     ui: &UiRc,
     file_scroll: &ScrolledWindow,
     debug_panel: &GtkBox,
+    args_row: &GtkBox,
 ) {
     add_win_action(win, ui, "novo", new_untitled_tab);
     add_win_action(win, ui, "salvar", |ui| {
@@ -250,6 +251,12 @@ pub(crate) fn install_menubar(
         add_win_toggle(win, "mostrar-painel", true, move |on| pane.set_visible(on));
     }
     {
+        let row = args_row.clone();
+        add_win_toggle(win, "mostrar-argumentos", true, move |on| {
+            row.set_visible(on)
+        });
+    }
+    {
         let dark = ui.borrow().prefs.dark;
         let initial = if dark { "escuro" } else { "claro" };
         let action = gio::SimpleAction::new_stateful(
@@ -301,6 +308,7 @@ pub(crate) fn install_menubar(
     let ver = gio::Menu::new();
     ver.append_item(&menu_item("_Arquivos", "win.mostrar-arquivos", Some("F7")));
     ver.append_item(&menu_item("_Painel", "win.mostrar-painel", Some("F8")));
+    ver.append_item(&menu_item("Ar_gumentos", "win.mostrar-argumentos", None));
     ver.append_item(&menu_item("_Buscar", "win.buscar", Some("<Primary>f")));
     ver.append_item(&menu_item(
         "Buscar no pro_jeto",

@@ -275,6 +275,7 @@ fn every_wire_opcode_roundtrips_with_full_operands() {
             argc: u32::MAX,
             name: u32::MAX,
         },
+        Op::Garanta { cond: u32::MAX },
     ];
     for (tag, op) in cases.into_iter().enumerate() {
         let mut w = Writer {

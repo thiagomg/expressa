@@ -63,6 +63,9 @@ enum Op {
     Slice(bool),
     Closure(u32),
     Call { argc: u32, name: u32 },
+    /// Direct `garanta(cond)`: callee and condition on the stack; `cond` is the
+    /// argument span (source snippet for the error).
+    Garanta { cond: u32 },
     Return,
     Finish,
     Checkpoint,

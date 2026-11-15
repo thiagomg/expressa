@@ -1321,6 +1321,14 @@ impl<'a, 'c> Vm<'a, 'c> {
                 for a in args {
                     vals.push(self.eval_expr(a, env)?);
                 }
+                if name == "garanta"
+                    && args.len() == 1
+                    && matches!(func, Value::Builtin("garanta"))
+                {
+                    let snippet =
+                        crate::runtime::nativas::texto_da_condicao(&self.source, args[0].span());
+                    return self.bi_garanta(&vals, *span, &snippet);
+                }
                 self.call_value(&func, &vals, *span, &name, env)
             }
             Expr::Index {

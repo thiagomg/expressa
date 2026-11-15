@@ -34,12 +34,15 @@ impl Compiler {
         self.names.insert(name.into(), id);
         id
     }
-    fn emit(&mut self, op: Op, span: Span) -> u32 {
+    fn intern_span(&mut self, span: Span) -> u32 {
         let n = self.code.spans.len() as u32;
-        let span = *self.spans.entry(span).or_insert_with(|| {
+        *self.spans.entry(span).or_insert_with(|| {
             self.code.spans.push(span);
             n
-        });
+        })
+    }
+    fn emit(&mut self, op: Op, span: Span) -> u32 {
+        let span = self.intern_span(span);
         let at = self.here();
         self.code.instructions.push(Instruction { op, span });
         at
@@ -316,6 +319,13 @@ impl Compiler {
                 self.emit(Op::MapField(id), span);
             }
             Expr::Call { callee, args, .. } => {
+                if callee_name(callee) == "garanta" && args.len() == 1 {
+                    self.expr(callee);
+                    self.expr(&args[0]);
+                    let cond = self.intern_span(args[0].span());
+                    self.emit(Op::Garanta { cond }, span);
+                    return;
+                }
                 self.expr(callee);
                 for arg in args {
                     self.expr(arg);

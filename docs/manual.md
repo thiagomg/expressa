@@ -166,6 +166,8 @@ linhas = leia_arquivo("x.txt") se_falhar []
 
 `saia(1)` encerra de propósito e **não** é capturado por `se_falhar`.
 
+`falhe("negativo")` gera um erro com essa mensagem e a pilha na chamada. `garanta(n > 0)` faz o mesmo se o teste for falso (`condição incorreta n > 0`). Os dois são pegos por `se_falhar`.
+
 ---
 
 ## Núcleo
@@ -195,6 +197,22 @@ Encerra. Sem argumento, código 0. Nada depois da chamada executa. No REPL do te
 
 ```text
 se nome == "" { saia(1) }
+```
+
+### `falhe(descricao)`
+
+Gera um erro de execução com essa descrição. A pilha aponta para a chamada; `falhe` não entra como quadro. `se_falhar` pega.
+
+```text
+se n < 0 { falhe("negativo") }
+```
+
+### `garanta(condicao)`
+
+A condição tem que ser verdadeiro ou falso. Se for falso, o erro é `condição incorreta` seguido do texto do teste. `se_falhar` pega.
+
+```text
+garanta(n > 0)
 ```
 
 ### `durma(segundos)`

@@ -12,7 +12,7 @@ use super::super::env::Env;
 use super::super::error::{CallFrame, EvalError};
 use super::super::eval::Vm;
 use super::super::numero::{Numero, NumeroAritmetica};
-use super::super::value::{MapKey, NumeroLocale, Value, conjunto_insert};
+use super::super::value::{conjunto_insert, MapKey, NumeroLocale, Value};
 use super::{builtin_args, builtin_doc_summary, builtin_modulo, lookup_ficha, sem_acento};
 
 impl Vm<'_, '_> {
@@ -78,6 +78,36 @@ impl Vm<'_, '_> {
         let _ = self.err.flush();
         Err(EvalError::Quit(code))
     }
+
+    pub(crate) fn bi_falhe(
+        &mut self,
+        args: &[Value],
+        span: Span,
+        env: &Rc<RefCell<Env>>,
+    ) -> Result<Value, EvalError> {
+        self.expect_arity(args, 1, span)?;
+        let text = self.como_texto_de(&args[0], span, env)?;
+        Err(self.err(text, span))
+    }
+
+    pub(crate) fn bi_garanta(
+        &mut self,
+        args: &[Value],
+        span: Span,
+        snippet: &str,
+    ) -> Result<Value, EvalError> {
+        self.expect_arity(args, 1, span)?;
+        if self.expect_bool(&args[0], span)? {
+            return Ok(Value::Nada);
+        }
+        let message = if snippet.is_empty() {
+            "condição incorreta".into()
+        } else {
+            format!("condição incorreta {snippet}")
+        };
+        Err(self.err(message, span))
+    }
+
     pub(crate) fn bi_leia(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
         if args.len() > 1 {
             return Err(self.err(
@@ -835,4 +865,41 @@ fn module_member_names(env: &Env) -> String {
         .map(|(k, _)| k)
         .collect::<Vec<_>>()
         .join(", ")
+}
+
+pub(crate) fn texto_da_condicao(source: &str, span: Span) -> String {
+    let raw = source.get(span.start..span.end).unwrap_or("");
+    let mut out = String::new();
+    let mut space = false;
+    for ch in raw.chars() {
+        if ch.is_whitespace() {
+            space = true;
+            continue;
+        }
+        if space && !out.is_empty() {
+            out.push(' ');
+        }
+        space = false;
+        out.push(ch);
+    }
+    out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::lexer::Span;
+
+    #[test]
+    fn texto_da_condicao_junta_espacos() {
+        let src = "garanta(\n    x > 0\n)";
+        let start = src.find("x > 0").unwrap();
+        let span = Span::new(2, 5, start, start + "x > 0".len());
+        assert_eq!(texto_da_condicao(src, span), "x > 0");
+        let src = "garanta(\n  1 >\n  2\n)";
+        let start = src.find("1 >").unwrap();
+        let end = src.rfind('2').unwrap() + 1;
+        let span = Span::new(2, 3, start, end);
+        assert_eq!(texto_da_condicao(src, span), "1 > 2");
+    }
 }

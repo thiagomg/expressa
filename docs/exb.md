@@ -149,6 +149,7 @@ A coluna abaixo fixa os números de arquivo. `(value)`/`target` são operandos u
 | 69 | `Op::ShortCircuit { target, value: false }` |
 | 70 | `Op::ShortCircuit { target, value: true }` |
 | 71 | `Op::Call { argc, name }` |
+| 72 | `Op::Garanta { cond }` |
 
 Esses números são independentes dos discriminantes Rust. Mudanças incompatíveis de layout, operandos ou semântica de instruções exigem uma revisão de versão. O loader atual aceita somente v1 e os recursos 3. A resolução de bibliotecas nativas continua sendo responsabilidade do runtime instalado.
 

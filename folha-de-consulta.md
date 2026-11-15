@@ -112,6 +112,8 @@ enquanto i <= 3 {
 valor = 10 / 0 se_falhar 0
 importe "arquivo"
 linhas = leia_arquivo("x.txt") se_falhar []
+garanta(n > 0)                 // erro: condição incorreta n > 0
+se n < 0 { falhe("negativo") }
 ```
 
 Sem `se_falhar`, um erro encerra o programa.
@@ -344,7 +346,7 @@ Núcleo (sempre no escopo):
 
 | | |
 |---|---|
-| `escreva` `escreva_erro` `saia` `durma` | imprimir / encerrar / esperar |
+| `escreva` `escreva_erro` `saia` `falhe` `garanta` `durma` | imprimir / encerrar / erro / esperar |
 | `leia` `leia_linhas` | teclado / pipe |
 | `argumentos` | lista (não é função) |
 | `numero` `número` `formato` `avalie` `catalogo` `ajuda` | número / executar texto / listar / ficha |

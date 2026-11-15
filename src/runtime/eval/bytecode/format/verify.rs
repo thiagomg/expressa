@@ -188,6 +188,7 @@ fn chunk(
             | Op::ReceiverMap(id)
             | Op::MapDestination(id) => index(id, code.names.len())?,
             Op::Call { name, .. } => index(name, code.names.len())?,
+            Op::Garanta { cond } => index(cond, code.spans.len())?,
             Op::LoadLocal(id) | Op::StoreLocal(id) => index(id, params)?,
             Op::Closure(id) => index(id, code.functions.len())?,
             Op::Import(id) => index(id, code.imports.len())?,
@@ -292,6 +293,7 @@ fn chunk(
                 0,
                 0,
             )?,
+            Op::Garanta { .. } => s.effect(2, 1, 0, 0)?,
             Op::Return => {
                 s.effect(1, 0, 0, 0)?;
                 fallthrough = false;

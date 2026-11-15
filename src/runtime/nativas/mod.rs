@@ -32,6 +32,7 @@ mod sistema;
 #[cfg(feature = "terminal")]
 mod tela;
 
+pub(crate) use nucleo::texto_da_condicao;
 pub use referencia::{
     BuiltinDoc, builtin_docs, docs_agrupados, lookup_alvo, lookup_builtin_doc, lookup_ficha,
     tema_de, titulo_modulo,
@@ -57,6 +58,14 @@ pub const NATIVAS: &[Nativa] = &[
     },
     Nativa {
         names: &["saia"],
+        module: None,
+    },
+    Nativa {
+        names: &["falhe"],
+        module: None,
+    },
+    Nativa {
+        names: &["garanta"],
         module: None,
     },
     Nativa {
@@ -687,6 +696,8 @@ impl Vm<'_, '_> {
             "escreva" => self.bi_escreva(args, span, env),
             "escreva_erro" => self.bi_escreva_erro(args, span, env),
             "saia" => self.bi_saia(args, span),
+            "falhe" => self.bi_falhe(args, span, env),
+            "garanta" => self.bi_garanta(args, span, ""),
             #[cfg(feature = "terminal")]
             "cls" | "limpe_tela" => self.bi_cls(args, span),
             #[cfg(feature = "terminal")]

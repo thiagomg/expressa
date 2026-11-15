@@ -31,6 +31,21 @@ escreva_erro = funcao(valor) { 0 }
 saia = funcao() { 0 }
 saia = funcao(codigo) { 0 }
 
+/// Interrompe com um erro de execução. A descrição vira a mensagem.
+///
+/// A pilha aponta para esta chamada, sem um quadro chamado falhe. se_falhar pega.
+///
+/// Exemplo: se n < 0 { falhe("negativo") }
+falhe = funcao(descricao) { 0 }
+
+/// Se a condição for falsa, erro "condição incorreta …" com o texto do teste.
+///
+/// A condição tem que ser verdadeiro ou falso (como no se). Devolve nada.
+/// se_falhar pega. A pilha aponta para esta chamada.
+///
+/// Exemplo: garanta(n > 0)
+garanta = funcao(condicao) { 0 }
+
 /// Espera o número de segundos (aceita fração: durma(0.5)).
 ///
 /// durma(0) não espera. Na Aula, o tempo-limite do programa continua valendo.

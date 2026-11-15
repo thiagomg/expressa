@@ -102,6 +102,28 @@
       "doc": "Encerra o programa. Sem argumento, código 0; saia(1) indica falha.\n\nNada depois da chamada executa. Não é capturado por se_falhar.\nNo REPL, a linha sair (sem parênteses) sai do interpretador; saia() encerra o processo.\n\nExemplo: se nome == \"\" { saia(1) }"
     },
     {
+      "name": "falhe",
+      "aliases": [],
+      "module": null,
+      "kind": "funcao",
+      "signatures": [
+        "falhe(descricao)"
+      ],
+      "summary": "Interrompe com um erro de execução. A descrição vira a mensagem.",
+      "doc": "Interrompe com um erro de execução. A descrição vira a mensagem.\n\nA pilha aponta para esta chamada, sem um quadro chamado falhe. se_falhar pega.\n\nExemplo: se n < 0 { falhe(\"negativo\") }"
+    },
+    {
+      "name": "garanta",
+      "aliases": [],
+      "module": null,
+      "kind": "funcao",
+      "signatures": [
+        "garanta(condicao)"
+      ],
+      "summary": "Se a condição for falsa, erro \"condição incorreta …\" com o texto do teste.",
+      "doc": "Se a condição for falsa, erro \"condição incorreta …\" com o texto do teste.\n\nA condição tem que ser verdadeiro ou falso (como no se). Devolve nada.\nse_falhar pega. A pilha aponta para esta chamada.\n\nExemplo: garanta(n > 0)"
+    },
+    {
       "name": "durma",
       "aliases": [],
       "module": null,

@@ -233,6 +233,21 @@ pub(crate) fn detached_function(
                     }
                     effect(&mut s, n, 1)?;
                 }
+                Op::Garanta { .. } => {
+                    let n = 2;
+                    let base = s
+                        .values
+                        .len()
+                        .checked_sub(n)
+                        .ok_or("pilha inválida para clone")?;
+                    let native = s.values[base].ok_or(
+                        "função tem chamada indireta; não é possível provar ausência de acesso ao ambiente",
+                    )?;
+                    if matches!(native, "avalie" | "catalogo" | "catálogo" | "ordene") {
+                        return Err(format!("função pode consultar o ambiente por `{native}`"));
+                    }
+                    effect(&mut s, n, 1)?;
+                }
                 Op::LoopEnter(id) => {
                     effect(
                         &mut s,

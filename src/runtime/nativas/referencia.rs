@@ -125,7 +125,9 @@ pub fn tema_de(module: Option<&str>, name: &str) -> &'static str {
             | "ordene",
         ) => "Coleção",
         (None, "ambiente") => "Sistema",
-        (None, "clone" | "avalie" | "catalogo" | "ajuda" | "tipo" | "tipos") => "Linguagem",
+        (None, "clone" | "avalie" | "catalogo" | "ajuda" | "tipo" | "tipos" | "falhe" | "garanta") => {
+            "Linguagem"
+        }
         (
             Some("tela"),
             "cls" | "casa" | "eh_terminal" | "colunas" | "linhas" | "posicao_cursor"

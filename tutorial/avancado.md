@@ -219,9 +219,12 @@ Arquivo: `exemplos/15_se_falhar.lep`
 escreva(10 / 0 se_falhar "não dá para dividir")
 escreva([1, 2][9] se_falhar "índice longe")
 escreva(numero("xyz") se_falhar 0)
+escreva(falhe("negativo") se_falhar "pego")
 ```
 
 Se você remover `se_falhar`, o programa encerra. Com `se_falhar`, o valor da direita é usado.
+
+`falhe("mensagem")` e `garanta(n > 0)` também geram erro; `se_falhar` pega.
 
 Mais casos (arquivo, índice): `../exemplos/linguagem/erros.lep`.
 
