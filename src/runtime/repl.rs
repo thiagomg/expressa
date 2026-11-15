@@ -537,6 +537,7 @@ fn print_help_linguagem() {
          argumentos[0]           primeiro argumento após o .lep\n  \
          funcao(a, b) {{ … }}            último valor é o resultado\n  \
          expr se_falhar outro            captura erro (divisão, arquivo, índice)\n  \
+         falhe(\"msg\")  garanta(n > 0)  erro capturável (pilha na chamada)\n  \
          :nome                           o texto \"nome\" (chave de mapa)\n  \
          :nome -> \"Ana\"                par; mapa([:nome -> \"Ana\"])\n  \
          conjunto([:ana, 1])             únicos; s += :bia; s.remova(:ana)\n  \

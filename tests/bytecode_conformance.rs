@@ -154,6 +154,12 @@ fn expression_and_statement_value_rules_match() {
         "escreva(avalie(\"10\\nx = 2\"))",
         "escreva({ 10 se falso { 20 } })",
         "escreva(nao falso e (verdadeiro ou (1 / 0 == 1)))",
+        "escreva(falhe(\"x\") se_falhar \"pego\")",
+        "escreva(garanta(falso) se_falhar \"pego\")",
+        "garanta(verdadeiro)\nescreva(1)",
+        "g = garanta\ng(1 > 2)",
+        "usa = funcao(garanta) { escreva(garanta(falso)) }\nusa(funcao(c) { se c { \"ok\" } senao { \"nao\" } })",
+        "confira = funcao(n) { garanta(n > 0) n }\nconfira(-1)",
         "escreva([1, 2, 3][1..3])\nescreva(\"olá\"[1])",
     ] {
         equivalent(source);

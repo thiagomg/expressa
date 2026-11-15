@@ -236,6 +236,27 @@ impl Machine {
                 let function = pop!();
                 return Ok(Step::Call(function, args, name!(name).clone(), span));
             }
+            Op::Garanta { cond } => {
+                let cond_v = pop!();
+                let function = pop!();
+                let snippet = crate::runtime::nativas::texto_da_condicao(
+                    &vm.source,
+                    frame.code.spans[cond as usize],
+                );
+                let result = match &function {
+                    Value::Builtin("garanta") => {
+                        vm.bi_garanta(std::slice::from_ref(&cond_v), span, &snippet)?
+                    }
+                    _ => vm.call_value(
+                        &function,
+                        std::slice::from_ref(&cond_v),
+                        span,
+                        "garanta",
+                        frame.env(),
+                    )?,
+                };
+                self.values.push(result);
+            }
             Op::Return => {
                 return Err(EvalError::Return {
                     value: pop!(),

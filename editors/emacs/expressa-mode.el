@@ -21,7 +21,7 @@
     "importe" "contem" "contém"))
 
 (defconst expressa-builtins
-  '("escreva" "escreva_erro" "saia" "cls" "limpe_tela" "casa" "quadro" "bloco" "escreva_em" "colunas" "linhas" "nova_linha" "durma" "pinte" "fundo" "negrito" "leia" "leia_linhas"
+  '("escreva" "escreva_erro" "saia" "falhe" "garanta" "cls" "limpe_tela" "casa" "quadro" "bloco" "escreva_em" "colunas" "linhas" "nova_linha" "durma" "pinte" "fundo" "negrito" "leia" "leia_linhas"
     "eh_terminal" "é_terminal" "argumentos"
     "numero" "número" "formato" "formate" "avalie" "catalogo" "catálogo" "ajuda" "tipo" "tipos" "raiz" "aleatorio" "aleatório" "semente"
     "nova" "linha" "circulo" "círculo" "ponto" "retangulo" "retângulo" "texto" "imagem" "apague" "pixel" "como_imagem" "salve" "evento"

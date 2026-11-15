@@ -449,6 +449,8 @@ Com `importe "crono"`: `agora()` é a data e a hora locais: mapa `:ano`, `:mes`,
 
 `saia()` encerra o programa com código 0. `saia(1)` encerra com falha (o shell vê o código). Não é capturado por `se_falhar`.
 
+`falhe(descricao)` gera um erro de execução com essa descrição (texto, ou `:_como_texto`). A pilha aponta para a chamada; a nativa não entra como quadro. `garanta(condicao)` exige `verdadeiro` ou `falso`; se for falso, a mensagem é `condição incorreta` seguida do fonte da condição (espaços compactados). Os dois são capturáveis com `se_falhar`.
+
 Com `importe "cartesiano"`: `documento()` é a identidade da janela (um mapa `:graficos`). `grafico()` é um plano xy (`:xmin`… e `:curvas`). `eixos(g, xmin, xmax, ymin, ymax)` grava os limites (y para cima). `plote(g, função, cor)` amostra ~400 pontos de xmin a xmax; y não finito vira um furo na linha. Cores: as da `tela`. `adicione(c, g)` copia o gráfico para a folha (congela). `mostre(c)` abre ou atualiza a janela daquele documento e traz o foco; não espera fechar. Folha vazia é erro. Dois `documento()` são duas janelas. `tipo(g)` continua `"mapa"`. Sem display, `mostre` falha (`se_falhar`). O CLI abre `expressa-grafico` (ou `expressa --grafico`). Na Aula o painel Gráficos (Destacar vira janela irmã).
 
 Com `importe "tela_grafica"`: `nova(largura, altura)` ou `nova(largura, altura, tamanho_pixel)` é uma tela de pixels (mapa `:largura`, `:altura`, `:tamanho_pixel`, `:cor`, `:fundo`, `:ops`). Origem no canto superior esquerdo, y para baixo, (0,0) no primeiro pixel. Inteiros 1…2048. `tamanho_pixel` (1…16, padrão 1) é o lado do quadrado na janela para cada pixel lógico (`2` = 2×2); `evento`, `pixel` e `salve` usam o canvas. `cor`, `fundo`, `linha`, `circulo`, `ponto`, `retangulo`, `texto`, `apague` acumulam ou limpam comandos. Cores: as da `tela` e `transparente` (furo no sprite). `fundo(g, cor)` é o papel (padrão branco). `retangulo(g, x1, y1, x2, y2)` preenche o retângulo (cantos inclusivos, recorta). `como_imagem(g)` devolve uma `imagem` (cópia; transparente vira alpha 0). `texto(g, x, y, t)` / `texto(g, x, y, t, tamanho)` desenha t na caneta; (x, y) é o canto superior esquerdo, tamanho é a altura da célula (padrão 8), `\\n` desce uma linha. `imagem(g, caminho|img|tela, x, y, angulo)` carimba pixels (PNG lido uma vez, ou outra tela via `como_imagem`). `pixel(g, x, y)` devolve o nome da cor (fora da tela é erro). `salve(g, "a.png")` grava PNG com transparência, sem janela. `mostre(g)` abre ou atualiza a janela daquela instância (não acopla na Aula). `evento(g)` / `evento(g, segundos)` espera clique, tecla ou fechar naquela janela (mapa `:tipo`, `:x`, `:y`, `:botao`, `:tecla`). Cada `nova()` é uma janela. `tipo(g)` continua `"mapa"`. Cores: as da `tela`. Protocolo da janela: `docs/tela_grafica.md`.
@@ -526,6 +528,9 @@ linhas = leia_arquivo("arquivo.txt") se_falhar []
 valor = 10 / 0 se_falhar 0
 
 item = lista[99] se_falhar "não existe"
+
+garanta(n > 0)
+se n < 0 { falhe("negativo") }
 ```
 
 ---

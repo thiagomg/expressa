@@ -151,6 +151,10 @@ impl Writer {
                 self.u32(argc)?;
                 self.u32(name)
             }
+            Op::Garanta { cond } => {
+                self.u8(72)?;
+                self.u32(cond)
+            }
         }
     }
 }
@@ -304,6 +308,7 @@ impl Reader<'_> {
                 argc: self.u32()?,
                 name: self.u32()?,
             },
+            72 => Op::Garanta { cond: self.u32()? },
             _ => return Err(self.err("opcode EXB inválido")),
         })
     }

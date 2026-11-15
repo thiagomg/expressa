@@ -1658,6 +1658,103 @@ fn call_stack_nested_functions_use_each_frame_line() {
 }
 
 #[test]
+fn falhe_e_garanta_mensagem_pilha_e_se_falhar() {
+    for backend in [ExecutionBackend::Ast, ExecutionBackend::Bytecode]
+        .into_iter()
+        .filter(|backend| backend.is_available())
+    {
+        let opts = ExecutionOptions {
+            backend,
+            ..ExecutionOptions::default()
+        };
+        let out = run_with_options(
+            r#"escreva(falhe("negativo") se_falhar "pego")
+escreva(garanta(verdadeiro) se_falhar "x")
+escreva(garanta(1 > 0))
+escreva(garanta(falso) se_falhar "ok")
+"#,
+            "app.lep",
+            "",
+            opts.clone(),
+        )
+        .unwrap();
+        assert_eq!(out.stdout, "pego\nnada\nnada\nok\n", "{backend:?}");
+
+        let err = run_with_options(
+            "boom = funcao() {\n    falhe(\"idade\")\n}\nboom()\n",
+            "app.lep",
+            "",
+            opts.clone(),
+        )
+        .unwrap_err();
+        assert_eq!(err.message, "idade", "{backend:?}");
+        assert_eq!(
+            err.stack
+                .iter()
+                .map(|f| (f.name.as_str(), f.span.line))
+                .collect::<Vec<_>>(),
+            [("<modulo>", 4), ("boom", 2)],
+            "{backend:?} {err}"
+        );
+        let text = err.to_string();
+        assert!(!text.contains("0: falhe"), "{text}");
+        assert!(text.contains("0: boom (app.lep:2:"), "{text}");
+
+        let err = run_with_options(
+            "confira = funcao(n) {\n    garanta(n > 0)\n    n\n}\nconfira(-1)\n",
+            "app.lep",
+            "",
+            opts.clone(),
+        )
+        .unwrap_err();
+        assert_eq!(err.message, "condição incorreta n > 0", "{backend:?} {err}");
+        assert_eq!(
+            err.stack
+                .iter()
+                .map(|f| (f.name.as_str(), f.span.line))
+                .collect::<Vec<_>>(),
+            [("<modulo>", 5), ("confira", 2)],
+            "{backend:?} {err}"
+        );
+        assert!(!err.to_string().contains("0: garanta"), "{err}");
+
+        let err = run_with_options(
+            "garanta(\n    1 >\n    2\n)\n",
+            "app.lep",
+            "",
+            opts.clone(),
+        )
+        .unwrap_err();
+        assert_eq!(err.message, "condição incorreta 1 > 2", "{backend:?} {err}");
+        assert!(!err.shows_stack(), "{err}");
+
+        let err = run_with_options("garanta(1)\n", "app.lep", "", opts.clone()).unwrap_err();
+        assert!(err.message.contains("esperado bool"), "{backend:?} {err}");
+
+        let err = run_with_options("falhe()\n", "app.lep", "", opts.clone()).unwrap_err();
+        assert!(err.message.contains("1 argumento"), "{backend:?} {err}");
+
+        let err = run_with_options(
+            "g = garanta\ng(1 > 2)\n",
+            "app.lep",
+            "",
+            opts.clone(),
+        )
+        .unwrap_err();
+        assert_eq!(err.message, "condição incorreta", "{backend:?} {err}");
+
+        let out = run_with_options(
+            "usa = funcao(garanta) {\n    escreva(garanta(falso))\n}\nusa(funcao(c) { se c { \"ok\" } senao { \"nao\" } })\n",
+            "app.lep",
+            "",
+            opts,
+        )
+        .unwrap();
+        assert_eq!(out.stdout, "nao\n", "{backend:?}");
+    }
+}
+
+#[test]
 fn top_level_error_omits_the_module_frame() {
     let err = match run_to_string("1 / 0\n", "app.lep") {
         Err(e) => e,
