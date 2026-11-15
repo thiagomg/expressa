@@ -2,6 +2,7 @@ name: Project storage
 
 on:
   push:
+    branches: [main]
   pull_request:
 
 permissions:
