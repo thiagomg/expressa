@@ -176,7 +176,7 @@ fn checked_control_flow_is_cancellable_and_source_is_not_reparsed() {
     assert!(result.unwrap_err().message.contains("tempo esgotado"));
 }
 #[test]
-fn arbitrary_mutations_do_not_panic_the_loader() {
+fn arbitrary_mutations_do_not_panic() {
     let original = compile_exb("f = funcao(x) { x + 1 }\nescreva(f(2))", "test.lep").unwrap();
     for i in 0..512 {
         let mut bytes = original.clone();
@@ -184,10 +184,24 @@ fn arbitrary_mutations_do_not_panic_the_loader() {
         bytes[pos] ^= (i as u8).wrapping_mul(17) | 1;
         let hash = checksum(&bytes[HEADER..]);
         bytes[12..20].copy_from_slice(&hash.to_le_bytes());
-        assert!(
-            std::panic::catch_unwind(|| load_exb(&bytes)).is_ok(),
-            "mutation {i}, byte {pos}"
-        );
+        let loaded = std::panic::catch_unwind(|| load_exb(&bytes));
+        assert!(loaded.is_ok(), "mutation {i}, byte {pos}");
+        let Ok(program) = loaded.unwrap() else {
+            continue;
+        };
+        let ran = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            crate::runtime::run_compiled_with_options(
+                &program,
+                "mutacao.exb",
+                "",
+                crate::runtime::ExecutionOptions {
+                    backend: ExecutionBackend::Bytecode,
+                    time_limit: Some(Duration::from_millis(1)),
+                    ..Default::default()
+                },
+            )
+        }));
+        assert!(ran.is_ok(), "mutation {i}, byte {pos} panicked");
     }
 }
 
@@ -260,8 +274,6 @@ fn every_wire_opcode_roundtrips_with_full_operands() {
         Op::Binary(BinaryOp::Le),
         Op::Binary(BinaryOp::Gt),
         Op::Binary(BinaryOp::Ge),
-        Op::Binary(BinaryOp::And),
-        Op::Binary(BinaryOp::Or),
         Op::Binary(BinaryOp::Contem),
         Op::ShortCircuit {
             target: 19,
@@ -277,16 +289,17 @@ fn every_wire_opcode_roundtrips_with_full_operands() {
         },
         Op::Garanta { cond: u32::MAX },
     ];
-    for (tag, op) in cases.into_iter().enumerate() {
+    let mut tag = 0u8;
+    for op in cases {
+        if tag == 66 {
+            tag = 68;
+        }
         let mut w = Writer {
             bytes: vec![],
             items: MAX_ITEMS,
         };
         w.op(op).unwrap();
-        assert_eq!(
-            w.bytes[0], tag as u8,
-            "EXB v1 opcode assignments are pinned"
-        );
+        assert_eq!(w.bytes[0], tag, "EXB v2 opcode assignments are pinned");
         let mut r = Reader::new(&w.bytes);
         let decoded = r.op().unwrap();
         assert_eq!(decoded, op);
@@ -297,7 +310,9 @@ fn every_wire_opcode_roundtrips_with_full_operands() {
         };
         out.op(decoded).unwrap();
         assert_eq!(out.bytes, w.bytes);
+        tag += 1;
     }
+    assert_eq!(tag, 73);
     let mut r = Reader::new(&[255]);
     assert!(r.op().is_err());
 }
@@ -319,8 +334,8 @@ fn runtime_layout_remains_unpacked_and_file_limits_are_bounded() {
 }
 
 #[test]
-fn version_one_golden_file_remains_compatible() {
-    let hex = "4558420001000300d7000000e56a91e5538f756c0a000000676f6c64656e2e6c65700a000000657363726576612831290100000001000000000000000a000000040000000100000001000000000000000a0000000100000001000000000000000700000001000000090000000800000009000000000000000000000000000000000000000100000007000000657363726576610100000000000000000100000000000000000000000000000000000000000000000700000008000000001b000000000100000019000000000200000047010000000000000000000000010000000000030000000703000000";
+fn version_two_golden_file_remains_compatible() {
+    let hex = "4558420002000300d7000000e56a91e5538f756c0a000000676f6c64656e2e6c65700a000000657363726576612831290100000001000000000000000a000000040000000100000001000000000000000a0000000100000001000000000000000700000001000000090000000800000009000000000000000000000000000000000000000100000007000000657363726576610100000000000000000100000000000000000000000000000000000000000000000700000008000000001b000000000100000019000000000200000047010000000000000000000000010000000000030000000703000000";
     let bytes: Vec<u8> = hex
         .as_bytes()
         .as_chunks::<2>()
@@ -342,4 +357,103 @@ fn version_one_golden_file_remains_compatible() {
     )
     .unwrap();
     assert_eq!(result.stdout, "1\n");
+}
+
+#[test]
+fn version_one_is_rejected() {
+    let mut bytes = compile_exb("escreva(1)", "test.lep").unwrap();
+    assert_eq!(&bytes[4..6], &EXB_VERSION.to_le_bytes());
+    bytes[4] = 1;
+    match load_exb(&bytes) {
+        Err(err) => assert!(err.message.contains("versão EXB não suportada"), "{err}"),
+        Ok(_) => panic!("versão 1 foi aceita"),
+    }
+}
+
+#[test]
+fn opcodes_66_and_67_are_rejected() {
+    for tag in [66u8, 67] {
+        let err = Reader::new(&[tag]).op().unwrap_err();
+        assert!(err.message.contains("opcode EXB inválido"), "{err}");
+    }
+    for op in [Op::Binary(BinaryOp::And), Op::Binary(BinaryOp::Or)] {
+        let mut w = Writer {
+            bytes: vec![],
+            items: MAX_ITEMS,
+        };
+        let err = w.op(op).unwrap_err();
+        assert!(err.message.contains("opcode EXB inválido"), "{err}");
+    }
+
+    let bytes = compile_exb("escreva(1 + 2)", "test.lep").unwrap();
+    let program = load_exb(&bytes).unwrap();
+    let span = program
+        .code
+        .instructions
+        .iter()
+        .find(|instruction| matches!(instruction.op, Op::Binary(BinaryOp::Add)))
+        .expect("soma")
+        .span;
+    let mut needle = vec![55u8];
+    needle.extend_from_slice(&span.to_le_bytes());
+    let hits: Vec<usize> = bytes[HEADER..]
+        .windows(needle.len())
+        .enumerate()
+        .filter(|(_, window)| *window == needle.as_slice())
+        .map(|(index, _)| index)
+        .collect();
+    assert_eq!(hits.len(), 1, "uma única soma no fio");
+    for tag in [66u8, 67] {
+        let mut broken = bytes.clone();
+        broken[HEADER + hits[0]] = tag;
+        let hash = checksum(&broken[HEADER..]);
+        broken[12..20].copy_from_slice(&hash.to_le_bytes());
+        let loaded = std::panic::catch_unwind(|| load_exb(&broken));
+        assert!(loaded.is_ok(), "tag {tag} panicked in the loader");
+        match loaded.unwrap() {
+            Err(err) => assert!(err.message.contains("opcode EXB inválido"), "{err}"),
+            Ok(_) => panic!("tag {tag} foi aceita"),
+        }
+        let ran = std::panic::catch_unwind(|| {
+            crate::runtime::run_exb_with_options(
+                &broken,
+                "test.exb",
+                "",
+                ExecutionOptions {
+                    backend: ExecutionBackend::Bytecode,
+                    time_limit: Some(Duration::from_millis(1)),
+                    ..Default::default()
+                },
+            )
+        });
+        assert!(ran.is_ok(), "tag {tag} panicked when run");
+        assert!(ran.unwrap().is_err());
+    }
+}
+
+#[test]
+fn short_circuit_binary_ops_are_errors_not_panics() {
+    for op in [BinaryOp::And, BinaryOp::Or] {
+        let mut program = fixture("escreva(1 + 2)");
+        let code = Rc::get_mut(&mut program.code).unwrap();
+        let slot = code
+            .instructions
+            .iter_mut()
+            .find(|instruction| matches!(instruction.op, Op::Binary(BinaryOp::Add)))
+            .expect("soma");
+        slot.op = Op::Binary(op);
+        let ran = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            crate::runtime::run_compiled_with_options(
+                &program,
+                "test.exb",
+                "",
+                ExecutionOptions {
+                    backend: ExecutionBackend::Bytecode,
+                    ..Default::default()
+                },
+            )
+        }));
+        let err = ran.expect("e/ou panicked").unwrap_err();
+        assert!(err.message.contains("não são instruções binárias"), "{err}");
+    }
 }

@@ -1,4 +1,6 @@
-//! EXB v1: portable file encoding, independent from the VM's in-memory Op enum.
+//! EXB v2: portable file encoding, independent from the VM's in-memory Op enum.
+//! Version 1 is rejected. Some instruction meanings changed, and tags 66 and 67
+//! are not opcodes.
 mod opcodes;
 #[cfg(test)]
 mod tests;
@@ -8,7 +10,8 @@ use super::*;
 use std::fmt;
 use std::io::Read;
 
-pub const EXB_VERSION: u16 = 1;
+/// Current EXB file version. The loader rejects every other version, including 1.
+pub const EXB_VERSION: u16 = 2;
 pub const EXB_MAX_BYTES: usize = 16 * 1024 * 1024;
 const MAGIC: &[u8; 4] = b"EXB\0";
 const FLAGS: u16 = 3; // decimal96 constants and embedded debug source

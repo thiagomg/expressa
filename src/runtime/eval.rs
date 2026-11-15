@@ -1537,7 +1537,9 @@ impl<'a, 'c> Vm<'a, 'c> {
                 self.compare(l, op, r, span)
             }
             BinaryOp::Contem => self.contains(l, r, span),
-            BinaryOp::And | BinaryOp::Or => unreachable!("short-circuit ops handled above"),
+            BinaryOp::And | BinaryOp::Or => {
+                Err(self.err("os operadores e/ou não são instruções binárias", span))
+            }
         }
     }
 

@@ -43,7 +43,7 @@ Compilar: `cargo build --release` (Rust, edition 2024; CMake e compilador C/C++ 
 
 O backend padrão executa bytecode, sem JIT. Para comparar com o interpretador AST de referência: `expressa --backend ast prog.lep`; `--backend bytecode` seleciona explicitamente a VM. A opção `--ast` apenas imprime a árvore sintática. Veja [a revisão da migração](lang-tasks/BYTECODE-REVIEW.md) e [a comparação de CPU e memória](benchmarks/AST-VS-BYTECODE.md).
 
-O formato [EXB v1](docs/exb.md) inclui fonte para diagnósticos, valida instruções no carregamento e dispensa o `.lep` original. Veja [a medição de CPU e memória](benchmarks/EXB-V1-REVIEW.md).
+O formato [EXB v2](docs/exb.md) inclui fonte para diagnósticos, valida instruções no carregamento e dispensa o `.lep` original. Veja [a medição de CPU e memória](benchmarks/EXB-V1-REVIEW.md).
 
 Um [perfil mínimo de compilação](docs/runtime-profiles.md) mantém bytecode, EXB e `avalie`, excluindo o executor AST, gráficos, processos e terminal interativo com `--no-default-features`. O build padrão continua completo.
 

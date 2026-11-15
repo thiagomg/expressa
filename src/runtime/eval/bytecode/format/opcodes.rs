@@ -1,4 +1,5 @@
-//! Stable EXB v1 opcode assignments. Do not renumber without a format version change.
+//! Stable EXB v2 opcode assignments. Tags 66 and 67 are reserved and rejected.
+//! Do not renumber without a format version change.
 use super::*;
 impl Writer {
     pub(super) fn op(&mut self, op: Op) -> Result<()> {
@@ -129,8 +130,9 @@ impl Writer {
             Op::Binary(BinaryOp::Le) => self.u8(63),
             Op::Binary(BinaryOp::Gt) => self.u8(64),
             Op::Binary(BinaryOp::Ge) => self.u8(65),
-            Op::Binary(BinaryOp::And) => self.u8(66),
-            Op::Binary(BinaryOp::Or) => self.u8(67),
+            Op::Binary(BinaryOp::And) | Op::Binary(BinaryOp::Or) => {
+                Err(super::error("opcode EXB inválido"))
+            }
             Op::Binary(BinaryOp::Contem) => self.u8(68),
             Op::ShortCircuit {
                 target,
@@ -287,8 +289,6 @@ impl Reader<'_> {
             63 => Op::Binary(BinaryOp::Le),
             64 => Op::Binary(BinaryOp::Gt),
             65 => Op::Binary(BinaryOp::Ge),
-            66 => Op::Binary(BinaryOp::And),
-            67 => Op::Binary(BinaryOp::Or),
             68 => Op::Binary(BinaryOp::Contem),
             69 => {
                 let operand = self.u32()?;
