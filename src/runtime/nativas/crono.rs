@@ -428,22 +428,31 @@ fn ano_cabe_no_relogio(ano: i64) -> bool {
 
 #[cfg(unix)]
 fn mktime_epoch(tm: &mut libc::tm) -> Option<i64> {
-    // Epoch -1 is a real instant. `mktime` reports it as -1, so only a set
-    // errno means the civil time does not fit in `time_t`.
-    #[cfg(any(target_os = "linux", target_os = "android"))]
-    unsafe {
-        *libc::__errno_location() = 0;
+    // `mktime` returns -1 both for one second before the epoch and for a
+    // civil time that does not fit in `time_t`. Accept -1 when local time
+    // still shows the fields we asked for.
+    let ano = tm.tm_year;
+    let mes = tm.tm_mon;
+    let dia = tm.tm_mday;
+    let hora = tm.tm_hour;
+    let minuto = tm.tm_min;
+    let segundo = tm.tm_sec;
+    let t = unsafe { libc::mktime(tm) } as i64;
+    if t != -1 {
+        return Some(t);
     }
-    let t = unsafe { libc::mktime(tm) };
-    #[cfg(any(target_os = "linux", target_os = "android"))]
-    {
-        let err = unsafe { *libc::__errno_location() };
-        if t == -1 && err != 0 { None } else { Some(t) }
+    let instante = t as libc::time_t;
+    let mut de_volta: libc::tm = unsafe { std::mem::zeroed() };
+    if unsafe { libc::localtime_r(&instante, &mut de_volta) }.is_null() {
+        return None;
     }
-    #[cfg(not(any(target_os = "linux", target_os = "android")))]
-    {
-        if t == -1 { None } else { Some(t) }
-    }
+    let mesmo = de_volta.tm_year == ano
+        && de_volta.tm_mon == mes
+        && de_volta.tm_mday == dia
+        && de_volta.tm_hour == hora
+        && de_volta.tm_min == minuto
+        && de_volta.tm_sec == segundo;
+    if mesmo { Some(t) } else { None }
 }
 
 #[cfg(unix)]

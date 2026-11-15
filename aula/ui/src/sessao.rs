@@ -154,10 +154,8 @@ pub fn salvar(ui: &UiRc) {
     let arquivo = arquivo_da_sessao(&chave);
     let texto = sessao_em_texto(&sessao);
     if let Err(e) = crate::background::persistence().dispatch(move || {
-        if let Some(pasta) = arquivo.parent() {
-            std::fs::create_dir_all(pasta).map_err(|e| e.to_string())?;
-        }
-        std::fs::write(arquivo, texto).map_err(|e| e.to_string())
+        expressa_aula_storage::write_replacing(&arquivo, texto.as_bytes())
+            .map_err(|e| e.to_string())
     }) {
         set_status(ui, &e);
     }

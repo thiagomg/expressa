@@ -6,6 +6,7 @@ use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::Arc;
 
+use crate::docs::Doc;
 use crate::prefs::{expand_tilde, path_for_display};
 use crate::rpc::Rpc;
 use crate::store::{Files, valid_aluno};
@@ -1200,81 +1201,158 @@ pub(crate) fn renomear_entrada(ui: &UiRc, rel: &str) {
     );
 }
 
+fn caminho_no_alvo(doc: &Doc, rel: &str) -> bool {
+    let Some(caminho) = doc.path.borrow().clone() else {
+        return false;
+    };
+    caminho == rel || caminho.starts_with(&format!("{rel}/"))
+}
+
+fn apagar_caminho(ui: &UiRc, rel: &str) {
+    let (files, project) = {
+        let u = ui.borrow();
+        (u.files.clone(), u.project.clone())
+    };
+    let snapshots: Vec<_> = all_docs(ui)
+        .into_iter()
+        .filter(|d| caminho_no_alvo(d, rel))
+        .map(|d| {
+            (
+                Rc::downgrade(&d),
+                d.path.borrow().clone().unwrap_or_default(),
+                d.edit_epoch.get(),
+            )
+        })
+        .collect();
+    invalidate_file_operations(ui, rel);
+    let path = rel.to_string();
+    let rel = rel.to_string();
+    async_result(
+        ui,
+        &format!("Apagando {rel}"),
+        false,
+        move || files.delete_file(&project, &path),
+        move |ui, result| match result {
+            Ok(()) => {
+                invalidate_file_operations(ui, &rel);
+                let mut preserved = false;
+                for (weak, caminho, epoch) in snapshots {
+                    let Some(doc) = weak.upgrade() else {
+                        continue;
+                    };
+                    if doc.path.borrow().as_deref() != Some(caminho.as_str()) {
+                        continue;
+                    }
+                    if doc.edit_epoch.get() != epoch {
+                        preserved = true;
+                        continue;
+                    }
+                    doc.mark_saved();
+                    remove_tab(ui, &doc);
+                }
+                refresh_tree(ui);
+                set_status(
+                    ui,
+                    &if preserved {
+                        format!("apagado {rel}; novas edições foram preservadas nas abas")
+                    } else {
+                        format!("apagado {rel}")
+                    },
+                );
+            }
+            Err(e) => set_status(ui, &format!("apagar: {e}")),
+        },
+    );
+}
+
 pub(crate) fn confirmar_apagar(ui: &UiRc, rel: &str) {
     if rel.is_empty() {
         return;
     }
+    let sujas: Vec<Rc<Doc>> = all_docs(ui)
+        .into_iter()
+        .filter(|d| caminho_no_alvo(d, rel) && d.is_dirty())
+        .collect();
     let window = ui.borrow().window.clone();
-    let then = {
+    if sujas.is_empty() {
+        let then = {
+            let ui = Rc::clone(ui);
+            let rel = rel.to_string();
+            move || apagar_caminho(&ui, &rel)
+        };
+        let then = RefCell::new(Some(then));
+        let dlg = gtk::MessageDialog::builder()
+            .transient_for(&window)
+            .modal(true)
+            .message_type(gtk::MessageType::Warning)
+            .buttons(gtk::ButtonsType::None)
+            .text(format!("Apagar `{rel}`?"))
+            .build();
+        dlg.add_button("Cancelar", gtk::ResponseType::Cancel);
+        dlg.add_button("Apagar", gtk::ResponseType::Accept);
+        dlg.connect_response(move |d, resp| {
+            d.close();
+            if resp == gtk::ResponseType::Accept
+                && let Some(f) = then.borrow_mut().take()
+            {
+                f();
+            }
+        });
+        dlg.present();
+        return;
+    }
+    let nomes = sujas
+        .iter()
+        .map(|d| d.name())
+        .collect::<Vec<_>>()
+        .join("\n");
+    let then_apagar = {
         let ui = Rc::clone(ui);
         let rel = rel.to_string();
+        move || apagar_caminho(&ui, &rel)
+    };
+    let then_salvar = {
+        let ui = Rc::clone(ui);
+        let rel = rel.to_string();
+        let docs = sujas;
         move || {
-            let (files, project) = {
-                let u = ui.borrow();
-                (u.files.clone(), u.project.clone())
-            };
-            let snapshots: Vec<_> = all_docs(&ui)
-                .into_iter()
-                .map(|d| (Rc::downgrade(&d), d.name(), d.edit_epoch.get()))
-                .collect();
-            invalidate_file_operations(&ui, &rel);
-            let path = rel.clone();
-            async_result(
-                &ui,
-                &format!("Apagando {rel}"),
-                false,
-                move || files.delete_file(&project, &path),
-                move |ui, result| match result {
-                    Ok(()) => {
-                        invalidate_file_operations(ui, &rel);
-                        let mut preserved = false;
-                        for (weak, name, epoch) in snapshots {
-                            let Some(doc) = weak.upgrade() else {
-                                continue;
-                            };
-                            if doc.name() != name
-                                || !(name == rel || name.starts_with(&format!("{rel}/")))
-                            {
-                                continue;
-                            }
-                            if doc.edit_epoch.get() != epoch {
-                                preserved = true;
-                                continue;
-                            }
-                            doc.mark_saved();
-                            remove_tab(ui, &doc);
-                        }
-                        refresh_tree(ui);
-                        set_status(
-                            ui,
-                            &if preserved {
-                                format!("apagado {rel}; novas edições foram preservadas nas abas")
-                            } else {
-                                format!("apagado {rel}")
-                            },
-                        );
-                    }
-                    Err(e) => set_status(ui, &format!("apagar: {e}")),
-                },
-            );
+            let aviso = Rc::clone(&ui);
+            save_documents(&ui, docs, move || {
+                set_status(&aviso, &format!("salvo; `{rel}` não foi apagado"));
+            });
         }
     };
-    let then = RefCell::new(Some(then));
+    let then_apagar = RefCell::new(Some(then_apagar));
+    let then_salvar = RefCell::new(Some(then_salvar));
     let dlg = gtk::MessageDialog::builder()
         .transient_for(&window)
         .modal(true)
         .message_type(gtk::MessageType::Warning)
         .buttons(gtk::ButtonsType::None)
         .text(format!("Apagar `{rel}`?"))
+        .secondary_text(format!(
+            "Há alterações não salvas em:\n{nomes}\n\
+             Salvar grava esses arquivos e não apaga. Descartar apaga e perde as alterações."
+        ))
         .build();
     dlg.add_button("Cancelar", gtk::ResponseType::Cancel);
-    dlg.add_button("Apagar", gtk::ResponseType::Accept);
+    dlg.add_button("Descartar", gtk::ResponseType::Reject);
+    dlg.add_button("Salvar", gtk::ResponseType::Accept);
+    dlg.set_default_response(gtk::ResponseType::Cancel);
     dlg.connect_response(move |d, resp| {
         d.close();
-        if resp == gtk::ResponseType::Accept
-            && let Some(f) = then.borrow_mut().take()
-        {
-            f();
+        match resp {
+            gtk::ResponseType::Accept => {
+                if let Some(f) = then_salvar.borrow_mut().take() {
+                    f();
+                }
+            }
+            gtk::ResponseType::Reject => {
+                if let Some(f) = then_apagar.borrow_mut().take() {
+                    f();
+                }
+            }
+            _ => {}
         }
     });
     dlg.present();

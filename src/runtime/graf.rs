@@ -18,9 +18,8 @@ pub const LARGURA_MAX: u32 = 2048;
 pub const ALTURA_MAX: u32 = 2048;
 /// Cada pixel lógico vira um quadrado `n`×`n` na janela (1…16).
 pub const TAMANHO_PIXEL_MAX: u32 = 16;
-/// Largest absolute coordinate or radius. Twice the maximum canvas side
-/// (`LARGURA_MAX`), so a stroke may start off-screen and still be clipped
-/// without walking billions of pixels.
+/// Largest absolute coordinate or radius the native accepts. Twice the
+/// maximum canvas side (`LARGURA_MAX`), so a stroke may start off-screen.
 pub const LIMITE_COORD: i32 = 4096;
 #[cfg(feature = "graphics")]
 const _: () = assert!(LIMITE_COORD == LARGURA_MAX as i32 * 2);
@@ -414,131 +413,53 @@ fn plot_i64(idx: &mut [u8], w: u32, h: u32, x: i64, y: i64, cor: u8) {
     idx[(y as u32 * w + x as u32) as usize] = cor;
 }
 
-/// Inclusive canvas rectangle. The arithmetic stays in `i128` so endpoints at
-/// `i32::MIN`/`i32::MAX` neither overflow nor make Bresenham run forever.
-fn recorta_linha(
-    x0: i32,
-    y0: i32,
-    x1: i32,
-    y1: i32,
-    w: u32,
-    h: u32,
-) -> Option<(i32, i32, i32, i32)> {
-    if w == 0 || h == 0 {
-        return None;
-    }
-    let xmax = i128::from(w) - 1;
-    let ymax = i128::from(h) - 1;
-    let mut x0 = i128::from(x0);
-    let mut y0 = i128::from(y0);
-    let mut x1 = i128::from(x1);
-    let mut y1 = i128::from(y1);
-    // Each pass clips one endpoint to one edge. Two edges per endpoint is enough.
-    for _ in 0..8 {
-        let c0 = codigo_recorte(x0, y0, xmax, ymax);
-        let c1 = codigo_recorte(x1, y1, xmax, ymax);
-        if c0 | c1 == 0 {
-            return Some((x0 as i32, y0 as i32, x1 as i32, y1 as i32));
-        }
-        if c0 & c1 != 0 {
-            return None;
-        }
-        let fora = if c0 != 0 { c0 } else { c1 };
-        let (x, y) = cruza_borda(x0, y0, x1, y1, fora, xmax, ymax)?;
-        if fora == c0 {
-            x0 = x;
-            y0 = y;
-        } else {
-            x1 = x;
-            y1 = y;
-        }
-    }
-    None
-}
-
-fn codigo_recorte(x: i128, y: i128, xmax: i128, ymax: i128) -> u8 {
-    let mut c = 0u8;
-    if x < 0 {
-        c |= 1;
-    } else if x > xmax {
-        c |= 2;
-    }
-    if y < 0 {
-        c |= 4;
-    } else if y > ymax {
-        c |= 8;
-    }
-    c
-}
-
-fn cruza_borda(
-    x0: i128,
-    y0: i128,
-    x1: i128,
-    y1: i128,
-    fora: u8,
-    xmax: i128,
-    ymax: i128,
-) -> Option<(i128, i128)> {
-    let dx = x1 - x0;
-    let dy = y1 - y0;
-    if fora & 1 != 0 {
-        if dx == 0 {
-            return None;
-        }
-        return Some((0, y0 + dy * (0 - x0) / dx));
-    }
-    if fora & 2 != 0 {
-        if dx == 0 {
-            return None;
-        }
-        return Some((xmax, y0 + dy * (xmax - x0) / dx));
-    }
-    if fora & 4 != 0 {
-        if dy == 0 {
-            return None;
-        }
-        return Some((x0 + dx * (0 - y0) / dy, 0));
-    }
-    if fora & 8 != 0 {
-        if dy == 0 {
-            return None;
-        }
-        return Some((x0 + dx * (ymax - y0) / dy, ymax));
-    }
-    None
-}
-
+/// Pixels of this Bresenham segment that land inside the canvas.
+/// Each column (or row, when the line is steeper) is one step of
+/// `y = (2*k*dy + dx) / (2*dx)`. A truncating edge intersection drops a
+/// shallow stroke or paints a whole border the segment never touches.
 fn linha_idx(idx: &mut [u8], w: u32, h: u32, x0: i32, y0: i32, x1: i32, y1: i32, cor: u8) {
-    let Some((x0, y0, x1, y1)) = recorta_linha(x0, y0, x1, y1, w, h) else {
+    if w == 0 || h == 0 {
         return;
-    };
-    let x0 = i64::from(x0);
-    let y0 = i64::from(y0);
-    let x1 = i64::from(x1);
-    let y1 = i64::from(y1);
-    let mut x = x0;
-    let mut y = y0;
+    }
+    let x0 = i128::from(x0);
+    let y0 = i128::from(y0);
+    let x1 = i128::from(x1);
+    let y1 = i128::from(y1);
     let dx = (x1 - x0).abs();
+    let dy = (y1 - y0).abs();
     let sx = if x0 < x1 { 1 } else { -1 };
-    let dy = -(y1 - y0).abs();
     let sy = if y0 < y1 { 1 } else { -1 };
-    let mut err = dx + dy;
-    // A clipped segment fits in the canvas. The cap stops a bad clip from looping.
-    let max_passos = (w as u64).saturating_add(h as u64).saturating_add(1);
-    for _ in 0..max_passos {
-        plot_i64(idx, w, h, x, y, cor);
-        if x == x1 && y == y1 {
-            break;
+    let largura = i128::from(w);
+    let altura = i128::from(h);
+    if dx == 0 && dy == 0 {
+        plot_i64(idx, w, h, x0 as i64, y0 as i64, cor);
+        return;
+    }
+    if dx >= dy {
+        let (de, ate) = if sx > 0 {
+            (0i128.max(-x0), dx.min(largura - 1 - x0))
+        } else {
+            (0i128.max(x0 - (largura - 1)), dx.min(x0))
+        };
+        if de > ate {
+            return;
         }
-        let e2 = 2 * err;
-        if e2 >= dy {
-            err += dy;
-            x += sx;
+        for k in de..=ate {
+            let y = y0 + sy * ((2 * k * dy + dx) / (2 * dx));
+            plot_i64(idx, w, h, (x0 + sx * k) as i64, y as i64, cor);
         }
-        if e2 <= dx {
-            err += dx;
-            y += sy;
+    } else {
+        let (de, ate) = if sy > 0 {
+            (0i128.max(-y0), dy.min(altura - 1 - y0))
+        } else {
+            (0i128.max(y0 - (altura - 1)), dy.min(y0))
+        };
+        if de > ate {
+            return;
+        }
+        for k in de..=ate {
+            let x = x0 + sx * ((2 * k * dx + dy) / (2 * dy));
+            plot_i64(idx, w, h, x as i64, (y0 + sy * k) as i64, cor);
         }
     }
 }
@@ -657,6 +578,73 @@ mod tests {
         assert_eq!(r.pixel(0, 1), Some("azul"));
         assert_eq!(r.pixel(9, 1), Some("azul"));
         assert_eq!(r.pixel(0, 0), Some("branco"));
+    }
+
+    fn tela_wh(largura: u32, altura: u32, linha: (i32, i32, i32, i32)) -> Raster {
+        TelaGrafica {
+            id: 1,
+            largura,
+            altura,
+            tamanho_pixel: 1,
+            fundo: "branco".into(),
+            ops: vec![OpGraf::Linha {
+                x1: linha.0,
+                y1: linha.1,
+                x2: linha.2,
+                y2: linha.3,
+                cor: "azul".into(),
+            }],
+        }
+        .raster()
+    }
+
+    fn azuis(r: &Raster) -> Vec<(u32, u32)> {
+        let mut out = Vec::new();
+        for y in 0..r.altura {
+            for x in 0..r.largura {
+                if r.pixel(x as i32, y as i32) == Some("azul") {
+                    out.push((x, y));
+                }
+            }
+        }
+        out
+    }
+
+    #[test]
+    fn linha_rasa_junto_da_borda_segue_o_bresenham() {
+        let r = tela_wh(10, 10, (24, 10, -22, 7));
+        assert_eq!(
+            azuis(&r),
+            vec![
+                (0, 8),
+                (1, 8),
+                (2, 9),
+                (3, 9),
+                (4, 9),
+                (5, 9),
+                (6, 9),
+                (7, 9),
+                (8, 9),
+                (9, 9),
+            ]
+        );
+
+        let r = tela_wh(10, 10, (-30, 0, 10, -1));
+        assert!(azuis(&r).is_empty());
+
+        let r = tela_wh(320, 200, (-50, 0, 320, -1));
+        let pts = azuis(&r);
+        assert_eq!(pts.len(), 135);
+        assert_eq!(pts.first(), Some(&(0, 0)));
+        assert_eq!(pts.last(), Some(&(134, 0)));
+
+        let r = tela_wh(320, 200, (800, 200, -4096, 190));
+        let pts = azuis(&r);
+        assert_eq!(pts.len(), 320);
+        assert!(pts.iter().take(66).all(|p| p.1 == 198));
+        assert!(pts.iter().skip(66).all(|p| p.1 == 199));
+        assert_eq!(pts.first(), Some(&(0, 198)));
+        assert_eq!(pts.last(), Some(&(319, 199)));
     }
 
     #[test]

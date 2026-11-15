@@ -163,10 +163,7 @@ impl Prefs {
         };
         let text = self.to_text();
         if let Err(e) = crate::background::persistence().dispatch(move || {
-            if let Some(dir) = p.parent() {
-                std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
-            }
-            std::fs::write(p, text).map_err(|e| e.to_string())
+            expressa_aula_storage::write_replacing(&p, text.as_bytes()).map_err(|e| e.to_string())
         }) {
             eprintln!("preferências: {e}");
         }

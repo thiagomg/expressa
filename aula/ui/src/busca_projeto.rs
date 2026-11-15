@@ -7,7 +7,7 @@ use std::rc::Rc;
 
 use gtk::prelude::*;
 use gtk::{Box as GtkBox, Button, Entry, Label, ListBox, Orientation, ScrolledWindow};
-use regex::{NoExpand, Regex, RegexBuilder};
+use regex::{Regex, RegexBuilder};
 
 use crate::{UiRc, all_docs, em_segundo_plano, goto_file_line, set_status};
 
@@ -87,20 +87,79 @@ pub fn procurar_em(arquivo: &str, texto: &str, p: &Padrao) -> Vec<Achado> {
 }
 
 /// `texto` with every match replaced, and how many there were.
+/// A match stays inside one line, the same rule as [`procurar_em`].
 pub fn trocar_em(texto: &str, p: &Padrao, por: &str) -> (String, usize) {
-    let n =
-        p.re.find_iter(texto)
-            .filter(|m| m.start() != m.end())
-            .count();
-    if n == 0 {
-        return (texto.to_string(), 0);
+    let mut out = String::with_capacity(texto.len());
+    let mut n = 0;
+    let mut resto = texto;
+    while !resto.is_empty() {
+        let (linha, fim, proximo) = partir_linha(resto);
+        let (nova, achadas) = trocar_na_linha(linha, p, por);
+        n += achadas;
+        out.push_str(&nova);
+        out.push_str(fim);
+        if proximo.is_empty() {
+            break;
+        }
+        resto = proximo;
     }
-    let novo = if p.expandir {
-        p.re.replace_all(texto, por)
-    } else {
-        p.re.replace_all(texto, NoExpand(por))
+    (out, n)
+}
+
+/// `(conteúdo, terminador, o que vem depois)`, com as mesmas quebras que
+/// `str::lines`: só `\n`, e o `\r` de um `\r\n` sai do conteúdo. Um `\r`
+/// sozinho continua no meio da linha.
+fn partir_linha(texto: &str) -> (&str, &str, &str) {
+    let Some(i) = texto.find('\n') else {
+        return (texto, "", "");
     };
-    (novo.into_owned(), n)
+    if i > 0 && texto.as_bytes()[i - 1] == b'\r' {
+        (&texto[..i - 1], &texto[i - 1..i + 1], &texto[i + 1..])
+    } else {
+        (&texto[..i], &texto[i..i + 1], &texto[i + 1..])
+    }
+}
+
+fn trocar_na_linha(linha: &str, p: &Padrao, por: &str) -> (String, usize) {
+    let mut out = String::with_capacity(linha.len());
+    let mut ultimo = 0;
+    let mut n = 0;
+    for caps in p.re.captures_iter(linha) {
+        let Some(m) = caps.get(0) else {
+            continue;
+        };
+        // A busca também ignora casamento vazio. Trocar esses pontos faria
+        // `a*` inserir o texto novo entre os caracteres da linha.
+        if m.start() == m.end() {
+            continue;
+        }
+        out.push_str(&linha[ultimo..m.start()]);
+        if p.expandir {
+            caps.expand(por, &mut out);
+        } else {
+            out.push_str(por);
+        }
+        ultimo = m.end();
+        n += 1;
+    }
+    if n == 0 {
+        return (linha.to_string(), 0);
+    }
+    out.push_str(&linha[ultimo..]);
+    (out, n)
+}
+
+/// The search that Trocar is allowed to apply. A later edit of the query
+/// does not change this copy.
+#[derive(Clone)]
+struct BuscaFeita {
+    padrao: Padrao,
+    consulta: String,
+    maiusculas: bool,
+    palavra: bool,
+    regex: bool,
+    arquivos: std::collections::BTreeSet<String>,
+    cortado: bool,
 }
 
 pub struct PainelBusca {
@@ -112,7 +171,9 @@ pub struct PainelBusca {
     regex: gtk::ToggleButton,
     lista: ListBox,
     resumo: Label,
+    trocar: Button,
     achados: RefCell<Vec<Achado>>,
+    busca: RefCell<Option<BuscaFeita>>,
 }
 
 impl PainelBusca {
@@ -135,6 +196,7 @@ impl PainelBusca {
         let regex = opcao(".*", "Expressão regular (na troca, $1 é o primeiro grupo)");
         let buscar = Button::with_label("Buscar");
         let trocar = Button::with_label("Trocar em todos");
+        trocar.set_sensitive(false);
         let linha1 = GtkBox::new(Orientation::Horizontal, 6);
         linha1.append(&consulta);
         linha1.append(&maiusculas);
@@ -173,7 +235,9 @@ impl PainelBusca {
             regex,
             lista,
             resumo,
+            trocar: trocar.clone(),
             achados: RefCell::new(Vec::new()),
+            busca: RefCell::new(None),
         });
         let ligar = |b: &Button, f: fn(&UiRc, &Rc<PainelBusca>)| {
             let ui = Rc::downgrade(ui);
@@ -204,7 +268,100 @@ impl PainelBusca {
                 }
             });
         }
+        {
+            let atualizar = Rc::new({
+                let p = Rc::downgrade(&painel);
+                move || {
+                    if let Some(p) = p.upgrade() {
+                        p.atualizar_troca();
+                    }
+                }
+            });
+            {
+                let atualizar = atualizar.clone();
+                painel.consulta.connect_changed(move |_| atualizar());
+            }
+            for botao in [&painel.maiusculas, &painel.palavra, &painel.regex] {
+                let atualizar = atualizar.clone();
+                botao.connect_toggled(move |_| atualizar());
+            }
+        }
         painel
+    }
+
+    fn consulta_atual(&self) -> (String, bool, bool, bool) {
+        (
+            self.consulta.text().to_string(),
+            self.maiusculas.is_active(),
+            self.palavra.is_active(),
+            self.regex.is_active(),
+        )
+    }
+
+    fn registrar(
+        &self,
+        padrao: Padrao,
+        consulta: String,
+        maiusculas: bool,
+        palavra: bool,
+        regex: bool,
+        achados: Vec<Achado>,
+        arquivos: usize,
+        cortado: bool,
+    ) {
+        let nomes = achados.iter().map(|a| a.arquivo.clone()).collect();
+        *self.busca.borrow_mut() = Some(BuscaFeita {
+            padrao,
+            consulta,
+            maiusculas,
+            palavra,
+            regex,
+            arquivos: nomes,
+            cortado,
+        });
+        self.mostrar(achados, arquivos, cortado);
+        self.atualizar_troca();
+    }
+
+    fn atualizar_troca(&self) {
+        self.trocar.set_sensitive(self.pode_trocar());
+    }
+
+    fn pode_trocar(&self) -> bool {
+        let guard = self.busca.borrow();
+        let Some(busca) = guard.as_ref() else {
+            return false;
+        };
+        if busca.cortado || busca.arquivos.is_empty() {
+            return false;
+        }
+        let (consulta, maiusculas, palavra, regex) = self.consulta_atual();
+        busca.consulta == consulta
+            && busca.maiusculas == maiusculas
+            && busca.palavra == palavra
+            && busca.regex == regex
+    }
+
+    /// The pattern and files from the last search, when Trocar is still valid.
+    fn busca_para_troca(&self) -> Result<BuscaFeita, &'static str> {
+        let Some(busca) = self.busca.borrow().clone() else {
+            return Err("busque antes de trocar");
+        };
+        if busca.cortado {
+            return Err("resultado cortado; refine a busca antes de trocar");
+        }
+        let (consulta, maiusculas, palavra, regex) = self.consulta_atual();
+        let mesma = busca.consulta == consulta
+            && busca.maiusculas == maiusculas
+            && busca.palavra == palavra
+            && busca.regex == regex;
+        if !mesma {
+            return Err("a busca mudou; busque de novo antes de trocar");
+        }
+        if busca.arquivos.is_empty() {
+            return Err("busque antes de trocar");
+        }
+        Ok(busca)
     }
 
     /// Ctrl+Shift+F: focus the search, starting from the selected text.
@@ -213,15 +370,6 @@ impl PainelBusca {
             self.consulta.set_text(&s);
         }
         self.consulta.grab_focus();
-    }
-
-    fn padrao(&self) -> Result<Padrao, String> {
-        Padrao::new(
-            &self.consulta.text(),
-            self.maiusculas.is_active(),
-            self.palavra.is_active(),
-            self.regex.is_active(),
-        )
     }
 
     fn mostrar(&self, achados: Vec<Achado>, arquivos: usize, cortado: bool) {
@@ -289,7 +437,8 @@ fn juntar(
 }
 
 fn buscar_no_projeto(ui: &UiRc, painel: &Rc<PainelBusca>) {
-    let padrao = match painel.padrao() {
+    let (consulta, maiusculas, palavra, regex) = painel.consulta_atual();
+    let padrao = match Padrao::new(&consulta, maiusculas, palavra, regex) {
         Ok(p) => p,
         Err(e) => {
             painel.resumo.set_text(&e);
@@ -297,8 +446,11 @@ fn buscar_no_projeto(ui: &UiRc, painel: &Rc<PainelBusca>) {
         }
     };
     let (abertos, outros, files, projeto) = juntar(ui);
+    painel.busca.replace(None);
+    painel.trocar.set_sensitive(false);
     painel.resumo.set_text("procurando…");
     let painel = Rc::clone(painel);
+    let padrao_ui = padrao.clone();
     em_segundo_plano(
         ui,
         move || {
@@ -326,35 +478,29 @@ fn buscar_no_projeto(ui: &UiRc, painel: &Rc<PainelBusca>) {
             }
             (achados, arquivos, false)
         },
-        move |_, (achados, arquivos, cortado)| painel.mostrar(achados, arquivos, cortado),
+        move |_, (achados, arquivos_n, cortado)| {
+            painel.registrar(
+                padrao_ui, consulta, maiusculas, palavra, regex, achados, arquivos_n, cortado,
+            );
+        },
     );
 }
 
 fn trocar_no_projeto(ui: &UiRc, painel: &Rc<PainelBusca>) {
-    let padrao = match painel.padrao() {
-        Ok(p) => p,
+    let busca = match painel.busca_para_troca() {
+        Ok(b) => b,
         Err(e) => {
-            painel.resumo.set_text(&e);
+            painel.resumo.set_text(e);
             return;
         }
     };
     let por = painel.troca.text().to_string();
     let quantos = painel.achados.borrow().len();
-    let arquivos: std::collections::BTreeSet<String> = painel
-        .achados
-        .borrow()
-        .iter()
-        .map(|a| a.arquivo.clone())
-        .collect();
-    if quantos == 0 {
-        painel.resumo.set_text("busque antes de trocar");
-        return;
-    }
+    let n_arquivos = busca.arquivos.len();
     let dialogo = gtk::AlertDialog::builder()
         .modal(true)
         .message(format!(
-            "Trocar {quantos} ocorrência(s) em {} arquivo(s)?",
-            arquivos.len()
+            "Trocar {quantos} ocorrência(s) em {n_arquivos} arquivo(s)?",
         ))
         .detail(
             "Os arquivos fechados são gravados agora. Os abertos mudam no editor \
@@ -369,16 +515,30 @@ fn trocar_no_projeto(ui: &UiRc, painel: &Rc<PainelBusca>) {
     let painel = Rc::clone(painel);
     dialogo.choose(Some(&window), None::<&gtk::gio::Cancellable>, move |r| {
         if r == Ok(1) {
-            aplicar_troca(&ui, &painel, padrao, por);
+            aplicar_troca(&ui, &painel, busca, por);
         }
     });
 }
 
-fn aplicar_troca(ui: &UiRc, painel: &Rc<PainelBusca>, padrao: Padrao, por: String) {
-    // Open tabs: in the editor, one undo step each, not saved.
+fn aplicar_troca(ui: &UiRc, painel: &Rc<PainelBusca>, busca: BuscaFeita, por: String) {
+    // Open tabs that the search listed: one undo step each, not saved yet.
+    // The path stays out of the disk write even when this buffer no longer
+    // matches, or grew past the search limit, so the tab is not overwritten.
     let mut nos_abertos = 0;
-    for d in all_docs(ui).iter().filter(|d| !d.is_untitled()) {
-        let (novo, n) = trocar_em(&d.text(), &padrao, &por);
+    let mut abertos = std::collections::BTreeSet::new();
+    for d in all_docs(ui) {
+        let Some(caminho) = d.path.borrow().clone() else {
+            continue;
+        };
+        if !busca.arquivos.contains(&caminho) {
+            continue;
+        }
+        abertos.insert(caminho);
+        let texto = d.text();
+        if texto.len() > TAMANHO_MAXIMO {
+            continue;
+        }
+        let (novo, n) = trocar_em(&texto, &busca.padrao, &por);
         if n == 0 {
             continue;
         }
@@ -391,9 +551,14 @@ fn aplicar_troca(ui: &UiRc, painel: &Rc<PainelBusca>, padrao: Padrao, por: Strin
             d.buffer.place_cursor(&it);
         }
     }
-    // The rest: read, replace and write on a worker.
-    let (_, outros, files, projeto) = juntar(ui);
-    let p = padrao.clone();
+    let fechados: Vec<String> = busca
+        .arquivos
+        .iter()
+        .filter(|f| !abertos.contains(*f))
+        .cloned()
+        .collect();
+    let (_, _, files, projeto) = juntar(ui);
+    let p = busca.padrao;
     let painel = Rc::clone(painel);
     em_segundo_plano(
         ui,
@@ -401,15 +566,19 @@ fn aplicar_troca(ui: &UiRc, painel: &Rc<PainelBusca>, padrao: Padrao, por: Strin
             let mut trocas = 0;
             let mut erros = Vec::new();
             let mut avisos = Vec::new();
-            for f in outros {
+            for f in fechados {
                 let snapshot = match files.current_text(&projeto, &f) {
                     Ok(Some(snapshot)) => snapshot,
                     Ok(None) => continue,
+                    Err(e) if erro_de_utf8(&e) => continue,
                     Err(e) => {
                         erros.push(format!("{f}: {e}"));
                         continue;
                     }
                 };
+                if snapshot.text.len() > TAMANHO_MAXIMO {
+                    continue;
+                }
                 let (novo, n) = trocar_em(&snapshot.text, &p, &por);
                 if n == 0 {
                     continue;
@@ -495,4 +664,51 @@ mod tests {
         let (t, n) = trocar_em("nada", &p("x", true, false, false), "y");
         assert_eq!((t.as_str(), n), ("nada", 0));
     }
+
+    #[test]
+    fn troca_respeita_as_linhas_como_a_busca() {
+        let texto = "x\nx\n";
+        let ancora = p("^x", true, false, true);
+        assert_eq!(procurar_em("a.lep", texto, &ancora).len(), 2);
+        let (t, n) = trocar_em(texto, &ancora, "y");
+        assert_eq!((t.as_str(), n), ("y\ny\n", 2));
+
+        let texto = "a \n b";
+        let espacos = p(r"\s+", true, false, true);
+        assert_eq!(procurar_em("a.lep", texto, &espacos).len(), 2);
+        let (t, n) = trocar_em(texto, &espacos, "_");
+        assert_eq!((t.as_str(), n), ("a_\n_b", 2));
+
+        let (t, n) = trocar_em("a\r\nb\r\n", &p("^.", true, false, true), "z");
+        assert_eq!((t.as_str(), n), ("z\r\nz\r\n", 2));
+
+        let texto = "b\rb";
+        let ancora = p("^b", true, false, true);
+        assert_eq!(procurar_em("a.lep", texto, &ancora).len(), 1);
+        let (t, n) = trocar_em(texto, &ancora, "Q");
+        assert_eq!((t.as_str(), n), ("Q\rb", 1));
+
+        let texto = "a\rb";
+        let cr = p("\r", true, false, true);
+        assert_eq!(procurar_em("a.lep", texto, &cr).len(), 1);
+        let (t, n) = trocar_em(texto, &cr, "_");
+        assert_eq!((t.as_str(), n), ("a_b", 1));
+    }
+
+    #[test]
+    fn troca_ignora_casamento_vazio() {
+        let estrela = p("a*", true, false, true);
+        assert_eq!(procurar_em("a.lep", "ab", &estrela).len(), 1);
+        let (t, n) = trocar_em("ab", &estrela, "Q");
+        assert_eq!((t.as_str(), n), ("Qb", 1));
+        let vazio = p("x*", true, false, true);
+        assert!(procurar_em("a.lep", "ab", &vazio).is_empty());
+        let (t, n) = trocar_em("ab", &vazio, "Q");
+        assert_eq!((t.as_str(), n), ("ab", 0));
+    }
+}
+
+fn erro_de_utf8(msg: &str) -> bool {
+    let m = msg.to_ascii_lowercase();
+    m.contains("utf-8") || m.contains("utf8")
 }

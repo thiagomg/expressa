@@ -3,6 +3,7 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{Receiver, SyncSender, TryRecvError, TrySendError};
 use std::sync::{Arc, Mutex, OnceLock};
+use std::time::{Duration, Instant};
 
 thread_local! {
     static CANCELLATION: std::cell::RefCell<Option<Arc<AtomicBool>>> = const { std::cell::RefCell::new(None) };
@@ -51,6 +52,41 @@ impl Pool {
                 }
             }))
             .map_err(|_| "fila de gravação local cheia; tente novamente".into())
+    }
+
+    /// Wait until jobs already queued on this pool have finished.
+    /// The wait is bounded so a stuck write cannot hold process exit forever.
+    /// `SyncSender::send_timeout` is unstable, so a full queue is retried
+    /// until the same deadline instead of abandoning the barrier on the first try.
+    pub fn flush(&self, timeout: Duration) -> bool {
+        let deadline = Instant::now() + timeout;
+        let (done, wait) = std::sync::mpsc::channel();
+        let mut job = Some(Box::new(move || {
+            let _ = done.send(());
+        }) as Job);
+        loop {
+            if Instant::now() >= deadline {
+                return false;
+            }
+            let Some(pending) = job.take() else {
+                return false;
+            };
+            match self.sender.try_send(pending) {
+                Ok(()) => break,
+                Err(TrySendError::Full(returned)) => {
+                    job = Some(returned);
+                    let pause = Duration::from_millis(5)
+                        .min(deadline.saturating_duration_since(Instant::now()));
+                    if pause.is_zero() {
+                        return false;
+                    }
+                    std::thread::sleep(pause);
+                }
+                Err(TrySendError::Disconnected(_)) => return false,
+            }
+        }
+        wait.recv_timeout(deadline.saturating_duration_since(Instant::now()))
+            .is_ok()
     }
     fn new(workers: usize, capacity: usize, name: &str) -> Self {
         let (sender, receiver) = std::sync::mpsc::sync_channel::<Job>(capacity);
@@ -244,5 +280,29 @@ mod tests {
         wait(&first).unwrap();
         assert!(wait(&queued).unwrap_err().contains("falha interna"));
         assert_eq!(wait(&pool.submit(1, || Ok(42))), Ok(42));
+    }
+
+    #[test]
+    fn flush_runs_after_the_queued_write_and_gives_up_when_it_stalls() {
+        let pool = Pool::new(1, 2, "test-flush");
+        let (started, start) = std::sync::mpsc::channel();
+        let (release, block) = std::sync::mpsc::channel();
+        pool.dispatch(move || {
+            started.send(()).unwrap();
+            block.recv().unwrap();
+            Ok(())
+        })
+        .unwrap();
+        start.recv_timeout(Duration::from_secs(5)).unwrap();
+        assert!(!pool.flush(Duration::from_millis(30)));
+        release.send(()).unwrap();
+        let (done, saw) = std::sync::mpsc::channel();
+        pool.dispatch(move || {
+            done.send(()).unwrap();
+            Ok(())
+        })
+        .unwrap();
+        assert!(pool.flush(Duration::from_secs(2)));
+        assert!(saw.try_recv().is_ok());
     }
 }

@@ -94,6 +94,9 @@ fn main() {
         build_ui_with_prefs(app, true, prefs.clone());
     });
     app.run();
+    if !background::persistence().flush(std::time::Duration::from_secs(3)) {
+        eprintln!("não deu tempo de gravar a sessão e as preferências");
+    }
 }
 
 #[cfg(test)]

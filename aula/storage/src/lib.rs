@@ -359,9 +359,51 @@ fn replace(temp: tempfile::NamedTempFile, path: &Path) -> io::Result<Option<Stri
     }))
 }
 
+/// Replace `path` with `bytes` via a temporary file in the same directory.
+/// Used for preferences and the session, which are overwritten whole and have
+/// no storage revision. Project sources keep going through [`save`].
+pub fn write_replacing(path: &Path, bytes: &[u8]) -> io::Result<()> {
+    let parent = path
+        .parent()
+        .filter(|p| !p.as_os_str().is_empty())
+        .unwrap_or(Path::new("."));
+    fs::create_dir_all(parent)?;
+    let mut temp = tempfile::Builder::new()
+        .prefix(TEMP_PREFIX)
+        .tempfile_in(parent)?;
+    temp.write_all(bytes)?;
+    temp.as_file().sync_all()?;
+    if path.is_file() {
+        replace(temp, path).map(|_| ())?;
+    } else {
+        temp.persist(path).map_err(|e| e.error)?;
+    }
+    #[cfg(unix)]
+    {
+        let _ = fs::File::open(parent).and_then(|dir| dir.sync_all());
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn write_replacing_creates_then_overwrites_without_leaving_a_temp_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("aula").join("prefs");
+        write_replacing(&path, b"um").unwrap();
+        assert_eq!(fs::read(&path).unwrap(), b"um");
+        write_replacing(&path, b"dois").unwrap();
+        assert_eq!(fs::read(&path).unwrap(), b"dois");
+        let sobras: Vec<_> = fs::read_dir(path.parent().unwrap())
+            .unwrap()
+            .map(|e| e.unwrap().file_name())
+            .filter(|n| n.to_string_lossy().starts_with(TEMP_PREFIX))
+            .collect();
+        assert!(sobras.is_empty(), "{sobras:?}");
+    }
 
     #[test]
     fn limited_reads_accept_exact_bounds_and_reject_larger_files() {

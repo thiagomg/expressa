@@ -150,11 +150,10 @@ pub(crate) fn open_doc(ui: &UiRc, path: Option<String>, text: &str) -> Rc<Doc> {
     }
     {
         let weak = Rc::downgrade(ui);
-        let buf = doc.buffer.clone();
         doc.buffer
-            .connect_notify_local(Some("cursor-position"), move |_, _| {
+            .connect_notify_local(Some("cursor-position"), move |buffer, _| {
                 if let Some(ui) = weak.upgrade() {
-                    refresh_cursor(&ui, &buf);
+                    refresh_cursor(&ui, buffer);
                 }
             });
     }
