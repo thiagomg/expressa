@@ -192,7 +192,7 @@
         "formate(modelo, valor)"
       ],
       "summary": "Monta um texto: {} valor, {:<n} esquerda, {:>n} direita, {:^n} centro.",
-      "doc": "Monta um texto: {} valor, {:<n} esquerda, {:>n} direita, {:^n} centro.\n\nCada {} (ou {0}, {1}, …) é substituído pelo valor correspondente.\nSem < > ^, texto encosta à esquerda e número à direita: {:8}.\nSe o valor já é mais largo que n, entra inteiro. {0} é o primeiro valor.\n{{ e }} escrevem { e }. Números seguem o formato atual.\nMapa com :_como_texto (função de um argumento que devolve texto) usa essa função.\n\nExemplo: formate(\"{:<8} {:>5}\", \"Ana\", 10)"
+      "doc": "Monta um texto: {} valor, {:<n} esquerda, {:>n} direita, {:^n} centro.\n\nCada {} (ou {0}, {1}, …) é substituído pelo valor correspondente.\nSem < > ^, texto encosta à esquerda e número à direita: {:8}.\nSe o valor já é mais largo que n, entra inteiro. n vai de 0 a 10000;\nacima disso formate devolve erro. {0} é o primeiro valor.\n{{ e }} escrevem { e }. Números seguem o formato atual.\nMapa com :_como_texto (função de um argumento que devolve texto) usa essa função.\n\nExemplo: formate(\"{:<8} {:>5}\", \"Ana\", 10)"
     },
     {
       "name": "avalie",
@@ -1369,8 +1369,8 @@
       "signatures": [
         "linha(g, x1, y1, x2, y2)"
       ],
-      "summary": "Reta da caneta. Pixels fora da tela são recortados.",
-      "doc": "Reta da caneta. Pixels fora da tela são recortados.\n\nExemplo: g.linha(10, 10, 310, 190)"
+      "summary": "Reta da caneta. Coordenadas entre -4096 e 4096; fora disso é erro. Pixels fora da tela são recortados.",
+      "doc": "Reta da caneta. Coordenadas entre -4096 e 4096; fora disso é erro.\nPixels fora da tela são recortados.\n\nExemplo: g.linha(10, 10, 310, 190)"
     },
     {
       "name": "circulo",
@@ -1382,8 +1382,8 @@
       "signatures": [
         "circulo(g, x, y, r)"
       ],
-      "summary": "Circunferência (contorno). Raio ≥ 0.",
-      "doc": "Circunferência (contorno). Raio ≥ 0.\n\nExemplo: g.circulo(160, 100, 40)"
+      "summary": "Circunferência (contorno). Centro entre -4096 e 4096 e raio de 0 a 4096.",
+      "doc": "Circunferência (contorno). Centro entre -4096 e 4096 e raio de 0 a 4096.\n\nExemplo: g.circulo(160, 100, 40)"
     },
     {
       "name": "ponto",
@@ -1393,8 +1393,8 @@
       "signatures": [
         "ponto(g, x, y)"
       ],
-      "summary": "Um pixel da caneta. Fora da tela, ignora.",
-      "doc": "Um pixel da caneta. Fora da tela, ignora.\n\nExemplo: g.ponto(5, 5)"
+      "summary": "Um pixel da caneta. Coordenadas entre -4096 e 4096. Fora da tela, ignora.",
+      "doc": "Um pixel da caneta. Coordenadas entre -4096 e 4096. Fora da tela, ignora.\n\nExemplo: g.ponto(5, 5)"
     },
     {
       "name": "retangulo",
@@ -1406,8 +1406,8 @@
       "signatures": [
         "retangulo(g, x1, y1, x2, y2)"
       ],
-      "summary": "Retângulo preenchido da caneta, cantos (x1, y1) e (x2, y2) inclusivos. A ordem dos cantos não importa. Pixels fora da tela são recortados.",
-      "doc": "Retângulo preenchido da caneta, cantos (x1, y1) e (x2, y2) inclusivos.\nA ordem dos cantos não importa. Pixels fora da tela são recortados.\n\nExemplo: g.retangulo(10, 10, 40, 30)"
+      "summary": "Retângulo preenchido da caneta, cantos (x1, y1) e (x2, y2) inclusivos. A ordem dos cantos não importa. Coordenadas entre -4096 e 4096. Pixels fora da tela são recortados.",
+      "doc": "Retângulo preenchido da caneta, cantos (x1, y1) e (x2, y2) inclusivos.\nA ordem dos cantos não importa. Coordenadas entre -4096 e 4096.\nPixels fora da tela são recortados.\n\nExemplo: g.retangulo(10, 10, 40, 30)"
     },
     {
       "name": "texto",
@@ -1418,8 +1418,8 @@
         "texto(g, x, y, t)",
         "texto(g, x, y, t, tamanho)"
       ],
-      "summary": "Escreve t na caneta. (x, y) é o canto superior esquerdo do primeiro glifo. tamanho é a altura da célula em pixels (padrão 8). Acento e ç entram. Quebra de linha (`\\n`) desce uma célula. Fundo transparente.",
-      "doc": "Escreve t na caneta. (x, y) é o canto superior esquerdo do primeiro\nglifo. tamanho é a altura da célula em pixels (padrão 8). Acento e\nç entram. Quebra de linha (`\\n`) desce uma célula. Fundo transparente.\n\nExemplo: g.texto(8, 8, \"olá\")"
+      "summary": "Escreve t na caneta. (x, y) é o canto superior esquerdo do primeiro glifo, entre -4096 e 4096. tamanho é a altura da célula em pixels (padrão 8). Acento e ç entram. Quebra de linha (`\\n`) desce uma célula. Fundo transparente.",
+      "doc": "Escreve t na caneta. (x, y) é o canto superior esquerdo do primeiro\nglifo, entre -4096 e 4096. tamanho é a altura da célula em pixels (padrão 8). Acento e\nç entram. Quebra de linha (`\\n`) desce uma célula. Fundo transparente.\n\nExemplo: g.texto(8, 8, \"olá\")"
     },
     {
       "name": "imagem",
@@ -1431,8 +1431,8 @@
         "imagem(g, img, x, y, angulo)",
         "imagem(g, img, x, y)"
       ],
-      "summary": "Carimba uma imagem centrada em (x, y). O segundo argumento é um caminho PNG, um valor de `importe \"imagem\"` ou outra tela gráfica (vira imagem na hora). O arquivo é lido uma vez; os pixels ficam no comando. angulo é em graus, no sentido horário; 0 deixa o topo para cima. Pixels transparentes não cobrem o desenho.",
-      "doc": "Carimba uma imagem centrada em (x, y). O segundo argumento é um caminho\nPNG, um valor de `importe \"imagem\"` ou outra tela gráfica (vira imagem\nna hora). O arquivo é lido uma vez; os pixels ficam no comando. angulo\né em graus, no sentido horário; 0 deixa o topo para cima. Pixels\ntransparentes não cobrem o desenho.\n\nExemplo: g.imagem(img, 160, 100, 90)"
+      "summary": "Carimba uma imagem centrada em (x, y), entre -4096 e 4096. O segundo argumento é um caminho PNG, um valor de `importe \"imagem\"` ou outra tela gráfica (vira imagem na hora). O arquivo é lido uma vez; os pixels ficam no comando. angulo é em graus, no sentido horário; 0 deixa o topo para cima. Pixels transparentes não cobrem o desenho.",
+      "doc": "Carimba uma imagem centrada em (x, y), entre -4096 e 4096. O segundo argumento é um caminho\nPNG, um valor de `importe \"imagem\"` ou outra tela gráfica (vira imagem\nna hora). O arquivo é lido uma vez; os pixels ficam no comando. angulo\né em graus, no sentido horário; 0 deixa o topo para cima. Pixels\ntransparentes não cobrem o desenho.\n\nExemplo: g.imagem(img, 160, 100, 90)"
     },
     {
       "name": "apague",

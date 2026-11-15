@@ -5,7 +5,8 @@ use crate::lexer::Span;
 use crate::runtime::error::EvalError;
 use crate::runtime::eval::Vm;
 use crate::runtime::graf::{
-    ALTURA_MAX, LARGURA_MAX, OpGraf, TAMANHO_PIXEL_MAX, TelaGrafica, cor_graf_conhecida,
+    ALTURA_MAX, LARGURA_MAX, LIMITE_COORD, OpGraf, TAMANHO_PIXEL_MAX, TelaGrafica,
+    cor_graf_conhecida,
 };
 use crate::runtime::graf_host::{CapturaEvento, EventoGraf, GrafHost};
 use crate::runtime::imagem::{self, Imagem};
@@ -103,10 +104,7 @@ impl Vm<'_, '_> {
         let mapa = expect_graf(&args[0], span, self)?;
         let x = self.expect_px(&args[1], span)?;
         let y = self.expect_px(&args[2], span)?;
-        let r = self.expect_px(&args[3], span)?;
-        if r < 0 {
-            return Err(self.err("raio do círculo deve ser ≥ 0", span));
-        }
+        let r = self.expect_raio(&args[3], span)?;
         let cor = pen(&mapa);
         push_op(
             &mapa,
@@ -388,8 +386,39 @@ impl Vm<'_, '_> {
         if !n.is_finite() {
             return Err(self.err("coordenada deve ser um número finito", span));
         }
-        Ok(n.round() as i32)
+        limitar_coord(n).ok_or_else(|| {
+            self.err(
+                format!("coordenada fora do intervalo (entre -{LIMITE_COORD} e {LIMITE_COORD})"),
+                span,
+            )
+        })
     }
+
+    fn expect_raio(&self, v: &Value, span: Span) -> Result<i32, EvalError> {
+        let n = self.expect_f64(v, span)?;
+        if !n.is_finite() {
+            return Err(self.err("raio deve ser um número finito", span));
+        }
+        let arred = n.round();
+        if arred < 0.0 {
+            return Err(self.err("raio do círculo deve ser ≥ 0", span));
+        }
+        if arred > f64::from(LIMITE_COORD) {
+            return Err(self.err(
+                format!("raio do círculo deve ser um inteiro de 0 a {LIMITE_COORD}"),
+                span,
+            ));
+        }
+        Ok(arred as i32)
+    }
+}
+
+fn limitar_coord(n: f64) -> Option<i32> {
+    let arred = n.round();
+    if arred < f64::from(-LIMITE_COORD) || arred > f64::from(LIMITE_COORD) {
+        return None;
+    }
+    Some(arred as i32)
 }
 
 pub(crate) fn is_graf(v: &Value) -> bool {
@@ -467,36 +496,36 @@ fn op_de(v: &Value, span: Span, vm: &Vm<'_, '_>) -> Result<OpGraf, EvalError> {
     let cor = get_texto(xs, "cor").unwrap_or_else(|| "preto".into());
     match tipo.as_str() {
         "ponto" => Ok(OpGraf::Ponto {
-            x: get_i32(xs, "x").unwrap_or(0),
-            y: get_i32(xs, "y").unwrap_or(0),
+            x: exigir_coord(xs, "x", span, vm)?,
+            y: exigir_coord(xs, "y", span, vm)?,
             cor,
         }),
         "linha" => Ok(OpGraf::Linha {
-            x1: get_i32(xs, "x1").unwrap_or(0),
-            y1: get_i32(xs, "y1").unwrap_or(0),
-            x2: get_i32(xs, "x2").unwrap_or(0),
-            y2: get_i32(xs, "y2").unwrap_or(0),
+            x1: exigir_coord(xs, "x1", span, vm)?,
+            y1: exigir_coord(xs, "y1", span, vm)?,
+            x2: exigir_coord(xs, "x2", span, vm)?,
+            y2: exigir_coord(xs, "y2", span, vm)?,
             cor,
         }),
         "circulo" => Ok(OpGraf::Circulo {
-            x: get_i32(xs, "x").unwrap_or(0),
-            y: get_i32(xs, "y").unwrap_or(0),
-            r: get_i32(xs, "r").unwrap_or(0),
+            x: exigir_coord(xs, "x", span, vm)?,
+            y: exigir_coord(xs, "y", span, vm)?,
+            r: exigir_raio(xs, span, vm)?,
             cor,
         }),
         "imagem" => {
             let figura = get_imagem(xs, "figura")
                 .ok_or_else(|| vm.err("comando de imagem sem :figura", span))?;
             Ok(OpGraf::Imagem {
-                x: get_i32(xs, "x").unwrap_or(0),
-                y: get_i32(xs, "y").unwrap_or(0),
+                x: exigir_coord(xs, "x", span, vm)?,
+                y: exigir_coord(xs, "y", span, vm)?,
                 angulo: get_f64(xs, "angulo").unwrap_or(0.0),
                 figura,
             })
         }
         "texto" => Ok(OpGraf::Texto {
-            x: get_i32(xs, "x").unwrap_or(0),
-            y: get_i32(xs, "y").unwrap_or(0),
+            x: exigir_coord(xs, "x", span, vm)?,
+            y: exigir_coord(xs, "y", span, vm)?,
             tamanho: get_i32(xs, "tamanho")
                 .unwrap_or(fonte8x8::TAMANHO_PADRAO)
                 .clamp(1, fonte8x8::TAMANHO_MAX),
@@ -504,10 +533,10 @@ fn op_de(v: &Value, span: Span, vm: &Vm<'_, '_>) -> Result<OpGraf, EvalError> {
             texto: get_texto(xs, "texto").unwrap_or_default(),
         }),
         "retangulo" | "retângulo" => Ok(OpGraf::Retangulo {
-            x1: get_i32(xs, "x1").unwrap_or(0),
-            y1: get_i32(xs, "y1").unwrap_or(0),
-            x2: get_i32(xs, "x2").unwrap_or(0),
-            y2: get_i32(xs, "y2").unwrap_or(0),
+            x1: exigir_coord(xs, "x1", span, vm)?,
+            y1: exigir_coord(xs, "y1", span, vm)?,
+            x2: exigir_coord(xs, "x2", span, vm)?,
+            y2: exigir_coord(xs, "y2", span, vm)?,
             cor,
         }),
         other => Err(vm.err(
@@ -673,6 +702,19 @@ fn get_f64(mapa: &MapaRc, chave: &str) -> Option<f64> {
 }
 
 fn get_i32(mapa: &MapaRc, chave: &str) -> Option<i32> {
+    match numero_campo(mapa, chave) {
+        NumeroCampo::Ok(n) => Some(n.round() as i32),
+        NumeroCampo::Ausente | NumeroCampo::NaoFinito => None,
+    }
+}
+
+enum NumeroCampo {
+    Ausente,
+    NaoFinito,
+    Ok(f64),
+}
+
+fn numero_campo(mapa: &MapaRc, chave: &str) -> NumeroCampo {
     let k = MapKey::Texto(chave.into());
     match mapa
         .borrow()
@@ -683,12 +725,43 @@ fn get_i32(mapa: &MapaRc, chave: &str) -> Option<i32> {
         Some(Value::Numero(n)) => {
             let f = n.to_f64();
             if f.is_finite() {
-                Some(f.round() as i32)
+                NumeroCampo::Ok(f)
             } else {
-                None
+                NumeroCampo::NaoFinito
             }
         }
-        _ => None,
+        _ => NumeroCampo::Ausente,
+    }
+}
+
+fn exigir_coord(mapa: &MapaRc, chave: &str, span: Span, vm: &Vm<'_, '_>) -> Result<i32, EvalError> {
+    match numero_campo(mapa, chave) {
+        NumeroCampo::Ausente => Ok(0),
+        NumeroCampo::NaoFinito => Err(vm.err("coordenada deve ser um número finito", span)),
+        NumeroCampo::Ok(n) => limitar_coord(n).ok_or_else(|| {
+            vm.err(
+                format!("coordenada fora do intervalo (entre -{LIMITE_COORD} e {LIMITE_COORD})"),
+                span,
+            )
+        }),
+    }
+}
+
+fn exigir_raio(mapa: &MapaRc, span: Span, vm: &Vm<'_, '_>) -> Result<i32, EvalError> {
+    match numero_campo(mapa, "r") {
+        NumeroCampo::Ausente => Ok(0),
+        NumeroCampo::NaoFinito => Err(vm.err("raio deve ser um número finito", span)),
+        NumeroCampo::Ok(n) => {
+            let arred = n.round();
+            if arred < 0.0 || arred > f64::from(LIMITE_COORD) {
+                Err(vm.err(
+                    format!("raio do círculo deve ser um inteiro de 0 a {LIMITE_COORD}"),
+                    span,
+                ))
+            } else {
+                Ok(arred as i32)
+            }
+        }
     }
 }
 
@@ -762,6 +835,33 @@ mod tests {
         }
     }
 
+    fn nos_dois(src: &str) -> String {
+        use crate::runtime::{ExecutionBackend, ExecutionOptions, run_with_options};
+        let src = format!("importe \"tela_grafica\"\n{src}");
+        let mut visto = None;
+        for backend in [ExecutionBackend::Bytecode, ExecutionBackend::Ast] {
+            if !backend.is_available() {
+                continue;
+            }
+            let saiu = run_with_options(
+                &src,
+                "teste.lep",
+                "",
+                ExecutionOptions {
+                    backend,
+                    ..ExecutionOptions::default()
+                },
+            )
+            .map(|o| o.stdout)
+            .unwrap_or_else(|e| panic!("{backend:?}: {e}\n{src}"));
+            if let Some(antes) = &visto {
+                assert_eq!(&saiu, antes, "{backend:?}");
+            }
+            visto = Some(saiu);
+        }
+        visto.expect("nenhum backend")
+    }
+
     #[test]
     fn nova_e_mapa_e_pixel_do_fundo() {
         assert_eq!(
@@ -809,6 +909,32 @@ g.apague()
 escreva(g.pixel(0, 0))
 "#);
         assert_eq!(out, "azul\nbranco\nbranco\n");
+    }
+
+    #[test]
+    fn coordenada_e_raio_enormes_sao_erro_e_o_recorte_fica() {
+        let fora = run_err("g = nova(10, 10)\ng.linha(-9999999999, 0, 9999999999, 5)\n");
+        assert!(fora.contains("coordenada fora do intervalo"), "{fora}");
+        let raio = run_err("g = nova(10, 10)\ng.circulo(0, 0, 99999999999)\n");
+        assert!(raio.contains("raio do círculo"), "{raio}");
+        assert!(run_err("g = nova(10, 10)\ng.circulo(0, 0, -1)\n").contains("≥ 0"));
+        assert_eq!(
+            nos_dois(
+                r#"
+g = nova(10, 10)
+g.cor(:azul)
+escreva(g.linha(-9999999999, 0, 9999999999, 5) se_falhar "e")
+escreva(g.circulo(0, 0, 99999999999) se_falhar "e")
+g.linha(-20, 1, 30, 1)
+escreva(g.pixel(0, 1))
+escreva(g.pixel(9, 1))
+escreva(g.pixel(0, 0))
+g.circulo(5, 5, 3)
+escreva(g.pixel(8, 5))
+"#
+            ),
+            "e\ne\nazul\nazul\nbranco\nazul\n"
+        );
     }
 
     #[test]

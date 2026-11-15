@@ -18,6 +18,12 @@ pub const LARGURA_MAX: u32 = 2048;
 pub const ALTURA_MAX: u32 = 2048;
 /// Cada pixel lógico vira um quadrado `n`×`n` na janela (1…16).
 pub const TAMANHO_PIXEL_MAX: u32 = 16;
+/// Largest absolute coordinate or radius. Twice the maximum canvas side
+/// (`LARGURA_MAX`), so a stroke may start off-screen and still be clipped
+/// without walking billions of pixels.
+pub const LIMITE_COORD: i32 = 4096;
+#[cfg(feature = "graphics")]
+const _: () = assert!(LIMITE_COORD == LARGURA_MAX as i32 * 2);
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum OpGraf {
@@ -398,18 +404,119 @@ fn retangulo_idx(idx: &mut [u8], w: u32, h: u32, x1: i32, y1: i32, x2: i32, y2: 
 }
 
 fn plot_idx(idx: &mut [u8], w: u32, h: u32, x: i32, y: i32, cor: u8) {
-    if x < 0 || y < 0 {
+    plot_i64(idx, w, h, i64::from(x), i64::from(y), cor);
+}
+
+fn plot_i64(idx: &mut [u8], w: u32, h: u32, x: i64, y: i64, cor: u8) {
+    if x < 0 || y < 0 || x >= i64::from(w) || y >= i64::from(h) {
         return;
     }
-    let x = x as u32;
-    let y = y as u32;
-    if x >= w || y >= h {
-        return;
+    idx[(y as u32 * w + x as u32) as usize] = cor;
+}
+
+/// Inclusive canvas rectangle. The arithmetic stays in `i128` so endpoints at
+/// `i32::MIN`/`i32::MAX` neither overflow nor make Bresenham run forever.
+fn recorta_linha(
+    x0: i32,
+    y0: i32,
+    x1: i32,
+    y1: i32,
+    w: u32,
+    h: u32,
+) -> Option<(i32, i32, i32, i32)> {
+    if w == 0 || h == 0 {
+        return None;
     }
-    idx[(y * w + x) as usize] = cor;
+    let xmax = i128::from(w) - 1;
+    let ymax = i128::from(h) - 1;
+    let mut x0 = i128::from(x0);
+    let mut y0 = i128::from(y0);
+    let mut x1 = i128::from(x1);
+    let mut y1 = i128::from(y1);
+    // Each pass clips one endpoint to one edge. Two edges per endpoint is enough.
+    for _ in 0..8 {
+        let c0 = codigo_recorte(x0, y0, xmax, ymax);
+        let c1 = codigo_recorte(x1, y1, xmax, ymax);
+        if c0 | c1 == 0 {
+            return Some((x0 as i32, y0 as i32, x1 as i32, y1 as i32));
+        }
+        if c0 & c1 != 0 {
+            return None;
+        }
+        let fora = if c0 != 0 { c0 } else { c1 };
+        let (x, y) = cruza_borda(x0, y0, x1, y1, fora, xmax, ymax)?;
+        if fora == c0 {
+            x0 = x;
+            y0 = y;
+        } else {
+            x1 = x;
+            y1 = y;
+        }
+    }
+    None
+}
+
+fn codigo_recorte(x: i128, y: i128, xmax: i128, ymax: i128) -> u8 {
+    let mut c = 0u8;
+    if x < 0 {
+        c |= 1;
+    } else if x > xmax {
+        c |= 2;
+    }
+    if y < 0 {
+        c |= 4;
+    } else if y > ymax {
+        c |= 8;
+    }
+    c
+}
+
+fn cruza_borda(
+    x0: i128,
+    y0: i128,
+    x1: i128,
+    y1: i128,
+    fora: u8,
+    xmax: i128,
+    ymax: i128,
+) -> Option<(i128, i128)> {
+    let dx = x1 - x0;
+    let dy = y1 - y0;
+    if fora & 1 != 0 {
+        if dx == 0 {
+            return None;
+        }
+        return Some((0, y0 + dy * (0 - x0) / dx));
+    }
+    if fora & 2 != 0 {
+        if dx == 0 {
+            return None;
+        }
+        return Some((xmax, y0 + dy * (xmax - x0) / dx));
+    }
+    if fora & 4 != 0 {
+        if dy == 0 {
+            return None;
+        }
+        return Some((x0 + dx * (0 - y0) / dy, 0));
+    }
+    if fora & 8 != 0 {
+        if dy == 0 {
+            return None;
+        }
+        return Some((x0 + dx * (ymax - y0) / dy, ymax));
+    }
+    None
 }
 
 fn linha_idx(idx: &mut [u8], w: u32, h: u32, x0: i32, y0: i32, x1: i32, y1: i32, cor: u8) {
+    let Some((x0, y0, x1, y1)) = recorta_linha(x0, y0, x1, y1, w, h) else {
+        return;
+    };
+    let x0 = i64::from(x0);
+    let y0 = i64::from(y0);
+    let x1 = i64::from(x1);
+    let y1 = i64::from(y1);
     let mut x = x0;
     let mut y = y0;
     let dx = (x1 - x0).abs();
@@ -417,8 +524,10 @@ fn linha_idx(idx: &mut [u8], w: u32, h: u32, x0: i32, y0: i32, x1: i32, y1: i32,
     let dy = -(y1 - y0).abs();
     let sy = if y0 < y1 { 1 } else { -1 };
     let mut err = dx + dy;
-    loop {
-        plot_idx(idx, w, h, x, y, cor);
+    // A clipped segment fits in the canvas. The cap stops a bad clip from looping.
+    let max_passos = (w as u64).saturating_add(h as u64).saturating_add(1);
+    for _ in 0..max_passos {
+        plot_i64(idx, w, h, x, y, cor);
         if x == x1 && y == y1 {
             break;
         }
@@ -435,25 +544,27 @@ fn linha_idx(idx: &mut [u8], w: u32, h: u32, x0: i32, y0: i32, x1: i32, y1: i32,
 }
 
 fn circulo_idx(idx: &mut [u8], w: u32, h: u32, cx: i32, cy: i32, r: i32, cor: u8) {
-    if r < 0 {
+    if !(0..=LIMITE_COORD).contains(&r) {
         return;
     }
+    let cx = i64::from(cx);
+    let cy = i64::from(cy);
     if r == 0 {
-        plot_idx(idx, w, h, cx, cy, cor);
+        plot_i64(idx, w, h, cx, cy, cor);
         return;
     }
-    let mut x = r;
-    let mut y = 0;
-    let mut err = 1 - r;
+    let mut x = i64::from(r);
+    let mut y = 0i64;
+    let mut err = 1 - x;
     while x >= y {
-        plot_idx(idx, w, h, cx + x, cy + y, cor);
-        plot_idx(idx, w, h, cx + y, cy + x, cor);
-        plot_idx(idx, w, h, cx - y, cy + x, cor);
-        plot_idx(idx, w, h, cx - x, cy + y, cor);
-        plot_idx(idx, w, h, cx - x, cy - y, cor);
-        plot_idx(idx, w, h, cx - y, cy - x, cor);
-        plot_idx(idx, w, h, cx + y, cy - x, cor);
-        plot_idx(idx, w, h, cx + x, cy - y, cor);
+        plot_i64(idx, w, h, cx + x, cy + y, cor);
+        plot_i64(idx, w, h, cx + y, cy + x, cor);
+        plot_i64(idx, w, h, cx - y, cy + x, cor);
+        plot_i64(idx, w, h, cx - x, cy + y, cor);
+        plot_i64(idx, w, h, cx - x, cy - y, cor);
+        plot_i64(idx, w, h, cx - y, cy - x, cor);
+        plot_i64(idx, w, h, cx + y, cy - x, cor);
+        plot_i64(idx, w, h, cx + x, cy - y, cor);
         y += 1;
         if err < 0 {
             err += 2 * y + 1;
@@ -466,19 +577,19 @@ fn circulo_idx(idx: &mut [u8], w: u32, h: u32, cx: i32, cy: i32, r: i32, cor: u8
 
 fn texto_idx(idx: &mut [u8], w: u32, h: u32, x: i32, y: i32, tamanho: i32, texto: &str, cor: u8) {
     let t = tamanho.max(1);
-    let mut cx = x;
-    let mut cy = y;
+    let mut cx = i64::from(x);
+    let mut cy = i64::from(y);
     for ch in texto.chars() {
         if ch == '\r' {
             continue;
         }
         if ch == '\n' {
-            cx = x;
-            cy += t;
+            cx = i64::from(x);
+            cy = cy.saturating_add(i64::from(t));
             continue;
         }
         if ch == '\t' {
-            cx += 2 * t;
+            cx = cx.saturating_add(i64::from(t).saturating_mul(2));
             continue;
         }
         let g = fonte8x8::glifo(ch);
@@ -488,11 +599,11 @@ fn texto_idx(idx: &mut [u8], w: u32, h: u32, x: i32, y: i32, tamanho: i32, texto
             for px in 0..t {
                 let fx = ((px * fonte8x8::LADO) / t) as usize;
                 if row & (1 << fx) != 0 {
-                    plot_idx(idx, w, h, cx + px, cy + py, cor);
+                    plot_i64(idx, w, h, cx + i64::from(px), cy + i64::from(py), cor);
                 }
             }
         }
-        cx += t;
+        cx = cx.saturating_add(i64::from(t));
     }
 }
 
@@ -500,6 +611,74 @@ fn texto_idx(idx: &mut [u8], w: u32, h: u32, x: i32, y: i32, tamanho: i32, texto
 #[allow(clippy::identity_op)] // `1 * 4`: pixel 1, 4 bytes each
 mod tests {
     use super::*;
+
+    fn tela(ops: Vec<OpGraf>) -> TelaGrafica {
+        TelaGrafica {
+            id: 1,
+            largura: 10,
+            altura: 10,
+            tamanho_pixel: 1,
+            fundo: "branco".into(),
+            ops,
+        }
+    }
+
+    #[test]
+    fn linha_extrema_recorte_sem_panico() {
+        let r = tela(vec![OpGraf::Linha {
+            x1: i32::MIN,
+            y1: 0,
+            x2: i32::MAX,
+            y2: 5,
+            cor: "azul".into(),
+        }])
+        .raster();
+        let mut azuis = 0;
+        for y in 0..10 {
+            for x in 0..10 {
+                if r.pixel(x, y) == Some("azul") {
+                    azuis += 1;
+                }
+            }
+        }
+        assert!((1..=10).contains(&azuis), "{azuis}");
+    }
+
+    #[test]
+    fn linha_de_fora_pinta_a_faixa_visivel() {
+        let r = tela(vec![OpGraf::Linha {
+            x1: -20,
+            y1: 1,
+            x2: 30,
+            y2: 1,
+            cor: "azul".into(),
+        }])
+        .raster();
+        assert_eq!(r.pixel(0, 1), Some("azul"));
+        assert_eq!(r.pixel(9, 1), Some("azul"));
+        assert_eq!(r.pixel(0, 0), Some("branco"));
+    }
+
+    #[test]
+    fn circulo_raio_enorme_nao_trava_e_o_pequeno_pinta() {
+        let vazio = tela(vec![OpGraf::Circulo {
+            x: 0,
+            y: 0,
+            r: i32::MAX,
+            cor: "azul".into(),
+        }])
+        .raster();
+        assert_eq!(vazio.pixel(0, 0), Some("branco"));
+        let r = tela(vec![OpGraf::Circulo {
+            x: 5,
+            y: 5,
+            r: 3,
+            cor: "azul".into(),
+        }])
+        .raster();
+        assert_eq!(r.pixel(8, 5), Some("azul"));
+        assert_eq!(r.pixel(5, 5), Some("branco"));
+    }
 
     #[test]
     fn diagonal_paints_and_png_roundtrip() {

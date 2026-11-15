@@ -1413,6 +1413,33 @@ escreva(p:nome)
         assert_eq!(run(r#"escreva("{0} {0}".formate("oi"))"#), "oi oi\n");
         assert!(run_err(r#"formate("{}")"#).contains("espera pelo menos"));
         assert!(run_err(r#"formate(10, "x")"#).contains("texto"));
+        let enorme = r#"escreva(formate("{:>999999999999}", 1) se_falhar "e")
+escreva(formate("{:>99999999999999999999999}", 1) se_falhar "e")
+"#;
+        use crate::runtime::{ExecutionBackend, ExecutionOptions, run_with_options};
+        let mut visto = None;
+        for backend in [ExecutionBackend::Bytecode, ExecutionBackend::Ast] {
+            if !backend.is_available() {
+                continue;
+            }
+            let saiu = run_with_options(
+                enorme,
+                "teste.lep",
+                "",
+                ExecutionOptions {
+                    backend,
+                    ..ExecutionOptions::default()
+                },
+            )
+            .map(|o| o.stdout)
+            .unwrap_or_else(|e| panic!("{backend:?}: {e}"));
+            assert_eq!(saiu, "e\ne\n", "{backend:?}");
+            if let Some(antes) = &visto {
+                assert_eq!(&saiu, antes);
+            }
+            visto = Some(saiu);
+        }
+        assert!(visto.is_some());
     }
 
     #[test]
