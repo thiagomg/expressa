@@ -60,6 +60,17 @@ le_completa = funcao(min, max) {
     le_posicao(min, max)
 }
 
+le_edita = funcao(min, max) {
+    escreva("Qual posição você quer editar? Enter para voltar")
+    le_posicao(min, max)
+}
+
+le_nova_desc = funcao(tarefa_antiga) {
+    escreva("Digite a nova descrição ou pressione enter para voltar")
+    escreva("Antiga = " + tarefa_antiga)
+    leia("Descrição: ")
+}
+
 le_remova = funcao(min, max) {
     escreva("Qual posição você quer remover? Enter para voltar")
     le_posicao(min, max)

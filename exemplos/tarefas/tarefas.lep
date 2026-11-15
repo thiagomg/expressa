@@ -18,11 +18,20 @@ mostre = funcao(ts, tudo) {
 // ------------------------
 
 tarefas = ps::carrega()
-// tarefas = [
-//     comum::nova("Dormir", agora(), falso),
-//     comum::nova("Acordar", agora(), falso),
-//     comum::nova("Trabalhar", agora(), verdadeiro)
-// ]
+// Ordena por data, indo da mais nova para a mais antiga
+// epoch é o numero de segundos desde 1970-01-01
+tarefas = ordene(tarefas, funcao(p) { -p:data:epoch })
+
+// Gera exemplo de lista de tarefas, só se não tiver nada salvo
+se tarefas.tamanho() == 0 {
+    tarefas = [
+        comum::nova("Dormir", agora(), falso),
+        comum::nova("Acordar", agora(), falso),
+        comum::nova("Trabalhar", agora(), verdadeiro)
+    ]
+}
+
+
 
 op = ""
 todos_itens = falso
@@ -31,7 +40,7 @@ enquanto op != "S" {
     cls()
     
     opções = [
-        "Novo", "Completar", "Remover", 
+        "Novo", "Completar", "Editar", "Remover", 
         se todos_itens == verdadeiro { "Mostrar não completos" } senao { "Mostrar tudo" }, 
         "Sair"
     ]
@@ -46,10 +55,19 @@ enquanto op != "S" {
         se item.tamanho() > 0 {
             tarefas += [ item ]
         }
+        tarefas = ordene(tarefas, funcao(p) { -p:data:epoch })
     } ou se op == "C" {
         idx = le_completa(1, tarefas.tamanho())
         se idx != falso {
             tarefas[idx-1]:completo = se tarefas[idx-1]:completo == verdadeiro { falso } senão { verdadeiro }
+        }
+    } ou se op == "E" {
+        idx = le_edita(1, tarefas.tamanho())
+        se idx != falso {
+            desc = le_nova_desc(tarefas[idx-1]:desc)
+            se desc.limpe().tamanho() > 0 {
+                tarefas[idx-1]:desc = desc
+            }
         }
     } ou se op == "R" {
         idx = le_remova(1, tarefas.tamanho())
@@ -66,5 +84,4 @@ enquanto op != "S" {
     ps::salva(tarefas)
 }
 
-// TODO: Falta editar
 
