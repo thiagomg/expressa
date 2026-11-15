@@ -411,7 +411,7 @@ fn build_ui_with_prefs(app: &Application, startup: bool, prefs: Prefs) -> UiRc {
     status_row.append(&ui.borrow().diag_label);
     status_row.append(&ui.borrow().project_path);
 
-    install_menubar(&win, &ui, &file_scroll, &debug_panel);
+    install_menubar(&win, &ui, &file_scroll, &debug_panel, &args_row);
     root.append(&args_row);
     root.append(&ui.borrow().depuracao.barra_exec.caixa);
     root.append(&ui.borrow().search_revealer);
