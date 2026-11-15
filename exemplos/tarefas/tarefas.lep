@@ -1,12 +1,7 @@
 importe "crono"
 importe "menu"
+comum = importe "comum"
 ps = importe "persiste"
-
-tarefa_texto = funcao(t) {
-    comp_t = se t:completo { "x" } senao { " " }
-    dt = t:data.formate_data("%Y-%m-%d")
-    formate("[{}] {} - {}", comp_t, dt, t:desc)
-}
 
 mostre = funcao(ts, tudo) {
     escreva("Lista de tarefas")
@@ -20,22 +15,14 @@ mostre = funcao(ts, tudo) {
     escreva()
 }
 
-nova = funcao(desc, data, completo) {
-    mapa([
-        :desc -> desc,
-        :data -> data,
-        :completo -> completo,
-        :_como_texto -> tarefa_texto
-    ])
-}
-
 // ------------------------
 
-tarefas = [
-    nova("Dormir", agora(), falso),
-    nova("Acordar", agora(), falso),
-    nova("Trabalhar", agora(), verdadeiro)
-]
+tarefas = ps::carrega()
+// tarefas = [
+//     comum::nova("Dormir", agora(), falso),
+//     comum::nova("Acordar", agora(), falso),
+//     comum::nova("Trabalhar", agora(), verdadeiro)
+// ]
 
 op = ""
 todos_itens = falso
@@ -55,7 +42,7 @@ enquanto op != "S" {
     
     se op == "N" {
         t = le_novo()
-        item = limpe(nova(t, falso))
+        item = comum::nova(limpe(t), agora(), falso)
         se item.tamanho() > 0 {
             tarefas += [ item ]
         }
@@ -78,3 +65,6 @@ enquanto op != "S" {
     
     ps::salva(tarefas)
 }
+
+// TODO: Falta editar
+
