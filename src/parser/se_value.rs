@@ -135,7 +135,7 @@ fn check_expr_inner(expr: &Expr, use_: Use) -> Result<(), ParseError> {
             attempt, fallback, ..
         } => {
             check_expr(attempt, Use::Value)?;
-            check_expr(fallback, Use::Value)
+            check_block(fallback, Use::Value)
         }
         Expr::List { elements, .. } => {
             for e in elements {

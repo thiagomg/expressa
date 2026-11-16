@@ -70,7 +70,7 @@ fn indexed_parameters_share_storage_with_eval_and_closures() {
             "7\n",
         ),
         (
-            "f = funcao(a) { g = funcao() { a = 7 } g() se_falhar 0 a }\nescreva(f(1))",
+            "f = funcao(a) { g = funcao() { a = 7 } g() se_falhar { 0 } a }\nescreva(f(1))",
             "1\n",
         ),
         (
@@ -132,12 +132,12 @@ fn stack_arguments_preserve_order_results_and_error_recovery() {
         "f = funcao(a, b) { a * 10 + b }\nescreva(100 + f(f(1, 2), f(3, 4)))",
         "make = funcao(n) { funcao(a, b) { n + a + b } }\nescreva(make(10)(2, 3))",
         "f = funcao(a, b) { [a, b] }\nescreva(f({ escreva(1) 10 }, { escreva(2) 20 }))",
-        "f = funcao(a, b) { a + b }\nescreva(f({ escreva(1) 1 / 0 }, { escreva(2) 2 }) se_falhar 9)\nescreva(f(3, 4))",
-        "f = funcao(a) { a }\nescreva(f({ escreva(1) 1 }, { escreva(2) 2 }) se_falhar 9)\nescreva(f(3))",
-        "f = funcao(a) { a }\nescreva(f() se_falhar 9)\nescreva(f(3))",
-        "f = funcao(a) { 1 / 0 }\nescreva(10 + (f([1, 2]) se_falhar 3))",
+        "f = funcao(a, b) { a + b }\nescreva(f({ escreva(1) 1 / 0 }, { escreva(2) 2 }) se_falhar { 9 })\nescreva(f(3, 4))",
+        "f = funcao(a) { a }\nescreva(f({ escreva(1) 1 }, { escreva(2) 2 }) se_falhar { 9 })\nescreva(f(3))",
+        "f = funcao(a) { a }\nescreva(f() se_falhar { 9 })\nescreva(f(3))",
+        "f = funcao(a) { 1 / 0 }\nescreva(10 + (f([1, 2]) se_falhar { 3 }))",
         "f = funcao(a) { a }\nescreva(f(avalie(\"2 + 3\")))\nescreva(avalie(\"f(7)\"))",
-        "escreva(42(1, 2) se_falhar 9)",
+        "escreva(42(1, 2) se_falhar { 9 })",
         "f = funcao(a, b) { a }\nf(1)",
         "f = funcao(a) { a }\nf(1, 2)",
         "f = funcao(a) { a }\nxs = [1]\nescreva(f(xs) == xs)",
@@ -154,8 +154,8 @@ fn expression_and_statement_value_rules_match() {
         "escreva(avalie(\"10\\nx = 2\"))",
         "escreva({ 10 se falso { 20 } })",
         "escreva(nao falso e (verdadeiro ou (1 / 0 == 1)))",
-        "escreva(falhe(\"x\") se_falhar \"pego\")",
-        "escreva(garanta(falso) se_falhar \"pego\")",
+        "escreva(falhe(\"x\") se_falhar { \"pego\" })",
+        "escreva(garanta(falso) se_falhar { \"pego\" })",
         "garanta(verdadeiro)\nescreva(1)",
         "g = garanta\ng(1 > 2)",
         "usa = funcao(garanta) { escreva(garanta(falso)) }\nusa(funcao(c) { se c { \"ok\" } senao { \"nao\" } })",
@@ -170,7 +170,7 @@ fn expression_and_statement_value_rules_match() {
 fn dynamic_eval_updates_existing_and_later_bindings_and_escaping_closures() {
     for source in [
         "f = funcao() { later }\navalie(\"later = 42\")\nescreva(f())",
-        "x = 10\nf = funcao() { avalie(\"x = 2\") }\nescreva(f() se_falhar x)",
+        "x = 10\nf = funcao() { avalie(\"x = 2\") }\nescreva(f() se_falhar { x })",
         "make = funcao(n) { avalie(\"x = n + 1\\nfuncao() { x }\") }\ng = make(4)\nescreva(g())",
         "x = 1\nf = avalie(\"funcao() { x }\")\nx = 9\nescreva(f())",
         "escreva(avalie(\"avalie(\\\"2 + 3\\\")\"))",
@@ -182,12 +182,12 @@ fn dynamic_eval_updates_existing_and_later_bindings_and_escaping_closures() {
 #[test]
 fn loop_control_and_error_handlers_unwind_the_same_scopes() {
     for source in [
-        "n = 0\npara i em 1..=5 { { se i == 3 { continue } n += i } se_falhar 0 }\nescreva(n)",
-        "f = funcao() { para i em 1..=5 { { retorne i } se_falhar 99 } 0 }\nescreva(f())",
+        "n = 0\npara i em 1..=5 { { se i == 3 { continue } n += i } se_falhar { 0 } }\nescreva(n)",
+        "f = funcao() { para i em 1..=5 { { retorne i } se_falhar { 99 } } 0 }\nescreva(f())",
         "n = 0\n{ para i em 1..=3 { n += 1 1 / 0 } } se_falhar { n += 10 }\nescreva(n)",
         "n = 0\npara i em 1..=3 { enquanto { pare verdadeiro } { n += 100 } n += 1 }\nescreva(n)",
-        "f = funcao() { { pare } se_falhar 42 }\nescreva(f() se_falhar 7)",
-        "f = funcao() { avalie(\"retorne 1\") }\nescreva(f() se_falhar 7)",
+        "f = funcao() { { pare } se_falhar { 42 } }\nescreva(f() se_falhar { 7 })",
+        "f = funcao() { avalie(\"retorne 1\") }\nescreva(f() se_falhar { 7 })",
         "n = 0\npara x em \"olá\" { n += 1 }\npara x em conjunto([1, 2]) { n += x }\nescreva(n)",
     ] {
         equivalent(source);
@@ -241,13 +241,13 @@ fn recursion_uses_vm_frames_and_still_obeys_the_language_limit() {
         .unwrap();
     assert_eq!(worker.join().unwrap().unwrap().stdout, "3.000\n");
     let result = outcome(
-        "f = funcao() { f() }\nescreva(f() se_falhar \"depth\")",
+        "f = funcao() { f() }\nescreva(f() se_falhar { \"depth\" })",
         ExecutionBackend::Bytecode,
     )
     .unwrap();
     assert_eq!(result.stdout, "depth\n");
     let result = outcome(
-        "f = funcao(n) { f(n) }\nescreva(f(1) se_falhar \"depth\")",
+        "f = funcao(n) { f(n) }\nescreva(f(1) se_falhar { \"depth\" })",
         ExecutionBackend::Bytecode,
     )
     .unwrap();
@@ -257,7 +257,7 @@ fn recursion_uses_vm_frames_and_still_obeys_the_language_limit() {
 #[test]
 fn faixa_bounds_are_evaluated_then_validated() {
     equivalent(
-        "m = mapa([:n -> 0])\n{ para i em 1.5..{ m:n = 9 2 } { 0 } } se_falhar 0\nescreva(m:n)",
+        "m = mapa([:n -> 0])\n{ para i em 1.5..{ m:n = 9 2 } { 0 } } se_falhar { 0 }\nescreva(m:n)",
     );
 }
 
@@ -267,9 +267,9 @@ fn top_level_control_signals_have_identical_diagnostics() {
         "pare",
         "continue",
         "retorne 1",
-        "{ pare } se_falhar 0",
+        "{ pare } se_falhar { 0 }",
         "avalie(\"pare\")",
-        "f = funcao() { { pare } se_falhar 0 }\nf()",
+        "f = funcao() { { pare } se_falhar { 0 } }\nf()",
     ] {
         equivalent(source);
     }
@@ -327,4 +327,78 @@ fn backend_selection_does_not_consume_script_arguments() {
         );
     }
     std::fs::remove_file(file).unwrap();
+}
+
+#[test]
+fn se_falhar_capture_scope_and_control_flow() {
+    for (source, expected) in [
+        (
+            r#"escreva(falhe("fração inválida") se_falhar erro { erro })"#,
+            "fração inválida\n",
+        ),
+        (
+            r#"erro = "fora"
+escreva(falhe("dentro") se_falhar erro { erro })
+escreva(erro)"#,
+            "dentro\nfora\n",
+        ),
+        (
+            r#"escreva(42 se_falhar erro { falhe("não deve executar") })"#,
+            "42\n",
+        ),
+        (
+            r#"falhe("x") se_falhar erro { erro }
+escreva(erro se_falhar { "local" })"#,
+            "local\n",
+        ),
+        (
+            r#"escreva((falhe("x") se_falhar erro { falhe(erro + "y") }) se_falhar outro { outro })"#,
+            "xy\n",
+        ),
+        (
+            r#"f = funcao(erro) { falhe("interno") se_falhar erro { erro } }
+escreva(f("parâmetro"))"#,
+            "interno\n",
+        ),
+        (
+            r#"f = falhe("capturado") se_falhar erro { funcao() { erro } }
+escreva(f())"#,
+            "capturado\n",
+        ),
+        (
+            r#"f = funcao() { falhe("x") se_falhar erro { retorne erro } }
+escreva(f())"#,
+            "x\n",
+        ),
+        (
+            r#"n = 0
+para i em 1..=3 { falhe("x") se_falhar erro { n += 1 continue } }
+escreva(n)"#,
+            "3\n",
+        ),
+        (
+            r#"escreva(falhe("externo") se_falhar erro {
+    falhe("interno") se_falhar erro { escreva(erro) }
+    erro
+})"#,
+            "interno\nexterno\n",
+        ),
+        (r#"escreva(falhe("x") se_falhar { [] })"#, "[]\n"),
+    ] {
+        equivalent(source);
+        assert_eq!(
+            outcome(source, ExecutionBackend::Bytecode).unwrap().stdout,
+            expected,
+            "{source}"
+        );
+    }
+    equivalent(r#"falhe("x") se_falhar erro { falhe("tratamento falhou") }"#);
+    equivalent(r#"escreva(numero("abc") se_falhar erro { erro })"#);
+    equivalent(r#"escreva([1][9] se_falhar erro { erro })"#);
+    equivalent(r#"escreva(inexistente se_falhar erro { erro })"#);
+    equivalent(
+        r#"f = falhe("x") se_falhar erro { funcao() { erro } }
+g = clone(f)
+escreva(g())"#,
+    );
 }

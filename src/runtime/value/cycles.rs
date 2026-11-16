@@ -368,7 +368,7 @@ mod clone_failure_tests {
             }
         }
         let checked = Rc::new(Cell::new(false));
-        run_with_hook("a = [0]\na[0] = a\nb = mapa()\nb:_clonavel = falso\nxs = [a,b]\nrepita 100 vezes { clone(xs) se_falhar 0 }\nobserve = 0","partial.lep",Box::new(Hook {baseline:0,checked:Rc::clone(&checked)}),None,None,&mut Vec::new(),&mut Vec::new(),&mut Input,&[]).unwrap();
+        run_with_hook("a = [0]\na[0] = a\nb = mapa()\nb:_clonavel = falso\nxs = [a,b]\nrepita 100 vezes { clone(xs) se_falhar { 0 } }\nobserve = 0","partial.lep",Box::new(Hook {baseline:0,checked:Rc::clone(&checked)}),None,None,&mut Vec::new(),&mut Vec::new(),&mut Input,&[]).unwrap();
         assert!(checked.get());
     }
 }

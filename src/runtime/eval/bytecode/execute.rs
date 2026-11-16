@@ -49,6 +49,7 @@ struct Frame {
     ip: usize,
     envs: Vec<Rc<RefCell<Env>>>,
     handlers: Vec<Handler>,
+    caught_error: Option<String>,
     loops: Vec<Loop>,
     kind: FrameKindCode,
     values: usize,
@@ -274,6 +275,17 @@ impl Machine {
             Op::Finish => return Ok(Step::Finish(pop!())),
             Op::Checkpoint => vm.pause(span, frame.env())?,
             Op::EnterScope => frame.envs.push(Env::child(frame.env(), FrameKind::Block)),
+            Op::Catch(id) => {
+                let message = frame
+                    .caught_error
+                    .take()
+                    .ok_or_else(|| vm.err("captura sem erro", span))?;
+                let child = Env::child(frame.env(), FrameKind::Block);
+                child
+                    .borrow_mut()
+                    .define(name!(id).clone(), Value::Texto(message));
+                frame.envs.push(child);
+            }
             Op::LeaveScope => frame.leave_scopes(frame.envs.len() - 1),
             Op::ParentScope => {
                 vm.check_deadline(span)?;
@@ -553,6 +565,7 @@ impl Machine {
             ip: 0,
             envs: vec![env],
             handlers: vec![],
+            caught_error: None,
             loops: vec![],
             kind,
             values: self.values.len(),
@@ -729,6 +742,9 @@ impl Machine {
                 self.destinations.truncate(handler.destinations);
                 frame.loops.truncate(handler.loops);
                 frame.leave_scopes(handler.scopes);
+                if let EvalError::Runtime(error) = error {
+                    frame.caught_error = Some(error.message);
+                }
                 frame.ip = handler.target;
                 return Ok(());
             }
@@ -792,6 +808,7 @@ impl Vm<'_, '_> {
                 ip: 0,
                 envs: vec![Rc::clone(env)],
                 handlers: vec![],
+                caught_error: None,
                 loops: vec![],
                 kind,
                 values: 0,

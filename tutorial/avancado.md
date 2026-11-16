@@ -216,19 +216,31 @@ Cada valor entra somente uma vez. A Forca usa conjunto para verificar quais letr
 Arquivo: `exemplos/15_se_falhar.lep`
 
 ```text
-escreva(10 / 0 se_falhar "não dá para dividir")
-escreva([1, 2][9] se_falhar "índice longe")
-escreva(numero("xyz") se_falhar 0)
-escreva(falhe("negativo") se_falhar "pego")
+escreva(10 / 0 se_falhar { "não dá para dividir" })
+escreva([1, 2][9] se_falhar { "índice longe" })
+escreva(numero("xyz") se_falhar { 0 })
+escreva(falhe("negativo") se_falhar { "pego" })
 ```
 
-Se você remover `se_falhar`, o programa encerra. Com `se_falhar`, o valor da direita é usado.
+Se você remover `se_falhar`, o programa encerra. Com `se_falhar`, o último valor do bloco de tratamento é usado.
+
+A captura opcional de `se_falhar` recebe a mensagem do erro como texto e só existe no bloco:
+
+```text
+valor = numero("abc") se_falhar erro {
+    escreva("Falha:", erro)
+    falso
+}
+```
+
+O bloco é obrigatório, inclusive sem captura: `numero("abc") se_falhar { falso }`.
+Erros no tratamento se propagam normalmente.
 
 `falhe("mensagem")` e `garanta(n > 0)` também geram erro; `se_falhar` pega.
 
 Mais casos (arquivo, índice): `../exemplos/linguagem/erros.lep`.
 
-**Desafio:** `leia_arquivo("nao_existe.txt") se_falhar []` (precisa `importe "arquivo"`).
+**Desafio:** `leia_arquivo("nao_existe.txt") se_falhar { [] }` (precisa `importe "arquivo"`).
 
 ---
 
@@ -265,7 +277,7 @@ Nativos (`"tela"`, `"mat"`, `"matriz"`, `"arquivo"`, `"crono"`) não têm arquiv
 importe "arquivo"
 
 salve_arquivo("saida/notas.txt", ["7", "8", "9"])
-linhas = leia_arquivo("saida/notas.txt") se_falhar []
+linhas = leia_arquivo("saida/notas.txt") se_falhar { [] }
 escreva(linhas)
 ```
 

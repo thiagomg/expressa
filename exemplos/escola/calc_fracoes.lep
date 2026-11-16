@@ -10,7 +10,7 @@ txt_como_fracao = funcao(txt) {
     itens = txt.separe("/")
     para i em 0..itens.tamanho() {
         t = itens[i]
-        n = numero(t) se_falhar(falso)
+        n = numero(t) se_falhar { falso }
         se n == falso {
             falhe("Não é uma fração ou um número: " + txt)
         }
@@ -37,7 +37,7 @@ leia_opcao = funcao(txt) {
         pos = posicao_cursor()
         fr1_txt = leia(txt)
         // TODO: Capturar o retorno de se_falhar
-        res = txt_como_fracao(fr1_txt) se_falhar(falso)
+        res = txt_como_fracao(fr1_txt) se_falhar { falso }
         se res == falso {
             escreva("Erro: ".pinte(:vermelho) + ": XXXX")
             posicao_cursor(pos)

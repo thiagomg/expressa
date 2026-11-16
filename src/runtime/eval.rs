@@ -1388,9 +1388,7 @@ impl<'a, 'c> Vm<'a, 'c> {
                 for a in args {
                     vals.push(self.eval_expr(a, env)?);
                 }
-                if name == "garanta"
-                    && args.len() == 1
-                    && matches!(func, Value::Builtin("garanta"))
+                if name == "garanta" && args.len() == 1 && matches!(func, Value::Builtin("garanta"))
                 {
                     let snippet =
                         crate::runtime::nativas::texto_da_condicao(&self.source, args[0].span());
@@ -1461,7 +1459,10 @@ impl<'a, 'c> Vm<'a, 'c> {
                 }
             }
             Expr::SeFalhar {
-                attempt, fallback, ..
+                attempt,
+                fallback,
+                error_name,
+                ..
             } => {
                 self.protected += 1;
                 let attempt = self.eval_expr(attempt, env);
@@ -1474,7 +1475,16 @@ impl<'a, 'c> Vm<'a, 'c> {
                     }
                     Err(EvalError::Break { span }) => Err(EvalError::Break { span }),
                     Err(EvalError::Continue { span }) => Err(EvalError::Continue { span }),
-                    Err(EvalError::Runtime(_)) => self.eval_expr(fallback, env),
+                    Err(EvalError::Runtime(error)) => {
+                        self.eval_in_child(env, FrameKind::Block, |vm, child| {
+                            if let Some(name) = error_name {
+                                child
+                                    .borrow_mut()
+                                    .define(name.clone(), Value::Texto(error.message));
+                            }
+                            vm.eval_stmts(&fallback.stmts, child)
+                        })
+                    }
                 }
             }
         }
@@ -2242,10 +2252,9 @@ impl<'a, 'c> Vm<'a, 'c> {
     pub(crate) fn expect_nao(&self, v: &Value, span: Span) -> Result<bool, EvalError> {
         match v {
             Value::Bool(b) => Ok(*b),
-            Value::Numero(_) => Err(self.err(
-                "esperado bool, encontrado numero; use nao (x == 3)",
-                span,
-            )),
+            Value::Numero(_) => {
+                Err(self.err("esperado bool, encontrado numero; use nao (x == 3)", span))
+            }
             _ => self.expect_bool(v, span),
         }
     }

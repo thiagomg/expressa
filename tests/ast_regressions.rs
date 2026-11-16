@@ -68,7 +68,7 @@ fn float_conversion_is_explicit_and_fallible() {
     assert_eq!(Numero::try_from(0.5).unwrap().to_plain_string(), "0.5");
     assert_eq!(
         run(
-            "importe \"mat\"\nescreva(exp(100) se_falhar \"range\")\nescreva(potencia(10, 100) se_falhar \"range\")"
+            "importe \"mat\"\nescreva(exp(100) se_falhar { \"range\" })\nescreva(potencia(10, 100) se_falhar { \"range\" })"
         ),
         "range\nrange\n"
     );
@@ -185,7 +185,7 @@ escreva(m:n)
 #[test]
 fn compound_assignment_preserves_function_write_barriers() {
     assert_eq!(
-        run("x = 1\nf = funcao() { x += 1 }\nf() se_falhar 0\nescreva(x)"),
+        run("x = 1\nf = funcao() { x += 1 }\nf() se_falhar { 0 }\nescreva(x)"),
         "1\n"
     );
 }
@@ -195,8 +195,8 @@ fn failed_native_import_publishes_no_bindings() {
     assert_eq!(
         run(r#"
 fundo = 1
-avalie("importe \"tela\"") se_falhar 0
-escreva(tipo(casa) se_falhar "absent")
+avalie("importe \"tela\"") se_falhar { 0 }
+escreva(tipo(casa) se_falhar { "absent" })
 escreva(fundo)
 "#),
         "absent\n1\n"
@@ -230,7 +230,7 @@ fn failed_file_import_with_late_name_collision_is_atomic() {
     let dir = ModuleDir::new();
     std::fs::write(dir.0.join("module.lep"), "aaa = 1\nf = 3\n").unwrap();
     // An ordinary user-name collision after aaa must not leave aaa installed.
-    assert_eq!(dir.run("f = 2\navalie(\"importe \\\"./module\\\"\") se_falhar 0\nescreva(tipo(aaa) se_falhar \"absent\")").unwrap(), "absent\n");
+    assert_eq!(dir.run("f = 2\navalie(\"importe \\\"./module\\\"\") se_falhar { 0 }\nescreva(tipo(aaa) se_falhar { \"absent\" })").unwrap(), "absent\n");
 }
 
 #[test]
@@ -257,9 +257,9 @@ fn matrix_overflow_is_catchable_and_does_not_create_invalid_cells() {
 importe "matriz"
 A = matriz([[100000000000000000000]])
 B = matriz([[10000000000]])
-escreva(A * B se_falhar "range")
-escreva(A * 10000000000 se_falhar "range")
-escreva(det(matriz([[100000000000000000000, 0], [0, 100000000000000000000]])) se_falhar "range")
+escreva(A * B se_falhar { "range" })
+escreva(A * 10000000000 se_falhar { "range" })
+escreva(det(matriz([[100000000000000000000, 0], [0, 100000000000000000000]])) se_falhar { "range" })
 escreva(A[0,0] == 100000000000000000000)
 "#),
         "range\nrange\nrange\nverdadeiro\n"
@@ -271,10 +271,10 @@ fn matrix_dimensions_are_checked_before_allocation() {
     assert_eq!(
         run(r#"
 importe "matriz"
-escreva(zeros(9223372036854775807, 2) se_falhar "limit")
-escreva(identidade(9223372036854775807) se_falhar "limit")
-escreva(uns(9223372036854775807) se_falhar "limit")
-escreva(cheia(2, 9223372036854775807, 1) se_falhar "limit")
+escreva(zeros(9223372036854775807, 2) se_falhar { "limit" })
+escreva(identidade(9223372036854775807) se_falhar { "limit" })
+escreva(uns(9223372036854775807) se_falhar { "limit" })
+escreva(cheia(2, 9223372036854775807, 1) se_falhar { "limit" })
 "#),
         "limit\nlimit\nlimit\nlimit\n"
     );
@@ -292,9 +292,9 @@ fn matrix_budget_is_explicit_and_applies_to_results_and_constructors() {
 importe "matriz"
 A = uns(4, 1)
 B = uns(1, 4)
-escreva(A * B se_falhar "limit")
-escreva(zeros(5, 1) se_falhar "limit")
-escreva(matriz([[1,2,3,4,5]]) se_falhar "limit")
+escreva(A * B se_falhar { "limit" })
+escreva(zeros(5, 1) se_falhar { "limit" })
+escreva(matriz([[1,2,3,4,5]]) se_falhar { "limit" })
 escreva(tamanho(transposta(A)))
 escreva_erro("stderr")
 saia(7)

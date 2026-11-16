@@ -180,6 +180,7 @@ fn chunk(
             Op::Constant(id) => index(id, code.constants.len())?,
             Op::BadNumber(id)
             | Op::Load(id)
+            | Op::Catch(id)
             | Op::Store(id)
             | Op::Field(id)
             | Op::MapField(id)
@@ -316,7 +317,7 @@ fn chunk(
                     return Err(error("pilha EXB vazia na validação de inteiro"));
                 }
             }
-            Op::EnterScope => s.scopes.push(Scope::Block),
+            Op::EnterScope | Op::Catch(_) => s.scopes.push(Scope::Block),
             Op::LeaveScope => {
                 if s.scopes.pop() != Some(Scope::Block) {
                     return Err(error("saída de escopo EXB inválida"));

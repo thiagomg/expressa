@@ -444,7 +444,7 @@ Com `importe "tela"`: `cls()` (também `limpe_tela()`) limpa a tela; `casa()` ma
 `pinte(texto, frente)` e `pinte(texto, frente, fundo)` devolvem o texto com cor ANSI e reset no fim. `fundo(texto, cor)` pinta só o papel; `negrito(texto)` deixa em negrito. Cores: `normal`, `preto`, `vermelho`, `verde`, `amarelo`, `azul`, `magenta`, `ciano`, `branco`.  
 `durma(segundos)` espera; `durma(0.5)` é meio segundo.
 
-`ambiente(nome)` devolve a variável de ambiente como texto (`ambiente("HOME")`). Se ela não existe, é erro: `ambiente("EDITOR") se_falhar "vim"`.
+`ambiente(nome)` devolve a variável de ambiente como texto (`ambiente("HOME")`). Se ela não existe, é erro: `ambiente("EDITOR") se_falhar { "vim" }`.
 
 Com `importe "crono"`: `agora()` é a data e a hora locais: mapa `:ano`, `:mes`, `:dia`, `:hora`, `:minuto`, `:segundo`, `:dia_da_semana` (1 = domingo … 7 = sábado) e `:epoch` (segundos desde 1970). Fora do Linux/macOS o horário é UTC. `hoje()` é a data de hoje à meia-noite. `data(ano, mes, dia)` e `data(ano, mes, dia, hora, minuto, segundo)` constroem o mesmo mapa; data inválida é erro (`se_falhar`). `adicione(d, n, unidade)` soma `n` (positivo ou negativo) em `:dias`, `:meses`, `:anos`, `:horas`, `:minutos` ou `:segundos`; mês e ano prendem o dia no último dia do mês destino (31 de janeiro + 1 mês = último de fevereiro). `dias_entre(a, b)` é o número com sinal de dias de calendário, ignorando a hora. `eh_bissexto(ano)` (também `é_bissexto`) aceita o ano ou o mapa. `formate_data(data, modelo)` monta um texto com `%Y`, `%m`, `%d`, `%H`, `%M`, `%S` (dois dígitos, ano com quatro) e `%%`; outra letra depois de `%` é erro. A data é o mapa de `agora()` (bastam `:ano` … `:segundo`) ou um número de segundos (`:epoch`). `adicione` do `crono` tem 3 argumentos; o de `cartesiano` tem 2.
 
@@ -519,16 +519,24 @@ Caminhos relativos partem da **pasta do `.lep`**, não de `pasta_atual()`. `~` e
 ## 15. Tratamento de Erros
 
 - Um erro não tratado interrompe a execução e produz um diagnóstico com localização e pilha de chamadas; erros da linguagem não devem causar pânico interno do interpretador.
-- Para tratar, usa-se `se_falhar`
+- Para tratar, usa-se `expressao se_falhar { alternativa }` ou `expressao se_falhar erro { tratamento }`. O bloco é obrigatório; as formas antigas `se_falhar valor` e `se_falhar(valor)` não são aceitas.
+- O bloco só executa em caso de erro de execução; seu último valor é o resultado alternativo. Também aceita `inicio ... fim`, como os demais blocos.
+- O nome de captura é opcional e escolhido pelo programa. Recebe a mensagem do erro como texto, existe somente no bloco e pode sombrear um nome externo sem alterá-lo.
+- Erros no próprio tratamento se propagam e podem ser capturados por um `se_falhar` externo. `retorne`, `pare`, `continue` e `saia` não são erros capturáveis.
 - `se_falhar` não desfaz atribuições nem outros efeitos que ocorreram antes do erro. Uma importação achatada valida conflitos de todos os nomes antes de publicar qualquer nome; isso não torna os efeitos de inicialização do módulo uma transação.
 
 ```text
 importe "arquivo"
-linhas = leia_arquivo("arquivo.txt") se_falhar []
+linhas = leia_arquivo("arquivo.txt") se_falhar { [] }
 
-valor = 10 / 0 se_falhar 0
+valor = 10 / 0 se_falhar { 0 }
 
-item = lista[99] se_falhar "não existe"
+item = lista[99] se_falhar { "não existe" }
+
+valor = numero("inválido") se_falhar erro {
+    escreva("Não foi possível converter:", erro)
+    falso
+}
 
 garanta(n > 0)
 se n < 0 { falhe("negativo") }
@@ -645,7 +653,7 @@ Código diferente de 0 **não** é erro de execução; confira `:ok`. Um comando
 
 **`linhas_de`** devolve um valor do tipo `"processo"`: o comando já rodando. `para linha em …` recebe cada linha assim que ela passa por todas as etapas. Sair do laço por qualquer caminho (`pare`, `retorne`, erro, `saia()`) encerra os comandos; o laço termina sozinho quando eles terminam. A saída de erro vai direto para `escreva_erro`. Código de saída diferente de 0 não é erro (use `execute` para ler o código). Percorrer de novo um processo que já acabou não dá nenhuma volta. `tamanho`, `[i]` e outras funções de lista não aceitam processo.
 
-**Erros** (`se_falhar`): comando que não existe, sem permissão, `:pasta` que não existe, `:tempo` esgotado, etapa inválida, e erro dentro de uma função de etapa (que também encerra os comandos). `para` não aceita `se_falhar`; a chamada sim: `para l em linhas_de("x") se_falhar [] { … }`.
+**Erros** (`se_falhar`): comando que não existe, sem permissão, `:pasta` que não existe, `:tempo` esgotado, etapa inválida, e erro dentro de uma função de etapa (que também encerra os comandos). `para` não aceita `se_falhar`; a chamada sim: `para l em linhas_de("x") se_falhar { [] } { … }`.
 
 Sem `:terminal`, programas que buscam o teclado (editor, senha) não funcionam: a entrada deles é `:entrada` ou vazia. Programas como `grep` guardam a saída em blocos quando ela não é um terminal; em `tail -f`, use `grep --line-buffered` ou filtre com uma função.
 

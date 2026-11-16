@@ -302,6 +302,11 @@ pub(crate) fn detached_function(
                     );
                 }
                 Op::EnterScope => s.scopes.push(Names::new()),
+                Op::Catch(id) => {
+                    let mut names = Names::new();
+                    names.insert(code.names[id as usize].clone());
+                    s.scopes.push(names);
+                }
                 Op::LeaveScope => {
                     s.scopes.pop().ok_or("escopo inválido para clone")?;
                 }
