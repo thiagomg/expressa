@@ -409,14 +409,26 @@ impl Compiler {
                 }
             }
             Expr::SeFalhar {
-                attempt, fallback, ..
+                attempt,
+                fallback,
+                error_name,
+                ..
             } => {
                 let handler = self.emit(Op::Try(0), span);
                 self.expr(attempt);
                 self.emit(Op::EndTry, span);
                 let end = self.emit(Op::Jump(0), span);
                 self.jump(handler, self.here());
-                self.expr(fallback);
+                if let Some(name) = error_name {
+                    let locals = std::mem::replace(&mut self.locals, false);
+                    let id = self.name(name);
+                    self.emit(Op::Catch(id), fallback.span);
+                    self.stmts(&fallback.stmts);
+                    self.emit(Op::LeaveScope, fallback.span);
+                    self.locals = locals;
+                } else {
+                    self.block(fallback);
+                }
                 self.jump(end, self.here());
             }
         }

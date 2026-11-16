@@ -135,7 +135,7 @@ fn callback_errors_propagate_and_release_execution_guard() {
 desenhe = função(tela) {{ tela.tela_grafica::ponto(0, 0) }}
 eventos = função(ev, dt) {{ 1 / 0 }}
 config = mapa([:fps -> 30, :eventos -> eventos, :desenho -> desenhe])
-l.tela_grafica::execute(config) se_falhar escreva("erro capturado")
+l.tela_grafica::execute(config) se_falhar {{ escreva("erro capturado") }}
 config:eventos = função(ev, dt) {{ l.tela_grafica::pare() }}
 l.tela_grafica::execute(config)
 escreva("reiniciou")

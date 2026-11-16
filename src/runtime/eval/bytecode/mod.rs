@@ -62,20 +62,30 @@ enum Op {
     Index2,
     Slice(bool),
     Closure(u32),
-    Call { argc: u32, name: u32 },
+    Call {
+        argc: u32,
+        name: u32,
+    },
     /// Direct `garanta(cond)`: callee and condition on the stack; `cond` is the
     /// argument span (source snippet for the error).
-    Garanta { cond: u32 },
+    Garanta {
+        cond: u32,
+    },
     Return,
     Finish,
     Checkpoint,
     EnterScope,
+    /// Enter a block and bind the last caught runtime message locally.
+    Catch(u32),
     LeaveScope,
     ParentScope,
     RestoreScope,
     Jump(u32),
     BranchFalse(u32),
-    ShortCircuit { target: u32, value: bool },
+    ShortCircuit {
+        target: u32,
+        value: bool,
+    },
     CheckBool,
     CheckInt,
     Try(u32),

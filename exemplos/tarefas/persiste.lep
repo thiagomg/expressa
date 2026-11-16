@@ -112,7 +112,7 @@ campo_data = função(t) {
 }
 
 é_numero = função(t) {
-    n = numero(t) se_falhar(falso)
+    n = numero(t) se_falhar { falso }
     se n == falso {
         falso
     } senão {
@@ -173,7 +173,7 @@ salva = funcao(tarefas) {
 carrega = função() {
     ts = []
     
-    linhas = leia_arquivo(arquivo) se_falhar []
+    linhas = leia_arquivo(arquivo) se_falhar { [] }
     para linha em linhas {
         t = separe_linha(linha)
         ts += [comum::nova(t[2], t[1], t[0])]

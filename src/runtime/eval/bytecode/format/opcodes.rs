@@ -14,6 +14,10 @@ impl Writer {
             Op::Finish => self.u8(7),
             Op::Checkpoint => self.u8(8),
             Op::EnterScope => self.u8(9),
+            Op::Catch(id) => {
+                self.u8(73)?;
+                self.u32(id)
+            }
             Op::LeaveScope => self.u8(10),
             Op::ParentScope => self.u8(11),
             Op::RestoreScope => self.u8(12),
@@ -309,6 +313,7 @@ impl Reader<'_> {
                 name: self.u32()?,
             },
             72 => Op::Garanta { cond: self.u32()? },
+            73 => Op::Catch(self.u32()?),
             _ => return Err(self.err("opcode EXB inválido")),
         })
     }

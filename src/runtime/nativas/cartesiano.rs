@@ -540,7 +540,7 @@ importe "cartesiano"
 g = grafico()
 g.eixos(-1, 1, -1, 1)
 g.plote(função(x) {
-    se x == 0 { 1 / 0 se_falhar 0 / 0 }
+    se x == 0 { 1 / 0 se_falhar { 0 / 0 } }
     senao { x }
 }, :azul)
 c = documento()

@@ -111,10 +111,11 @@ pub enum Expr {
         span: Span,
     },
 
-    /// `A se_falhar B`
+    /// `A se_falhar [erro] { ... }`
     SeFalhar {
         attempt: Box<Expr>,
-        fallback: Box<Expr>,
+        fallback: Block,
+        error_name: Option<String>,
         span: Span,
     },
 }

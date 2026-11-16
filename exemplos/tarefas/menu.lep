@@ -42,7 +42,7 @@ le_posicao = função(min, max) {
             retorne falso
         }
         
-        idx = op.numero() se_falhar falso
+        idx = op.numero() se_falhar { falso }
         se idx == falso {
             escreva("Posição inválida. Tente novamente".pinte(:vermelho))
         } ou se idx >= min e idx <= max { 

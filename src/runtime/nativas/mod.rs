@@ -1197,8 +1197,8 @@ escreva(f(3))
 "#),
             "6\n"
         );
-        assert_eq!(run(r#"escreva(avalie("1 / 0") se_falhar 0)"#), "0\n");
-        assert_eq!(run(r#"escreva(avalie("2 +") se_falhar "ops")"#), "ops\n");
+        assert_eq!(run(r#"escreva(avalie("1 / 0") se_falhar { 0 })"#), "0\n");
+        assert_eq!(run(r#"escreva(avalie("2 +") se_falhar { "ops" })"#), "ops\n");
         assert!(run_err("avalie(1)").contains("texto"));
         assert!(run_err(r#"avalie("")"#).contains("expressão"));
         let err = run_to_string(r#"avalie("1 / 0")"#, "teste.lep").expect_err("divisão");
@@ -1256,7 +1256,7 @@ escreva(0.1 + 0.2)"#),
         assert_eq!(run(r#"escreva(numero("  3,14  "))"#), "3,14\n");
         assert_eq!(run(r#"escreva(numero("1_000"))"#), "1.000\n");
         assert_eq!(run(r#"escreva(numero(-8))"#), "-8\n");
-        assert_eq!(run(r#"escreva(numero("abc") se_falhar 0)"#), "0\n");
+        assert_eq!(run(r#"escreva(numero("abc") se_falhar { 0 })"#), "0\n");
         assert!(run_err(r#"numero("xyz")"#).contains("transformar"));
         assert_eq!(run(r#"escreva(numero("1.000"))"#), "1.000\n");
         assert_eq!(
@@ -1302,7 +1302,7 @@ fim
         assert_eq!(run(r#"escreva(raiz(0))"#), "0\n");
         assert_eq!(run(r#"escreva(raiz(9))"#), "3\n");
         assert_eq!(run(r#"escreva(raiz(2.25))"#), "1,5\n");
-        assert_eq!(run(r#"escreva(raiz(-1) se_falhar 0)"#), "0\n");
+        assert_eq!(run(r#"escreva(raiz(-1) se_falhar { 0 })"#), "0\n");
         assert!(run_err("raiz(-4)").contains("raiz de número negativo"));
         assert!(run_err(r#"raiz("9")"#).contains("esperado numero"));
     }
@@ -1347,7 +1347,7 @@ fim
 escreva(m::cosseno(0))"#),
             "1\n"
         );
-        assert_eq!(run("escreva(arcoseno(2) se_falhar 0)"), "0\n");
+        assert_eq!(run("escreva(arcoseno(2) se_falhar { 0 })"), "0\n");
         assert!(run_err("arcoseno(2)").contains("entre -1 e 1"));
         assert!(run_err("log(0)").contains("positivo"));
         assert!(run_err("log10(-1)").contains("positivo"));
@@ -1438,8 +1438,8 @@ escreva(p:nome)
         assert_eq!(run(r#"escreva("{0} {0}".formate("oi"))"#), "oi oi\n");
         assert!(run_err(r#"formate("{}")"#).contains("espera pelo menos"));
         assert!(run_err(r#"formate(10, "x")"#).contains("texto"));
-        let enorme = r#"escreva(formate("{:>999999999999}", 1) se_falhar "e")
-escreva(formate("{:>99999999999999999999999}", 1) se_falhar "e")
+        let enorme = r#"escreva(formate("{:>999999999999}", 1) se_falhar { "e" })
+escreva(formate("{:>99999999999999999999999}", 1) se_falhar { "e" })
 "#;
         use crate::runtime::{ExecutionBackend, ExecutionOptions, run_with_options};
         let mut visto = None;
@@ -1546,7 +1546,7 @@ escreva("b")
         assert!(run_err(r#"fundo("HP")"#).contains("esperado 2"));
         assert!(run_err("negrito(1)").contains("texto"));
         assert_eq!(
-            run(r#"escreva(pinte("x", :rosa) se_falhar "ops")"#),
+            run(r#"escreva(pinte("x", :rosa) se_falhar { "ops" })"#),
             "ops\n"
         );
     }
@@ -1731,8 +1731,8 @@ escreva(A.mat::xy(2, 1), mat::xy(A, 2, 1))
             let source = format!(
                 r#"
 A = cheia(2, 3, 7)
-escreva(A.xy({x}, {y}) se_falhar :erro)
-escreva(A.xy({x}, {y}, 9) se_falhar :erro)
+escreva(A.xy({x}, {y}) se_falhar {{ :erro }})
+escreva(A.xy({x}, {y}, 9) se_falhar {{ :erro }})
 escreva(A == cheia(2, 3, 7))
 "#
             );
@@ -1745,7 +1745,7 @@ escreva(A == cheia(2, 3, 7))
         assert_eq!(
             run(r#"
 A = cheia(2, 3, 7)
-escreva(A.xy(0, 0, "a") se_falhar :erro)
+escreva(A.xy(0, 0, "a") se_falhar {{ :erro }})
 escreva(A == cheia(2, 3, 7))
 "#),
             "erro\nverdadeiro\n"

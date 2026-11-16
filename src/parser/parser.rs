@@ -561,20 +561,36 @@ impl<'a> Parser<'a> {
                 comparacao_dobrada = false;
                 continue;
             }
+            if matches!(op_kind, TokenKind::SeFalhar) {
+                let error_name = if let TokenKind::Ident(name) = self.peek_kind() {
+                    let name = name.clone();
+                    self.remove();
+                    Some(name)
+                } else {
+                    None
+                };
+                if !matches!(self.peek_kind(), TokenKind::LBrace | TokenKind::Inicio) {
+                    return Err(self.err("esperado bloco após 'se_falhar' ou nome do erro"));
+                }
+                let fallback = self.parse_block()?;
+                let span = lhs.span().join(fallback.span);
+                self.descer()?;
+                lhs = Expr::SeFalhar {
+                    attempt: Box::new(lhs),
+                    fallback,
+                    error_name,
+                    span,
+                };
+                comparacao_dobrada = false;
+                continue;
+            }
             let rhs = self.parse_bp(r_bp)?;
             let span = lhs.span().join(rhs.span());
             self.descer()?;
 
             // Fold: lhs becomes (lhs OP rhs), then loop may take another op.
             // e.g. 1 - 2 - 3 → first fold (1-2), then fold ((1-2)-3).
-            lhs = if matches!(op_kind, TokenKind::SeFalhar) {
-                comparacao_dobrada = false;
-                Expr::SeFalhar {
-                    attempt: Box::new(lhs),
-                    fallback: Box::new(rhs),
-                    span,
-                }
-            } else {
+            lhs = {
                 let op = token_to_binary(&op_kind).expect("infix op");
                 comparacao_dobrada = is_comparison_op(op);
                 Expr::Binary {
@@ -1710,10 +1726,29 @@ fim
 
     #[test]
     fn se_falhar() {
-        let p = parse_ok("a se_falhar b");
+        let p = parse_ok("a se_falhar { b }");
         match expr_stmt(&p) {
             Expr::SeFalhar { .. } => {}
             other => panic!("{other:?}"),
+        }
+    }
+
+    #[test]
+    fn se_falhar_requires_block_and_accepts_optional_capture() {
+        for source in [
+            "a se_falhar falso",
+            "a se_falhar(falso)",
+            "a se_falhar erro",
+            "a se_falhar erro {}",
+        ] {
+            assert!(parse(source).is_err(), "{source}");
+        }
+        for source in [
+            "a se_falhar { falso }",
+            "a se_falhar erro { erro }",
+            "a se_falhar erro inicio erro fim",
+        ] {
+            assert!(parse(source).is_ok(), "{source}");
         }
     }
 

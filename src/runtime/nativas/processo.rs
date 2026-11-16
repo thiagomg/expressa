@@ -574,7 +574,7 @@ mod tests {
         assert!(e.contains("tempo esgotado"), "{e}");
         assert!(inicio.elapsed() < Duration::from_secs(5));
         assert_eq!(
-            run("escreva(execute(\"sleep 10\", mapa([:tempo -> 0.1])) se_falhar \"desisti\")"),
+            run("escreva(execute(\"sleep 10\", mapa([:tempo -> 0.1])) se_falhar { \"desisti\" })"),
             "desisti\n"
         );
     }
@@ -620,8 +620,7 @@ mod tests {
         assert!(e.contains("falhou (código 2): a / fatal: x"), "{e}");
         assert_eq!(
             run(
-                "escreva(execute(\"false\", mapa([:exija -> verdadeiro])) se_falhar \"pego\")\n\
-                 escreva(execute(\"true\", mapa([:exija -> verdadeiro])):ok)"
+                "escreva(execute(\"false\", mapa([:exija -> verdadeiro])) se_falhar { \"pego\" })\nescreva(execute(\"true\", mapa([:exija -> verdadeiro])):ok)"
             ),
             "pego\nverdadeiro\n"
         );

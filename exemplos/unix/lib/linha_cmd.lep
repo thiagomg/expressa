@@ -20,7 +20,7 @@ separa_args = função(args, ops) {
             
             valor = se ops contem nome_op {
                 i += 1
-                args[i] se_falhar("")
+                args[i] se_falhar { "" }
             } senão {
                 ""
             }

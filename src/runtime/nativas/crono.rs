@@ -681,10 +681,7 @@ mod tests {
     fn estouro_e_epoca_menos_um_sao_erro_capturavel() {
         let d = data_local(-1);
         let src = format!(
-            "{IMP}\
-             escreva(adicione(data(2024, 1, 1), 9223372036854775807, :dias) se_falhar \"e\")\n\
-             escreva(data(-9223372036854775808, 1, 1) se_falhar \"e\")\n\
-             escreva(data({}, {}, {}, {}, {}, {}):epoch)\n",
+            "{IMP}escreva(adicione(data(2024, 1, 1), 9223372036854775807, :dias) se_falhar {{ \"e\" }})\nescreva(data(-9223372036854775808, 1, 1) se_falhar {{ \"e\" }})\nescreva(data({}, {}, {}, {}, {}, {}):epoch)\n",
             d.ano, d.mes, d.dia, d.hora, d.minuto, d.segundo
         );
         assert_eq!(nos_dois(&src), "e\ne\n-1\n");

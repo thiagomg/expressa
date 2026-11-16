@@ -46,7 +46,7 @@
   },
   "se_falhar": {
     "prefix": "se_falhar",
-    "body": ["${1:valor} = ${2:expressao} se_falhar ${0:padrao}"],
-    "description": "valor = expressão se_falhar padrão"
+    "body": ["${1:valor} = ${2:expressao} se_falhar { ${0:padrao} }"],
+    "description": "valor = expressão se_falhar { padrão }"
   }
 }

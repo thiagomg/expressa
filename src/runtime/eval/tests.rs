@@ -137,7 +137,7 @@ fn diagnosticos_de_tipo_faixa_e_nao() {
         );
 
         let saida = run_with_options(
-            "m = mapa([])\nescreva(m[\"z\"] se_falhar 0)\n",
+            "m = mapa([])\nescreva(m[\"z\"] se_falhar { 0 })\n",
             "teste.lep",
             "",
             opts,
@@ -406,7 +406,7 @@ escreva("depois")
 "#);
     assert_eq!(skipped, "");
     let not_caught = run(r#"
-saia(1) se_falhar 0
+saia(1) se_falhar { 0 }
 escreva("depois")
 "#);
     assert_eq!(not_caught, "");
@@ -537,7 +537,7 @@ fim
 senao
 inicio
     0
-fim se_falhar 9
+fim se_falhar { 9 }
 fim
 escreva(f())
 "#);
@@ -636,7 +636,7 @@ escreva("Oi " + nome)
         "Nome: Oi Ana\n"
     );
     assert_eq!(
-        run_in(r#"escreva(leia() se_falhar "vazio")"#, ""),
+        run_in(r#"escreva(leia() se_falhar { "vazio" })"#, ""),
         "vazio\n"
     );
     assert_eq!(run_in(r#"escreva(leia())"#, "  x  \n"), "  x  \n");
@@ -644,7 +644,7 @@ escreva("Oi " + nome)
 
 #[test]
 fn se_falhar_div_zero() {
-    assert_eq!(run(r#"escreva(10 / 0 se_falhar 0)"#), "0\n");
+    assert_eq!(run(r#"escreva(10 / 0 se_falhar { 0 })"#), "0\n");
 }
 
 #[test]
@@ -1232,8 +1232,8 @@ s[3] = "x"
 
 #[test]
 fn se_falhar_catches_undefined_and_bad_index() {
-    assert_eq!(run(r#"escreva(lista[0] se_falhar "não")"#), "não\n");
-    assert_eq!(run(r#"escreva([1][99] se_falhar 0)"#), "0\n");
+    assert_eq!(run(r#"escreva(lista[0] se_falhar { "não" })"#), "não\n");
+    assert_eq!(run(r#"escreva([1][99] se_falhar { 0 })"#), "0\n");
 }
 
 #[test]
@@ -1411,7 +1411,7 @@ fn recursao_profunda_mas_finita_funciona() {
 #[test]
 fn se_falhar_pega_recursao_sem_fim() {
     let out =
-        run_fundo("f = funcao(n) {\n    f(n + 1)\n}\nescreva(f(1) se_falhar \"parou\")\n").unwrap();
+        run_fundo("f = funcao(n) {\n    f(n + 1)\n}\nescreva(f(1) se_falhar { \"parou\" })\n").unwrap();
     assert_eq!(out, "parou\n");
 }
 
@@ -1756,10 +1756,10 @@ fn falhe_e_garanta_mensagem_pilha_e_se_falhar() {
             ..ExecutionOptions::default()
         };
         let out = run_with_options(
-            r#"escreva(falhe("negativo") se_falhar "pego")
-escreva(garanta(verdadeiro) se_falhar "x")
+            r#"escreva(falhe("negativo") se_falhar { "pego" })
+escreva(garanta(verdadeiro) se_falhar { "x" })
 escreva(garanta(1 > 0))
-escreva(garanta(falso) se_falhar "ok")
+escreva(garanta(falso) se_falhar { "ok" })
 "#,
             "app.lep",
             "",
@@ -2147,7 +2147,7 @@ fn errors_and_pauses_in_imported_functions_name_their_file() {
 
 #[test]
 fn debugger_ignores_errors_handled_by_se_falhar() {
-    let (pauses, result) = debug_pauses("x = 1 / 0 se_falhar 7\nescreva(x)\n");
+    let (pauses, result) = debug_pauses("x = 1 / 0 se_falhar { 7 }\nescreva(x)\n");
     assert_eq!(result.unwrap(), 0);
     assert!(pauses.iter().all(|p| p.error.is_none()), "{pauses:?}");
 }
@@ -2469,7 +2469,7 @@ mod process_lifetime {
         {
             check("f = funcao(p) { 0 }\nf(ARG)\nobserve = 0", false, backend);
             check(
-                "f = funcao() { 0 }\nf(ARG) se_falhar 0\nobserve = 0",
+                "f = funcao() { 0 }\nf(ARG) se_falhar { 0 }\nobserve = 0",
                 false,
                 backend,
             );

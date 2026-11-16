@@ -109,12 +109,24 @@ enquanto i <= 3 {
     i = i + 1
 }
 
-valor = 10 / 0 se_falhar 0
+valor = 10 / 0 se_falhar { 0 }
 importe "arquivo"
-linhas = leia_arquivo("x.txt") se_falhar []
+linhas = leia_arquivo("x.txt") se_falhar { [] }
 garanta(n > 0)                 // erro: condição incorreta n > 0
 se n < 0 { falhe("negativo") }
 ```
+
+A captura opcional de `se_falhar` recebe a mensagem do erro como texto e só existe no bloco:
+
+```text
+valor = numero("abc") se_falhar erro {
+    escreva("Falha:", erro)
+    falso
+}
+```
+
+O bloco é obrigatório, inclusive sem captura: `numero("abc") se_falhar { falso }`.
+Erros no tratamento se propagam normalmente.
 
 Sem `se_falhar`, um erro encerra o programa.
 
@@ -129,7 +141,7 @@ soma = funcao(x, y) { x + y }
 escreva(soma(10, 5))           // 15
 
 avalie("2 + 3 * 4")           // 14  (usa x, funções… do escopo atual)
-escreva(avalie(leia("> ")) se_falhar "conta inválida")
+escreva(avalie(leia("> ")) se_falhar { "conta inválida" })
 catalogo()                     // nativas, funcao do programa, módulos
 catalogo(c)  catalogo("matriz")  // mapa, módulo ou função
 ajuda("escreva")  ajuda("matriz::zeros")
@@ -212,7 +224,7 @@ saia()                         // encerra, código 0
 saia(1)                        // encerra com falha (não pega se_falhar)
 
 nome = leia("Seu nome: ")      // uma linha, sem o Enter
-idade = numero(leia("Idade: ")) se_falhar 0    // também número()
+idade = numero(leia("Idade: ")) se_falhar { 0 }    // também número()
 linhas = leia_linhas()         // resto da entrada → lista; vazio = []
 
 busca = argumentos[0]          // depois do .lep; REPL → []
@@ -257,7 +269,7 @@ Literais no código sempre com ponto: `3.14`.
 
 ```text
 importe "arquivo"
-linhas = leia_arquivo("dados.txt") se_falhar []
+linhas = leia_arquivo("dados.txt") se_falhar { [] }
 salve_arquivo("saida.txt", linhas)
 adicione_arquivo("saida.txt", ["nova"])
 
@@ -406,7 +418,7 @@ vars (v)   pilha (k)   ponto N   terminar (q)
 
 ```text
 #!/usr/bin/env expressa
-busca = argumentos[0] se_falhar ""
+busca = argumentos[0] se_falhar { "" }
 para linha em leia_linhas() {
     se linha contem busca { escreva(linha) }
 }

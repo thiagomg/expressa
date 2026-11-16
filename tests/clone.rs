@@ -90,7 +90,7 @@ fn cloneable_marker_is_recursive_and_does_not_run_callbacks() {
         r#"
 a = mapa()
 a:_clonavel = falso
-escreva(clone(a) se_falhar "bloqueado")
+escreva(clone(a) se_falhar { "bloqueado" })
 a:_clonavel = verdadeiro
 escreva(tipo(clone(a)))
 "#,
@@ -131,7 +131,7 @@ f = funcao(n) {
     soma
 }
 escreva(clone(f)(8))
-g = funcao(n) { x = 0 enquanto x < n { x += 1 } (1 / 0) se_falhar x }
+g = funcao(n) { x = 0 enquanto x < n { x += 1 } (1 / 0) se_falhar { x } }
 escreva(clone(g)(3))
 "#,
         "14\n3\n",
@@ -179,11 +179,11 @@ c = importe "cartesiano"
 t = g::nova(8, 8)
 escreva(t:_clonavel)
 t:_clonavel = verdadeiro
-escreva(clone(t) se_falhar "recurso")
+escreva(clone(t) se_falhar { "recurso" })
 u = remova(t, :_clonavel)
-escreva(clone([u]) se_falhar "aninhado")
+escreva(clone([u]) se_falhar { "aninhado" })
 d = c::documento()
-escreva(clone(d) se_falhar "documento")
+escreva(clone(d) se_falhar { "documento" })
 "#,
         "falso\nrecurso\naninhado\ndocumento\n",
     );

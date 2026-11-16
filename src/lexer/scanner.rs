@@ -1367,7 +1367,7 @@ notas = [7.5, 8.0]
 nome = "Ana"
 se media >= 7
 inicio
-    escreva("ok") se_falhar falso
+    escreva("ok") se_falhar { falso }
 fim
 "#;
         assert_eq!(
@@ -1393,7 +1393,9 @@ fim
                 TokenKind::String("ok".into()),
                 TokenKind::RParen,
                 TokenKind::SeFalhar,
+                TokenKind::LBrace,
                 TokenKind::Falso,
+                TokenKind::RBrace,
                 TokenKind::Fim,
                 TokenKind::Eof,
             ]

@@ -446,11 +446,12 @@ mod tests {
             copie(\"t/a/x.txt\", \"t/a/c.txt\")\n\
             mova(\"t/a/y.md\", \"t/z.md\")\n\
             escreva(liste(\"t/a/b\"), leia_arquivo(\"t/a/c.txt\"), existe(\"t/z.md\"), existe(\"t/a/y.md\"))\n\
-            escreva(apague_arquivo(\"t/a\") se_falhar \"é pasta\", apague_pasta(\"t/z.md\") se_falhar \"é arquivo\")\n\
-            escreva(copie(\"t/a\", \"t/q\") se_falhar \"copie pasta\", liste(\"t/nada\") se_falhar \"sem pasta\")\n\
+            escreva(apague_arquivo(\"t/a\") se_falhar { \"é pasta\" }, apague_pasta(\"t/z.md\") se_falhar { \"é arquivo\" })\n\
+            escreva(copie(\"t/a\", \"t/q\") se_falhar { \"copie pasta\" }, liste(\"t/nada\") se_falhar { \"sem pasta\" })\n\
             apague_arquivo(\"t/z.md\")\n\
             apague_pasta(\"t\")\n\
-            escreva(existe(\"t\"), apague_pasta(\"/\") se_falhar \"raiz não\")\n";
+            escreva(existe(\"t\"), apague_pasta(\"/\") se_falhar { \"raiz não\" })\n\
+            ";
         let out = run_to_string(src, &dir.join("t.lep").to_string_lossy()).unwrap();
         assert_eq!(
             out,

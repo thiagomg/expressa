@@ -148,7 +148,7 @@ mod tests {
     fn ambiente_le_variaveis() {
         assert_eq!(run("escreva(ambiente(\"PATH\") == \"\")"), "falso\n");
         assert_eq!(
-            run("escreva(ambiente(\"EXPRESSA_NAO_EXISTE_X\") se_falhar \"padrão\")"),
+            run("escreva(ambiente(\"EXPRESSA_NAO_EXISTE_X\") se_falhar { \"padrão\" })"),
             "padrão\n"
         );
         assert!(run_err("ambiente(\"EXPRESSA_NAO_EXISTE_X\")").contains("não definida"));

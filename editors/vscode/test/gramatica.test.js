@@ -64,7 +64,7 @@ test('grammar scopes', async () => {
     'senão_x = 1_000.5',
     'se_falhar_não = verdadeiro',
     'para ação em 1..=3 { escreva(pinte("oi\\n", :verde)) }',
-    'x = modulo::raiz(4) se_falhar 0',
+    'x = modulo::raiz(4) se_falhar { 0 }',
     'p = pessoa:nome',
     'senão',
     'escreva(argumentos[1], formate("{:<8}", "a"))',

@@ -157,12 +157,24 @@ Nativos: `tela`, `mat`, `matriz`, `arquivo`, `crono`, `cartesiano`, `tela_grafic
 
 ## Erros
 
-Sem `se_falhar`, o erro encerra o programa. Com, vale o da direita.
+Sem `se_falhar`, o erro encerra o programa. Com, vale o último valor do bloco de tratamento.
 
 ```text
-valor = 10 / 0 se_falhar 0
-linhas = leia_arquivo("x.txt") se_falhar []
+valor = 10 / 0 se_falhar { 0 }
+linhas = leia_arquivo("x.txt") se_falhar { [] }
 ```
+
+A captura opcional de `se_falhar` recebe a mensagem do erro como texto e só existe no bloco:
+
+```text
+valor = numero("abc") se_falhar erro {
+    escreva("Falha:", erro)
+    falso
+}
+```
+
+O bloco é obrigatório, inclusive sem captura: `numero("abc") se_falhar { falso }`.
+Erros no tratamento se propagam normalmente.
 
 `saia(1)` encerra de propósito e **não** é capturado por `se_falhar`.
 
@@ -271,7 +283,7 @@ tipos() contem "mapa"
 Texto → número. Aceita `3.14` ou `3,14` conforme `formato`. Espaços nas pontas e `_`. Se já for número, devolve o mesmo.
 
 ```text
-idade = numero(leia("Idade: ")) se_falhar 0
+idade = numero(leia("Idade: ")) se_falhar { 0 }
 ```
 
 ### `formato(padrao)`
@@ -435,7 +447,7 @@ Verdadeiro ou falso.
 
 ### `ambiente(nome)`
 
-Variável de ambiente. Não existe → erro: `ambiente("EDITOR") se_falhar "vim"`.
+Variável de ambiente. Não existe → erro: `ambiente("EDITOR") se_falhar { "vim" }`.
 
 ### `importe "crono"`
 
@@ -711,7 +723,7 @@ Caminhos relativos: pasta do `.lep`, não a pasta de onde você chamou `expressa
 Lista de textos (uma linha cada, sem a quebra). Vazio → `[]`. Falha de leitura é erro (`se_falhar`).
 
 ```text
-linhas = leia_arquivo("dados.txt") se_falhar []
+linhas = leia_arquivo("dados.txt") se_falhar { [] }
 ```
 
 ### `salve_arquivo(caminho, linhas)`
