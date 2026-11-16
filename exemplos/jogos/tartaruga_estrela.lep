@@ -1,4 +1,4 @@
-/// Estrela de cinco pontas. Mude o lado ou o ângulo (144°) e rode de novo.
+// Estrela de cinco pontas. Mude o lado ou o ângulo (144°) e rode de novo.
 
 tartaruga = importe "../lib/tartaruga"
 tela = importe "tela_grafica"

@@ -1,6 +1,6 @@
-/// Casinha e sol na tela de pixels.
-///
-/// Altere um número (o raio do sol, a porta) e rode de novo.
+// Casinha e sol na tela de pixels.
+//
+// Altere um número (o raio do sol, a porta) e rode de novo.
 
 mat = importe "mat"
 tela_grafica = importe "tela_grafica"

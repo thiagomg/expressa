@@ -158,6 +158,9 @@ fn parse_manual_index(s: &str) -> Result<usize, String> {
     Ok(n)
 }
 
+/// Largura máxima de um campo `{:>n}`. Acima disso a alocação derruba o processo.
+const LARGURA_MAX: usize = 10_000;
+
 fn apply_spec(spec: &str, text: &str, value: &Value) -> Result<String, String> {
     let chars: Vec<char> = spec.chars().collect();
     if chars.is_empty() {
@@ -179,7 +182,15 @@ fn apply_spec(spec: &str, text: &str, value: &Value) -> Result<String, String> {
     let width = if width_chars.is_empty() {
         0
     } else if width_chars.iter().all(|c| c.is_ascii_digit()) {
-        width_chars.iter().collect::<String>().parse().unwrap_or(0)
+        let texto: String = width_chars.iter().collect();
+        match texto.parse::<usize>() {
+            Ok(n) if n <= LARGURA_MAX => n,
+            _ => {
+                return Err(format!(
+                    "largura do formato deve ser um inteiro de 0 a {LARGURA_MAX}"
+                ));
+            }
+        }
     } else {
         return Err(format!("especificação inválida `:{}`", spec));
     };
@@ -294,5 +305,13 @@ mod tests {
         assert!(err("{1}", &[t("a")]).contains("fora do intervalo"));
         assert!(err("{} {0}", &[t("a")]).contains("não misture"));
         assert!(err("{:z}", &[t("a")]).contains("inválida"));
+    }
+
+    #[test]
+    fn largura_enorme_e_erro() {
+        assert!(err("{:>10001}", &[n(1.0)]).contains("0 a 10000"));
+        assert!(err("{:>999999999999}", &[n(1.0)]).contains("0 a 10000"));
+        assert!(err("{:>99999999999999999999999}", &[n(1.0)]).contains("0 a 10000"));
+        assert_eq!(f("{:>10000}", &[t("x")]).chars().count(), 10_000);
     }
 }

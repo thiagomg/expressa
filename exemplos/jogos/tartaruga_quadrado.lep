@@ -1,4 +1,4 @@
-/// Quadrado com a tartaruga. Mude o lado ou o ângulo e rode de novo.
+// Quadrado com a tartaruga. Mude o lado ou o ângulo e rode de novo.
 
 tartaruga = importe "../lib/tartaruga"
 

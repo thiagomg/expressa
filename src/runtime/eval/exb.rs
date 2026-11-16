@@ -66,6 +66,15 @@ pub fn run_exb_file_args(
     args: &[String],
     mode: ExbRunMode,
 ) -> Result<i32, RuntimeError> {
+    run_exb_file_args_com(path, args, mode, ExecutionOptions::default())
+}
+
+pub fn run_exb_file_args_com(
+    path: &str,
+    args: &[String],
+    mode: ExbRunMode,
+    options: ExecutionOptions,
+) -> Result<i32, RuntimeError> {
     let program = format::read_exb(Path::new(path)).map_err(|e| load_error(e, path))?;
     let hook: Box<dyn DebugHook> = if mode == ExbRunMode::Debug {
         #[cfg(feature = "terminal")]
@@ -97,7 +106,7 @@ pub fn run_exb_file_args(
             &mut io::Cursor::new(""),
             &mut out,
             &mut err,
-            ExecutionOptions::default(),
+            options,
             Some(&mut host),
             true,
             args,
@@ -110,7 +119,7 @@ pub fn run_exb_file_args(
             &mut ConsoleInput,
             &mut out,
             &mut err,
-            ExecutionOptions::default(),
+            options,
             None,
             true,
             args,
@@ -168,6 +177,8 @@ fn run<'a>(
     vm.base_dir = base_dir_of(file);
     vm.backend = ExecutionBackend::Bytecode;
     vm.max_matrix_cells = options.max_matrix_cells;
+    vm.numero_locale = options.numero_locale;
+    vm.numero_aritmetica = options.numero_aritmetica;
     let env = Env::child(&vm.builtins, FrameKind::Module);
     let result = vm.eval_loaded_module(program, &env);
     drop(env);

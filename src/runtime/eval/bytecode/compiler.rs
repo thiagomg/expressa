@@ -73,6 +73,7 @@ impl Compiler {
                 Item::Import(import) => {
                     let id = self.code.imports.len() as u32;
                     self.code.imports.push(import.clone());
+                    self.emit(Op::Checkpoint, import.span);
                     self.emit(Op::Import(id), import.span);
                     self.emit(Op::Drop, import.span);
                     self.emit(Op::Nada, import.span);
@@ -373,10 +374,10 @@ impl Compiler {
                             target: 0,
                             value: matches!(op, BinaryOp::Or),
                         },
-                        span,
+                        left.span(),
                     );
                     self.expr(right);
-                    self.emit(Op::CheckBool, span);
+                    self.emit(Op::CheckBool, right.span());
                     self.jump(jump, self.here());
                 } else {
                     self.expr(right);
@@ -521,6 +522,7 @@ pub(super) fn module(items: &[Item]) -> Rc<Chunk> {
             Item::Import(import) => {
                 let id = compiler.code.imports.len() as u32;
                 compiler.code.imports.push(import.clone());
+                compiler.emit(Op::Checkpoint, import.span);
                 compiler.emit(Op::Import(id), import.span);
             }
         }

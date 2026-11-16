@@ -1,6 +1,7 @@
 //! Recursive-descent / Pratt parser: tokens → AST.
 
 use crate::lexer::scanner::{Token, tokenize};
+use crate::lexer::tokens::{texto_do_token, token_e_comando};
 use crate::lexer::{Span, TokenKind};
 use crate::parser::block_types::Block;
 use crate::parser::core_types::{Import, Item, Program};
@@ -39,6 +40,11 @@ struct Parser<'a> {
     /// Depth of the tree being built here: one per nested call below, and
     /// one each time a loop wraps what it built (`a + b + c`, `x[1][2]`).
     profundidade: usize,
+    /// Parsing the iterable of `para i em …`. `{` or `inicio` then starts
+    /// the body, so `para i em 0.. {` is an open range.
+    em_para: bool,
+    /// `(` still open around the expression being parsed.
+    parenteses: u32,
 }
 
 impl<'a> Parser<'a> {
@@ -49,6 +55,8 @@ impl<'a> Parser<'a> {
             pos: 0,
             allow_colon_field: true,
             profundidade: 0,
+            em_para: false,
+            parenteses: 0,
         }
     }
 
@@ -123,6 +131,22 @@ impl<'a> Parser<'a> {
         }
     }
 
+    /// `(` or `[` that never closed. The error points at the current token
+    /// and names the line and column of the opener.
+    fn expect_close<F>(&mut self, pred: F, simbolo: &str, aberto: Span) -> Result<Token, ParseError>
+    where
+        F: FnOnce(&TokenKind) -> bool,
+    {
+        if pred(self.peek_kind()) {
+            Ok(self.remove())
+        } else {
+            Err(self.err(format!(
+                "esperado '{simbolo}' (aberto em {}:{})",
+                aberto.line, aberto.col
+            )))
+        }
+    }
+
     fn err(&self, message: impl Into<String>) -> ParseError {
         ParseError {
             kind: if self.at_eof() {
@@ -189,11 +213,17 @@ impl<'a> Parser<'a> {
         Ok(Item::Stmt(self.parse_stmt_with_docs(docs)?))
     }
 
-    /// Consecutive `///` lines. Error if they are not followed by a definition.
+    /// Consecutive `///` lines immediately above a definition.
     fn take_docs(&mut self) -> Result<Option<String>, ParseError> {
         let mut lines = Vec::new();
         let mut span: Option<Span> = None;
         while let TokenKind::DocComment(text) = self.peek_kind() {
+            let aqui = self.peek().span;
+            if let Some(anterior) = span
+                && separa_doc(self.source, anterior.end, aqui.start)
+            {
+                return Err(self.err_at("documentação só vale antes de uma definição", anterior));
+            }
             lines.push(text.clone());
             let tok = self.remove();
             span = Some(match span {
@@ -204,8 +234,10 @@ impl<'a> Parser<'a> {
         if lines.is_empty() {
             return Ok(None);
         }
-        if !self.is_definition_start() {
-            return Err(self.err_at("documentação só vale antes de uma definição", span.unwrap()));
+        let span = span.unwrap();
+        if separa_doc(self.source, span.end, self.peek().span.start) || !self.is_definition_start()
+        {
+            return Err(self.err_at("documentação só vale antes de uma definição", span));
         }
         Ok(Some(join_doc_lines(&lines)))
     }
@@ -320,7 +352,11 @@ impl<'a> Parser<'a> {
         match self.peek_kind() {
             TokenKind::Em => {
                 self.remove();
-                let iter = self.parse_expr()?;
+                let antes = self.em_para;
+                self.em_para = true;
+                let iter = self.parse_expr();
+                self.em_para = antes;
+                let iter = iter?;
                 let body = self.parse_block()?;
                 Ok(Stmt::ParaIn {
                     var,
@@ -452,6 +488,9 @@ impl<'a> Parser<'a> {
         // --- left-hand side: atom / unary / already-built subexpr ---
         // Not an infix yet. Examples: 10, x, (a+b), -3, nao ok, se …, funcao …
         let mut lhs = self.parse_unary()?;
+        // True only after this loop folds a comparison. A comparison that
+        // arrived from parentheses, `(a < b) == (c > d)`, is one value.
+        let mut comparacao_dobrada = false;
 
         // --- infix operator? ---
         // Returns (operator token kind, left_bp, right_bp).
@@ -464,21 +503,29 @@ impl<'a> Parser<'a> {
             if l_bp < min_bp {
                 break;
             }
+            // `x = 5` then a line `-3` is the next statement. `x = 1 +`
+            // then a line `2` still continues: the operator shares the line.
+            if !self.on_same_line_as_previous() {
+                break;
+            }
 
             // Spec: no `a < b < c` (would be confusing with bool vs number).
-            if is_comparison_token(&op_kind)
-                && let Expr::Binary { op, span, .. } = &lhs
-                && is_comparison_op(*op)
-            {
+            if is_comparison_token(&op_kind) && comparacao_dobrada {
                 return Err(self.err_at(
                     "comparações não podem ser encadeadas; use 'e' (ex.: a < b e b < c)",
-                    *span,
+                    lhs.span(),
                 ));
             }
 
             // Commit to this operator, then parse its right-hand side.
             // We pass *right_bp* as the new min_bp so the RHS only
             // absorbs *tighter* operators (see infix_info docs).
+            if matches!(op_kind, TokenKind::DotDot | TokenKind::DotDotEq)
+                && matches!(lhs, Expr::Faixa { .. })
+            {
+                return Err(self
+                    .err("faixas não podem ser encadeadas; coloque cada faixa entre parênteses"));
+            }
             let op_tok = self.remove();
             if matches!(op_kind, TokenKind::DotDot | TokenKind::DotDotEq) {
                 let inclusive = matches!(op_kind, TokenKind::DotDotEq);
@@ -493,6 +540,7 @@ impl<'a> Parser<'a> {
                     end: end.map(Box::new),
                     span,
                 };
+                comparacao_dobrada = false;
                 continue;
             }
             if matches!(op_kind, TokenKind::Arrow) {
@@ -510,6 +558,7 @@ impl<'a> Parser<'a> {
                     value: Box::new(rhs),
                     span,
                 };
+                comparacao_dobrada = false;
                 continue;
             }
             let rhs = self.parse_bp(r_bp)?;
@@ -519,6 +568,7 @@ impl<'a> Parser<'a> {
             // Fold: lhs becomes (lhs OP rhs), then loop may take another op.
             // e.g. 1 - 2 - 3 → first fold (1-2), then fold ((1-2)-3).
             lhs = if matches!(op_kind, TokenKind::SeFalhar) {
+                comparacao_dobrada = false;
                 Expr::SeFalhar {
                     attempt: Box::new(lhs),
                     fallback: Box::new(rhs),
@@ -526,6 +576,7 @@ impl<'a> Parser<'a> {
                 }
             } else {
                 let op = token_to_binary(&op_kind).expect("infix op");
+                comparacao_dobrada = is_comparison_op(op);
                 Expr::Binary {
                     left: Box::new(lhs),
                     op,
@@ -610,33 +661,22 @@ impl<'a> Parser<'a> {
             }
             let end = self.parse_bp(FAIXA_RIGHT_BP)?;
             Ok(Some(plus_one(end, op_span)))
-        } else if same_line && self.can_start_expr() {
+        } else if same_line && self.can_start_expr() && !self.faixa_aberta_antes_do_corpo() {
             Ok(Some(self.parse_bp(FAIXA_RIGHT_BP)?))
         } else {
             Ok(None)
         }
     }
 
+    /// `{` or `inicio` after `..` in `para i em 0.. {` is the loop body.
+    fn faixa_aberta_antes_do_corpo(&self) -> bool {
+        self.em_para
+            && self.parenteses == 0
+            && matches!(self.peek_kind(), TokenKind::LBrace | TokenKind::Inicio)
+    }
+
     fn can_start_expr(&self) -> bool {
-        matches!(
-            self.peek_kind(),
-            TokenKind::Number(_)
-                | TokenKind::String(_)
-                | TokenKind::Ident(_)
-                | TokenKind::Verdadeiro
-                | TokenKind::Falso
-                | TokenKind::Colon
-                | TokenKind::LParen
-                | TokenKind::LBracket
-                | TokenKind::LBrace
-                | TokenKind::Inicio
-                | TokenKind::Se
-                | TokenKind::Funcao
-                | TokenKind::Minus
-                | TokenKind::Nao
-                | TokenKind::DotDot
-                | TokenKind::DotDotEq
-        )
+        expr_can_start(self.peek_kind())
     }
 
     fn peek_span(&self) -> Span {
@@ -654,10 +694,11 @@ impl<'a> Parser<'a> {
     fn parse_postfix_inner(&mut self) -> Result<Expr, ParseError> {
         let mut lhs = self.parse_primary()?;
         loop {
-            // A list on the next line starts another expression, rather than
-            // indexing the previous statement's result. Bracket contents may
-            // still span multiple lines once the opener has been consumed.
-            if matches!(self.peek_kind(), TokenKind::LBracket) && !self.on_same_line_as_previous() {
+            // A list or a call on the next line starts another expression.
+            // The contents may still span lines once the opener is consumed.
+            if matches!(self.peek_kind(), TokenKind::LParen | TokenKind::LBracket)
+                && !self.on_same_line_as_previous()
+            {
                 break;
             }
             if matches!(
@@ -674,12 +715,12 @@ impl<'a> Parser<'a> {
                 TokenKind::LParen => lhs = self.finish_call(lhs)?,
                 TokenKind::LBracket => lhs = self.finish_index_or_slice(lhs)?,
                 TokenKind::ColonColon => lhs = self.finish_module_field(lhs)?,
-                TokenKind::Colon
-                    if self.allow_colon_field
-                        && self.on_same_line_as_previous()
-                        && map_field_receiver(&lhs) =>
-                {
-                    lhs = self.finish_map_field(lhs)?;
+                TokenKind::Colon if self.allow_colon_field && self.on_same_line_as_previous() => {
+                    if map_field_receiver(&lhs) {
+                        lhs = self.finish_map_field(lhs)?;
+                    } else {
+                        return Err(self.err("':' espera um mapa"));
+                    }
                 }
                 TokenKind::Dot => lhs = self.finish_ufcs(lhs)?,
                 _ => break,
@@ -727,10 +768,12 @@ impl<'a> Parser<'a> {
             TokenKind::LParen => {
                 let prev = self.allow_colon_field;
                 self.allow_colon_field = true;
+                self.parenteses += 1;
                 let expr = self.parse_expr();
+                self.parenteses -= 1;
                 self.allow_colon_field = prev;
                 let expr = expr?;
-                self.expect_kind(|k| matches!(k, TokenKind::RParen), "esperado ')'")?;
+                self.expect_close(|k| matches!(k, TokenKind::RParen), ")", tok.span)?;
                 Ok(expr)
             }
             TokenKind::LBracket => self.finish_list(tok.span),
@@ -747,10 +790,15 @@ impl<'a> Parser<'a> {
                 self.pos -= 1;
                 self.parse_function()
             }
-            _ => Err(self.err_at(
-                format!("expressão inválida (token inesperado: {:?})", tok.kind),
-                tok.span,
-            )),
+            _ => {
+                let escrito = texto_do_token(&tok.kind);
+                let mensagem = if token_e_comando(&tok.kind) {
+                    format!("{escrito} é um comando, não um valor")
+                } else {
+                    format!("expressão inválida (token inesperado: {escrito})")
+                };
+                Err(self.err_at(mensagem, tok.span))
+            }
         }
     }
 
@@ -769,7 +817,7 @@ impl<'a> Parser<'a> {
                 break;
             }
         }
-        let end = self.expect_kind(|k| matches!(k, TokenKind::RBracket), "esperado ']'")?;
+        let end = self.expect_close(|k| matches!(k, TokenKind::RBracket), "]", start)?;
         Ok(Expr::List {
             elements,
             span: start.join(end.span),
@@ -778,7 +826,20 @@ impl<'a> Parser<'a> {
 
     fn finish_call(&mut self, callee: Expr) -> Result<Expr, ParseError> {
         let start = callee.span();
-        self.remove(); // (
+        let aberto = self.remove(); // (
+        self.parenteses += 1;
+        let args = self.finish_call_args();
+        self.parenteses -= 1;
+        let args = args?;
+        let end = self.expect_close(|k| matches!(k, TokenKind::RParen), ")", aberto.span)?;
+        Ok(Expr::Call {
+            callee: Box::new(callee),
+            args,
+            span: start.join(end.span),
+        })
+    }
+
+    fn finish_call_args(&mut self) -> Result<Vec<Expr>, ParseError> {
         let mut args = Vec::new();
         if !matches!(self.peek_kind(), TokenKind::RParen) {
             loop {
@@ -793,22 +854,17 @@ impl<'a> Parser<'a> {
                 break;
             }
         }
-        let end = self.expect_kind(|k| matches!(k, TokenKind::RParen), "esperado ')'")?;
-        Ok(Expr::Call {
-            callee: Box::new(callee),
-            args,
-            span: start.join(end.span),
-        })
+        Ok(args)
     }
 
     fn finish_index_or_slice(&mut self, object: Expr) -> Result<Expr, ParseError> {
         let start = object.span();
-        self.remove(); // [
+        let aberto = self.remove(); // [
         let first = self.parse_expr()?;
         if matches!(self.peek_kind(), TokenKind::Comma) {
             self.remove();
             let col = self.parse_expr()?;
-            let end = self.expect_kind(|k| matches!(k, TokenKind::RBracket), "esperado ']'")?;
+            let end = self.expect_close(|k| matches!(k, TokenKind::RBracket), "]", aberto.span)?;
             Ok(Expr::Index2 {
                 object: Box::new(object),
                 row: Box::new(first),
@@ -816,7 +872,7 @@ impl<'a> Parser<'a> {
                 span: start.join(end.span),
             })
         } else {
-            let end = self.expect_kind(|k| matches!(k, TokenKind::RBracket), "esperado ']'")?;
+            let end = self.expect_close(|k| matches!(k, TokenKind::RBracket), "]", aberto.span)?;
             Ok(Expr::Index {
                 object: Box::new(object),
                 index: Box::new(first),
@@ -959,7 +1015,7 @@ impl<'a> Parser<'a> {
         let start = self
             .expect_kind(|k| matches!(k, TokenKind::Funcao), "esperado 'funcao'")?
             .span;
-        self.expect_kind(
+        let aberto = self.expect_kind(
             |k| matches!(k, TokenKind::LParen),
             "esperado '(' após 'funcao'",
         )?;
@@ -976,12 +1032,21 @@ impl<'a> Parser<'a> {
                 }
                 if matches!(self.peek_kind(), TokenKind::Comma) {
                     self.remove();
+                    if matches!(self.peek_kind(), TokenKind::RParen) {
+                        break;
+                    }
                     continue;
                 }
                 break;
             }
         }
-        self.expect_kind(|k| matches!(k, TokenKind::RParen), "esperado ')'")?;
+        self.expect_close(|k| matches!(k, TokenKind::RParen), ")", aberto.span)?;
+        let mut vistos = std::collections::HashSet::new();
+        for p in &params {
+            if !vistos.insert(p.name.as_str()) {
+                return Err(self.err_at(format!("parâmetro duplicado `{}`", p.name), p.span));
+            }
+        }
         let body = self.parse_block()?;
         Ok(Expr::Function {
             params,
@@ -990,6 +1055,14 @@ impl<'a> Parser<'a> {
             doc: None,
         })
     }
+}
+
+/// A blank line or a `//` comment between `///` and the definition.
+fn separa_doc(source: &str, from: usize, to: usize) -> bool {
+    let Some(gap) = source.get(from..to) else {
+        return true;
+    };
+    gap.matches('\n').count() > 1 || gap.contains("//")
 }
 
 fn join_doc_lines(lines: &[String]) -> String {
@@ -1056,6 +1129,8 @@ fn expr_can_start(kind: &TokenKind) -> bool {
             | TokenKind::Minus
             | TokenKind::Nao
             | TokenKind::Colon
+            | TokenKind::DotDot
+            | TokenKind::DotDotEq
     )
 }
 
@@ -1779,6 +1854,60 @@ fim
     }
 
     #[test]
+    fn comparacao_entre_parenteses_nao_e_encadeada() {
+        parse_ok("escreva((a < b) == (b > a))");
+        let err = parse("escreva(a < b < c)").unwrap_err();
+        assert!(err.message.contains("encadeadas"), "{err}");
+    }
+
+    #[test]
+    fn para_aberto_na_mesma_linha_do_corpo() {
+        let src = "para i em 0.. {\n    escreva(i)\n    pare\n}\n";
+        match first_stmt(&parse_ok(src)) {
+            Stmt::ParaIn { iter, .. } => match iter {
+                Expr::Faixa { end: None, .. } => {}
+                other => panic!("{other:?}"),
+            },
+            other => panic!("{other:?}"),
+        }
+        let src = "para i em 0.. inicio\n    escreva(i)\n    pare\nfim\n";
+        match first_stmt(&parse_ok(src)) {
+            Stmt::ParaIn { iter, .. } => match iter {
+                Expr::Faixa { end: None, .. } => {}
+                other => panic!("{other:?}"),
+            },
+            other => panic!("{other:?}"),
+        }
+    }
+
+    #[test]
+    fn operador_no_inicio_da_linha_nao_continua() {
+        let p = parse_ok("x = 5\n-3\n");
+        assert_eq!(p.items.len(), 2, "{p:?}");
+        parse_ok("x = 1 +\n2\n");
+        let p = parse_ok("se verdadeiro { escreva(\"sim\") }\n(1 + 2)\n");
+        assert_eq!(p.items.len(), 2, "{p:?}");
+    }
+
+    #[test]
+    fn parametro_com_virgula_final_e_sem_repeticao() {
+        parse_ok("f = funcao(\n    a,\n    b,\n) { a + b }\n");
+        let err = parse("f = funcao(a, a) { a }").unwrap_err();
+        assert!(err.message.contains("duplicado"), "{err}");
+    }
+
+    #[test]
+    fn doc_no_fim_da_linha_nao_vai_para_a_proxima_definicao() {
+        let p = parse_ok("contador = 0 /// zera\nf = funcao() { 1 }\n");
+        match first_stmt(&p) {
+            Stmt::Assign { doc: None, .. } => {}
+            other => panic!("{other:?}"),
+        }
+        let err = parse("/// longe\n\nf = funcao() { 1 }\n").unwrap_err();
+        assert!(err.message.contains("documentação"), "{err}");
+    }
+
+    #[test]
     fn enquanto_loop() {
         let src = r#"
 enquanto i < 10
@@ -1866,6 +1995,66 @@ fim
         match first_stmt(&parse_ok("xs[1] = 9")) {
             Stmt::Assign {
                 target: AssignTarget::Index { .. },
+                ..
+            } => {}
+            other => panic!("{other:?}"),
+        }
+    }
+
+    #[test]
+    fn mensagens_nomeiam_o_token_e_o_comando() {
+        let mais = parse("+").unwrap_err();
+        assert!(
+            mais.message.contains("token inesperado: '+'"),
+            "{}",
+            mais.message
+        );
+        assert!(!mais.message.contains("Plus"));
+        let pare = parse("(pare)").unwrap_err();
+        assert!(
+            pare.message.contains("'pare' é um comando, não um valor"),
+            "{}",
+            pare.message
+        );
+        let fim = parse("(").unwrap_err();
+        assert!(
+            fim.message.contains("fim do arquivo") || fim.message.contains("aberto em 1:1"),
+            "{}",
+            fim.message
+        );
+    }
+
+    #[test]
+    fn parentese_aberto_cita_a_linha() {
+        let err = parse("f(\n1").unwrap_err();
+        assert!(
+            err.message.contains("esperado ')'") && err.message.contains("aberto em 1:"),
+            "{}",
+            err.message
+        );
+    }
+
+    #[test]
+    fn dois_pontos_fora_de_mapa_e_faixa_encadeada() {
+        let campo = parse(r#"escreva("abc":x)"#).unwrap_err();
+        assert!(
+            campo.message.contains("':' espera um mapa"),
+            "{}",
+            campo.message
+        );
+        let faixa = parse("0..3 + 0..3").unwrap_err();
+        assert!(
+            faixa.message.contains("faixas não podem ser encadeadas"),
+            "{}",
+            faixa.message
+        );
+    }
+
+    #[test]
+    fn retorne_aceita_faixa_aberta() {
+        match first_stmt(&parse_ok("retorne ..5")) {
+            Stmt::Retorne {
+                value: Some(Expr::Faixa { end: Some(_), .. }),
                 ..
             } => {}
             other => panic!("{other:?}"),

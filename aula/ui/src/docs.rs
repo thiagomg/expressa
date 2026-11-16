@@ -2,8 +2,9 @@
 //! breakpoints, search, block-match highlight and syntax check.
 
 use std::cell::{Cell, RefCell};
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashMap};
 use std::rc::{Rc, Weak};
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use gtk::glib;
 use gtk::prelude::*;
@@ -70,11 +71,15 @@ pub struct Doc {
     pub edit_epoch: Cell<u64>,
     pub io_epoch: Cell<u64>,
     pub saving: Cell<bool>,
+    /// Close or another save asked to continue when the current write finishes.
+    pub save_wait: RefCell<Vec<Box<dyn FnOnce(bool)>>>,
     pub pending_external_change: Cell<bool>,
     pub recovery: std::sync::Arc<crate::recuperacao::Owner>,
     analysis_epoch: Cell<u64>,
     analysis: RefCell<Option<crate::analysis::Analysis>>,
     analysis_job: RefCell<Option<crate::background::Reply<()>>>,
+    /// Id of the analysis queued for this tab. The worker never receives the `Doc`.
+    analysis_id: Cell<u64>,
     pub untitled: String,
     pub buffer: SourceBuffer,
     pub view: SourceView,
@@ -114,16 +119,34 @@ pub struct Doc {
 const DIAG_DELAY_MS: u64 = 400;
 const OCORRENCIAS_DELAY_MS: u64 = 250;
 
-/// `T` is only used on the GTK thread that created it. Used to deliver
-/// analysis results through `MainContext::invoke` (which requires `Send`).
-struct GtkThread<T>(T);
-// SAFETY: the value is created on the GTK thread and only used again inside
-// `MainContext::invoke` on that same context.
-unsafe impl<T> Send for GtkThread<T> {}
-impl GtkThread<Weak<Doc>> {
-    fn upgrade(&self) -> Option<Rc<Doc>> {
-        self.0.upgrade()
+// The worker thread must not drop a `Weak<Doc>`: that count is not atomic.
+// Only this id crosses threads. The map lives on the GTK thread.
+thread_local! {
+    static ANALISE_POR_ID: RefCell<HashMap<u64, Weak<Doc>>> = RefCell::new(HashMap::new());
+}
+static PROXIMA_ANALISE: AtomicU64 = AtomicU64::new(1);
+
+fn registrar_analise(doc: &Rc<Doc>) -> u64 {
+    let id = PROXIMA_ANALISE.fetch_add(1, Ordering::Relaxed);
+    ANALISE_POR_ID.with(|mapa| {
+        mapa.borrow_mut().insert(id, Rc::downgrade(doc));
+    });
+    id
+}
+
+fn tirar_analise(id: u64) -> Option<Rc<Doc>> {
+    ANALISE_POR_ID
+        .with(|mapa| mapa.borrow_mut().remove(&id))
+        .and_then(|fraco| fraco.upgrade())
+}
+
+fn esquecer_analise(id: u64) {
+    if id == 0 {
+        return;
     }
+    ANALISE_POR_ID.with(|mapa| {
+        mapa.borrow_mut().remove(&id);
+    });
 }
 
 #[cfg(test)]
@@ -186,6 +209,17 @@ impl Doc {
         search_settings: &SearchSettings,
     ) -> Rc<Self> {
         let buffer = SourceBuffer::new(None::<&gtk::TextTagTable>);
+        // A decomposed accent becomes the letter, including on paste.
+        // Asking the student to re-save the file as NFC only adds doubt.
+        buffer.connect_insert_text(|buf, at, texto| {
+            let composto = expressa::lexer::em_nfc(texto);
+            if composto.as_ref() == texto {
+                return;
+            }
+            buf.stop_signal_emission_by_name("insert-text");
+            let mut aqui = at.clone();
+            buf.insert(&mut aqui, composto.as_ref());
+        });
         if let Some(lang) = languages.language("expressa") {
             buffer.set_language(Some(&lang));
         }
@@ -289,11 +323,13 @@ impl Doc {
             edit_epoch: Cell::new(1),
             io_epoch: Cell::new(0),
             saving: Cell::new(false),
+            save_wait: RefCell::new(Vec::new()),
             pending_external_change: Cell::new(false),
             recovery: std::sync::Arc::new(crate::recuperacao::Owner::default()),
             analysis_epoch: Cell::new(0),
             analysis: RefCell::new(None),
             analysis_job: RefCell::new(None),
+            analysis_id: Cell::new(0),
             untitled,
             buffer,
             view,
@@ -684,17 +720,22 @@ impl Doc {
         if let Some(source) = self.diag_timer.borrow_mut().take() {
             source.remove();
         }
+        esquecer_analise(self.analysis_id.replace(0));
         self.analysis_job.borrow_mut().take();
         let epoch = self.edit_epoch.get();
         let text = self.text();
         let ctx = glib::MainContext::ref_thread_default();
-        let weak = GtkThread(Rc::downgrade(self));
+        let id = registrar_analise(self);
+        self.analysis_id.set(id);
         let job = crate::background::analysis().submit(epoch, move || {
             let analysis = crate::analysis::Analysis::new(&text);
             ctx.invoke(move || {
-                let Some(doc) = weak.upgrade() else {
+                let Some(doc) = tirar_analise(id) else {
                     return;
                 };
+                if doc.analysis_id.get() == id {
+                    doc.analysis_id.set(0);
+                }
                 doc.analysis_job.borrow_mut().take();
                 if doc.edit_epoch.get() == epoch {
                     doc.apply_analysis(epoch, analysis);
@@ -710,6 +751,7 @@ impl Doc {
     }
 
     pub fn cancel_pending(&self) {
+        esquecer_analise(self.analysis_id.replace(0));
         self.analysis_job.borrow_mut().take();
         if let Some(monitor) = self.vigia.borrow_mut().take() {
             monitor.cancel();
@@ -806,6 +848,7 @@ fn ring_pixbuf() -> gtk::gdk_pixbuf::Pixbuf {
 
 impl Drop for Doc {
     fn drop(&mut self) {
+        esquecer_analise(self.analysis_id.get());
         if let Some(id) = self.diag_timer.get_mut().take() {
             id.remove();
         }
@@ -859,6 +902,18 @@ mod tests {
     }
 
     #[test]
+    fn acento_decomposto_entra_composto() {
+        crate::gtk_test::run(|| {
+            let doc = test_doc("cafe\u{0301} = 1\n");
+            assert_eq!(doc.text(), "café = 1\n");
+            assert!(!doc.buffer.is_modified());
+            doc.buffer
+                .insert(&mut doc.buffer.end_iter(), "func\u{0327}a\u{0303}o");
+            assert!(doc.text().contains("função"), "{}", doc.text());
+        });
+    }
+
+    #[test]
     fn breakpoint_mark_survives_the_debug_line() {
         crate::gtk_test::run(|| {
             let languages = sourceview5::LanguageManager::new();
@@ -876,6 +931,26 @@ mod tests {
             assert!(doc.breakpoint_lines().contains(&2));
             let marks = doc.buffer.source_marks_at_line(1, Some("breakpoint"));
             assert_eq!(marks.len(), 1);
+        });
+    }
+
+    #[test]
+    fn analise_terminada_nao_deixa_o_documento_no_mapa() {
+        crate::gtk_test::run(|| {
+            let doc = Doc::new(
+                Some("a.lep".into()),
+                String::new(),
+                "escreva(1)\n",
+                &sourceview5::LanguageManager::new(),
+                &SearchSettings::new(),
+            );
+            doc.check_now();
+            let id = doc.analysis_id.get();
+            assert_ne!(id, 0);
+            doc.wait_for_analysis();
+            drop(doc);
+            // Other tests may still finish their own analyses on this thread.
+            assert!(ANALISE_POR_ID.with(|mapa| !mapa.borrow().contains_key(&id)));
         });
     }
 

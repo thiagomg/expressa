@@ -15,6 +15,9 @@ service Turma {
   rpc CreateProject(CreateProjectRequest) returns (CreateProjectResponse);
   rpc ListFiles(ListFilesRequest) returns (ListFilesResponse);
   rpc ReadFile(ReadFileRequest) returns (ReadFileResponse);
+  // Legacy. The server treats this exactly like WriteFileChecked. Current
+  // editors never call it; they call WriteFileChecked so an old server cannot
+  // ignore the expected revision.
   rpc WriteFile(WriteFileRequest) returns (WriteFileResponse);
   // New editors use this method so an old server cannot silently ignore CAS.
   rpc WriteFileChecked(WriteFileRequest) returns (WriteFileResponse);
@@ -53,8 +56,10 @@ message TreeEntry {
   // Path relative to the project folder, e.g. "lib" or "lib/mat.lep".
   string path = 1;
   bool is_dir = 2;
-  // Files only. The editor copies a file again only when these change;
-  // both 0 (older servers) means "unknown, always copy".
+  // Files only. The editor does not read these fields: each run copies every
+  // file. Skipping on size and modified_ns would miss a rewrite that keeps
+  // the same size when the clock does not advance. Both 0 means an older
+  // server left them unset.
   uint64 size = 3;
   int64 modified_ns = 4;
 }

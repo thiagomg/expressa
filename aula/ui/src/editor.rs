@@ -41,11 +41,21 @@ pub(crate) fn make_help(ui: &UiRc) -> Rc<Help> {
             let r = rel.clone();
             em_segundo_plano(
                 &ui,
-                move || files.read_file(&p, &r).ok(),
-                move |ui, text| {
+                move || files.current_text(&p, &r).map(|s| s.map(|snap| snap.text)),
+                move |ui, resultado| {
                     let u = ui.borrow();
-                    if u.project_epoch == epoch {
-                        u.file_cache.borrow_mut().insert(rel, text);
+                    if u.project_epoch != epoch {
+                        return;
+                    }
+                    match resultado {
+                        Ok(texto) => {
+                            u.file_cache.borrow_mut().insert(rel, texto);
+                        }
+                        // A transport failure must not stick: the placeholder
+                        // would disable hover until the next tree refresh.
+                        Err(_) => {
+                            u.file_cache.borrow_mut().remove(&rel);
+                        }
                     }
                 },
             );
@@ -117,17 +127,39 @@ pub(crate) fn switch_to(ui: &UiRc, doc: &Rc<Doc>) {
     refresh_title(ui);
 }
 
-/// New tab for `path` (or untitled) with `text`, wired to the editor.
-pub(crate) fn open_doc(ui: &UiRc, path: Option<String>, text: &str) -> Rc<Doc> {
-    let untitled = {
-        let mut u = ui.borrow_mut();
+/// A new untitled tab must not reuse the name of a file already in the project.
+fn nome_sem_titulo(ui: &UiRc) -> String {
+    let mut u = ui.borrow_mut();
+    loop {
         u.untitled_count += 1;
-        if u.untitled_count == 1 {
+        let nome = if u.untitled_count == 1 {
             "sem-titulo.lep".to_string()
         } else {
             format!("sem-titulo-{}.lep", u.untitled_count)
+        };
+        let aberta = u.docs.iter().any(|(d, _)| {
+            d.untitled == nome
+                || d.path
+                    .borrow()
+                    .as_deref()
+                    .is_some_and(|caminho| exec::same_project_path(caminho, &nome))
+        });
+        let no_disco = match &u.files {
+            crate::store::Files::Local(raiz) => raiz.join(&nome).is_file(),
+            _ => false,
+        };
+        if !aberta && !no_disco {
+            return nome;
         }
-    };
+        if u.untitled_count > 10_000 {
+            return nome;
+        }
+    }
+}
+
+/// New tab for `path` (or untitled) with `text`, wired to the editor.
+pub(crate) fn open_doc(ui: &UiRc, path: Option<String>, text: &str) -> Rc<Doc> {
+    let untitled = nome_sem_titulo(ui);
     let doc = {
         let u = ui.borrow();
         Doc::new(path, untitled, text, &u.languages, &u.search_settings)
@@ -150,11 +182,10 @@ pub(crate) fn open_doc(ui: &UiRc, path: Option<String>, text: &str) -> Rc<Doc> {
     }
     {
         let weak = Rc::downgrade(ui);
-        let buf = doc.buffer.clone();
         doc.buffer
-            .connect_notify_local(Some("cursor-position"), move |_, _| {
+            .connect_notify_local(Some("cursor-position"), move |buffer, _| {
                 if let Some(ui) = weak.upgrade() {
-                    refresh_cursor(&ui, &buf);
+                    refresh_cursor(&ui, buffer);
                 }
             });
     }
@@ -552,8 +583,11 @@ pub(crate) fn save_request(
     done: impl FnOnce(bool) + 'static,
 ) {
     if doc.saving.get() {
-        set_status(ui, "esta aba já está sendo salva");
-        done(false);
+        doc.save_wait.borrow_mut().push(Box::new(done));
+        set_status(
+            ui,
+            "esta aba já está sendo salva; a ação continua quando a gravação terminar",
+        );
         return;
     }
     let request = match with_documents(ui, |documents| {
@@ -576,6 +610,14 @@ pub(crate) fn save_request(
     };
     let work = request.clone();
     save_prepared(ui, doc, request, move || work.write(&files, &project), done);
+}
+
+fn concluir_gravacao(doc: &Doc, ok: bool, done: impl FnOnce(bool)) {
+    let espera = std::mem::take(&mut *doc.save_wait.borrow_mut());
+    done(ok);
+    for continuar in espera {
+        continuar(ok);
+    }
 }
 
 pub(crate) fn save_prepared(
@@ -601,14 +643,18 @@ pub(crate) fn save_prepared(
             doc.saving.set(false);
             doc.refresh_label();
             if !all_docs(ui).iter().any(|open| Rc::ptr_eq(open, &doc)) {
-                done(false);
+                concluir_gravacao(&doc, false, done);
                 return;
             }
             if request.creating
                 && matches!(&result, Ok(Ok(_)))
                 && all_docs(ui).iter().any(|other| {
                     !Rc::ptr_eq(other, &doc)
-                        && exec::same_project_path(&other.name(), &request.name)
+                        && other
+                            .path
+                            .borrow()
+                            .as_deref()
+                            .is_some_and(|caminho| exec::same_project_path(caminho, &request.name))
                 })
             {
                 doc.buffer.set_modified(true);
@@ -616,7 +662,7 @@ pub(crate) fn save_prepared(
                     ui,
                     "o arquivo foi salvo, mas o destino foi aberto em outra aba; sua aba foi preservada",
                 );
-                done(false);
+                concluir_gravacao(&doc, false, done);
                 return;
             }
             let result = result.and_then(|receipt| request.complete(&doc, receipt));
@@ -628,7 +674,7 @@ pub(crate) fn save_prepared(
                 set_status(ui, "arquivo salvo; há novas alterações na aba");
             }
             sessao::check_deferred(ui, &doc);
-            done(succeeded && !doc.is_dirty());
+            concluir_gravacao(&doc, succeeded && !doc.is_dirty(), done);
         },
     );
 }
@@ -1105,6 +1151,7 @@ pub(crate) fn buscar_no_projeto(ui: &UiRc) {
 pub(crate) fn mostrar_repl(ui: &UiRc) {
     mostrar_pagina_inferior(ui, PaginaInferior::Repl);
     let repl = Rc::clone(&ui.borrow().repl);
+    repl.garantir();
     repl.focar();
 }
 

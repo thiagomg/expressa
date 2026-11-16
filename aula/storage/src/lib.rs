@@ -11,6 +11,8 @@ const LOCK_NAME: &str = ".expressa-save.lock";
 const TEMP_PREFIX: &str = ".expressa-save-";
 const OUTPUT_NAME_CHARS: usize = 32;
 const OUTPUT_EXTENSION_CHARS: usize = 16;
+/// Largest existing file whose revision is hashed during a save.
+const REVISAO_MAXIMA: u64 = 32 * 1024 * 1024;
 
 /// Coordinates local rename/delete with saves in the same editor process.
 /// The directory file lock additionally serializes cooperating processes.
@@ -153,16 +155,51 @@ pub fn is_internal(name: &std::ffi::OsStr) -> bool {
         .is_some_and(|s| s == LOCK_NAME || s.starts_with(TEMP_PREFIX))
 }
 
+/// Relative project path accepted by the editor and the server.
+///
+/// Rejects traversal, `:` and `\`, a trailing dot or space, and Windows
+/// device names (`CON`, `NUL`, `COM1`, …) even with an extension.
+pub fn caminho_relativo_valido(path: &str) -> bool {
+    !path.is_empty()
+        && !path.contains('\\')
+        && !path.contains(':')
+        && !path.starts_with('/')
+        && !path.ends_with('/')
+        && path.split('/').all(segmento_de_caminho_valido)
+}
+
+fn segmento_de_caminho_valido(segmento: &str) -> bool {
+    !segmento.is_empty()
+        && segmento != "."
+        && segmento != ".."
+        && !segmento.ends_with('.')
+        && !segmento.ends_with(' ')
+        && !nome_de_dispositivo(segmento)
+}
+
+fn nome_de_dispositivo(segmento: &str) -> bool {
+    let base = segmento.split('.').next().unwrap_or(segmento);
+    let nome = base.to_ascii_uppercase();
+    matches!(nome.as_str(), "CON" | "PRN" | "AUX" | "NUL")
+        || (nome.len() == 4
+            && (nome.starts_with("COM") || nome.starts_with("LPT"))
+            && nome.as_bytes()[3].is_ascii_digit()
+            && nome.as_bytes()[3] != b'0')
+}
+
 pub fn save(path: &Path, bytes: &[u8], expected: &Expected) -> Result<Saved, SaveError> {
     let _mutation = mutation_lock();
     save_before_publish(path, bytes, expected, || Ok(()))
 }
 
 fn check(path: &Path, expected: &Expected) -> Result<(), SaveError> {
-    match (read(path), expected) {
+    match (revisao_existente(path), expected) {
         (Err(e), Expected::Missing) if e.kind() == io::ErrorKind::NotFound => Ok(()),
+        (Err(e), Expected::Missing) if e.kind() == io::ErrorKind::IsADirectory => {
+            Err(SaveError::AlreadyExists)
+        }
         (Ok(_), Expected::Missing) => Err(SaveError::AlreadyExists),
-        (Ok(current), Expected::Revision(rev)) if current.revision == *rev => Ok(()),
+        (Ok(atual), Expected::Revision(rev)) if atual == *rev => Ok(()),
         (Ok(_), Expected::Revision(_)) => Err(SaveError::Conflict),
         (Err(e), Expected::Revision(_)) if e.kind() == io::ErrorKind::NotFound => {
             Err(SaveError::Conflict)
@@ -170,6 +207,57 @@ fn check(path: &Path, expected: &Expected) -> Result<(), SaveError> {
         (_, Expected::Unversioned) => Err(SaveError::Unsupported),
         (Err(e), _) => Err(e.into()),
     }
+}
+
+/// Hash of an existing file, streamed. A directory is `IsADirectory`. A file
+/// past [`REVISAO_MAXIMA`] is `InvalidData` so a dataset is not read three
+/// times while the project lock is held.
+fn revisao_existente(path: &Path) -> io::Result<String> {
+    use std::io::Read;
+    let meta = fs::symlink_metadata(path)?;
+    if meta.file_type().is_symlink() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "atalho não é aceito",
+        ));
+    }
+    if meta.is_dir() {
+        return Err(io::Error::new(io::ErrorKind::IsADirectory, "é uma pasta"));
+    }
+    let mut file = fs::File::open(path)?;
+    // Size of the opened descriptor, not the path looked up above. A file
+    // that grows while hashing stops at the same ceiling.
+    if file.metadata()?.len() > REVISAO_MAXIMA {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "arquivo grande demais",
+        ));
+    }
+    let mut hasher = Sha256::new();
+    let mut buf = [0u8; 8192];
+    let mut lido = 0u64;
+    loop {
+        let n = file.read(&mut buf)?;
+        if n == 0 {
+            break;
+        }
+        lido += n as u64;
+        if lido > REVISAO_MAXIMA {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "arquivo grande demais",
+            ));
+        }
+        hasher.update(&buf[..n]);
+    }
+    Ok(format!(
+        "sha256:{}",
+        hasher
+            .finalize()
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect::<String>()
+    ))
 }
 
 fn save_before_publish(
@@ -359,9 +447,51 @@ fn replace(temp: tempfile::NamedTempFile, path: &Path) -> io::Result<Option<Stri
     }))
 }
 
+/// Replace `path` with `bytes` via a temporary file in the same directory.
+/// Used for preferences and the session, which are overwritten whole and have
+/// no storage revision. Project sources keep going through [`save`].
+pub fn write_replacing(path: &Path, bytes: &[u8]) -> io::Result<()> {
+    let parent = path
+        .parent()
+        .filter(|p| !p.as_os_str().is_empty())
+        .unwrap_or(Path::new("."));
+    fs::create_dir_all(parent)?;
+    let mut temp = tempfile::Builder::new()
+        .prefix(TEMP_PREFIX)
+        .tempfile_in(parent)?;
+    temp.write_all(bytes)?;
+    temp.as_file().sync_all()?;
+    if path.is_file() {
+        replace(temp, path).map(|_| ())?;
+    } else {
+        temp.persist(path).map_err(|e| e.error)?;
+    }
+    #[cfg(unix)]
+    {
+        let _ = fs::File::open(parent).and_then(|dir| dir.sync_all());
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn write_replacing_creates_then_overwrites_without_leaving_a_temp_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("aula").join("prefs");
+        write_replacing(&path, b"um").unwrap();
+        assert_eq!(fs::read(&path).unwrap(), b"um");
+        write_replacing(&path, b"dois").unwrap();
+        assert_eq!(fs::read(&path).unwrap(), b"dois");
+        let sobras: Vec<_> = fs::read_dir(path.parent().unwrap())
+            .unwrap()
+            .map(|e| e.unwrap().file_name())
+            .filter(|n| n.to_string_lossy().starts_with(TEMP_PREFIX))
+            .collect();
+        assert!(sobras.is_empty(), "{sobras:?}");
+    }
 
     #[test]
     fn limited_reads_accept_exact_bounds_and_reject_larger_files() {
@@ -494,6 +624,26 @@ mod tests {
         {
             fs::set_permissions(&path, original_permissions).unwrap();
         }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn revisao_recusa_atalho_e_arquivo_acima_do_teto() {
+        use std::os::unix::fs::symlink;
+        let root = tempfile::tempdir().unwrap();
+        let alvo = root.path().join("alvo");
+        fs::write(&alvo, b"pequeno").unwrap();
+        assert_eq!(revisao_existente(&alvo).unwrap(), revision(b"pequeno"));
+        let link = root.path().join("atalho");
+        symlink(&alvo, &link).unwrap();
+        let err = revisao_existente(&link).unwrap_err();
+        assert_eq!(err.kind(), io::ErrorKind::InvalidInput, "{err}");
+        let grande = root.path().join("grande");
+        let arquivo = fs::File::create(&grande).unwrap();
+        arquivo.set_len(REVISAO_MAXIMA + 1).unwrap();
+        let err = revisao_existente(&grande).unwrap_err();
+        assert_eq!(err.kind(), io::ErrorKind::InvalidData, "{err}");
+        assert!(err.to_string().contains("grande"), "{err}");
     }
 
     #[cfg(unix)]

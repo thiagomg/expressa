@@ -299,5 +299,32 @@ fn backend_selection_does_not_consume_script_arguments() {
         );
         assert_eq!(output.stdout, b"[\"--backend\", \"literal\"]\n");
     }
+    let output = std::process::Command::new(env!("CARGO_BIN_EXE_expressa"))
+        .arg(&file)
+        .args(["x", "--numeros", "en", "--aritmetica"])
+        .env("EXPRESSA_BACKEND", "bytecode")
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(
+        output.stdout,
+        b"[\"x\", \"--numeros\", \"en\", \"--aritmetica\"]\n"
+    );
+    for flag in ["--numeros", "--aritmetica", "--backend"] {
+        let output = std::process::Command::new(env!("CARGO_BIN_EXE_expressa"))
+            .arg(flag)
+            .env("EXPRESSA_BACKEND", "bytecode")
+            .output()
+            .unwrap();
+        assert!(
+            !output.status.success(),
+            "{flag} sem valor saiu com sucesso: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
     std::fs::remove_file(file).unwrap();
 }

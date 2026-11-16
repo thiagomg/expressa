@@ -6,6 +6,7 @@ use crate::parser::core_types::{Item, Program};
 use crate::parser::error::{ParseError, ParseErrorKind};
 use crate::parser::expression_types::Expr;
 use crate::parser::statement_types::{AssignTarget, Stmt};
+use crate::runtime::parse_numero;
 
 #[derive(Clone, Copy)]
 enum Use {
@@ -167,9 +168,17 @@ fn check_expr_inner(expr: &Expr, use_: Use) -> Result<(), ParseError> {
             }
             Ok(())
         }
-        Expr::Number { .. } | Expr::String { .. } | Expr::Bool { .. } | Expr::Ident { .. } => {
+        Expr::Number { raw, span } => {
+            if parse_numero(raw).is_none() {
+                return Err(ParseError {
+                    kind: ParseErrorKind::Syntax,
+                    message: format!("número inválido: {raw}"),
+                    span: *span,
+                });
+            }
             Ok(())
         }
+        Expr::String { .. } | Expr::Bool { .. } | Expr::Ident { .. } => Ok(()),
     }
 }
 

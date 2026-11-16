@@ -966,6 +966,28 @@ pub(crate) fn builtin_doc_summary(name: &str) -> String {
         .unwrap_or_default()
 }
 
+/// Docs for `nome` inside `modulo`. Shared names (`adicione`, `fundo`, `mostre`)
+/// must not show the first module that registered the word.
+pub(crate) fn builtin_args_em(name: &str, modulo: &str) -> String {
+    doc_no_modulo(name, modulo)
+        .map(|d| d.args_text())
+        .unwrap_or_default()
+}
+
+pub(crate) fn builtin_doc_summary_em(name: &str, modulo: &str) -> String {
+    doc_no_modulo(name, modulo)
+        .map(|d| d.summary.clone())
+        .unwrap_or_default()
+}
+
+fn doc_no_modulo(name: &str, modulo: &str) -> Option<&'static crate::runtime::nativas::referencia::BuiltinDoc> {
+    if modulo.is_empty() {
+        lookup_builtin_doc(name)
+    } else {
+        lookup_alvo(&format!("{modulo}::{name}"))
+    }
+}
+
 pub(super) fn csv_cell(v: &Value) -> String {
     match v {
         Value::Texto(s) => s.clone(),
@@ -1193,6 +1215,9 @@ escreva(f(3))
         assert_eq!(run("escreva(35.87+12.63+11.05+11.47+10.35)"), "81,37\n");
         assert_eq!(run("escreva(0.1 + 0.2)"), "0,3\n");
         assert_eq!(run("escreva(0.1 + 0.2 == 0.3)"), "verdadeiro\n");
+        assert_eq!(run("escreva(0.1 * 3)"), "0,3\n");
+        assert_eq!(run("escreva(3 * 0.1)"), "0,3\n");
+        assert_eq!(run("escreva(0.1 * 3 == 0.3)"), "verdadeiro\n");
         assert_eq!(
             run(r#"formato("float")
 escreva(0.1 + 0.2 == 0.3)"#),
@@ -1413,6 +1438,33 @@ escreva(p:nome)
         assert_eq!(run(r#"escreva("{0} {0}".formate("oi"))"#), "oi oi\n");
         assert!(run_err(r#"formate("{}")"#).contains("espera pelo menos"));
         assert!(run_err(r#"formate(10, "x")"#).contains("texto"));
+        let enorme = r#"escreva(formate("{:>999999999999}", 1) se_falhar "e")
+escreva(formate("{:>99999999999999999999999}", 1) se_falhar "e")
+"#;
+        use crate::runtime::{ExecutionBackend, ExecutionOptions, run_with_options};
+        let mut visto = None;
+        for backend in [ExecutionBackend::Bytecode, ExecutionBackend::Ast] {
+            if !backend.is_available() {
+                continue;
+            }
+            let saiu = run_with_options(
+                enorme,
+                "teste.lep",
+                "",
+                ExecutionOptions {
+                    backend,
+                    ..ExecutionOptions::default()
+                },
+            )
+            .map(|o| o.stdout)
+            .unwrap_or_else(|e| panic!("{backend:?}: {e}"));
+            assert_eq!(saiu, "e\ne\n", "{backend:?}");
+            if let Some(antes) = &visto {
+                assert_eq!(&saiu, antes);
+            }
+            visto = Some(saiu);
+        }
+        assert!(visto.is_some());
     }
 
     #[test]
@@ -1868,6 +1920,34 @@ para f em catalogo(inc) {
         );
         assert!(run_err("catalogo(1)").contains("módulo, mapa, função"));
         assert!(run_err("catalogo(1, 2)").contains("0 ou 1"));
+    }
+
+    #[test]
+    #[cfg(feature = "graphics")]
+    fn catalogo_separa_nomes_repetidos() {
+        let out = run(
+            r#"
+para f em catalogo("cartesiano") {
+    se f:nome == "adicione" { escreva(f:args) }
+}
+para f em catalogo("crono") {
+    se f:nome == "adicione" { escreva(f:args) }
+}
+para f em catalogo("tela_grafica") {
+    se f:nome == "fundo" { escreva(f:args) }
+    se f:nome == "mostre" { escreva(f:args) }
+}
+c = importe "cartesiano"
+para f em catalogo(c) {
+    se f:nome == "adicione" { escreva(f:args) }
+}
+"#,
+        );
+        assert_eq!(
+            out,
+            "documento, grafico\ndata, n, unidade\ng, cor\ng\ndocumento, grafico\n",
+            "{out}"
+        );
     }
 
     #[test]

@@ -290,7 +290,7 @@ formato("float")
 
 ### `formate(modelo, valor, …)`
 
-`{}` vira o valor. `{:<n}` esquerda, `{:>n}` direita, `{:^n}` centro. `{0}` é o primeiro valor. `{{` `}}` escrevem `{` `}`.
+`{}` vira o valor. `{:<n}` esquerda, `{:>n}` direita, `{:^n}` centro. `{0}` é o primeiro valor. `{{` `}}` escrevem `{` `}`. A largura `n` vai de 0 a 10000; acima disso é erro.
 
 ```text
 formate("{:<8} {:>5}", "Ana", 10)

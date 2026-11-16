@@ -86,7 +86,14 @@ impl Vm<'_, '_> {
         })?;
         let nova = match unidade {
             "dias" => {
-                let (ano, mes, dia) = civil_de_dias(dias_desde_civil(d.ano, d.mes, d.dia) + n);
+                let total = dias_desde_civil(d.ano, d.mes, d.dia)
+                    .checked_add(n)
+                    .ok_or_else(|| self.err("adicione: instante fora do intervalo", span))?;
+                // Howard's conversion overflows near the ends of i64.
+                if total.checked_abs().is_none_or(|abs| abs > DIAS_LIMITE) {
+                    return Err(self.err("adicione: instante fora do intervalo", span));
+                }
+                let (ano, mes, dia) = civil_de_dias(total);
                 self.montar(ano, mes, dia, d.hora, d.minuto, d.segundo, span)?
             }
             "meses" => {
@@ -410,8 +417,49 @@ fn dia_semana_civil(ano: i64, mes: i64, dia: i64) -> i64 {
     (dias_desde_civil(ano, mes, dia) + 4).rem_euclid(7) + 1
 }
 
+/// Day counts `civil_de_dias` can convert without overflowing `i64`.
+const DIAS_LIMITE: i64 = 366 * (i32::MAX as i64);
+
+fn ano_cabe_no_relogio(ano: i64) -> bool {
+    ano.checked_sub(1900)
+        .and_then(|y| i32::try_from(y).ok())
+        .is_some()
+}
+
+#[cfg(unix)]
+fn mktime_epoch(tm: &mut libc::tm) -> Option<i64> {
+    // `mktime` returns -1 both for one second before the epoch and for a
+    // civil time that does not fit in `time_t`. Accept -1 when local time
+    // still shows the fields we asked for.
+    let ano = tm.tm_year;
+    let mes = tm.tm_mon;
+    let dia = tm.tm_mday;
+    let hora = tm.tm_hour;
+    let minuto = tm.tm_min;
+    let segundo = tm.tm_sec;
+    let t = unsafe { libc::mktime(tm) } as i64;
+    if t != -1 {
+        return Some(t);
+    }
+    let instante = t as libc::time_t;
+    let mut de_volta: libc::tm = unsafe { std::mem::zeroed() };
+    if unsafe { libc::localtime_r(&instante, &mut de_volta) }.is_null() {
+        return None;
+    }
+    let mesmo = de_volta.tm_year == ano
+        && de_volta.tm_mon == mes
+        && de_volta.tm_mday == dia
+        && de_volta.tm_hour == hora
+        && de_volta.tm_min == minuto
+        && de_volta.tm_sec == segundo;
+    if mesmo { Some(t) } else { None }
+}
+
 #[cfg(unix)]
 fn epoch_de(ano: i64, mes: i64, dia: i64, hora: i64, minuto: i64, segundo: i64) -> Option<i64> {
+    if !ano_cabe_no_relogio(ano) {
+        return None;
+    }
     let mut tm: libc::tm = unsafe { std::mem::zeroed() };
     tm.tm_year = i32::try_from(ano - 1900).ok()?;
     tm.tm_mon = i32::try_from(mes - 1).ok()?;
@@ -420,15 +468,14 @@ fn epoch_de(ano: i64, mes: i64, dia: i64, hora: i64, minuto: i64, segundo: i64) 
     tm.tm_min = i32::try_from(minuto).ok()?;
     tm.tm_sec = i32::try_from(segundo).ok()?;
     tm.tm_isdst = -1;
-    let t = unsafe { libc::mktime(&mut tm) };
-    if t == -1 {
-        return None;
-    }
-    Some(t)
+    mktime_epoch(&mut tm)
 }
 
 #[cfg(not(unix))]
 fn epoch_de(ano: i64, mes: i64, dia: i64, hora: i64, minuto: i64, segundo: i64) -> Option<i64> {
+    if !ano_cabe_no_relogio(ano) {
+        return None;
+    }
     dias_desde_civil(ano, mes, dia)
         .checked_mul(86_400)
         .and_then(|d| d.checked_add(hora * 3600 + minuto * 60 + segundo))
@@ -476,7 +523,7 @@ fn data_utc(epoch: i64) -> Data {
 
 #[cfg(test)]
 mod tests {
-    use super::{civil_de_dias, data_utc, dias_desde_civil, eh_bissexto};
+    use super::{civil_de_dias, data_local, data_utc, dias_desde_civil, eh_bissexto};
     use crate::runtime::run_to_string;
 
     fn run(src: &str) -> String {
@@ -600,5 +647,46 @@ mod tests {
         assert_eq!((d.ano, d.mes, d.dia, d.hora), (1969, 12, 31, 23));
         assert_eq!(dias_desde_civil(1970, 1, 1), 0);
         assert_eq!(civil_de_dias(0), (1970, 1, 1));
+        let _ = civil_de_dias(super::DIAS_LIMITE);
+        let _ = civil_de_dias(-super::DIAS_LIMITE);
+    }
+
+    fn nos_dois(src: &str) -> String {
+        use crate::runtime::{ExecutionBackend, ExecutionOptions, run_with_options};
+        let mut visto = None;
+        for backend in [ExecutionBackend::Bytecode, ExecutionBackend::Ast] {
+            if !backend.is_available() {
+                continue;
+            }
+            let saiu = run_with_options(
+                src,
+                "teste.lep",
+                "",
+                ExecutionOptions {
+                    backend,
+                    ..ExecutionOptions::default()
+                },
+            )
+            .map(|o| o.stdout)
+            .unwrap_or_else(|e| panic!("{backend:?}: {e}\n{src}"));
+            if let Some(antes) = &visto {
+                assert_eq!(&saiu, antes, "{backend:?}");
+            }
+            visto = Some(saiu);
+        }
+        visto.expect("nenhum backend")
+    }
+
+    #[test]
+    fn estouro_e_epoca_menos_um_sao_erro_capturavel() {
+        let d = data_local(-1);
+        let src = format!(
+            "{IMP}\
+             escreva(adicione(data(2024, 1, 1), 9223372036854775807, :dias) se_falhar \"e\")\n\
+             escreva(data(-9223372036854775808, 1, 1) se_falhar \"e\")\n\
+             escreva(data({}, {}, {}, {}, {}, {}):epoch)\n",
+            d.ano, d.mes, d.dia, d.hora, d.minuto, d.segundo
+        );
+        assert_eq!(nos_dois(&src), "e\ne\n-1\n");
     }
 }

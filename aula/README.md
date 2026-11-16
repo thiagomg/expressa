@@ -63,13 +63,22 @@ Leituras de texto aceitam até 8 MiB em projetos locais; o servidor aceita até 
 
 ## Subir o servidor
 
+O editor **não** inicia o `expressa-aula-server` e fechar a IDE não o encerra. O servidor precisa já estar no ar. Em casa, no loopback, com uma pasta absoluta (o padrão `./aula-data` é relativo à pasta de trabalho; um atalho pode gravar os dados dos alunos em `Program Files` ou em `/usr/bin`):
+
 ```bash
-# servidor (se já não estiver no ar, o editor tenta iniciá-lo)
-cargo run -p expressa-aula-server -- --root ./aula-data --bind 127.0.0.1:50051
+cargo run -p expressa-aula-server -- --root "$HOME/expressa-aula-data" --bind 127.0.0.1:50051
 
 # editor
 cargo run -p expressa-aula
 ```
+
+Na sala, o atalho **Servidor da sala** (menu Iniciar no Windows, aplicativo no Linux) sobe o servidor escutando a rede. O comando equivalente, com `--root` absoluto:
+
+```bash
+expressa-aula-server --root "$HOME/expressa-aula-data" --bind 0.0.0.0:50051
+```
+
+No Windows o atalho usa `%LOCALAPPDATA%\Expressa Aula\aula-data` e `--bind 0.0.0.0:50051`. Libere a porta 50051 no firewall do computador do professor; sem isso os alunos não conectam.
 
 O instalador (Windows e `.deb`) copia os exemplos para `Documentos/Expressa Aula/exemplos`. Arquivos novos do pacote entram na pasta; o que o aluno já tiver ali não é substituído. O editor não copia de novo ao abrir. No Linux, `expressa --instalar-exemplos` faz a mesma cópia (o `postinst` chama isso para o usuário que instalou).
 
@@ -114,7 +123,7 @@ primeiro projeto, as abas que já estavam abertas continuam abertas para serem s
 
 **Sala de aula**: Ctrl+= / Ctrl+- (ou A+ / A−) aumentam e diminuem a letra, Ctrl+0 volta. **Ver → Claro** ou **Ver → Escuro** pinta a janela inteira (menus, painéis, editor e saída). A escolha fica em `~/.config/expressa-aula/prefs`.
 
-Fechar o editor fecha as janelas irmãs (gráficos destacados e Ajuda) e encerra o `expressa-aula-server` que ele mesmo tiver iniciado. A janela abre maximizada; o código ocupa a maior parte da tela. Em janela estreita os painéis encolhem.
+Fechar o editor fecha as janelas irmãs (gráficos destacados e Ajuda). O servidor, se estiver no ar, continua. A janela abre maximizada; o código ocupa a maior parte da tela. Em janela estreita os painéis encolhem.
 
 No depurador: a linha atual fica amarela na aba **Execução: arquivo**, uma cópia somente para leitura da fonte executada (inclusive módulos importados). Um erro durante a depuração para na linha em vermelho, com as variáveis visíveis, e Continuar encerra. **Observados** guarda nomes para ver o valor a cada passo; **Variáveis** lista o que está no escopo; **Pilha** as chamadas.
 

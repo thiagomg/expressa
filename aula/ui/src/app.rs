@@ -1,6 +1,6 @@
 //! Shared application state (`Ui`) and the run handle. Other modules borrow this; they do not own a second copy.
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::Arc;
@@ -165,7 +165,15 @@ pub(crate) struct Ui {
     pub(crate) theme_css: ThemeCss,
     pub(crate) help: Option<Rc<Help>>,
     /// Unsaved changes were handled: the window may close now.
+    /// Set only after an in-progress run was confirmed, or when nothing is
+    /// running. `unrealize` also sets it because the window is already going.
     pub(crate) closing: std::cell::Cell<bool>,
+    /// The close dialog for a busy run was accepted. `closing` alone does
+    /// not authorize killing that run.
+    pub(crate) interrupcao_aceita: Cell<bool>,
+    /// Bumped by every `set_status`. Shared with the idle callback, which
+    /// cannot borrow `Ui` while the caller still holds it.
+    pub(crate) geracao_status: Rc<Cell<u64>>,
     /// Bumped by each tree listing; an older listing that comes back late
     /// is dropped.
     pub(crate) geracao_arvore: u64,

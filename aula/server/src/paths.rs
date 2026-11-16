@@ -65,8 +65,8 @@ pub fn student_file(
 ) -> Result<PathBuf, String> {
     let base = project_dir(root, student, project)?;
     let rel = rel.trim();
-    if rel.is_empty() {
-        return Err("caminho vazio".into());
+    if !expressa_aula_storage::caminho_relativo_valido(rel) {
+        return Err(format!("caminho inválido: {rel}"));
     }
     let rel_path = Path::new(rel);
     if rel_path
@@ -102,10 +102,14 @@ pub fn project_dir(root: &Path, student: &str, project: &str) -> Result<PathBuf,
 }
 
 pub fn relative_to(root: &Path, path: &Path) -> String {
-    path.strip_prefix(root)
-        .unwrap_or(path)
-        .to_string_lossy()
-        .replace('\\', "/")
+    let rel = path.strip_prefix(root).unwrap_or(path);
+    let mut partes = Vec::new();
+    for c in rel.components() {
+        if let Component::Normal(s) = c {
+            partes.push(s.to_string_lossy().into_owned());
+        }
+    }
+    partes.join("/")
 }
 
 #[cfg(test)]
@@ -121,7 +125,10 @@ mod tests {
             "../outro/a.lep",
         ] {
             let err = student_file(root, "ana", "aula-1", rel).unwrap_err();
-            assert!(err.contains("fora da pasta"), "{rel}: {err}");
+            assert!(
+                err.contains("fora da pasta") || err.contains("inválido"),
+                "{rel}: {err}"
+            );
         }
     }
 
@@ -146,7 +153,10 @@ mod tests {
         let root = Path::new("/var/aula");
         for rel in [".", "./", "lib/..", "./lib/../."] {
             let err = student_file(root, "ana", "aula-1", rel).unwrap_err();
-            assert!(err.contains("própria pasta"), "{rel}: {err}");
+            assert!(
+                err.contains("própria pasta") || err.contains("inválido"),
+                "{rel}: {err}"
+            );
         }
     }
 
@@ -159,6 +169,22 @@ mod tests {
     fn accepts_nested_lep() {
         let p = student_file(Path::new("/var/aula"), "ana", "aula-1", "ex/bhaskara.lep").unwrap();
         assert_eq!(p, PathBuf::from("/var/aula/ana/aula-1/ex/bhaskara.lep"));
+    }
+
+    #[test]
+    fn recusa_dois_pontos_barra_invertida_e_nome_de_dispositivo() {
+        let root = Path::new("/var/aula");
+        for rel in [
+            "notas: aula.txt",
+            r"lib\m.lep",
+            "CON",
+            "nul.lep",
+            "pasta/COM1.txt",
+            "fim. ",
+        ] {
+            assert!(student_file(root, "ana", "aula-1", rel).is_err(), "{rel}");
+        }
+        assert!(student_file(root, "ana", "aula-1", "lib/m.lep").is_ok());
     }
 
     #[test]

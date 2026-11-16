@@ -29,7 +29,7 @@ cargo build -p expressa --release --bin expressa --no-default-features \
 | --- | --- | --- | --- |
 | VM bytecode, decimais, coleções, closures, GC e limites atuais | Sempre | Sim | Sim |
 | Lexer, AST de parsing e compilador; `avalie` no escopo atual | Sempre | Sim | Sim |
-| Compilação/carregamento EXB v1 | Sempre | Sim | Sim |
+| Compilação/carregamento EXB v2 | Sempre | Sim | Sim |
 | Entrada/saída padrão, argumentos, marcador de leitura | Sempre | Sim | Sim |
 | Matemática, matrizes, arquivos, datas e funções do núcleo | Sempre | Sim | Sim |
 | Executor AST de referência | `ast` | Sim | Não |

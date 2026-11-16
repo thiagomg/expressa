@@ -43,7 +43,7 @@ Compilar: `cargo build --release` (Rust, edition 2024; CMake e compilador C/C++ 
 
 O backend padrão executa bytecode, sem JIT. Para comparar com o interpretador AST de referência: `expressa --backend ast prog.lep`; `--backend bytecode` seleciona explicitamente a VM. A opção `--ast` apenas imprime a árvore sintática. Veja [a revisão da migração](lang-tasks/BYTECODE-REVIEW.md) e [a comparação de CPU e memória](benchmarks/AST-VS-BYTECODE.md).
 
-O formato [EXB v1](docs/exb.md) inclui fonte para diagnósticos, valida instruções no carregamento e dispensa o `.lep` original. Veja [a medição de CPU e memória](benchmarks/EXB-V1-REVIEW.md).
+O formato [EXB v2](docs/exb.md) inclui fonte para diagnósticos, valida instruções no carregamento e dispensa o `.lep` original. Veja [a medição de CPU e memória](benchmarks/EXB-V1-REVIEW.md).
 
 Um [perfil mínimo de compilação](docs/runtime-profiles.md) mantém bytecode, EXB e `avalie`, excluindo o executor AST, gráficos, processos e terminal interativo com `--no-default-features`. O build padrão continua completo.
 
@@ -64,7 +64,13 @@ No GitHub, abra **Actions → Build packages → execução → Artifacts** para
 | `ExpressaAula-*-Setup.exe` | Instalador Windows com executáveis, GTK e runtime do Visual C++ |
 
 Os três pacotes incluem o interpretador, visualizador de gráficos, IDE Aula,
-servidor e tutoriais. Os artefatos ficam disponíveis por **30 dias**. No Windows,
+servidor e tutoriais. O editor não inicia o `expressa-aula-server`. Na sala,
+o professor abre o atalho **Servidor da sala**, com `--bind 0.0.0.0:50051` e
+um `--root` absoluto (por exemplo `$HOME/expressa-aula-data` ou
+`%LOCALAPPDATA%\Expressa Aula\aula-data`). O padrão `./aula-data` segue a
+pasta de trabalho e pode gravar os arquivos dos alunos em `Program Files`.
+Libere a porta 50051 no firewall do computador do professor. Os artefatos
+ficam disponíveis por **30 dias**. No Windows,
 execute `ExpressaAula-*-Setup.exe`; no Ubuntu,
 instale o `.deb` correspondente com `sudo apt install ./expressa_*.deb`.
 

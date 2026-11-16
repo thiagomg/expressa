@@ -126,7 +126,6 @@ pub(crate) fn executar(ui: &UiRc, debug: bool) {
         let args = parse_run_args(&u.execucao.args_entry.text());
         (u.files.clone(), u.project.clone(), args)
     };
-    let chave = ui.borrow().project_epoch;
     set_status(ui, &format!("preparando {name}…"));
     async_result(
         ui,
@@ -134,26 +133,12 @@ pub(crate) fn executar(ui: &UiRc, debug: bool) {
         true,
         move || {
             let mut ws = Workspace::sync(&files, &project)?;
-            for source in &textos {
-                ws.write_editor_source(source)?;
-            }
+            ws.write_editor_sources(&textos)?;
             ws.arm()?;
             let sources = ws.capture_sources()?;
             Ok::<_, String>((ws, sources))
         },
         move |ui, ws| {
-            let outro_projeto = {
-                let u = ui.borrow();
-                u.project_epoch != chave
-            };
-            if outro_projeto {
-                ui.borrow_mut()
-                    .execucao
-                    .execution
-                    .transition(ExecutionEvent::PreparationFailed)
-                    .expect("preparation abandoned after a project change");
-                return;
-            }
             match ws {
                 Ok((ws, mut sources)) => {
                     // The entry source has its own immutable identity, even if
@@ -184,9 +169,13 @@ pub(crate) fn executar(ui: &UiRc, debug: bool) {
                         .execution
                         .transition(ExecutionEvent::PreparationFailed)
                         .expect("preparing before a preparation failure");
-                    set_status(ui, &format!("não copiou o projeto: {e}"));
-                    if !ui.borrow().files.is_remote() {
-                        pendencias_ui::notify_local_failure(ui);
+                    if e == "operação cancelada" {
+                        set_status(ui, "preparação cancelada");
+                    } else {
+                        set_status(ui, &format!("não copiou o projeto: {e}"));
+                        if !ui.borrow().files.is_remote() {
+                            pendencias_ui::notify_local_failure(ui);
+                        }
                     }
                 }
             }

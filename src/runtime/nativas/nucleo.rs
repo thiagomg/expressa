@@ -12,8 +12,11 @@ use super::super::env::Env;
 use super::super::error::{CallFrame, EvalError};
 use super::super::eval::Vm;
 use super::super::numero::{Numero, NumeroAritmetica};
-use super::super::value::{conjunto_insert, MapKey, NumeroLocale, Value};
-use super::{builtin_args, builtin_doc_summary, builtin_modulo, lookup_ficha, sem_acento};
+use super::super::value::{MapKey, NumeroLocale, Value, conjunto_insert};
+use super::{
+    builtin_args, builtin_args_em, builtin_doc_summary, builtin_doc_summary_em, builtin_modulo,
+    lookup_ficha, sem_acento,
+};
 
 impl Vm<'_, '_> {
     pub(crate) fn bi_escreva(
@@ -699,7 +702,15 @@ impl Vm<'_, '_> {
                 };
                 Ok(catalog_frame(&mod_env.borrow(), s))
             }
-            Value::Modulo(mod_env) => Ok(catalog_frame(&mod_env.borrow(), "")),
+            Value::Modulo(mod_env) => {
+                let nome = self
+                    .native_modules
+                    .iter()
+                    .find(|(_, env)| Rc::ptr_eq(env, mod_env))
+                    .map(|(nome, _)| nome.as_str())
+                    .unwrap_or("");
+                Ok(catalog_frame(&mod_env.borrow(), nome))
+            }
             Value::Mapa(xs) => {
                 let mut rows: Vec<(String, Value)> = xs
                     .borrow()
@@ -806,9 +817,9 @@ fn catalog_frame(env: &Env, modulo: &str) -> Value {
             Value::Builtin(canon) => rows.push(catalog_row(
                 &name,
                 "nativa",
-                &builtin_args(canon),
+                &builtin_args_em(canon, modulo),
                 modulo,
-                &builtin_doc_summary(canon),
+                &builtin_doc_summary_em(canon, modulo),
             )),
             Value::Funcao(c) => rows.push(catalog_row(
                 &name,

@@ -27,6 +27,9 @@ enum Iteration {
     Range {
         next: Option<i64>,
         end: Option<i64>,
+        /// The previous step was `i64::MAX`. Yield that value first; the
+        /// following `LoopNext` reports the overflow.
+        estourou: bool,
     },
     Items(std::vec::IntoIter<Value>),
     #[cfg(feature = "process")]
@@ -157,16 +160,21 @@ impl Machine {
                         Value::Matriz(_) => vm.matriz_scale(&value, &value, -1.0, span)?,
                         _ => Value::Numero(-vm.expect_numero(&value, span)?),
                     },
-                    UnaryOp::Not => Value::Bool(!vm.expect_bool(&value, span)?),
+                    UnaryOp::Not => Value::Bool(!vm.expect_nao(&value, span)?),
                 });
             }
             Op::Binary(op) => {
                 let right = pop!();
                 let left = pop!();
-                self.values
-                    .push(stacker::maybe_grow(PILHA_RESERVA, PILHA_SEGMENTO, || {
-                        vm.apply_binary(&left, op, &right, span, frame.env())
-                    })?);
+                // Number arithmetic does not walk values. Other operands can.
+                let resultado = if matches!((&left, &right), (Value::Numero(_), Value::Numero(_))) {
+                    vm.apply_binary(&left, op, &right, span, span, span, frame.env())?
+                } else {
+                    stacker::maybe_grow(PILHA_RESERVA, PILHA_SEGMENTO, || {
+                        vm.apply_binary(&left, op, &right, span, span, span, frame.env())
+                    })?
+                };
+                self.values.push(resultado);
             }
             Op::Field(id) => {
                 let object = pop!();
@@ -330,6 +338,7 @@ impl Machine {
                         Iteration::Range {
                             next: (from < to).then_some(from),
                             end: Some(to),
+                            estourou: false,
                         }
                     }
                     LoopKind::Items => {
@@ -344,6 +353,7 @@ impl Machine {
                                     _ => None,
                                 },
                                 end,
+                                estourou: false,
                             },
                             other => Iteration::Items(
                                 vm.iter_items(&other, spec.first_span)?.into_iter(),
@@ -378,23 +388,31 @@ impl Machine {
                             Some(Value::Nada)
                         }
                     }
-                    Iteration::Range { next, end } => match next.take() {
-                        None => None,
-                        Some(n) => {
-                            let following = n.checked_add(1);
-                            *next = match (*end, following) {
-                                (Some(end), Some(n1)) if n1 < end => Some(n1),
-                                (None, Some(n1)) => Some(n1),
-                                (None, None) => {
-                                    return Err(
-                                        vm.err("faixa passou do maior inteiro", spec.first_span)
-                                    );
-                                }
-                                _ => None,
-                            };
-                            Some(Value::Numero(n.into()))
+                    Iteration::Range {
+                        next,
+                        end,
+                        estourou,
+                    } => {
+                        if *estourou {
+                            return Err(vm.err("faixa passou do maior inteiro", spec.first_span));
                         }
-                    },
+                        match next.take() {
+                            None => None,
+                            Some(n) => {
+                                match n.checked_add(1) {
+                                    Some(n1) => {
+                                        *next = match *end {
+                                            Some(end) if n1 < end => Some(n1),
+                                            None => Some(n1),
+                                            Some(_) => None,
+                                        };
+                                    }
+                                    None => *estourou = true,
+                                }
+                                Some(Value::Numero(n.into()))
+                            }
+                        }
+                    }
                     Iteration::Items(items) => items.next(),
                     #[cfg(feature = "process")]
                     Iteration::Process(p) => vm
@@ -806,6 +824,9 @@ impl Vm<'_, '_> {
         program: Program,
         env: &Rc<RefCell<Env>>,
     ) -> Result<Value, EvalError> {
+        // A long-lived session (REPL) reuses this Vm. Nested imports must
+        // not clear the flag; only a new top-level program does.
+        self.error_reported = false;
         if !self.backend.is_available() {
             return Err(self.err("backend AST indisponível neste build", program.span));
         }

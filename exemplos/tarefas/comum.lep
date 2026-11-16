@@ -14,3 +14,4 @@ nova = funcao(desc, data, completo) {
         :_como_texto -> tarefa_texto
     ])
 }
+

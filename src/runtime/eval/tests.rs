@@ -59,6 +59,95 @@ fn run_err(src: &str) -> String {
 }
 
 #[test]
+fn diagnosticos_de_tipo_faixa_e_nao() {
+    assert_eq!(
+        ExecutionBackend::from_name("AST"),
+        Some(ExecutionBackend::Ast)
+    );
+    assert_eq!(
+        ExecutionBackend::from_name(" Bytecode "),
+        Some(ExecutionBackend::Bytecode)
+    );
+
+    for backend in [ExecutionBackend::Ast, ExecutionBackend::Bytecode]
+        .into_iter()
+        .filter(|backend| backend.is_available())
+    {
+        let opts = ExecutionOptions {
+            backend,
+            ..ExecutionOptions::default()
+        };
+        let erro = |src: &str| {
+            run_with_options(src, "teste.lep", "", opts.clone())
+                .expect_err(&format!("{backend:?} {src}"))
+        };
+
+        let e = erro("x = 2\ny = 3\nx > 1 e y\n");
+        assert!(
+            e.message.contains("esperado bool, encontrado numero"),
+            "{backend:?} {}",
+            e.message
+        );
+        assert_eq!(e.span.line, 3, "{backend:?}");
+        assert_eq!(e.span.col, 9, "{backend:?} col {}", e.span.col);
+
+        let sub = erro("total = 1\nnome = \"a\"\ntotal * 2 + total - nome\n");
+        assert!(
+            sub.message.contains("operador '-' não se aplica a numero e texto"),
+            "{backend:?} {}",
+            sub.message
+        );
+        if backend == ExecutionBackend::Ast {
+            assert_eq!(sub.span.col, 21, "{backend:?}");
+        }
+
+        let conjunto = erro("c = conjunto([])\nc -= 1\n");
+        assert!(
+            conjunto
+                .message
+                .contains("operador '-' não se aplica a conjunto e numero"),
+            "{backend:?} {}",
+            conjunto.message
+        );
+
+        let nao = erro("x = 3\nnao x == 3\n");
+        assert!(
+            nao.message.contains("use nao (x == 3)"),
+            "{backend:?} {}",
+            nao.message
+        );
+
+        let teto = erro("para i em 0..=9223372036854775807 {\n  pare\n}\n");
+        assert_eq!(
+            teto.message, "o teto de ..= passa do maior inteiro",
+            "{backend:?}"
+        );
+        assert!(!teto.message.contains("808"), "{backend:?}");
+
+        let fracao = erro("para i em 0..2.5 {\n  pare\n}\n");
+        assert!(
+            fracao.message.contains("2,5"),
+            "{backend:?} {}",
+            fracao.message
+        );
+        assert!(
+            !fracao.message.contains("2.5"),
+            "{backend:?} {}",
+            fracao.message
+        );
+
+        let saida = run_with_options(
+            "m = mapa([])\nescreva(m[\"z\"] se_falhar 0)\n",
+            "teste.lep",
+            "",
+            opts,
+        )
+        .unwrap();
+        assert_eq!(saida.stdout, "0\n", "{backend:?}");
+    }
+}
+
+#[test]
 fn media_example() {
     let src = include_str!("../../../exemplos/linguagem/media.lep");
     let out = run_to_string(src, "exemplos/linguagem/media.lep").unwrap();
@@ -448,8 +537,7 @@ fim
 senao
 inicio
     0
-fim
-se_falhar 9
+fim se_falhar 9
 fim
 escreva(f())
 "#);
@@ -2450,4 +2538,127 @@ fn parameter_slots_are_visible_to_debugger_and_collector() {
             "{backend:?}: parameter cycle leaked"
         );
     }
+}
+
+fn run_backend(
+    src: &str,
+    file: &str,
+    backend: ExecutionBackend,
+) -> (Vec<u8>, Result<i32, RuntimeError>) {
+    let mut input = io::Cursor::new("");
+    let mut out = Vec::new();
+    let mut err = Vec::new();
+    let result = run_configured_with_io(
+        src,
+        file,
+        Box::new(NoopHook),
+        &mut input,
+        &mut out,
+        &mut err,
+        ExecutionOptions {
+            backend,
+            ..ExecutionOptions::default()
+        },
+        None,
+        None,
+        false,
+        None,
+        &[],
+    );
+    (out, result)
+}
+
+fn backends() -> impl Iterator<Item = ExecutionBackend> {
+    [ExecutionBackend::Ast, ExecutionBackend::Bytecode]
+        .into_iter()
+        .filter(|backend| backend.is_available())
+}
+
+#[test]
+fn faixa_aberta_no_maior_inteiro_escreve_antes_de_estourar() {
+    let estoura = "para i em 9223372036854775807.. {\n    escreva(i)\n}\nescreva(\"fim\")\n";
+    let com_pare =
+        "para i em 9223372036854775807.. {\n    escreva(i)\n    pare\n}\nescreva(\"fim\")\n";
+    let numero = "9.223.372.036.854.775.807\n";
+    for backend in backends() {
+        let (out, result) = run_backend(estoura, "r.lep", backend);
+        let err = result.expect_err("a faixa aberta no maior inteiro deve falhar");
+        assert!(
+            err.message.contains("faixa passou do maior inteiro"),
+            "{backend:?} {err}"
+        );
+        assert_eq!(String::from_utf8(out).unwrap(), numero, "{backend:?}");
+
+        let (out, result) = run_backend(com_pare, "r.lep", backend);
+        result.expect("pare no maior inteiro não estoura");
+        assert_eq!(
+            String::from_utf8(out).unwrap(),
+            format!("{numero}fim\n"),
+            "{backend:?}"
+        );
+    }
+}
+
+#[test]
+fn erro_no_modulo_importado_aponta_para_o_importe() {
+    let dir = std::env::temp_dir().join(format!(
+        "expressa-imp-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    std::fs::create_dir_all(dir.join("imp")).unwrap();
+    std::fs::write(
+        dir.join("imp/mod2.lep"),
+        "divide = funcao() {\n    1 / 0\n}\ndivide()\n",
+    )
+    .unwrap();
+    let main = dir.join("imp/main.lep");
+    let src = "escreva(\"antes\")\nimporte \"./mod2\"\n";
+    std::fs::write(&main, src).unwrap();
+    let main_s = main.to_str().unwrap();
+    for backend in backends() {
+        let (_out, result) = run_backend(src, main_s, backend);
+        let err = result.expect_err("divisão no módulo");
+        let text = err.to_string();
+        assert!(!text.contains("/./"), "{backend:?} {text}");
+        assert!(err.file.ends_with("imp/mod2.lep"), "{backend:?} {err}");
+        assert_eq!(err.span.line, 2, "{backend:?} {err}");
+        assert!(
+            err.stack.iter().any(|f| f.name == "<modulo mod2>"),
+            "{backend:?} {:?}",
+            err.stack
+        );
+        assert_eq!(err.stack[0].name, "<modulo>");
+        assert!(
+            err.stack[0].file.ends_with("imp/main.lep"),
+            "{backend:?} {:?}",
+            err.stack[0]
+        );
+        assert_eq!(err.stack[0].span.line, 2, "{backend:?} {:?}", err.stack[0]);
+    }
+
+    std::fs::write(dir.join("imp/quebrado.lep"), "x = 1\nb =\n").unwrap();
+    let src = "importe \"./quebrado\"\n";
+    for backend in backends() {
+        let (_out, result) = run_backend(src, main_s, backend);
+        let err = result.expect_err("sintaxe no módulo");
+        assert!(err.file.ends_with("imp/quebrado.lep"), "{backend:?} {err}");
+        assert!(err.span.line >= 2, "{backend:?} {err}");
+        assert!(err.message.contains("sintaxe"), "{backend:?} {err}");
+        assert!(
+            err.stack.iter().any(|f| f.name == "<modulo quebrado>"),
+            "{backend:?} {:?}",
+            err.stack
+        );
+        assert!(
+            err.stack[0].file.ends_with("imp/main.lep"),
+            "{backend:?} {:?}",
+            err.stack[0]
+        );
+        assert_eq!(err.stack[0].span.line, 1, "{backend:?} {:?}", err.stack[0]);
+    }
+    let _ = std::fs::remove_dir_all(&dir);
 }

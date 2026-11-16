@@ -1,5 +1,9 @@
 ' Duplo clique abre a IDE com o GTK de deps\ e espera ela fechar.
-' O proprio programa sobe o servidor e o encerra ao sair.
+' O editor nao sobe o servidor nem o encerra ao sair. Na sala, em outro
+' terminal, com uma pasta absoluta (nao use .\aula-data: a pasta de
+' trabalho pode ser Program Files):
+'   cargo run -p expressa-aula-server -- --root C:\Expressa\aula-data --bind 0.0.0.0:50051
+' Libere a porta 50051 no firewall para os alunos conectarem.
 Set fso = CreateObject("Scripting.FileSystemObject")
 Set sh = CreateObject("Wscript.Shell")
 root = fso.GetParentFolderName(WScript.ScriptFullName)

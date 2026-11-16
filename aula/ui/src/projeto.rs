@@ -6,6 +6,7 @@ use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::Arc;
 
+use crate::docs::Doc;
 use crate::prefs::{expand_tilde, path_for_display};
 use crate::rpc::Rpc;
 use crate::store::{Files, valid_aluno};
@@ -207,6 +208,7 @@ pub(crate) fn navigation_task<T: Send + 'static>(
     ui: &UiRc,
     work: impl FnOnce() -> Result<T, String> + Send + 'static,
     done: impl FnOnce(&UiRc, T) + 'static,
+    mostrar_erro: bool,
 ) {
     let epoch = ui.borrow().navigation_epoch;
     let reply = background::Reply::spawn(epoch, work);
@@ -232,7 +234,9 @@ pub(crate) fn navigation_task<T: Send + 'static>(
                 glib::ControlFlow::Break
             }
             background::Poll::Ready(Err(e)) => {
-                set_status(&ui, &e);
+                if mostrar_erro {
+                    set_status(&ui, &e);
+                }
                 glib::ControlFlow::Break
             }
             background::Poll::Pending => glib::ControlFlow::Continue,
@@ -253,6 +257,7 @@ pub(crate) fn conectar_servidor(ui: &UiRc, url: String, aluno: String, atual: St
         ui,
         move || Rpc::connect(&address).map(Arc::new),
         move |ui, rpc| listar_e_escolher(ui, rpc, url, aluno, atual, false),
+        true,
     );
 }
 
@@ -295,6 +300,7 @@ pub(crate) fn listar_e_escolher(
                 },
             );
         },
+        true,
     );
 }
 
@@ -578,6 +584,19 @@ pub(crate) fn finish_open(ui: &UiRc) {
     projetos_menu::refresh(ui);
     refresh_title(ui);
     refresh_diag_label(ui);
+    let (files, project) = {
+        let u = ui.borrow();
+        (u.files.clone(), u.project.clone())
+    };
+    em_segundo_plano(
+        ui,
+        move || {
+            if let Ok(id) = files.identity(&project) {
+                let _ = pendencias::scan_project(&pendencias::root(), &id);
+            }
+        },
+        |_, _| {},
+    );
     // Reopen the tabs of last time once the listing says what is there.
     refresh_tree_e(ui, |ui| {
         sessao::restaurar(ui);
@@ -769,6 +788,37 @@ pub(crate) fn async_on<T: Send + 'static>(
             return glib::ControlFlow::Break;
         };
         if ui.borrow().closing.get() || ui.borrow().project_epoch != epoch {
+            operation.take();
+            // This callback belongs to the project that started the work.
+            // Calling it would open a file or finish a save in the project
+            // that replaced it. A run left in Preparing or Uploading would
+            // otherwise refuse the next F5 forever.
+            let aviso = {
+                use crate::execution_state::{Event, ExecutionState};
+                let mut ui = ui.borrow_mut();
+                match ui.execucao.execution {
+                    ExecutionState::Preparing => {
+                        ui.execucao
+                            .execution
+                            .transition(Event::PreparationFailed)
+                            .expect("preparing before the project changes");
+                        Some("preparação cancelada")
+                    }
+                    ExecutionState::Uploading => {
+                        ui.execucao
+                            .execution
+                            .transition(Event::Uploaded)
+                            .expect("uploading before the project changes");
+                        Some("envio interrompido ao trocar de projeto")
+                    }
+                    _ => None,
+                }
+            };
+            if let Some(aviso) = aviso
+                && !ui.borrow().closing.get()
+            {
+                set_status(&ui, aviso);
+            }
             return glib::ControlFlow::Break;
         }
         let result = match reply.poll(epoch) {
@@ -1020,7 +1070,8 @@ pub(crate) fn tree_popup(ui: &UiRc, x: f64, y: f64) {
             Box::new({
                 let ui = Rc::clone(ui);
                 let rel = rel.clone();
-                move || renomear_entrada(&ui, &rel)
+                let pasta = is_dir;
+                move || renomear_entrada(&ui, &rel, pasta)
             }),
         ));
         itens.push((
@@ -1097,11 +1148,7 @@ pub(crate) fn criar_arquivo(ui: &UiRc, dir: &str) {
     if name.is_empty() {
         return;
     }
-    let name = if name.contains('.') {
-        name
-    } else {
-        format!("{name}.lep")
-    };
+    let name = crate::shell::com_extensao_lep(&name);
     let path = join_path(dir, &name);
     let (files, project) = {
         let u = ui.borrow();
@@ -1153,16 +1200,22 @@ pub(crate) fn criar_pasta(ui: &UiRc, dir: &str) {
     );
 }
 
-pub(crate) fn renomear_entrada(ui: &UiRc, rel: &str) {
+pub(crate) fn renomear_entrada(ui: &UiRc, rel: &str, pasta: bool) {
     let window = ui.borrow().window.clone();
     let base = rel.rsplit('/').next().unwrap_or(rel).to_string();
     let Some(name) = perguntar_linha(&window, &format!("Renomear `{base}`:")) else {
         return;
     };
-    if name.trim().is_empty() {
+    let name = name.trim();
+    if name.is_empty() {
         return;
     }
-    let to = join_path(&parent_dir(rel, false), name.trim());
+    let name = if pasta {
+        name.to_string()
+    } else {
+        crate::shell::com_extensao_lep(name)
+    };
+    let to = join_path(&parent_dir(rel, false), &name);
     let (files, project) = {
         let u = ui.borrow();
         (u.files.clone(), u.project.clone())
@@ -1190,12 +1243,115 @@ pub(crate) fn renomear_entrada(ui: &UiRc, rel: &str) {
                         sessao::vigiar(ui, &d);
                     }
                 }
+                atualizar_caminhos_renomeados(ui, &rel, &to);
                 ui.borrow().file_cache.borrow_mut().clear();
                 refresh_tree(ui);
                 refresh_title(ui);
+                sessao::salvar(ui);
                 set_status(ui, &format!("{rel} → {to}"));
             }
             Err(e) => set_status(ui, &format!("renomear: {e}")),
+        },
+    );
+}
+
+fn caminho_renomeado(caminho: &str, de: &str, para: &str) -> Option<String> {
+    if caminho == de {
+        Some(para.to_string())
+    } else if let Some(resto) = caminho.strip_prefix(&format!("{de}/")) {
+        Some(format!("{para}/{resto}"))
+    } else {
+        None
+    }
+}
+
+fn atualizar_caminhos_renomeados(ui: &UiRc, de: &str, para: &str) {
+    let mut u = ui.borrow_mut();
+    if let Some(novo) = caminho_renomeado(&u.prefs.arquivo, de, para) {
+        u.prefs.arquivo = novo;
+        u.prefs.save();
+    }
+    for (nome, _) in &mut u.abas_fechadas {
+        if let Some(novo) = caminho_renomeado(nome, de, para) {
+            *nome = novo;
+        }
+    }
+    let antigos: Vec<String> = u.execucao.execution_editors.keys().cloned().collect();
+    for antigo in antigos {
+        let Some(novo) = caminho_renomeado(&antigo, de, para) else {
+            continue;
+        };
+        if let Some(doc) = u.execucao.execution_editors.remove(&antigo) {
+            u.execucao.execution_editors.insert(novo, doc);
+        }
+    }
+    for (arquivo, _) in &mut u.execucao.execution_breakpoints {
+        if let Some(novo) = caminho_renomeado(arquivo, de, para) {
+            *arquivo = novo;
+        }
+    }
+}
+
+fn caminho_no_alvo(doc: &Doc, rel: &str) -> bool {
+    let Some(caminho) = doc.path.borrow().clone() else {
+        return false;
+    };
+    caminho == rel || caminho.starts_with(&format!("{rel}/"))
+}
+
+fn apagar_caminho(ui: &UiRc, rel: &str) {
+    let (files, project) = {
+        let u = ui.borrow();
+        (u.files.clone(), u.project.clone())
+    };
+    let snapshots: Vec<_> = all_docs(ui)
+        .into_iter()
+        .filter(|d| caminho_no_alvo(d, rel))
+        .map(|d| {
+            (
+                Rc::downgrade(&d),
+                d.path.borrow().clone().unwrap_or_default(),
+                d.edit_epoch.get(),
+            )
+        })
+        .collect();
+    invalidate_file_operations(ui, rel);
+    let path = rel.to_string();
+    let rel = rel.to_string();
+    async_result(
+        ui,
+        &format!("Apagando {rel}"),
+        false,
+        move || files.delete_file(&project, &path),
+        move |ui, result| match result {
+            Ok(()) => {
+                invalidate_file_operations(ui, &rel);
+                let mut preserved = false;
+                for (weak, caminho, epoch) in snapshots {
+                    let Some(doc) = weak.upgrade() else {
+                        continue;
+                    };
+                    if doc.path.borrow().as_deref() != Some(caminho.as_str()) {
+                        continue;
+                    }
+                    if doc.edit_epoch.get() != epoch {
+                        preserved = true;
+                        continue;
+                    }
+                    doc.mark_saved();
+                    remove_tab(ui, &doc);
+                }
+                refresh_tree(ui);
+                set_status(
+                    ui,
+                    &if preserved {
+                        format!("apagado {rel}; novas edições foram preservadas nas abas")
+                    } else {
+                        format!("apagado {rel}")
+                    },
+                );
+            }
+            Err(e) => set_status(ui, &format!("apagar: {e}")),
         },
     );
 }
@@ -1204,77 +1360,90 @@ pub(crate) fn confirmar_apagar(ui: &UiRc, rel: &str) {
     if rel.is_empty() {
         return;
     }
+    let sujas: Vec<Rc<Doc>> = all_docs(ui)
+        .into_iter()
+        .filter(|d| caminho_no_alvo(d, rel) && d.is_dirty())
+        .collect();
     let window = ui.borrow().window.clone();
-    let then = {
+    if sujas.is_empty() {
+        let then = {
+            let ui = Rc::clone(ui);
+            let rel = rel.to_string();
+            move || apagar_caminho(&ui, &rel)
+        };
+        let then = RefCell::new(Some(then));
+        let dlg = gtk::MessageDialog::builder()
+            .transient_for(&window)
+            .modal(true)
+            .message_type(gtk::MessageType::Warning)
+            .buttons(gtk::ButtonsType::None)
+            .text(format!("Apagar `{rel}`?"))
+            .build();
+        dlg.add_button("Cancelar", gtk::ResponseType::Cancel);
+        dlg.add_button("Apagar", gtk::ResponseType::Accept);
+        dlg.connect_response(move |d, resp| {
+            d.close();
+            if resp == gtk::ResponseType::Accept
+                && let Some(f) = then.borrow_mut().take()
+            {
+                f();
+            }
+        });
+        dlg.present();
+        return;
+    }
+    let nomes = sujas
+        .iter()
+        .map(|d| d.name())
+        .collect::<Vec<_>>()
+        .join("\n");
+    let then_apagar = {
         let ui = Rc::clone(ui);
         let rel = rel.to_string();
+        move || apagar_caminho(&ui, &rel)
+    };
+    let then_salvar = {
+        let ui = Rc::clone(ui);
+        let rel = rel.to_string();
+        let docs = sujas;
         move || {
-            let (files, project) = {
-                let u = ui.borrow();
-                (u.files.clone(), u.project.clone())
-            };
-            let snapshots: Vec<_> = all_docs(&ui)
-                .into_iter()
-                .map(|d| (Rc::downgrade(&d), d.name(), d.edit_epoch.get()))
-                .collect();
-            invalidate_file_operations(&ui, &rel);
-            let path = rel.clone();
-            async_result(
-                &ui,
-                &format!("Apagando {rel}"),
-                false,
-                move || files.delete_file(&project, &path),
-                move |ui, result| match result {
-                    Ok(()) => {
-                        invalidate_file_operations(ui, &rel);
-                        let mut preserved = false;
-                        for (weak, name, epoch) in snapshots {
-                            let Some(doc) = weak.upgrade() else {
-                                continue;
-                            };
-                            if doc.name() != name
-                                || !(name == rel || name.starts_with(&format!("{rel}/")))
-                            {
-                                continue;
-                            }
-                            if doc.edit_epoch.get() != epoch {
-                                preserved = true;
-                                continue;
-                            }
-                            doc.mark_saved();
-                            remove_tab(ui, &doc);
-                        }
-                        refresh_tree(ui);
-                        set_status(
-                            ui,
-                            &if preserved {
-                                format!("apagado {rel}; novas edições foram preservadas nas abas")
-                            } else {
-                                format!("apagado {rel}")
-                            },
-                        );
-                    }
-                    Err(e) => set_status(ui, &format!("apagar: {e}")),
-                },
-            );
+            let aviso = Rc::clone(&ui);
+            save_documents(&ui, docs, move || {
+                set_status(&aviso, &format!("salvo; `{rel}` não foi apagado"));
+            });
         }
     };
-    let then = RefCell::new(Some(then));
+    let then_apagar = RefCell::new(Some(then_apagar));
+    let then_salvar = RefCell::new(Some(then_salvar));
     let dlg = gtk::MessageDialog::builder()
         .transient_for(&window)
         .modal(true)
         .message_type(gtk::MessageType::Warning)
         .buttons(gtk::ButtonsType::None)
         .text(format!("Apagar `{rel}`?"))
+        .secondary_text(format!(
+            "Há alterações não salvas em:\n{nomes}\n\
+             Salvar grava esses arquivos e não apaga. Descartar apaga e perde as alterações."
+        ))
         .build();
     dlg.add_button("Cancelar", gtk::ResponseType::Cancel);
-    dlg.add_button("Apagar", gtk::ResponseType::Accept);
+    dlg.add_button("Descartar", gtk::ResponseType::Reject);
+    dlg.add_button("Salvar", gtk::ResponseType::Accept);
+    dlg.set_default_response(gtk::ResponseType::Cancel);
     dlg.connect_response(move |d, resp| {
         d.close();
-        if resp == gtk::ResponseType::Accept
-            && let Some(f) = then.borrow_mut().take()
-        {
-            f();
+        match resp {
+            gtk::ResponseType::Accept => {
+                if let Some(f) = then_salvar.borrow_mut().take() {
+                    f();
+                }
+            }
+            gtk::ResponseType::Reject => {
+                if let Some(f) = then_apagar.borrow_mut().take() {
+                    f();
+                }
+            }
+            _ => {}
         }
     });
     dlg.present();

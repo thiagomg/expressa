@@ -24,23 +24,25 @@ cor = funcao(g, cor) { 0 }
 /// Exemplo: g.fundo(:transparente)
 fundo = funcao(g, cor) { 0 }
 
-/// Reta da caneta. Pixels fora da tela são recortados.
+/// Reta da caneta. Coordenadas entre -4096 e 4096; fora disso é erro.
+/// Pixels fora da tela são recortados.
 ///
 /// Exemplo: g.linha(10, 10, 310, 190)
 linha = funcao(g, x1, y1, x2, y2) { 0 }
 
-/// Circunferência (contorno). Raio ≥ 0.
+/// Circunferência (contorno). Centro entre -4096 e 4096 e raio de 0 a 4096.
 ///
 /// Exemplo: g.circulo(160, 100, 40)
 circulo = funcao(g, x, y, r) { 0 }
 
-/// Um pixel da caneta. Fora da tela, ignora.
+/// Um pixel da caneta. Coordenadas entre -4096 e 4096. Fora da tela, ignora.
 ///
 /// Exemplo: g.ponto(5, 5)
 ponto = funcao(g, x, y) { 0 }
 
 /// Retângulo preenchido da caneta, cantos (x1, y1) e (x2, y2) inclusivos.
-/// A ordem dos cantos não importa. Pixels fora da tela são recortados.
+/// A ordem dos cantos não importa. Coordenadas entre -4096 e 4096.
+/// Pixels fora da tela são recortados.
 ///
 /// Exemplo: g.retangulo(10, 10, 40, 30)
 retangulo = funcao(g, x1, y1, x2, y2) { 0 }
@@ -49,7 +51,7 @@ retangulo = funcao(g, x1, y1, x2, y2) { 0 }
 /// texto(g, x, y, t, tamanho)
 ///
 /// Escreve t na caneta. (x, y) é o canto superior esquerdo do primeiro
-/// glifo. tamanho é a altura da célula em pixels (padrão 8). Acento e
+/// glifo, entre -4096 e 4096. tamanho é a altura da célula em pixels (padrão 8). Acento e
 /// ç entram. Quebra de linha (`\n`) desce uma célula. Fundo transparente.
 ///
 /// Exemplo: g.texto(8, 8, "olá")
@@ -59,7 +61,7 @@ texto = funcao(g, x, y, t, tamanho) { 0 }
 /// imagem(g, img, x, y, angulo)
 /// imagem(g, img, x, y)
 ///
-/// Carimba uma imagem centrada em (x, y). O segundo argumento é um caminho
+/// Carimba uma imagem centrada em (x, y), entre -4096 e 4096. O segundo argumento é um caminho
 /// PNG, um valor de `importe "imagem"` ou outra tela gráfica (vira imagem
 /// na hora). O arquivo é lido uma vez; os pixels ficam no comando. angulo
 /// é em graus, no sentido horário; 0 deixa o topo para cima. Pixels

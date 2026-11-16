@@ -168,6 +168,17 @@ impl Env {
         self.vars.insert(name.into(), value);
     }
 
+    /// Same as [`define`](Self::define) when the name is new. A name that is
+    /// already in this frame keeps its key, so a loop variable is not
+    /// allocated again on every iteration.
+    pub fn define_repetido(&mut self, name: &str, value: Value) {
+        if let Some(slot) = self.vars.get_mut(name) {
+            *slot = value;
+            return;
+        }
+        self.vars.insert(name.to_string(), value);
+    }
+
     pub fn get(env: &Rc<RefCell<Self>>, name: &str) -> Option<Value> {
         let e = env.borrow();
         if let Some(v) = e.vars.get(name) {

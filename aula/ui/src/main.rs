@@ -94,6 +94,62 @@ fn main() {
         build_ui_with_prefs(app, true, prefs.clone());
     });
     app.run();
+    if !background::persistence().flush(std::time::Duration::from_secs(3)) {
+        eprintln!("não deu tempo de gravar a sessão e as preferências");
+    }
+}
+
+/// Save the session and stop runs. Call this only after a busy run was
+/// confirmed (`interrupcao_aceita`) or when nothing is running.
+fn encerrar_janela(ui: &UiRc) {
+    sessao::salvar(ui);
+    sessao::limpar_copias(ui);
+    fechar_janelas_filhas(ui);
+    ui.borrow().closing.set(true);
+    ui.borrow().execucao.operations.cancel_all();
+    sessao::stop_copies(ui);
+    for doc in all_docs(ui) {
+        doc.cancel_pending();
+    }
+    ui.borrow().repl.encerrar();
+    ui.borrow_mut().files.shutdown();
+}
+
+fn execucao_ocupada(ui: &UiRc) -> bool {
+    ui.borrow()
+        .execucao
+        .execution
+        .availability()
+        .is_err()
+}
+
+/// Ask before interrupting a run. `depois` runs if the student accepts, or
+/// immediately when the run is already idle.
+fn perguntar_se_interrompe(
+    ui: &UiRc,
+    janela: &ApplicationWindow,
+    depois: impl FnOnce() + 'static,
+) {
+    if !execucao_ocupada(ui) {
+        depois();
+        return;
+    }
+    let dialog = gtk::AlertDialog::builder()
+        .modal(true)
+        .message("Há uma execução em andamento")
+        .detail(
+            "Fechar agora interrompe o programa ou o envio dos arquivos. \
+             A saída pode ficar para revisar depois.",
+        )
+        .buttons(["Cancelar", "Fechar"])
+        .cancel_button(0)
+        .default_button(0)
+        .build();
+    dialog.choose(Some(janela), None::<&gtk::gio::Cancellable>, move |r| {
+        if r == Ok(1) {
+            depois();
+        }
+    });
 }
 
 #[cfg(test)]
@@ -267,6 +323,8 @@ fn build_ui_with_prefs(app: &Application, startup: bool, prefs: Prefs) -> UiRc {
         theme_css,
         help: None,
         closing: std::cell::Cell::new(false),
+        interrupcao_aceita: std::cell::Cell::new(false),
+        geracao_status: Rc::new(std::cell::Cell::new(0)),
         geracao_arvore: 0,
         abas_fechadas: Vec::new(),
         sessao_pronta: false,
@@ -280,6 +338,7 @@ fn build_ui_with_prefs(app: &Application, startup: bool, prefs: Prefs) -> UiRc {
         repl: painel_repl::PainelRepl::new(),
         ajuda_win: RefCell::new(None),
     }));
+    registrar_status(&ui);
     let help = make_help(&ui);
     ui.borrow_mut().help = Some(help);
     let busca = busca_projeto::PainelBusca::new(&ui);
@@ -331,6 +390,13 @@ fn build_ui_with_prefs(app: &Application, startup: bool, prefs: Prefs) -> UiRc {
             painel.append_page(&b.widget, Some(&Label::new(Some("Busca"))));
         }
         painel.append_page(&u.repl.widget, Some(&Label::new(Some("REPL"))));
+        let repl_pagina = u.repl.widget.clone();
+        let repl = Rc::clone(&u.repl);
+        painel.connect_switch_page(move |_, widget, _| {
+            if widget == repl_pagina.upcast_ref::<gtk::Widget>() {
+                repl.garantir();
+            }
+        });
         painel.set_vexpand(true);
         bottom.append(painel);
     }
@@ -619,40 +685,36 @@ fn build_ui_with_prefs(app: &Application, startup: bool, prefs: Prefs) -> UiRc {
         });
         let ui_close = Rc::clone(&ui);
         win.connect_close_request(move |w| {
-            if ui_close.borrow().closing.get() {
-                sessao::salvar(&ui_close);
-                sessao::limpar_copias(&ui_close);
-                fechar_janelas_filhas(&ui_close);
-                ui_close.borrow().closing.set(true);
-                ui_close.borrow().execucao.operations.cancel_all();
-                sessao::stop_copies(&ui_close);
-                for doc in all_docs(&ui_close) {
-                    doc.cancel_pending();
-                }
-                ui_close.borrow().repl.encerrar();
-                ui_close.borrow_mut().files.shutdown();
+            let ocupada = execucao_ocupada(&ui_close);
+            let aceita = ui_close.borrow().interrupcao_aceita.get();
+            // `closing` is not permission to kill a run. The unsaved dialog
+            // used to set it and close again, and this branch then stopped
+            // the program without asking.
+            if ui_close.borrow().closing.get() && (!ocupada || aceita) {
+                encerrar_janela(&ui_close);
                 return glib::Propagation::Proceed;
             }
             let dirty: Vec<Rc<Doc>> = dirty_docs(&ui_close);
-            if dirty.is_empty() {
-                sessao::salvar(&ui_close);
-                sessao::limpar_copias(&ui_close);
-                fechar_janelas_filhas(&ui_close);
-                ui_close.borrow().closing.set(true);
-                ui_close.borrow().execucao.operations.cancel_all();
-                sessao::stop_copies(&ui_close);
-                for doc in all_docs(&ui_close) {
-                    doc.cancel_pending();
-                }
-                ui_close.borrow().repl.encerrar();
-                ui_close.borrow_mut().files.shutdown();
+            if dirty.is_empty() && !ocupada {
+                ui_close.borrow().interrupcao_aceita.set(true);
+                encerrar_janela(&ui_close);
                 return glib::Propagation::Proceed;
             }
             let ui_c = Rc::clone(&ui_close);
-            let w = w.clone();
-            confirm_unsaved(&ui_close, dirty, move || {
+            let janela = w.clone();
+            let seguir = move || {
+                ui_c.borrow().interrupcao_aceita.set(true);
                 ui_c.borrow().closing.set(true);
-                w.close();
+                janela.close();
+            };
+            if dirty.is_empty() {
+                perguntar_se_interrompe(&ui_close, w, seguir);
+                return glib::Propagation::Stop;
+            }
+            let ui_c = Rc::clone(&ui_close);
+            let janela = w.clone();
+            confirm_unsaved(&ui_close, dirty, move || {
+                perguntar_se_interrompe(&ui_c, &janela, seguir);
             });
             glib::Propagation::Stop
         });

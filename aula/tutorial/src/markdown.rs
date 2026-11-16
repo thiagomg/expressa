@@ -136,6 +136,7 @@ pub fn parse(src: &str) -> Vec<Block> {
             out.push(Block::List(items));
             continue;
         }
+        let inicio = i;
         let mut para = String::new();
         while i < lines.len() {
             let t = lines[i].trim();
@@ -155,7 +156,12 @@ pub fn parse(src: &str) -> Vec<Block> {
             para.push_str(t);
             i += 1;
         }
-        if !para.is_empty() {
+        if para.is_empty() {
+            // `#` sozinho, ou `| a |` sem a linha `|---|`, não é título nem
+            // tabela. Sem avançar, o laço externo revê a mesma linha.
+            out.push(Block::Paragraph(inlines(lines[inicio].trim())));
+            i = inicio + 1;
+        } else {
             out.push(Block::Paragraph(inlines(&para)));
         }
     }
@@ -323,6 +329,18 @@ mod tests {
         assert!(chapters(&a).len() >= 8);
         assert!(chapters(&b).len() >= 8);
         assert!(a.iter().any(|x| matches!(x, Block::Code { .. })));
+    }
+
+    #[test]
+    fn cerquilha_sozinha_e_linha_de_tabela_sem_separador_nao_travam() {
+        let so = parse("#\n\ntexto\n");
+        assert!(matches!(&so[0], Block::Paragraph(_)));
+        assert!(
+            matches!(&so[1], Block::Paragraph(v) if v.iter().any(|i| matches!(i, Inline::Text(t) if t == "texto")))
+        );
+        let tabela = parse("| a | b |\n\ndepois\n");
+        assert!(tabela.len() >= 2);
+        assert!(matches!(&tabela[0], Block::Paragraph(_)));
     }
 
     #[test]

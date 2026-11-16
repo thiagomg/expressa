@@ -91,6 +91,43 @@ fn delayed_open_allows_typing_and_main_loop_work_then_respects_project_switch() 
 }
 
 #[test]
+fn troca_de_projeto_durante_a_preparacao_libera_o_proximo_f5() {
+    gtk_test::run(|| {
+        let (ui, _dir, _app) = ui();
+        ui.borrow_mut()
+            .execucao
+            .execution
+            .transition(crate::execution_state::Event::Prepare)
+            .unwrap();
+        let (started, release, wait) = gate();
+        let s = started.clone();
+        let completed = Rc::new(std::cell::Cell::new(false));
+        let done = completed.clone();
+        async_result(
+            &ui,
+            "Preparando execução",
+            true,
+            move || {
+                s.store(true, Ordering::Release);
+                wait.recv_timeout(Duration::from_secs(10)).unwrap();
+                Ok(())
+            },
+            move |_, _| done.set(true),
+        );
+        spin_until(|| started.load(Ordering::Acquire));
+        ui.borrow_mut().project_epoch += 1;
+        release.send(()).unwrap();
+        spin_until(|| ui.borrow().execucao.execution.availability().is_ok());
+        assert!(!completed.get(), "callback da preparação antiga rodou");
+        assert_eq!(
+            ui.borrow().execucao.execution,
+            crate::execution_state::ExecutionState::Idle
+        );
+        dispose(&ui);
+    });
+}
+
+#[test]
 fn edits_during_save_remain_dirty_and_the_next_save_uses_the_new_receipt() {
     gtk_test::run(|| {
         let (ui, dir, _app) = ui();

@@ -1,4 +1,4 @@
-# Arquivos Expressa Bytecode (.exb), versão 1
+# Arquivos Expressa Bytecode (.exb), versão 2
 
 ## Uso
 
@@ -38,16 +38,16 @@ O `.lep` original não precisa existir. Imports que ainda apontam para `.lep` co
 - `run_compiled_with_options(program, execution_file, stdin, options)`: reutiliza código já validado; cada execução cria novos globais.
 - `run_exb_file_args(path, args, ExbRunMode)`: entrada CLI com modos `Run`, `Debug` e `Marker`.
 
-`execution_file` define a base dos caminhos relativos. O texto e o nome originais ficam disponíveis por `CompiledProgram::source()`/`source_name()`. Código e tabelas internas não são mutáveis pela API. `ExbError` informa mensagem e offset; erros de execução continuam sendo `RuntimeError`, com os spans e frames do fonte original.
+`execution_file` define a base dos caminhos relativos. O nome embutido no arquivo é o caminho passado na compilação (`source_name`); um import relativo resolve a partir do diretório do `.exb` em execução, não a partir desse nome. O texto e o nome originais ficam disponíveis por `CompiledProgram::source()`/`source_name()`. Código e tabelas internas não são mutáveis pela API. `ExbError` informa mensagem e offset; erros de execução continuam sendo `RuntimeError`, com os spans e frames do fonte original.
 
-## Contrato binário v1
+## Contrato binário v2
 
 Todos os inteiros têm largura fixa e ordem **little-endian**. Textos são UTF-8 com comprimento em **bytes** u32; contagens e índices são u32, nunca `usize` ou ponteiros Rust. Nenhuma representação de `enum`, `Rc`, `HashMap` ou `Value` é gravada diretamente.
 
 | Offset | Tamanho | Campo |
 | --- | ---: | --- |
 | 0 | 4 | Magic `45 58 42 00` (`EXB\0`) |
-| 4 | 2 | Versão, u16 = 1 |
+| 4 | 2 | Versão, u16 = 2 |
 | 6 | 2 | Recursos, u16 = 3: decimal96 e fonte de depuração presente |
 | 8 | 4 | Comprimento do payload u32 |
 | 12 | 8 | FNV-1a-64 do payload, u64 |
@@ -71,7 +71,7 @@ Uma string opcional usa byte 0/1 seguido da string quando presente. O tipo de la
 
 Decimal: quatro u32 LE, na ordem flags, magnitude baixa, média e alta. A magnitude tem 96 bits. Nas flags, bit 31 é sinal e bits 16–23 são escala de 0 a 28; os demais bits precisam ser zero. Sinal, escala e precisão são preservados, incluindo zero com sinal. Não há conversão intermediária por f64 ou texto.
 
-## Opcodes v1
+## Opcodes v2
 
 A coluna abaixo fixa os números de arquivo. `(value)`/`target` são operandos u32; `Call` leva `argc` e `name`, ambos u32. Operações sem campos não têm payload. Booleanos, operações unárias/binárias e os dois sentidos de curto-circuito têm tags próprias. Toda instrução termina com o índice de span u32.
 
@@ -143,15 +143,13 @@ A coluna abaixo fixa os números de arquivo. `(value)`/`target` são operandos u
 | 63 | `Op::Binary(BinaryOp::Le)` |
 | 64 | `Op::Binary(BinaryOp::Gt)` |
 | 65 | `Op::Binary(BinaryOp::Ge)` |
-| 66 | `Op::Binary(BinaryOp::And)` |
-| 67 | `Op::Binary(BinaryOp::Or)` |
 | 68 | `Op::Binary(BinaryOp::Contem)` |
 | 69 | `Op::ShortCircuit { target, value: false }` |
 | 70 | `Op::ShortCircuit { target, value: true }` |
 | 71 | `Op::Call { argc, name }` |
 | 72 | `Op::Garanta { cond }` |
 
-Esses números são independentes dos discriminantes Rust. Mudanças incompatíveis de layout, operandos ou semântica de instruções exigem uma revisão de versão. O loader atual aceita somente v1 e os recursos 3. A resolução de bibliotecas nativas continua sendo responsabilidade do runtime instalado.
+Esses números são independentes dos discriminantes Rust. As tags 66 e 67 ficam vagas de propósito e o loader as rejeita com `opcode EXB inválido`. `e` e `ou` não são instruções binárias: o compilador emite curto-circuito nas tags 69 e 70. Mudanças incompatíveis de layout, operandos ou semântica de instruções exigem uma revisão de versão. O loader atual aceita somente a versão 2 e os recursos 3. A versão 1 é rejeitada (`versão EXB não suportada`): o significado de algumas instruções mudou (laço de faixa exclusivo e fatia que produz uma faixa) sem um arquivo publicado nessa versão. A resolução de bibliotecas nativas continua sendo responsabilidade do runtime instalado.
 
 ## Validação e limites do leitor desktop
 
@@ -163,6 +161,6 @@ O perfil atual limita arquivo a 16 MiB, soma de elementos a 250.000, aninhamento
 
 ## Testes e medições
 
-Há fixture v1 independente de otimizações do compilador, roundtrip de todos os opcodes, decimais exatos, Unicode/CRLF, arquivos truncados/corrompidos e mutações com checksum válida. A paridade AST/bytecode agora inclui execução carregada de `.exb` para os casos de fonte válidos. A CLI é testada sem o `.lep` original, com argumentos, saída não zero, marker, depuração e módulos relativos.
+Há fixture v2 independente de otimizações do compilador, roundtrip dos opcodes aceitos (66 e 67 ficam de fora), decimais exatos, Unicode/CRLF, arquivos truncados/corrompidos e mutações com checksum válida que também executam sem pânico. A versão 1 é rejeitada. A paridade AST/bytecode agora inclui execução carregada de `.exb` para os casos de fonte válidos. A CLI é testada sem o `.lep` original, com argumentos, saída não zero, marker, depuração e módulos relativos.
 
 [Relatório de implementação e comparação de CPU/RSS](../benchmarks/EXB-V1-REVIEW.md).

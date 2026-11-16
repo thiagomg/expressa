@@ -112,7 +112,8 @@ formato = funcao(padrao) { 0 }
 ///
 /// Cada {} (ou {0}, {1}, …) é substituído pelo valor correspondente.
 /// Sem < > ^, texto encosta à esquerda e número à direita: {:8}.
-/// Se o valor já é mais largo que n, entra inteiro. {0} é o primeiro valor.
+/// Se o valor já é mais largo que n, entra inteiro. n vai de 0 a 10000;
+/// acima disso formate devolve erro. {0} é o primeiro valor.
 /// {{ e }} escrevem { e }. Números seguem o formato atual.
 /// Mapa com :_como_texto (função de um argumento que devolve texto) usa essa função.
 ///

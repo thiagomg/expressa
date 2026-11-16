@@ -8,9 +8,7 @@ num_sec = aleatório(1, 100)
 num = leia("Palpite: ")
 adivinhou = falso
 enquanto num.tamanho() > 0 
-início
-    
-    // TODO: Adicionar acento
+início    
     nv = numero(num)
 
     se nv == num_sec
