@@ -360,8 +360,9 @@ fn apagar_sobras_com_trava(dir: &Path, sobras: &[PathBuf]) {
     let _ = lock.unlock();
 }
 
-/// Modification time in nanoseconds since 1970, or 0 if the system has none.
-fn mesmo_arquivo(a: &fs::Metadata, b: &fs::Metadata) -> bool {
+/// Compare filesystem identities, including directories and case-only renames.
+fn mesmo_arquivo(a: &fs::Metadata, b: &fs::Metadata, from: &Path, to: &Path) -> bool {
+    let _ = (a, b, from, to);
     #[cfg(unix)]
     {
         use std::os::unix::fs::MetadataExt;
@@ -369,8 +370,31 @@ fn mesmo_arquivo(a: &fs::Metadata, b: &fs::Metadata) -> bool {
     }
     #[cfg(windows)]
     {
-        use std::os::windows::fs::MetadataExt;
-        a.volume_serial_number() == b.volume_serial_number() && a.file_index() == b.file_index()
+        use std::os::windows::{fs::OpenOptionsExt, io::AsRawHandle};
+        use windows_sys::Win32::Storage::FileSystem::{
+            BY_HANDLE_FILE_INFORMATION, FILE_FLAG_BACKUP_SEMANTICS, FILE_FLAG_OPEN_REPARSE_POINT,
+            GetFileInformationByHandle,
+        };
+
+        fn identity(path: &Path) -> std::io::Result<(u32, u32, u32)> {
+            let file = fs::OpenOptions::new()
+                .access_mode(0)
+                .custom_flags(FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT)
+                .open(path)?;
+            let mut info = std::mem::MaybeUninit::<BY_HANDLE_FILE_INFORMATION>::uninit();
+            // SAFETY: the handle is live and info points to writable storage.
+            if unsafe { GetFileInformationByHandle(file.as_raw_handle(), info.as_mut_ptr()) } == 0 {
+                return Err(std::io::Error::last_os_error());
+            }
+            // SAFETY: a successful call initialized the structure.
+            let info = unsafe { info.assume_init() };
+            Ok((
+                info.dwVolumeSerialNumber,
+                info.nFileIndexHigh,
+                info.nFileIndexLow,
+            ))
+        }
+        matches!((identity(from), identity(to)), (Ok(a), Ok(b)) if a == b)
     }
     #[cfg(not(any(unix, windows)))]
     {
@@ -649,7 +673,7 @@ impl Turma for Aula {
                 return Ok(Response::new(RenameResponse {}));
             }
             if let Ok(destino) = to.symlink_metadata()
-                && !mesmo_arquivo(&origem, &destino)
+                && !mesmo_arquivo(&origem, &destino, &from, &to)
             {
                 return Err(ja_existe(&req.to));
             }
@@ -1077,6 +1101,19 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(ler(&aula, "a.lep"), "salvo");
+        let _ = fs::remove_dir_all(&aula.root);
+    }
+
+    #[cfg(windows)]
+    #[tokio::test]
+    async fn renomear_apenas_maiusculas_windows() {
+        let aula = servidor("rename-case");
+        aula.rename(renomear("a.lep", "A.lep")).await.unwrap();
+        assert_eq!(ler(&aula, "A.lep"), "original");
+        let project = aula.root.join("ana/principal");
+        fs::create_dir(project.join("pasta")).unwrap();
+        aula.rename(renomear("pasta", "Pasta")).await.unwrap();
+        assert!(project.join("Pasta").is_dir());
         let _ = fs::remove_dir_all(&aula.root);
     }
 
