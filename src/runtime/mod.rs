@@ -16,6 +16,7 @@ mod leia;
 mod letterbox;
 mod nativas;
 mod numero;
+pub(crate) use numero::parse_numero;
 mod pilha;
 #[cfg(feature = "process")]
 mod processo;

@@ -1,6 +1,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 
 use expressa_aula_proto::turma_server::Turma;
 use expressa_aula_proto::{
@@ -16,6 +17,8 @@ use tonic::{Request, Response, Status};
 use crate::{paths, projetos};
 
 const MAX_DISK_OPERATIONS: usize = 4;
+/// How long one call waits for a disk slot before "servidor ocupado".
+const ESPERA_DISCO: Duration = Duration::from_secs(2);
 const MAX_TREE_ENTRIES: usize = 20_000;
 const MAX_TREE_DEPTH: usize = 64;
 const MAX_FILE_BYTES: usize = 3 * 1024 * 1024;
@@ -30,10 +33,39 @@ fn ja_existe(rel: &str) -> Status {
 }
 
 fn interno(e: std::io::Error) -> Status {
-    if e.kind() == std::io::ErrorKind::InvalidData {
-        Status::resource_exhausted(e.to_string())
-    } else {
-        Status::internal(e.to_string())
+    status_de_io(e)
+}
+
+fn status_de_io(e: std::io::Error) -> Status {
+    match e.kind() {
+        std::io::ErrorKind::NotFound => Status::not_found(e.to_string()),
+        std::io::ErrorKind::AlreadyExists => Status::already_exists(e.to_string()),
+        std::io::ErrorKind::PermissionDenied => Status::permission_denied(e.to_string()),
+        std::io::ErrorKind::InvalidInput => Status::invalid_argument(e.to_string()),
+        std::io::ErrorKind::InvalidData => Status::out_of_range(e.to_string()),
+        _ => Status::internal(e.to_string()),
+    }
+}
+
+fn ocupado() -> Status {
+    Status::resource_exhausted("servidor ocupado; tente novamente")
+}
+
+fn esperar_disco_bloqueante(
+    disco: &Arc<tokio::sync::Semaphore>,
+) -> Result<tokio::sync::OwnedSemaphorePermit, Status> {
+    let fim = Instant::now() + ESPERA_DISCO;
+    loop {
+        match disco.clone().try_acquire_owned() {
+            Ok(permit) => return Ok(permit),
+            Err(tokio::sync::TryAcquireError::Closed) => return Err(ocupado()),
+            Err(tokio::sync::TryAcquireError::NoPermits) => {
+                if Instant::now() >= fim {
+                    return Err(ocupado());
+                }
+                std::thread::sleep(Duration::from_millis(20));
+            }
+        }
     }
 }
 
@@ -66,19 +98,34 @@ impl Aula {
         }
     }
 
+    async fn permissao_disco(&self) -> Result<tokio::sync::OwnedSemaphorePermit, Status> {
+        match tokio::time::timeout(ESPERA_DISCO, self.disco.clone().acquire_owned()).await {
+            Ok(Ok(permit)) => Ok(permit),
+            _ => Err(ocupado()),
+        }
+    }
+
+    /// `mutacao` takes the file lock before a disk slot, so a save waiting
+    /// on another save does not occupy one of the four permits.
     async fn blocking<T: Send + 'static>(
         &self,
+        mutacao: bool,
         work: impl FnOnce(Self) -> Result<T, Status> + Send + 'static,
     ) -> Result<T, Status> {
-        // Acquire before spawning: neither waiting requests nor blocking jobs
-        // can grow without bound. The permit stays with a running OS call even
-        // if its RPC future is dropped.
-        let permit = self
-            .disco
-            .clone()
-            .try_acquire_owned()
-            .map_err(|_| Status::resource_exhausted("servidor ocupado; tente novamente"))?;
         let aula = self.clone();
+        if mutacao {
+            let disco = Arc::clone(&aula.disco);
+            let arquivos = Arc::clone(&aula.arquivos);
+            return tokio::task::spawn_blocking(move || {
+                let _vez = arquivos.lock().unwrap_or_else(|e| e.into_inner());
+                let _permit = esperar_disco_bloqueante(&disco)?;
+                work(aula)
+            })
+            .await
+            .map_err(|_| Status::internal("falha na operação de arquivos"))?;
+        }
+        // The permit stays with a running OS call even if its RPC future is dropped.
+        let permit = self.permissao_disco().await?;
         tokio::task::spawn_blocking(move || {
             let _permit = permit;
             work(aula)
@@ -106,7 +153,7 @@ impl Aula {
             if paths::sanitize_project(project) == Ok(paths::PROJETO_PADRAO) {
                 fs::create_dir_all(&dir).map_err(interno)?;
             } else {
-                return Err(Status::not_found(format!(
+                return Err(Status::failed_precondition(format!(
                     "projeto `{}` não existe",
                     project.trim()
                 )));
@@ -130,9 +177,8 @@ impl Aula {
         expected_revision: &str,
     ) -> Result<WriteFileResponse, Status> {
         if contents.len() > MAX_FILE_BYTES {
-            return Err(Status::resource_exhausted("arquivo grande demais"));
+            return Err(Status::out_of_range("arquivo grande demais"));
         }
-        let _vez = self.arquivos.lock().unwrap_or_else(|e| e.into_inner());
         let dest = self.file(student, project, path)?;
         let expected = if create_new {
             Expected::Missing
@@ -147,6 +193,7 @@ impl Aula {
         let saved = storage::save(&dest, contents, &expected).map_err(|e| match e {
             SaveError::Conflict => Status::aborted("o arquivo mudou desde que foi lido"),
             SaveError::AlreadyExists => ja_existe(path),
+            SaveError::Io(e) => status_de_io(e),
             other => Status::internal(other.to_string()),
         })?;
         Ok(WriteFileResponse {
@@ -157,6 +204,25 @@ impl Aula {
 }
 
 /// Modification time in nanoseconds since 1970, or 0 if the system has none.
+fn mesmo_arquivo(a: &fs::Metadata, b: &fs::Metadata) -> bool {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        return a.dev() == b.dev() && a.ino() == b.ino();
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::MetadataExt;
+        return a.volume_serial_number() == b.volume_serial_number()
+            && a.file_index() == b.file_index();
+    }
+    #[cfg(not(any(unix, windows)))]
+    {
+        let _ = (a, b);
+        false
+    }
+}
+
 fn modificado_ns(meta: &fs::Metadata) -> i64 {
     meta.modified()
         .ok()
@@ -189,8 +255,8 @@ fn walk_tree(dir: &Path, out: &mut Vec<TreeEntry>, prefix: &Path) -> std::io::Re
         ));
     }
     entries.sort_by(|a, b| {
-        let a_dir = a.path().is_dir();
-        let b_dir = b.path().is_dir();
+        let a_dir = a.file_type().is_ok_and(|t| t.is_dir());
+        let b_dir = b.file_type().is_ok_and(|t| t.is_dir());
         match (a_dir, b_dir) {
             (true, false) => std::cmp::Ordering::Less,
             (false, true) => std::cmp::Ordering::Greater,
@@ -207,12 +273,20 @@ fn walk_tree(dir: &Path, out: &mut Vec<TreeEntry>, prefix: &Path) -> std::io::Re
                 "projeto com arquivos demais",
             ));
         }
-        if entry.file_type()?.is_symlink() {
+        let tipo = match entry.file_type() {
+            Ok(tipo) => tipo,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(e) => return Err(e),
+        };
+        if tipo.is_symlink() {
             continue;
         }
         let path = entry.path();
         let rel = paths::relative_to(prefix, &path);
-        if path.is_dir() {
+        if !storage::caminho_relativo_valido(&rel) {
+            continue;
+        }
+        if tipo.is_dir() {
             out.push(TreeEntry {
                 path: rel,
                 is_dir: true,
@@ -220,7 +294,11 @@ fn walk_tree(dir: &Path, out: &mut Vec<TreeEntry>, prefix: &Path) -> std::io::Re
             });
             walk_tree(&path, out, prefix)?;
         } else {
-            let meta = entry.metadata()?;
+            let meta = match entry.metadata() {
+                Ok(meta) => meta,
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => continue,
+                Err(e) => return Err(e),
+            };
             out.push(TreeEntry {
                 path: rel,
                 is_dir: false,
@@ -238,7 +316,7 @@ impl Turma for Aula {
         &self,
         request: Request<ListProjectsRequest>,
     ) -> Result<Response<ListProjectsResponse>, Status> {
-        self.blocking(move |aula| {
+        self.blocking(false, move |aula| {
             let req = request.into_inner();
             let dir = aula.aluno(&req.student)?;
             let projects = projetos::listar(&dir).map_err(interno)?;
@@ -251,7 +329,7 @@ impl Turma for Aula {
         &self,
         request: Request<CreateProjectRequest>,
     ) -> Result<Response<CreateProjectResponse>, Status> {
-        self.blocking(move |aula| {
+        self.blocking(true, move |aula| {
             let req = request.into_inner();
             if req.project.trim().is_empty() {
                 return Err(Status::invalid_argument("dê um nome ao projeto"));
@@ -274,7 +352,7 @@ impl Turma for Aula {
         &self,
         request: Request<ListFilesRequest>,
     ) -> Result<Response<ListFilesResponse>, Status> {
-        self.blocking(move |aula| {
+        self.blocking(false, move |aula| {
             let req = request.into_inner();
             let dir = aula.projeto(&req.student, &req.project)?;
             let mut entries = Vec::new();
@@ -288,7 +366,7 @@ impl Turma for Aula {
         &self,
         request: Request<ReadFileRequest>,
     ) -> Result<Response<ReadFileResponse>, Status> {
-        self.blocking(move |aula| {
+        self.blocking(false, move |aula| {
             let req = request.into_inner();
             let path = aula.file(&req.student, &req.project, &req.path)?;
             let snapshot = storage::read_limited(&path, MAX_FILE_BYTES).map_err(ler_erro)?;
@@ -306,7 +384,7 @@ impl Turma for Aula {
         &self,
         request: Request<WriteFileRequest>,
     ) -> Result<Response<WriteFileResponse>, Status> {
-        self.blocking(move |aula| {
+        self.blocking(true, move |aula| {
             let req = request.into_inner();
             let saved = aula.save_contents(
                 &req.student,
@@ -332,7 +410,7 @@ impl Turma for Aula {
         &self,
         request: Request<ReadFileBytesRequest>,
     ) -> Result<Response<ReadFileBytesResponse>, Status> {
-        self.blocking(move |aula| {
+        self.blocking(false, move |aula| {
             let req = request.into_inner();
             let path = aula.file(&req.student, &req.project, &req.path)?;
             let snapshot = storage::read_limited(&path, MAX_FILE_BYTES).map_err(ler_erro)?;
@@ -348,7 +426,7 @@ impl Turma for Aula {
         &self,
         request: Request<WriteFileBytesRequest>,
     ) -> Result<Response<WriteFileResponse>, Status> {
-        self.blocking(move |aula| {
+        self.blocking(true, move |aula| {
             let req = request.into_inner();
             let saved = aula.save_contents(
                 &req.student,
@@ -367,14 +445,13 @@ impl Turma for Aula {
         &self,
         request: Request<DeleteFileRequest>,
     ) -> Result<Response<DeleteFileResponse>, Status> {
-        self.blocking(move |aula| {
+        self.blocking(true, move |aula| {
             let req = request.into_inner();
-            let _vez = aula.arquivos.lock().unwrap_or_else(|e| e.into_inner());
             let path = aula.file(&req.student, &req.project, &req.path)?;
             if path.is_dir() {
-                fs::remove_dir_all(&path).map_err(|e| Status::internal(e.to_string()))?;
+                fs::remove_dir_all(&path).map_err(status_de_io)?;
             } else {
-                fs::remove_file(&path).map_err(|e| Status::not_found(e.to_string()))?;
+                fs::remove_file(&path).map_err(status_de_io)?;
             }
             Ok(Response::new(DeleteFileResponse {}))
         })
@@ -385,10 +462,16 @@ impl Turma for Aula {
         &self,
         request: Request<MkdirRequest>,
     ) -> Result<Response<MkdirResponse>, Status> {
-        self.blocking(move |aula| {
+        self.blocking(true, move |aula| {
             let req = request.into_inner();
             let path = aula.file(&req.student, &req.project, &req.path)?;
-            fs::create_dir_all(&path).map_err(|e| Status::internal(e.to_string()))?;
+            if path.symlink_metadata().is_ok_and(|m| !m.is_dir()) {
+                return Err(Status::already_exists(format!(
+                    "já existe um arquivo em `{}`",
+                    req.path
+                )));
+            }
+            fs::create_dir_all(&path).map_err(status_de_io)?;
             Ok(Response::new(MkdirResponse {}))
         })
         .await
@@ -398,22 +481,34 @@ impl Turma for Aula {
         &self,
         request: Request<RenameRequest>,
     ) -> Result<Response<RenameResponse>, Status> {
-        self.blocking(move |aula| {
+        self.blocking(true, move |aula| {
             let req = request.into_inner();
-            let _vez = aula.arquivos.lock().unwrap_or_else(|e| e.into_inner());
             let from = aula.file(&req.student, &req.project, &req.from)?;
+            let origem = match from.symlink_metadata() {
+                Ok(meta) => meta,
+                Err(e) => return Err(status_de_io(e)),
+            };
             let to = aula.file(&req.student, &req.project, &req.to)?;
             if from == to {
                 return Ok(Response::new(RenameResponse {}));
             }
-            // `fs::rename` replaces an existing file on Unix.
-            if to.symlink_metadata().is_ok() {
-                return Err(ja_existe(&req.to));
+            if let Ok(destino) = to.symlink_metadata() {
+                if !mesmo_arquivo(&origem, &destino) {
+                    return Err(ja_existe(&req.to));
+                }
             }
-            if let Some(parent) = to.parent() {
-                fs::create_dir_all(parent).map_err(|e| Status::internal(e.to_string()))?;
+            if let Some(parent) = to.parent()
+                && parent != Path::new("")
+            {
+                if parent.symlink_metadata().is_ok_and(|m| !m.is_dir()) {
+                    return Err(Status::failed_precondition(format!(
+                        "não dá para criar a pasta de `{}`",
+                        req.to
+                    )));
+                }
+                fs::create_dir_all(parent).map_err(status_de_io)?;
             }
-            fs::rename(&from, &to).map_err(|e| Status::internal(e.to_string()))?;
+            fs::rename(&from, &to).map_err(status_de_io)?;
             Ok(Response::new(RenameResponse {}))
         })
         .await
@@ -433,7 +528,7 @@ mod tests {
         let worker = aula.clone();
         let task = tokio::spawn(async move {
             worker
-                .blocking(move |_| {
+                .blocking(false, move |_| {
                     started.blocking_send(()).unwrap();
                     wait.recv_timeout(std::time::Duration::from_secs(10))
                         .unwrap();
@@ -453,7 +548,7 @@ mod tests {
             .try_acquire_many_owned((MAX_DISK_OPERATIONS - 1) as u32)
             .unwrap();
         assert_eq!(
-            aula.blocking(|_| Ok(())).await.unwrap_err().code(),
+            aula.blocking(false, |_| Ok(())).await.unwrap_err().code(),
             Code::ResourceExhausted
         );
         task.abort();
@@ -470,7 +565,7 @@ mod tests {
             assert!(std::time::Instant::now() < end);
             tokio::task::yield_now().await;
         }
-        aula.blocking(|_| Ok(())).await.unwrap();
+        aula.blocking(false, |_| Ok(())).await.unwrap();
     }
 
     #[tokio::test]
@@ -484,7 +579,7 @@ mod tests {
         let req = escrever("a.lep", &"x".repeat(MAX_FILE_BYTES + 1), false);
         assert_eq!(
             aula.write_file(req).await.unwrap_err().code(),
-            Code::ResourceExhausted
+            Code::OutOfRange
         );
         assert_eq!(ler(&aula, "a.lep"), "original");
         let _ = fs::remove_dir_all(&aula.root);
@@ -590,7 +685,7 @@ mod tests {
             }))
             .await
             .unwrap_err();
-        assert_eq!(err.code(), Code::ResourceExhausted);
+        assert_eq!(err.code(), Code::OutOfRange);
         assert_eq!(ler(&aula, "a.lep"), "original");
         let _ = fs::remove_dir_all(&aula.root);
     }
@@ -779,7 +874,8 @@ mod tests {
             .write_file(escrever_em("aual-2", "a.lep", "x", false))
             .await
             .unwrap_err();
-        assert_eq!(err.code(), Code::NotFound);
+        assert_eq!(err.code(), Code::FailedPrecondition);
+        assert!(err.message().contains("não existe"));
         assert_eq!(projetos(&aula, "ana").await, ["principal"]);
         let _ = fs::remove_dir_all(&aula.root);
     }
@@ -842,7 +938,7 @@ mod tests {
         aula.rename(renomear("b.lep", "c.lep")).await.unwrap();
         assert_eq!(ler(&aula, "c.lep"), "outro");
         // Same name: nothing to do, and nothing lost.
-        aula.rename(renomear("a.lep", "./a.lep")).await.unwrap();
+        aula.rename(renomear("a.lep", "a.lep")).await.unwrap();
         assert_eq!(ler(&aula, "a.lep"), "original");
         let _ = fs::remove_dir_all(&aula.root);
     }

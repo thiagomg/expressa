@@ -432,6 +432,102 @@ fn opcodes_66_and_67_are_rejected() {
 }
 
 #[test]
+fn loop_kind_one_is_exclusive_range_and_slice_builds_faixa() {
+    let lugar = Span::new(1, 1, 0, 1);
+    let ops = [
+        Op::Constant(0),
+        Op::Constant(1),
+        Op::LoopEnter(0),
+        Op::LoopNext(0),
+        Op::LoopBody,
+        Op::Checkpoint,
+        Op::Load(1),
+        Op::Load(0),
+        Op::Call { argc: 1, name: 1 },
+        Op::Drop,
+        Op::Jump(3),
+        Op::LoopEnd,
+        Op::Load(1),
+        Op::Constant(0),
+        Op::Constant(2),
+        Op::Slice(true),
+        Op::Call { argc: 1, name: 1 },
+        Op::Drop,
+        Op::Nada,
+        Op::Finish,
+    ];
+    let program = CompiledProgram {
+        source_name: "faixa.lep".into(),
+        source: Rc::from("faixa"),
+        span: lugar,
+        code: Rc::new(Chunk {
+            parameter_slots: Rc::new(HashMap::new()),
+            instructions: ops
+                .into_iter()
+                .map(|op| Instruction { op, span: 0 })
+                .collect(),
+            spans: vec![lugar],
+            names: vec!["i".into(), "escreva".into()],
+            constants: vec![
+                Value::Numero(Numero::from_i64(1)),
+                Value::Numero(Numero::from_i64(3)),
+                Value::Numero(Numero::from_i64(4)),
+            ],
+            functions: vec![],
+            imports: vec![],
+            loops: vec![LoopSpec {
+                kind: LoopKind::Range,
+                var: Some(0),
+                first_span: lugar,
+                second_span: lugar,
+                next: 3,
+                exit: 11,
+            }],
+        }),
+    };
+    let bytes = forged(&program);
+    assert_eq!(loop_kind_byte(&bytes), 1, "tipo 1 é a faixa exclusiva");
+    let loaded = load_exb(&bytes).unwrap();
+    assert!(matches!(loaded.code.loops[0].kind, LoopKind::Range));
+    let result = crate::runtime::run_compiled_with_options(
+        &loaded,
+        "faixa.exb",
+        "",
+        ExecutionOptions {
+            backend: ExecutionBackend::Bytecode,
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    assert_eq!(result.stdout, "1\n2\n1..4\n");
+}
+
+fn loop_kind_byte(bytes: &[u8]) -> u8 {
+    let mut r = Reader::new(&bytes[HEADER..]);
+    r.string().unwrap();
+    r.string().unwrap();
+    r.span().unwrap();
+    r.vector(16, Reader::span).unwrap();
+    r.vector(4, Reader::string).unwrap();
+    let constants = r.u32().unwrap();
+    for _ in 0..constants {
+        match r.u8().unwrap() {
+            0 => {
+                r.take(16).unwrap();
+            }
+            1 => {
+                r.string().unwrap();
+            }
+            other => panic!("constante {other}"),
+        }
+    }
+    assert_eq!(r.u32().unwrap(), 0, "funções");
+    assert_eq!(r.u32().unwrap(), 0, "importações");
+    assert_eq!(r.u32().unwrap(), 1, "laços");
+    r.u8().unwrap()
+}
+
+#[test]
 fn short_circuit_binary_ops_are_errors_not_panics() {
     for op in [BinaryOp::And, BinaryOp::Or] {
         let mut program = fixture("escreva(1 + 2)");

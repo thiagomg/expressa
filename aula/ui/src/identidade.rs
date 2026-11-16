@@ -42,7 +42,10 @@ pub fn normalize_endpoint(url: &str) -> Result<String, String> {
         .scheme_str()
         .ok_or("servidor sem protocolo")?
         .to_ascii_lowercase();
-    if scheme != "http" && scheme != "https" {
+    if scheme == "https" {
+        return Err("o servidor da sala não usa https; use http://".into());
+    }
+    if scheme != "http" {
         return Err("protocolo do servidor inválido".into());
     }
     let host = uri
@@ -54,7 +57,6 @@ pub fn normalize_endpoint(url: &str) -> Result<String, String> {
     }
     let port = match uri.port_u16() {
         Some(80) if scheme == "http" => String::new(),
-        Some(443) if scheme == "https" => String::new(),
         Some(port) => format!(":{port}"),
         None => String::new(),
     };
@@ -73,9 +75,10 @@ mod tests {
             normalize_endpoint("http://EXAMPLE.com:80/").unwrap(),
             "http://example.com"
         );
-        assert_eq!(
-            normalize_endpoint("https://EXAMPLE.com:443/").unwrap(),
-            "https://example.com"
+        assert!(
+            normalize_endpoint("https://EXAMPLE.com:443/")
+                .unwrap_err()
+                .contains("https")
         );
         assert_ne!(
             normalize_endpoint("http://server/api").unwrap(),

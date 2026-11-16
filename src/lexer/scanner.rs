@@ -1,3 +1,4 @@
+use crate::lexer::nfc::em_nfc;
 use crate::lexer::tokens::keyword;
 use crate::lexer::{Span, TokenKind};
 
@@ -164,14 +165,14 @@ impl<'src> Scanner<'src> {
         // Ident / keyword
         if Self::is_ident_start(ch) {
             while let Some(c) = self.peek() {
-                if Self::is_ident_continue(c) {
+                if Self::is_ident_continue(c) || marca_combinante(c) {
                     self.remove();
                 } else {
                     break;
                 }
             }
-            let word = &self.source[start..self.pos];
-            let kind = keyword(word).unwrap_or_else(|| TokenKind::Ident(word.to_string()));
+            let word = em_nfc(&self.source[start..self.pos]);
+            let kind = keyword(&word).unwrap_or_else(|| TokenKind::Ident(word.into_owned()));
             return token!(kind);
         }
 
@@ -347,12 +348,17 @@ impl<'src> Scanner<'src> {
                     self.remove();
                 }
                 Some('/') if self.skip_peek(1) == Some('/') => {
-                    // `///text` is a DocComment token. `////` is a normal comment.
-                    if self.skip_peek(2) == Some('/') && self.skip_peek(3) != Some('/') {
+                    // `///` at the start of a line is a DocComment. `////`,
+                    // and `///` after other code on the same line, is `//`.
+                    let doc = self.skip_peek(2) == Some('/') && self.skip_peek(3) != Some('/');
+                    if doc && self.so_espaco_desde_a_quebra() {
                         return Ok(());
                     }
                     self.remove(); // /
                     self.remove(); // /
+                    if doc {
+                        self.remove();
+                    }
                     while let Some(c) = self.peek() {
                         if c == '\n' {
                             break;
@@ -413,7 +419,14 @@ impl<'src> Scanner<'src> {
             }
             self.remove();
         }
-        let text = self.source[text_start..self.pos].to_string();
+        let mut text = self.source[text_start..self.pos].to_string();
+        if text.ends_with('\r') {
+            text.pop();
+        }
+        let text = match em_nfc(&text) {
+            std::borrow::Cow::Borrowed(_) => text,
+            std::borrow::Cow::Owned(composto) => composto,
+        };
         Ok(Token {
             kind: TokenKind::DocComment(text),
             span: Span {
@@ -495,6 +508,11 @@ impl<'src> Scanner<'src> {
                         }
                     }
                 }
+                Some('\r') if self.skip_peek(1) == Some('\n') => {
+                    self.remove();
+                    self.remove();
+                    value.push('\n');
+                }
                 Some(c) => {
                     // Includes raw newlines (multiline strings).
                     self.remove();
@@ -503,7 +521,10 @@ impl<'src> Scanner<'src> {
             }
         }
 
-        Ok(value)
+        Ok(match em_nfc(&value) {
+            std::borrow::Cow::Borrowed(_) => value,
+            std::borrow::Cow::Owned(composto) => composto,
+        })
     }
 
     /// Parse `\u{HEX}` after the `u` has already been consumed.
@@ -608,6 +629,32 @@ impl<'src> Scanner<'src> {
     fn is_ident_continue(c: char) -> bool {
         c.is_alphabetic() || c.is_ascii_digit() || c == '_'
     }
+
+    /// `///` is a doc only when the line has nothing but spaces before it.
+    fn so_espaco_desde_a_quebra(&self) -> bool {
+        let bytes = self.source.as_bytes();
+        let mut i = self.pos;
+        while i > 0 {
+            i -= 1;
+            match bytes[i] {
+                b' ' | b'\t' | b'\r' => {}
+                b'\n' => return true,
+                _ => return false,
+            }
+        }
+        true
+    }
+}
+
+fn marca_combinante(c: char) -> bool {
+    matches!(
+        c,
+        '\u{0300}'..='\u{036F}'
+            | '\u{1AB0}'..='\u{1AFF}'
+            | '\u{1DC0}'..='\u{1DFF}'
+            | '\u{20D0}'..='\u{20FF}'
+            | '\u{FE20}'..='\u{FE2F}'
+    )
 }
 
 #[cfg(test)]
@@ -1123,6 +1170,55 @@ pare continue";
                 TokenKind::Eof,
             ]
         );
+    }
+
+    #[test]
+    fn doc_no_meio_da_linha_e_comentario() {
+        assert_eq!(
+            kinds("contador = 0 /// zera\nf"),
+            vec![
+                TokenKind::Ident("contador".into()),
+                TokenKind::Eq,
+                TokenKind::Number("0".into()),
+                TokenKind::Ident("f".into()),
+                TokenKind::Eof,
+            ]
+        );
+    }
+
+    #[test]
+    fn crlf_na_string_e_no_doc_vira_lf() {
+        let tokens = tokenize("s = \"a\r\nb\"\r\n").unwrap();
+        match &tokens[2].kind {
+            TokenKind::String(v) => assert_eq!(v, "a\nb"),
+            other => panic!("{other:?}"),
+        }
+        let tokens = tokenize("/// linha\r\nf = 1\r\n").unwrap();
+        match &tokens[0].kind {
+            TokenKind::DocComment(v) => assert_eq!(v, "linha"),
+            other => panic!("{other:?}"),
+        }
+    }
+
+    #[test]
+    fn acento_decomposto_vira_a_letra_composta() {
+        let toks = tokenize("cafe\u{0301} = 1").unwrap();
+        assert!(matches!(&toks[0].kind, TokenKind::Ident(s) if s == "café"));
+        let toks = tokenize("f = func\u{0327}a\u{0303}o() { 1 }").unwrap();
+        assert!(matches!(toks[2].kind, TokenKind::Funcao), "{:?}", toks[2]);
+        let toks = tokenize("\"cafe\u{0301}\"").unwrap();
+        assert!(matches!(&toks[0].kind, TokenKind::String(s) if s == "café"));
+        let toks = tokenize("/// func\u{0327}a\u{0303}o\nx = 1\n").unwrap();
+        match &toks[0].kind {
+            TokenKind::DocComment(t) => {
+                assert!(t.contains('ç'), "{t}");
+                assert!(!t.chars().any(marca_combinante), "{t}");
+            }
+            other => panic!("{other:?}"),
+        }
+        let err = tokenize("\u{0301}").unwrap_err();
+        assert!(err.message.contains("caractere inválido"), "{err:?}");
+        assert!(crate::parser::parse("f = func\u{0327}a\u{0303}o() { 1 }\n").is_ok());
     }
 
     #[test]

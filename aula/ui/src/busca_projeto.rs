@@ -471,7 +471,7 @@ fn buscar_no_projeto(ui: &UiRc, painel: &Rc<PainelBusca>) {
                     arquivos += 1;
                 }
                 achados.extend(novos);
-                if achados.len() >= ACHADOS_MAXIMO {
+                if achados.len() > ACHADOS_MAXIMO {
                     achados.truncate(ACHADOS_MAXIMO);
                     return (achados, arquivos, true);
                 }

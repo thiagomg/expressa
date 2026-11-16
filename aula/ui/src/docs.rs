@@ -71,6 +71,8 @@ pub struct Doc {
     pub edit_epoch: Cell<u64>,
     pub io_epoch: Cell<u64>,
     pub saving: Cell<bool>,
+    /// Close or another save asked to continue when the current write finishes.
+    pub save_wait: RefCell<Vec<Box<dyn FnOnce(bool)>>>,
     pub pending_external_change: Cell<bool>,
     pub recovery: std::sync::Arc<crate::recuperacao::Owner>,
     analysis_epoch: Cell<u64>,
@@ -207,6 +209,17 @@ impl Doc {
         search_settings: &SearchSettings,
     ) -> Rc<Self> {
         let buffer = SourceBuffer::new(None::<&gtk::TextTagTable>);
+        // A decomposed accent becomes the letter, including on paste.
+        // Asking the student to re-save the file as NFC only adds doubt.
+        buffer.connect_insert_text(|buf, at, texto| {
+            let composto = expressa::lexer::em_nfc(texto);
+            if composto.as_ref() == texto {
+                return;
+            }
+            buf.stop_signal_emission_by_name("insert-text");
+            let mut aqui = at.clone();
+            buf.insert(&mut aqui, composto.as_ref());
+        });
         if let Some(lang) = languages.language("expressa") {
             buffer.set_language(Some(&lang));
         }
@@ -310,6 +323,7 @@ impl Doc {
             edit_epoch: Cell::new(1),
             io_epoch: Cell::new(0),
             saving: Cell::new(false),
+            save_wait: RefCell::new(Vec::new()),
             pending_external_change: Cell::new(false),
             recovery: std::sync::Arc::new(crate::recuperacao::Owner::default()),
             analysis_epoch: Cell::new(0),
@@ -885,6 +899,18 @@ mod tests {
     fn ocorrencias_com_acento() {
         let t = "posição = 1\nescreva(posição)";
         assert_eq!(ocorrencias_da_palavra(t, 3).len(), 2);
+    }
+
+    #[test]
+    fn acento_decomposto_entra_composto() {
+        crate::gtk_test::run(|| {
+            let doc = test_doc("cafe\u{0301} = 1\n");
+            assert_eq!(doc.text(), "café = 1\n");
+            assert!(!doc.buffer.is_modified());
+            doc.buffer
+                .insert(&mut doc.buffer.end_iter(), "func\u{0327}a\u{0303}o");
+            assert!(doc.text().contains("função"), "{}", doc.text());
+        });
     }
 
     #[test]

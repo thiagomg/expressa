@@ -2,7 +2,7 @@
 //! emulation (`cls()` / `casa()`), plus line input for `leia` typed right
 //! in the pane, like a terminal.
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 use std::sync::mpsc::Sender;
 
@@ -25,6 +25,8 @@ pub struct Console {
     screen: RefCell<Screen>,
     /// While a `leia` waits: where the answer starts and where it goes.
     input: Rc<RefCell<Option<Input>>>,
+    /// IDE inserts (avisos, recuperação) are not student edits.
+    escrevendo: Rc<Cell<u32>>,
 }
 
 impl Console {
@@ -53,10 +55,16 @@ impl Console {
         table.add(&input_tag);
 
         let input = Rc::new(RefCell::new(None::<Input>));
+        let escrevendo = Rc::new(Cell::new(0u32));
         // The editable newline supplies an insertion point even for an empty
-        // field in the middle of the output. Do not let edits cross its bounds.
+        // field in the middle of the output. Do not let student edits cross
+        // its bounds. Writes from the IDE itself are allowed.
         let state = input.clone();
+        let gravando = escrevendo.clone();
         view.buffer().connect_insert_text(move |buf, at, text| {
+            if gravando.get() > 0 {
+                return;
+            }
             if let Some(input) = state.borrow().as_ref() {
                 let start = buf.iter_at_mark(&input.start).offset();
                 let end = buf.iter_at_mark(&input.end).offset();
@@ -66,7 +74,11 @@ impl Console {
             }
         });
         let state = input.clone();
+        let gravando = escrevendo.clone();
         view.buffer().connect_delete_range(move |buf, a, b| {
+            if gravando.get() > 0 {
+                return;
+            }
             if let Some(input) = state.borrow().as_ref() {
                 let start = buf.iter_at_mark(&input.start).offset();
                 let end = buf.iter_at_mark(&input.end).offset();
@@ -84,7 +96,14 @@ impl Console {
             input_tag,
             screen: RefCell::new(Screen::default()),
             input,
+            escrevendo,
         }
+    }
+
+    fn pela_ide(&self, corpo: impl FnOnce()) {
+        self.escrevendo.set(self.escrevendo.get() + 1);
+        corpo();
+        self.escrevendo.set(self.escrevendo.get() - 1);
     }
 
     fn buffer(&self) -> gtk::TextBuffer {
@@ -92,9 +111,11 @@ impl Console {
     }
 
     pub fn clear(&self) {
-        self.cancel_input();
-        *self.screen.borrow_mut() = Screen::default();
-        self.buffer().set_text("");
+        self.pela_ide(|| {
+            self.cancel_input();
+            *self.screen.borrow_mut() = Screen::default();
+            self.buffer().set_text("");
+        });
     }
 
     pub fn stdout(&self, text: &str) {
@@ -106,6 +127,10 @@ impl Console {
     }
 
     fn write(&self, text: &str, stderr: bool) {
+        self.pela_ide(|| self.write_agora(text, stderr));
+    }
+
+    fn write_agora(&self, text: &str, stderr: bool) {
         let buf = self.buffer();
         let mut screen = self.screen.borrow_mut();
         // `escreva_em` builds "\x1b[{linha};{coluna}H" with write!, which
@@ -127,6 +152,10 @@ impl Console {
 
     /// `erro: … em arquivo:linha`, red and underlined: clicking jumps there.
     pub fn error_link(&self, text: &str) {
+        self.pela_ide(|| self.error_link_agora(text));
+    }
+
+    fn error_link_agora(&self, text: &str) {
         let buf = self.buffer();
         let mut start = buf.end_iter();
         let start_off = start.offset();
@@ -150,6 +179,10 @@ impl Console {
 
     /// `leia` edits only the remainder of the selected output line.
     pub fn begin_input(&self, prompt: &str, reply: Sender<String>) {
+        self.pela_ide(|| self.begin_input_agora(prompt, reply));
+    }
+
+    fn begin_input_agora(&self, prompt: &str, reply: Sender<String>) {
         self.cancel_input();
         if !prompt.is_empty() {
             self.stdout(prompt);

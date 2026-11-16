@@ -123,6 +123,11 @@ impl Workspace {
         let dir = journal.dir().canonicalize().map_err(|e| e.to_string())?;
         let mut revisions = HashMap::new();
         for entry in files.list_tree(project)? {
+            if crate::background::current_cancellation()
+                .is_some_and(|flag| flag.load(std::sync::atomic::Ordering::Acquire))
+            {
+                return Err("operação cancelada".into());
+            }
             if !crate::pendencias::valid_relative(&entry.path) {
                 return Err(format!("caminho inválido no projeto: {}", entry.path));
             }

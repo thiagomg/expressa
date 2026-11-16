@@ -1,12 +1,12 @@
-/// Tartaruga Logo: anda, vira e desenha na tela de pixels.
-///
-/// Ângulo 0 olha para cima. vire é para a direita (sentido horário).
-/// A origem (casa) fica no centro da tela.
-///
-/// velocidade(t, segundos) faz cada pedaço do traço aparecer na hora,
-/// com a figura tartaruga.png (32×32) no lugar da tartaruga.
-/// 0 desenha tudo de uma vez.
-/// Exemplo: velocidade(t, 0.02).
+// Tartaruga Logo: anda, vira e desenha na tela de pixels.
+//
+// Ângulo 0 olha para cima. vire é para a direita (sentido horário).
+// A origem (casa) fica no centro da tela.
+//
+// velocidade(t, segundos) faz cada pedaço do traço aparecer na hora,
+// com a figura tartaruga.png (32×32) no lugar da tartaruga.
+// 0 desenha tudo de uma vez.
+// Exemplo: velocidade(t, 0.02).
 
 _mat = importe "mat"
 _tela = importe "tela_grafica"

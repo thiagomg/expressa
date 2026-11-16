@@ -42,7 +42,16 @@ pub fn preparar(dir: &Path) -> io::Result<()> {
         .filter(|e| e.file_name() != MUDANDO)
         .collect();
     let mudando = dir.join(MUDANDO);
-    if !soltos.is_empty() || mudando.exists() {
+    // A crash after `principal` was renamed into place, or a teacher folder
+    // that is already one directory per project, must not nest again.
+    let ja_sao_projetos = !mudando.exists()
+        && soltos.iter().all(|e| {
+            e.file_type().is_ok_and(|t| t.is_dir())
+                && e.file_name()
+                    .to_str()
+                    .is_some_and(|nome| crate::paths::sanitize_project(nome).is_ok())
+        });
+    if !ja_sao_projetos && (!soltos.is_empty() || mudando.exists()) {
         // Through a temporary folder: an old folder may already be called
         // `principal`.
         fs::create_dir_all(&mudando)?;
@@ -51,7 +60,7 @@ pub fn preparar(dir: &Path) -> io::Result<()> {
         }
         fs::rename(&mudando, dir.join(PROJETO_PADRAO))?;
     }
-    fs::write(&marca, "uma pasta por projeto\n")
+    expressa_aula_storage::write_replacing(&marca, b"uma pasta por projeto\n")
 }
 
 /// Project names of a prepared student folder, sorted.
@@ -66,7 +75,10 @@ pub fn listar(dir: &Path) -> io::Result<Vec<String>> {
         }
         let entry = entry?;
         let name = entry.file_name().to_string_lossy().into_owned();
-        if !name.starts_with('.') && entry.file_type()?.is_dir() {
+        if !name.starts_with('.')
+            && entry.file_type()?.is_dir()
+            && crate::paths::sanitize_project(&name).is_ok()
+        {
             out.push(name);
         }
     }
@@ -133,6 +145,43 @@ mod tests {
             fs::read_to_string(dir.join("principal/a.lep")).unwrap(),
             "a"
         );
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn principal_ja_no_lugar_nao_reaninha() {
+        let dir = pasta("ja-principal");
+        fs::create_dir_all(dir.join("principal")).unwrap();
+        fs::write(dir.join("principal/x.lep"), "x").unwrap();
+        preparar(&dir).unwrap();
+        assert_eq!(
+            fs::read_to_string(dir.join("principal/x.lep")).unwrap(),
+            "x"
+        );
+        assert!(!dir.join("principal/principal").exists());
+        assert!(dir.join(MARCA).is_file());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn pasta_de_projeto_criada_antes_nao_entra_em_principal() {
+        let dir = pasta("professor");
+        fs::create_dir_all(dir.join("aula-1")).unwrap();
+        fs::write(dir.join("aula-1/a.lep"), "a").unwrap();
+        preparar(&dir).unwrap();
+        assert_eq!(fs::read_to_string(dir.join("aula-1/a.lep")).unwrap(), "a");
+        assert!(!dir.join("principal").exists());
+        assert_eq!(listar(&dir).unwrap(), ["aula-1"]);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn nome_invalido_nao_aparece_na_lista() {
+        let dir = pasta("invalido");
+        fs::create_dir_all(dir.join("aula-1")).unwrap();
+        preparar(&dir).unwrap();
+        fs::create_dir_all(dir.join("Aula 1")).unwrap();
+        assert_eq!(listar(&dir).unwrap(), ["aula-1"]);
         let _ = fs::remove_dir_all(&dir);
     }
 

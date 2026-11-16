@@ -64,7 +64,26 @@ impl Numero {
     }
 
     pub fn from_f64(n: f64) -> Option<Self> {
-        Decimal::from_f64_retain(n).map(Self)
+        if !n.is_finite() {
+            return None;
+        }
+        // Shortest text when Decimal gives the same f64 back, so 0.1*3 prints
+        // 0,30000000000000004. A text that rounds (0.3-0.1) keeps the extra
+        // digits; the next float operation must see the original value.
+        let texto = format!("{n}");
+        if let Ok(d) = Decimal::from_str(&texto) {
+            if n != 0.0 && d.is_zero() {
+                return None;
+            }
+            if d.to_f64() == Some(n) {
+                return Some(Self(d));
+            }
+        }
+        let d = Decimal::from_f64_retain(n)?;
+        if n != 0.0 && d.is_zero() {
+            return None;
+        }
+        Some(Self(d))
     }
 
     pub fn to_f64(self) -> f64 {
@@ -241,7 +260,19 @@ impl fmt::Display for Numero {
 
 pub fn parse_numero(raw: &str) -> Option<Numero> {
     let cleaned: String = raw.chars().filter(|c| *c != '_').collect();
+    if casas_alem_da_escala(&cleaned) {
+        return None;
+    }
     cleaned.parse().ok()
+}
+
+/// Decimal keeps 28 places. Extra non-zero places would round or become 0.
+fn casas_alem_da_escala(s: &str) -> bool {
+    let Some((_, frac)) = s.split_once('.') else {
+        return false;
+    };
+    let frac = frac.split(['e', 'E']).next().unwrap_or(frac);
+    frac.trim_end_matches('0').len() > 28
 }
 
 #[cfg(test)]
@@ -250,6 +281,29 @@ mod tests {
 
     fn n(s: &str) -> Numero {
         parse_numero(s).unwrap()
+    }
+
+    #[test]
+    fn parse_numero_rejects_scale_past_28() {
+        assert!(parse_numero("0.00000000000000000000000000001").is_none());
+        assert!(parse_numero("1.00000000000000000000000000001").is_none());
+        assert!(parse_numero("1.0000000000000000000000000000").is_some());
+    }
+
+    #[test]
+    fn from_f64_uses_the_shortest_round_trip() {
+        let n = Numero::from_f64(0.1 * 3.0).unwrap();
+        assert_eq!(n.to_plain_string(), "0.30000000000000004");
+        assert_eq!(n.to_f64().to_bits(), (0.1_f64 * 3.0).to_bits());
+        assert!(Numero::from_f64(1e-32).is_none());
+    }
+
+    #[test]
+    fn from_f64_keeps_a_value_whose_short_text_rounds() {
+        for n in [0.3 - 0.1, 0.3 / 3.0, 0.1 / 3.0, 0.2 + 0.01] {
+            let stored = Numero::from_f64(n).unwrap();
+            assert_eq!(stored.to_f64().to_bits(), n.to_bits(), "{n}");
+        }
     }
 
     #[test]

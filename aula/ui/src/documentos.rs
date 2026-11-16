@@ -211,7 +211,12 @@ impl<'a> Documents<'a> {
                 format!("{name}.lep")
             };
             if self.docs.iter().any(|other| {
-                !std::ptr::eq(other.as_ref(), doc) && same_project_path(&other.name(), &name)
+                !std::ptr::eq(other.as_ref(), doc)
+                    && other
+                        .path
+                        .borrow()
+                        .as_deref()
+                        .is_some_and(|caminho| same_project_path(caminho, &name))
             }) {
                 return Err(format!("`{name}` já está aberto em outra aba"));
             }
@@ -341,7 +346,12 @@ pub fn forget_recovery(doc: &Doc) -> Result<(), String> {
 
 pub fn find_by_name(docs: &[Rc<Doc>], name: &str) -> Option<Rc<Doc>> {
     docs.iter()
-        .find(|d| same_project_path(&d.name(), name))
+        .find(|d| {
+            d.path
+                .borrow()
+                .as_deref()
+                .is_some_and(|caminho| same_project_path(caminho, name))
+        })
         .cloned()
 }
 

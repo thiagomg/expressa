@@ -345,7 +345,7 @@ impl CliDebugger {
              vars, v               mostra variáveis visíveis\n  \
              pilha, k              mostra a pilha de chamadas\n  \
              ponto [arquivo:]N     coloca (ou lista) pontos de parada\n  \
-             remover N             remove um ponto de parada na linha N\n  \
+             remover [arquivo:]N   remove um ponto de parada\n  \
              ajuda, h              mostra esta ajuda\n  \
              terminar, q           encerra o programa"
         );
@@ -391,10 +391,9 @@ impl CliDebugger {
                 match line
                     .split_whitespace()
                     .nth(1)
-                    .and_then(|s| s.parse::<u32>().ok())
+                    .and_then(|s| parse_breakpoint(s, ctx.file))
                 {
-                    Some(n) => {
-                        let file = ctx.file.to_string();
+                    Some((file, n)) => {
                         if self.session.breakpoints.remove(&(file.clone(), n)) {
                             let _ = writeln!(self.out, "removido {file}:{n}");
                         } else {
@@ -402,7 +401,7 @@ impl CliDebugger {
                         }
                     }
                     None => {
-                        let _ = writeln!(self.out, "uso: remover linha");
+                        let _ = writeln!(self.out, "uso: remover [arquivo:]linha");
                     }
                 }
                 None
@@ -699,6 +698,44 @@ mod tests {
         s.handle_command("remover /p/lib/a.lep:4", &c);
         s.handle_command("remover 2", &c);
         assert!(s.breakpoints.is_empty());
+    }
+
+    #[test]
+    #[cfg(feature = "terminal")]
+    fn cli_remover_aceita_arquivo_e_linha() {
+        struct Mem(std::rc::Rc<std::cell::RefCell<Vec<u8>>>);
+        impl std::io::Write for Mem {
+            fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+                self.0.borrow_mut().extend_from_slice(buf);
+                Ok(buf.len())
+            }
+            fn flush(&mut self) -> std::io::Result<()> {
+                Ok(())
+            }
+        }
+        let e = env();
+        let c = ctx("main.lep", "", Span::new(1, 1, 0, 1), &e, &[]);
+        let log = std::rc::Rc::new(std::cell::RefCell::new(Vec::new()));
+        let mut dbg = CliDebugger::with_out(Box::new(Mem(std::rc::Rc::clone(&log))));
+        let texto = || String::from_utf8(log.borrow().clone()).unwrap();
+        assert!(dbg.handle_command("ponto lib.lep:4", &c).is_none());
+        assert!(dbg.handle_command("remover lib.lep:4", &c).is_none());
+        assert!(texto().contains("removido lib.lep:4"), "{}", texto());
+        assert!(dbg.handle_command("remover lib.lep:4", &c).is_none());
+        assert!(
+            texto().contains("nenhum ponto de parada em lib.lep:4"),
+            "{}",
+            texto()
+        );
+        assert!(dbg.handle_command("remover", &c).is_none());
+        assert!(
+            texto().contains("uso: remover [arquivo:]linha"),
+            "{}",
+            texto()
+        );
+        assert!(dbg.handle_command("ponto 3", &c).is_none());
+        assert!(dbg.handle_command("remover 3", &c).is_none());
+        assert!(texto().contains("removido main.lep:3"), "{}", texto());
     }
 
     #[test]

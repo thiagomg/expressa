@@ -692,7 +692,19 @@ impl<'a, 'c> Vm<'a, 'c> {
             file: self.file.clone(),
             span: program.span,
         });
-        let result = if self.backend == ExecutionBackend::Bytecode {
+        let result = self.executar_modulo(program, env);
+        self.stack.pop();
+        self.retorne_so_em_funcao(result)
+    }
+
+    /// Runs a module body without pushing another `<modulo>` frame.
+    /// An import pushes its own `<modulo nome>` frame before calling this.
+    fn executar_modulo(
+        &mut self,
+        program: Program,
+        env: &Rc<RefCell<Env>>,
+    ) -> Result<(), EvalError> {
+        if self.backend == ExecutionBackend::Bytecode {
             self.execute_module(program, env).map(|_| ())
         } else {
             #[cfg(feature = "ast")]
@@ -708,9 +720,7 @@ impl<'a, 'c> Vm<'a, 'c> {
             {
                 Err(self.err("backend AST indisponível neste build", program.span))
             }
-        };
-        self.stack.pop();
-        self.retorne_so_em_funcao(result)
+        }
     }
 
     #[cfg(feature = "ast")]
@@ -816,74 +826,95 @@ impl<'a, 'c> Vm<'a, 'c> {
         let module_env = if let Some(existing) = self.modules.get(&key) {
             Rc::clone(existing)
         } else {
-            enum Input {
-                Source(String, Program),
-                Compiled(CompiledProgram),
-            }
-            let input = if exb::is_exb_path(&path) {
-                if self.backend != ExecutionBackend::Bytecode {
-                    return Err(self.err("importar .exb exige o backend bytecode", import.span));
-                }
-                Input::Compiled(read_exb(&path).map_err(|e| {
-                    self.err(
-                        format!("não foi possível importar '{}': {e}", path.display()),
-                        import.span,
-                    )
-                })?)
-            } else {
-                let source = std::fs::read_to_string(&path).map_err(|e| {
-                    self.err(
-                        format!("não foi possível importar '{}': {e}", path.display()),
-                        import.span,
-                    )
-                })?;
-                let program = parse(&source).map_err(|e| {
-                    self.err(
-                        format!(
-                            "sintaxe em '{}': {} ({})",
-                            path.display(),
-                            e.message,
-                            e.span
-                        ),
-                        import.span,
-                    )
-                })?;
-
-                Input::Source(source, program)
-            };
-
-            self.loading.insert(key.clone());
-
-            let saved_file = self.file.clone();
-            let saved_source = std::mem::replace(&mut self.source, Rc::from(""));
-            let saved_base = self.base_dir.clone();
-
-            self.base_dir = base_dir_of(&path.display().to_string());
-            let module_env = Env::child(&self.builtins, FrameKind::Module);
-            let result = match input {
-                Input::Source(source, program) => {
-                    self.file = path.display().to_string();
-                    self.source = Rc::from(source);
-                    self.eval_program(program, &module_env)
-                }
-                Input::Compiled(program) => {
-                    self.file = program.source_name.clone();
-                    self.source = Rc::clone(&program.source);
-                    self.eval_loaded_module(&program, &module_env)
-                }
-            };
-
-            self.file = saved_file;
-            self.source = saved_source;
-            self.base_dir = saved_base;
-            self.loading.remove(&key);
-            result?;
-
-            self.modules.insert(key, Rc::clone(&module_env));
-            module_env
+            let stem = path.file_stem().unwrap_or_default().to_string_lossy();
+            // The frame stores the importer's file and the `importe` span.
+            // Display then shows this module's caller at that line, and a
+            // top-level error here uses the module path.
+            self.stack.push(CallFrame {
+                name: format!("<modulo {stem}>"),
+                file: self.file.clone(),
+                span: import.span,
+            });
+            let loaded = self.carregar_modulo(&path, &key, import.span);
+            self.stack.pop();
+            loaded?
         };
 
         self.bind_imported(import, env, module_env)
+    }
+
+    /// Load a module while the `<modulo nome>` frame is already on the stack.
+    fn carregar_modulo(
+        &mut self,
+        path: &Path,
+        key: &Path,
+        span: Span,
+    ) -> Result<Rc<RefCell<Env>>, EvalError> {
+        enum Input {
+            Source(String, Program),
+            Compiled(CompiledProgram),
+        }
+        let input = if exb::is_exb_path(path) {
+            if self.backend != ExecutionBackend::Bytecode {
+                return Err(self.err("importar .exb exige o backend bytecode", span));
+            }
+            Input::Compiled(read_exb(path).map_err(|e| {
+                self.err(
+                    format!("não foi possível importar '{}': {e}", path.display()),
+                    span,
+                )
+            })?)
+        } else {
+            let source = std::fs::read_to_string(path).map_err(|e| {
+                self.err(
+                    format!("não foi possível importar '{}': {e}", path.display()),
+                    span,
+                )
+            })?;
+            let program = match parse(&source) {
+                Ok(program) => program,
+                Err(e) => {
+                    let file = path.display().to_string();
+                    return Err(EvalError::Runtime(RuntimeError {
+                        message: format!("sintaxe em '{file}': {} ({})", e.message, e.span),
+                        stack: CallFrame::executing(&self.stack, &file, e.span),
+                        file,
+                        span: e.span,
+                    }));
+                }
+            };
+            Input::Source(source, program)
+        };
+
+        self.loading.insert(key.to_path_buf());
+        let saved_file = self.file.clone();
+        let saved_source = std::mem::replace(&mut self.source, Rc::from(""));
+        let saved_base = self.base_dir.clone();
+        self.base_dir = base_dir_of(&path.display().to_string());
+        let module_env = Env::child(&self.builtins, FrameKind::Module);
+        let result = match input {
+            Input::Source(source, program) => {
+                self.file = path.display().to_string();
+                self.source = Rc::from(source);
+                self.executar_modulo(program, &module_env)
+            }
+            Input::Compiled(program) => {
+                self.file = program.source_name.clone();
+                self.source = Rc::clone(&program.source);
+                self.execute_loaded_module(Rc::clone(&program.code), &module_env)
+                    .map(|_| ())
+            }
+        };
+        // Convert `retorne`/`pare` while `self.file` is still the module.
+        let result = self.retorne_so_em_funcao(result);
+        self.file = saved_file;
+        self.source = saved_source;
+        self.base_dir = saved_base;
+        self.loading.remove(key);
+        result?;
+        self.modules
+            .insert(key.to_path_buf(), Rc::clone(&module_env));
+        Ok(module_env)
     }
 
     fn bind_imported(
@@ -935,6 +966,7 @@ impl<'a, 'c> Vm<'a, 'c> {
     }
 
     pub(crate) fn confine(&self, path: PathBuf, span: Span) -> Result<PathBuf, EvalError> {
+        let path = lexical_normalize(&path);
         match &self.workspace_root {
             None => Ok(path),
             Some(root) => self.confine_in(path, root, span),

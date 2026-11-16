@@ -56,8 +56,6 @@ impl Pool {
 
     /// Wait until jobs already queued on this pool have finished.
     /// The wait is bounded so a stuck write cannot hold process exit forever.
-    /// `SyncSender::send_timeout` is unstable, so a full queue is retried
-    /// until the same deadline instead of abandoning the barrier on the first try.
     pub fn flush(&self, timeout: Duration) -> bool {
         let deadline = Instant::now() + timeout;
         let (done, wait) = std::sync::mpsc::channel();

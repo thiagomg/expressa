@@ -15,7 +15,7 @@ fn try_main() -> Result<(), Box<dyn std::error::Error>> {
     let mut args: Vec<String> = args().skip(1).collect();
     // Only global options before the command/file select the backend. Script
     // arguments named --backend must reach argumentos unchanged.
-    let mut option = 0;
+    let option = 0;
     while option < args.len() {
         match args[option].as_str() {
             "--backend" => {
@@ -30,35 +30,32 @@ fn try_main() -> Result<(), Box<dyn std::error::Error>> {
                 unsafe { std::env::set_var("EXPRESSA_BACKEND", &name) };
                 args.drain(option..=option + 1);
             }
-            "--numeros" | "--aritmetica" => option += 2,
+            "--numeros" => {
+                let name = args
+                    .get(option + 1)
+                    .cloned()
+                    .ok_or("Uso: expressa --numeros pt|en")?;
+                if expressa::runtime::NumeroLocale::from_name(&name).is_none() {
+                    return Err(format!("padrão desconhecido `{name}` (use pt ou en)").into());
+                }
+                unsafe { std::env::set_var("EXPRESSA_NUMEROS", &name) };
+                args.drain(option..=option + 1);
+            }
+            "--aritmetica" => {
+                let name = args
+                    .get(option + 1)
+                    .cloned()
+                    .ok_or("Uso: expressa --aritmetica decimal|float")?;
+                if expressa::runtime::NumeroAritmetica::from_name(&name).is_none() {
+                    return Err(
+                        format!("padrão desconhecido `{name}` (use decimal ou float)").into(),
+                    );
+                }
+                unsafe { std::env::set_var("EXPRESSA_ARITMETICA", &name) };
+                args.drain(option..=option + 1);
+            }
             _ => break,
         }
-    }
-    if let Some(i) = args.iter().position(|a| a == "--numeros") {
-        if i + 1 >= args.len() {
-            eprintln!("Uso: expressa --numeros pt|en");
-            return Ok(());
-        }
-        let name = args[i + 1].clone();
-        if expressa::runtime::NumeroLocale::from_name(&name).is_none() {
-            eprintln!("padrão desconhecido `{name}` (use pt ou en)");
-            process::exit(1);
-        }
-        unsafe { std::env::set_var("EXPRESSA_NUMEROS", &name) };
-        args.drain(i..=i + 1);
-    }
-    if let Some(i) = args.iter().position(|a| a == "--aritmetica") {
-        if i + 1 >= args.len() {
-            eprintln!("Uso: expressa --aritmetica decimal|float");
-            return Ok(());
-        }
-        let name = args[i + 1].clone();
-        if expressa::runtime::NumeroAritmetica::from_name(&name).is_none() {
-            eprintln!("padrão desconhecido `{name}` (use decimal ou float)");
-            process::exit(1);
-        }
-        unsafe { std::env::set_var("EXPRESSA_ARITMETICA", &name) };
-        args.drain(i..=i + 1);
     }
     if args.is_empty() {
         if !expressa::runtime::ExecutionOptions::default()
@@ -104,8 +101,7 @@ fn try_main() -> Result<(), Box<dyn std::error::Error>> {
     }
     if args[0] == "--grafico" {
         if args.len() < 2 {
-            eprintln!("Uso: expressa --grafico <arquivo.cart>");
-            return Ok(());
+            return Err("Uso: expressa --grafico <arquivo.cart>".into());
         }
         #[cfg(feature = "graphics")]
         expressa::runtime::run_viewer(std::path::Path::new(&args[1]))?;
@@ -163,20 +159,17 @@ fn try_main() -> Result<(), Box<dyn std::error::Error>> {
             return Err("depurador de terminal indisponível neste build".into());
         }
         if args.len() < 2 {
-            eprintln!("Uso: expressa debug <arquivo.lep|arquivo.exb> [args…]");
-            return Ok(());
+            return Err("Uso: expressa debug <arquivo.lep|arquivo.exb> [args…]".into());
         }
         ("debug", args[1].as_str(), &args[2..])
     } else if args[0] == "--ast" {
         if args.len() < 2 {
-            eprintln!("Uso: expressa --ast <arquivo.lep>");
-            return Ok(());
+            return Err("Uso: expressa --ast <arquivo.lep>".into());
         }
         ("ast", args[1].as_str(), &args[2..])
     } else if args[0] == "--marcador-leia" {
         if args.len() < 2 {
-            eprintln!("Uso: expressa --marcador-leia <arquivo.lep|arquivo.exb> [args…]");
-            return Ok(());
+            return Err("Uso: expressa --marcador-leia <arquivo.lep|arquivo.exb> [args…]".into());
         }
         ("marcador-leia", args[1].as_str(), &args[2..])
     } else {

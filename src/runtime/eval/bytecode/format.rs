@@ -1,6 +1,7 @@
 //! EXB v2: portable file encoding, independent from the VM's in-memory Op enum.
 //! Version 1 is rejected. Some instruction meanings changed, and tags 66 and 67
-//! are not opcodes.
+//! are not opcodes. Loop kind 1 is `LoopKind::Range`: the end is exclusive
+//! (`from < to`). `Op::Slice` builds a `Faixa`.
 mod opcodes;
 #[cfg(test)]
 mod tests;

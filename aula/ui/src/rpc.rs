@@ -242,12 +242,46 @@ impl Drop for Rpc {
 /// The server writes refusals (`já existe …`, bad paths) for the user; show
 /// those as they are, and the full status for anything unexpected.
 fn mensagem(status: tonic::Status) -> String {
+    let texto = status.message();
     match status.code() {
-        tonic::Code::AlreadyExists | tonic::Code::InvalidArgument | tonic::Code::NotFound => {
-            status.message().to_string()
-        }
-        _ => status.to_string(),
+        tonic::Code::AlreadyExists
+        | tonic::Code::InvalidArgument
+        | tonic::Code::NotFound
+        | tonic::Code::FailedPrecondition
+        | tonic::Code::OutOfRange
+        | tonic::Code::Aborted
+        | tonic::Code::Cancelled => texto.to_string(),
+        tonic::Code::Unavailable => format!("servidor indisponível: {texto}"),
+        tonic::Code::DeadlineExceeded => format!("o servidor demorou demais: {texto}"),
+        tonic::Code::ResourceExhausted if texto.contains("servidor ocupado") => texto.to_string(),
+        tonic::Code::ResourceExhausted => format!("servidor ocupado: {texto}"),
+        _ => texto.to_string(),
     }
+}
+
+fn servidor_ocupado(status: &tonic::Status) -> bool {
+    status.code() == tonic::Code::ResourceExhausted && status.message().contains("servidor ocupado")
+}
+
+fn cancelado_agora() -> bool {
+    crate::background::current_cancellation().is_some_and(|flag| flag.load(Ordering::Acquire))
+}
+
+/// Retry only a busy disk slot. Stop when the student cancelled the operation.
+fn pausa_se_ocupado(status: &tonic::Status, tentativa: u32) -> Result<(), String> {
+    const TENTATIVAS: u32 = 5;
+    if cancelado_agora() {
+        return Err("operação cancelada".into());
+    }
+    if !servidor_ocupado(status) || tentativa + 1 >= TENTATIVAS {
+        return Err(mensagem(status.clone()));
+    }
+    let espera = std::time::Duration::from_millis(200 << tentativa);
+    std::thread::sleep(espera.min(std::time::Duration::from_millis(1600)));
+    if cancelado_agora() {
+        return Err("operação cancelada".into());
+    }
+    Ok(())
 }
 
 fn nao_e_texto(status: &tonic::Status) -> bool {
@@ -292,13 +326,16 @@ impl Rpc {
     }
     /// The student's projects, sorted.
     pub fn list_projects(&self, student: &str) -> Result<Vec<String>, String> {
-        let mut c = TurmaClient::new(self.channel.clone());
-        let resp = self
-            .wait(c.list_projects(ListProjectsRequest {
+        for tentativa in 0..5 {
+            let mut c = TurmaClient::new(self.channel.clone());
+            match self.wait(c.list_projects(ListProjectsRequest {
                 student: student.to_string(),
-            }))
-            .map_err(mensagem)?;
-        Ok(resp.into_inner().projects)
+            })) {
+                Ok(resp) => return Ok(resp.into_inner().projects),
+                Err(e) => pausa_se_ocupado(&e, tentativa)?,
+            }
+        }
+        Err("servidor ocupado; tente novamente".into())
     }
 
     /// Fails with `já existe o projeto …` when it exists.
@@ -313,14 +350,17 @@ impl Rpc {
     }
 
     pub fn list_tree(&self, student: &str, project: &str) -> Result<Vec<TreeEntry>, String> {
-        let mut c = TurmaClient::new(self.channel.clone());
-        let resp = self
-            .wait(c.list_files(ListFilesRequest {
+        for tentativa in 0..5 {
+            let mut c = TurmaClient::new(self.channel.clone());
+            match self.wait(c.list_files(ListFilesRequest {
                 student: student.to_string(),
                 project: project.to_string(),
-            }))
-            .map_err(mensagem)?;
-        Ok(resp.into_inner().entries)
+            })) {
+                Ok(resp) => return Ok(resp.into_inner().entries),
+                Err(e) => pausa_se_ocupado(&e, tentativa)?,
+            }
+        }
+        Err("servidor ocupado; tente novamente".into())
     }
 
     pub fn current_text(
@@ -329,23 +369,28 @@ impl Rpc {
         project: &str,
         path: &str,
     ) -> Result<Option<crate::store::TextSnapshot>, String> {
-        let mut c = TurmaClient::new(self.channel.clone());
-        match self.wait(c.read_file(ReadFileRequest {
-            student: student.to_string(),
-            project: project.to_string(),
-            path: path.to_string(),
-        })) {
-            Ok(response) => {
-                let response = response.into_inner();
-                Ok(Some(crate::store::TextSnapshot {
-                    text: response.source,
-                    revision: (!response.revision.is_empty()).then_some(response.revision),
-                }))
+        for tentativa in 0..5 {
+            let mut c = TurmaClient::new(self.channel.clone());
+            match self.wait(c.read_file(ReadFileRequest {
+                student: student.to_string(),
+                project: project.to_string(),
+                path: path.to_string(),
+            })) {
+                Ok(response) => {
+                    let response = response.into_inner();
+                    return Ok(Some(crate::store::TextSnapshot {
+                        text: response.source,
+                        revision: (!response.revision.is_empty()).then_some(response.revision),
+                    }));
+                }
+                Err(e) if e.code() == tonic::Code::NotFound => return Ok(None),
+                Err(e) if nao_e_texto(&e) => {
+                    return Err(crate::store::ARQUIVO_NAO_E_TEXTO.into());
+                }
+                Err(e) => pausa_se_ocupado(&e, tentativa)?,
             }
-            Err(e) if e.code() == tonic::Code::NotFound => Ok(None),
-            Err(e) if nao_e_texto(&e) => Err(crate::store::ARQUIVO_NAO_E_TEXTO.into()),
-            Err(e) => Err(mensagem(e)),
         }
+        Err("servidor ocupado; tente novamente".into())
     }
 
     /// Whole-file bytes. An older server without this RPC falls back to
@@ -356,25 +401,28 @@ impl Rpc {
         project: &str,
         path: &str,
     ) -> Result<Option<expressa_aula_storage::Snapshot>, String> {
-        let mut c = TurmaClient::new(self.channel.clone());
-        match self.wait(c.read_file_bytes(ReadFileBytesRequest {
-            student: student.to_string(),
-            project: project.to_string(),
-            path: path.to_string(),
-        })) {
-            Ok(response) => {
-                let response = response.into_inner();
-                Ok(Some(expressa_aula_storage::Snapshot {
-                    bytes: response.contents,
-                    revision: response.revision,
-                }))
+        for tentativa in 0..5 {
+            let mut c = TurmaClient::new(self.channel.clone());
+            match self.wait(c.read_file_bytes(ReadFileBytesRequest {
+                student: student.to_string(),
+                project: project.to_string(),
+                path: path.to_string(),
+            })) {
+                Ok(response) => {
+                    let response = response.into_inner();
+                    return Ok(Some(expressa_aula_storage::Snapshot {
+                        bytes: response.contents,
+                        revision: response.revision,
+                    }));
+                }
+                Err(e) if e.code() == tonic::Code::NotFound => return Ok(None),
+                Err(e) if e.code() == tonic::Code::Unimplemented => {
+                    return self.current_bytes_via_text(student, project, path);
+                }
+                Err(e) => pausa_se_ocupado(&e, tentativa)?,
             }
-            Err(e) if e.code() == tonic::Code::NotFound => Ok(None),
-            Err(e) if e.code() == tonic::Code::Unimplemented => {
-                self.current_bytes_via_text(student, project, path)
-            }
-            Err(e) => Err(mensagem(e)),
         }
+        Err("servidor ocupado; tente novamente".into())
     }
 
     fn current_bytes_via_text(
@@ -544,6 +592,37 @@ mod tests {
         kill_pid(pid);
         let _ = child.wait();
         assert!(!pid_is_alive(pid), "processo encerrado");
+    }
+}
+
+#[cfg(test)]
+mod mensagem_tests {
+    use super::*;
+
+    #[test]
+    fn ocupado_nao_repete_o_prefixo() {
+        let status = tonic::Status::new(
+            tonic::Code::ResourceExhausted,
+            "servidor ocupado; tente novamente",
+        );
+        assert_eq!(mensagem(status), "servidor ocupado; tente novamente");
+        let outra = tonic::Status::new(tonic::Code::ResourceExhausted, "quota");
+        assert_eq!(mensagem(outra), "servidor ocupado: quota");
+    }
+
+    #[test]
+    fn quinta_tentativa_ocupada_devolve_a_frase_do_servidor() {
+        let status = tonic::Status::new(
+            tonic::Code::ResourceExhausted,
+            "servidor ocupado; tente novamente",
+        );
+        let err = pausa_se_ocupado(&status, 4).unwrap_err();
+        assert_eq!(err, "servidor ocupado; tente novamente");
+        let grande = tonic::Status::new(tonic::Code::OutOfRange, "arquivo grande demais");
+        assert_eq!(
+            pausa_se_ocupado(&grande, 0).unwrap_err(),
+            "arquivo grande demais"
+        );
     }
 }
 

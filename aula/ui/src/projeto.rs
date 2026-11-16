@@ -770,6 +770,37 @@ pub(crate) fn async_on<T: Send + 'static>(
             return glib::ControlFlow::Break;
         };
         if ui.borrow().closing.get() || ui.borrow().project_epoch != epoch {
+            operation.take();
+            // This callback belongs to the project that started the work.
+            // Calling it would open a file or finish a save in the project
+            // that replaced it. A run left in Preparing or Uploading would
+            // otherwise refuse the next F5 forever.
+            let aviso = {
+                use crate::execution_state::{Event, ExecutionState};
+                let mut ui = ui.borrow_mut();
+                match ui.execucao.execution {
+                    ExecutionState::Preparing => {
+                        ui.execucao
+                            .execution
+                            .transition(Event::PreparationFailed)
+                            .expect("preparing before the project changes");
+                        Some("preparação cancelada")
+                    }
+                    ExecutionState::Uploading => {
+                        ui.execucao
+                            .execution
+                            .transition(Event::Uploaded)
+                            .expect("uploading before the project changes");
+                        Some("envio interrompido ao trocar de projeto")
+                    }
+                    _ => None,
+                }
+            };
+            if let Some(aviso) = aviso
+                && !ui.borrow().closing.get()
+            {
+                set_status(&ui, aviso);
+            }
             return glib::ControlFlow::Break;
         }
         let result = match reply.poll(epoch) {

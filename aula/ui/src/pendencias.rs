@@ -4,7 +4,7 @@ use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, HashMap};
 use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Write};
-use std::path::{Component, Path, PathBuf};
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
 use crate::identidade::ProjectIdentity;
@@ -98,17 +98,7 @@ pub fn root() -> PathBuf {
 }
 
 pub fn valid_relative(path: &str) -> bool {
-    !path.is_empty()
-        && !path.contains('\\')
-        && !path.contains(':')
-        && !path.starts_with('/')
-        && !path.ends_with('/')
-        && path
-            .split('/')
-            .all(|c| !c.is_empty() && c != "." && c != "..")
-        && Path::new(path)
-            .components()
-            .all(|c| matches!(c, Component::Normal(_)))
+    expressa_aula_storage::caminho_relativo_valido(path)
 }
 
 /// Refuse links rather than copying a target outside the owned run.

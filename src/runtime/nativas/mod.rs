@@ -1193,6 +1193,9 @@ escreva(f(3))
         assert_eq!(run("escreva(35.87+12.63+11.05+11.47+10.35)"), "81,37\n");
         assert_eq!(run("escreva(0.1 + 0.2)"), "0,3\n");
         assert_eq!(run("escreva(0.1 + 0.2 == 0.3)"), "verdadeiro\n");
+        assert_eq!(run("escreva(0.1 * 3)"), "0,3\n");
+        assert_eq!(run("escreva(3 * 0.1)"), "0,3\n");
+        assert_eq!(run("escreva(0.1 * 3 == 0.3)"), "verdadeiro\n");
         assert_eq!(
             run(r#"formato("float")
 escreva(0.1 + 0.2 == 0.3)"#),

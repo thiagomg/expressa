@@ -1,4 +1,4 @@
-/// Tartaruga andando e girando. q ou fechar a janela sai.
+// Tartaruga andando e girando. q ou fechar a janela sai.
 
 tela_grafica = importe "tela_grafica"
 imagem = importe "imagem"

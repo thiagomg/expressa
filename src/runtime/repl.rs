@@ -292,6 +292,10 @@ fn parse_repl_command(line: &str) -> Option<ReplCommand<'_>> {
     let line = line.strip_prefix('.').unwrap_or(line);
     let mut parts = line.split_whitespace();
     let cmd = parts.next()?;
+    // `ls = [1, 2]` and `sair = 3` are Expressa, not the REPL commands.
+    if continua_como_codigo(line, cmd) {
+        return None;
+    }
     let rest = parts.next();
     match normalize_topic(cmd).as_str() {
         "sair" | "exit" | "quit" => Some(ReplCommand::Sair),
@@ -299,18 +303,55 @@ fn parse_repl_command(line: &str) -> Option<ReplCommand<'_>> {
         "cls" | "limpe_tela" | "clear" if rest.is_none() => Some(ReplCommand::Cls),
         "ls" => Some(ReplCommand::Catalogo {
             pretty: true,
-            alvo: rest_of(line, cmd),
+            alvo: alvo_de_catalogo(rest_of(line, cmd))?,
         }),
         "catalogo" => Some(ReplCommand::Catalogo {
             pretty: false,
-            alvo: rest_of(line, cmd),
+            alvo: alvo_de_catalogo(rest_of(line, cmd))?,
         }),
         _ => None,
     }
 }
 
+/// The token after the command word starts an assignment or a postfix.
+fn continua_como_codigo(line: &str, cmd: &str) -> bool {
+    let Some(rest) = line.trim_start().get(cmd.len()..) else {
+        return false;
+    };
+    let rest = rest.trim_start();
+    let b = rest.as_bytes();
+    if b.is_empty() {
+        return false;
+    }
+    matches!(b[0], b'=' | b'(' | b'.' | b':' | b'[')
+        || rest.starts_with("+=")
+        || rest.starts_with("-=")
+}
+
+/// `Some(None)` is a command with no target. `None` means the text is not a
+/// catalog target, so the line stays ordinary code.
+fn alvo_de_catalogo(alvo: Option<&str>) -> Option<Option<&str>> {
+    let Some(alvo) = alvo else {
+        return Some(None);
+    };
+    let campo = alvo.split_once(':');
+    let ok = match campo {
+        None => ident_simples(alvo),
+        Some((obj, campo)) => ident_simples(obj) && ident_simples(campo),
+    };
+    ok.then_some(Some(alvo))
+}
+
+fn ident_simples(s: &str) -> bool {
+    let mut cs = s.chars();
+    let Some(first) = cs.next() else {
+        return false;
+    };
+    (first.is_alphabetic() || first == '_') && cs.all(|c| c.is_alphanumeric() || c == '_')
+}
+
 fn rest_of<'a>(line: &'a str, cmd: &str) -> Option<&'a str> {
-    let rest = line.get(cmd.len()..)?.trim();
+    let rest = line.trim_start().get(cmd.len()..)?.trim();
     if rest.is_empty() { None } else { Some(rest) }
 }
 
@@ -671,5 +712,37 @@ mod tests {
             Some(ReplCommand::Cls)
         ));
         assert!(parse_repl_command("cls()").is_none());
+        assert!(parse_repl_command("ls = [1, 2]").is_none());
+        assert!(parse_repl_command("sair = 3").is_none());
+        assert!(parse_repl_command("ls[0]").is_none());
+    }
+
+    #[test]
+    fn repl_avisa_cada_erro_desprotegido() {
+        struct Conta(std::rc::Rc<std::cell::Cell<u32>>);
+        impl DebugHook for Conta {
+            fn before_stmt(
+                &mut self,
+                _: &super::super::debug::DebugCtx<'_>,
+            ) -> super::super::debug::DebugAction {
+                super::super::debug::DebugAction::Continue
+            }
+            fn on_error(&mut self, _: &super::super::debug::DebugCtx<'_>, _: &str) {
+                self.0.set(self.0.get() + 1);
+            }
+        }
+        let n = std::rc::Rc::new(std::cell::Cell::new(0));
+        let mut input = io::Cursor::new("");
+        let mut out = Vec::new();
+        let mut err = Vec::new();
+        let mut session = ReplSession::with_hook(
+            &mut input,
+            &mut out,
+            &mut err,
+            Box::new(Conta(std::rc::Rc::clone(&n))),
+        );
+        assert!(session.eval("1 / 0").is_err());
+        assert!(session.eval("2 / 0").is_err());
+        assert_eq!(n.get(), 2);
     }
 }

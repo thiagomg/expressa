@@ -1,4 +1,4 @@
-/// Clique na janela para desenhar um círculo. q ou fechar a janela sai.
+// Clique na janela para desenhar um círculo. q ou fechar a janela sai.
 
 tela_grafica = importe "tela_grafica"
 
