@@ -47,9 +47,10 @@ pub use error::{CallFrame, RuntimeError};
 pub use eval::{
     CompiledProgram, DEFAULT_MAX_MATRIX_CELLS, EXB_MAX_BYTES, EXB_VERSION, ExbError, ExbRunMode,
     ExecutionBackend, ExecutionOptions, ExecutionOutput, compile_exb, debug_source,
-    debug_source_args, load_exb, read_exb, run_compiled_with_options, run_exb_file_args,
-    run_exb_with_options, run_source, run_source_args, run_source_marcador,
-    run_source_marcador_args, run_to_string, run_to_string_with, run_to_strings_with,
+    debug_source_args, debug_source_args_com, load_exb, read_exb, run_compiled_with_options,
+    run_exb_file_args, run_exb_file_args_com, run_exb_with_options, run_source, run_source_args,
+    run_source_args_com, run_source_marcador, run_source_marcador_args,
+    run_source_marcador_args_com, run_to_string, run_to_string_with, run_to_strings_with,
     run_with_hook, run_with_hosts, run_with_leia_host, run_with_options,
 };
 pub use folha::{CurvaPronta, FolhaPronta, GraficoPronto, pintar};
@@ -67,7 +68,7 @@ pub use pilha::PROFUNDIDADE_MAXIMA;
 #[cfg(feature = "terminal")]
 pub use repl::{
     CanalRepl, ConteudoRepl, EventoRepl, FimRepl, FluxoRepl, IdAvaliacao, IdSessao,
-    REPL_MAX_CODIGO, TextoRepl, run_repl,
+    REPL_MAX_CODIGO, TextoRepl, run_repl, run_repl_com,
 };
 pub use value::{NumeroLocale, Value, default_numero_locale};
 #[cfg(feature = "graphics")]

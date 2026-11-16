@@ -1,8 +1,47 @@
-//! Regressions that both the AST evaluator and its future bytecode replacement must pass.
-use expressa::runtime::{Numero, run_to_string};
+//! Regressions both evaluators must pass. Each helper runs every backend
+//! this build includes and requires the same stdout or the same error.
+use expressa::runtime::{
+    ExecutionBackend, ExecutionOptions, Numero, RuntimeError, run_with_options,
+};
 
 fn run(source: &str) -> String {
-    run_to_string(source, "regression.lep").unwrap()
+    run_em(source, "regression.lep").unwrap()
+}
+
+fn run_em(source: &str, file: &str) -> Result<String, RuntimeError> {
+    let mut visto: Option<Result<String, RuntimeError>> = None;
+    for backend in [ExecutionBackend::Ast, ExecutionBackend::Bytecode]
+        .into_iter()
+        .filter(|backend| backend.is_available())
+    {
+        let atual = run_with_options(
+            source,
+            file,
+            "",
+            ExecutionOptions {
+                backend,
+                ..ExecutionOptions::default()
+            },
+        )
+        .map(|saida| saida.stdout);
+        match &visto {
+            None => visto = Some(atual),
+            Some(Ok(anterior)) => match atual {
+                Ok(stdout) => assert_eq!(stdout, *anterior, "{backend:?} divergiu"),
+                Err(e) => panic!("{backend:?} falhou: {e}"),
+            },
+            Some(Err(anterior)) => match atual {
+                Err(err) => {
+                    assert_eq!(
+                        err.message, anterior.message,
+                        "{backend:?} mensagem divergiu"
+                    )
+                }
+                Ok(ok) => panic!("{backend:?} passou: {ok:?}"),
+            },
+        }
+    }
+    visto.expect("algum backend")
 }
 
 #[test]
@@ -177,7 +216,7 @@ impl ModuleDir {
         Self(path)
     }
     fn run(&self, source: &str) -> Result<String, expressa::runtime::RuntimeError> {
-        run_to_string(source, self.0.join("main.lep").to_str().unwrap())
+        run_em(source, self.0.join("main.lep").to_str().unwrap())
     }
 }
 impl Drop for ModuleDir {

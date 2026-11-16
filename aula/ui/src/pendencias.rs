@@ -1,7 +1,7 @@
 //! Durable run copies. The journal lives outside the interpreter's filesystem root.
 //! A held OS lock owns each run; discovery/retry never touches a live execution.
 use sha2::{Digest, Sha256};
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
@@ -177,14 +177,26 @@ fn fingerprint(path: &Path) -> Result<(String, u64), String> {
     Ok((format!("sha256:{digest}"), bytes))
 }
 
-fn flush_output(path: &Path, root: &Path) -> Result<(), String> {
+fn sync_file(path: &Path) -> Result<(), String> {
     #[cfg(windows)]
     let file = OpenOptions::new().write(true).open(path);
     #[cfg(not(windows))]
     let file = File::open(path);
-    file.and_then(|f| f.sync_all()).map_err(|e| e.to_string())?;
+    file.and_then(|f| f.sync_all()).map_err(|e| e.to_string())
+}
+
+/// Fsync `path`'s directories up to `root`, once each. A directory already in
+/// `feitos` had its own parents synced on the walk that inserted it.
+fn sync_ancestors_once(
+    path: &Path,
+    root: &Path,
+    feitos: &mut HashSet<PathBuf>,
+) -> Result<(), String> {
     let mut parent = path.parent();
     while let Some(dir) = parent {
+        if !feitos.insert(dir.to_path_buf()) {
+            break;
+        }
         sync_directory(dir)?;
         if dir == root {
             break;
@@ -306,8 +318,17 @@ pub fn export_raw(path: &Path, folder: &Path) -> Result<PathBuf, String> {
 impl Journal {
     pub fn create(root: &Path, identity: ProjectIdentity) -> Result<Self, String> {
         fs::create_dir_all(root).map_err(|e| e.to_string())?;
-        let _ = scan(root);
-        check_budget(root)?;
+        // Hashing every retained run here threw the result away. Scan only
+        // when the budget is already full, so empty journals can be dropped
+        // before refusing the new run. Opening a project scans on its own.
+        if let Err(e) = check_budget(root) {
+            if e.starts_with("há muitas saídas") {
+                let _ = scan(root);
+                check_budget(root)?;
+            } else {
+                return Err(e);
+            }
+        }
         let parent = root.join(identity.key());
         fs::create_dir_all(&parent).map_err(|e| e.to_string())?;
         let run_dir = tempfile::Builder::new()
@@ -405,25 +426,44 @@ impl Journal {
     }
 
     pub fn overlay(&self, path: &str, bytes: &[u8], expected: &Expected) -> Result<(), String> {
-        if !valid_relative(path) {
-            return Err("caminho de aba inválido".into());
+        self.overlay_todos([(path, bytes, expected)])
+    }
+
+    /// One manifest write for every open tab. `ready` is cleared first when a
+    /// previous arm left the journal sealed, so a crash mid-write cannot upload
+    /// a half-written file.
+    pub fn overlay_todos<'a>(
+        &self,
+        itens: impl IntoIterator<Item = (&'a str, &'a [u8], &'a Expected)>,
+    ) -> Result<(), String> {
+        let itens: Vec<_> = itens.into_iter().collect();
+        if itens.is_empty() {
+            return Ok(());
+        }
+        for (path, _, _) in &itens {
+            if !valid_relative(path) {
+                return Err("caminho de aba inválido".into());
+            }
         }
         let mut state = self.state.lock().unwrap();
-        // Mark preparation before writing an overlay. A crash here must never
-        // turn a half-written input into output eligible for repository upload.
-        state.ready = false;
-        persist(&self.run_dir, &state)?;
-        let target = self.dir().join(path);
-        fs::create_dir_all(target.parent().ok_or("aba sem pasta")?).map_err(|e| e.to_string())?;
-        fs::write(&target, bytes).map_err(|e| e.to_string())?;
-        state.entries.insert(
-            path.into(),
-            Entry {
-                baseline: revision(bytes),
-                expected: expected.into(),
-                reason: None,
-            },
-        );
+        if state.ready {
+            state.ready = false;
+            persist(&self.run_dir, &state)?;
+        }
+        for (path, bytes, expected) in &itens {
+            let target = self.dir().join(path);
+            fs::create_dir_all(target.parent().ok_or("aba sem pasta")?)
+                .map_err(|e| e.to_string())?;
+            fs::write(&target, *bytes).map_err(|e| e.to_string())?;
+            state.entries.insert(
+                (*path).to_string(),
+                Entry {
+                    baseline: revision(*bytes),
+                    expected: (*expected).into(),
+                    reason: None,
+                },
+            );
+        }
         persist(&self.run_dir, &state)
     }
 
@@ -436,10 +476,14 @@ impl Journal {
         }
         let mut paths = Vec::new();
         walk(&self.dir(), &self.dir(), &mut paths)?;
-        for (_, path) in paths {
-            flush_output(&path, &self.dir())?;
+        let mut dirs = HashSet::new();
+        for (_, path) in &paths {
+            sync_file(path)?;
+            sync_ancestors_once(path, &self.dir(), &mut dirs)?;
         }
-        sync_directory(&self.dir())?;
+        if dirs.insert(self.dir()) {
+            sync_directory(&self.dir())?;
+        }
         state.ready = true;
         persist(&self.run_dir, &state)
     }
@@ -506,6 +550,7 @@ impl Journal {
         }
         let (outputs, errors) = self.collect_outputs();
         delivery.errors.extend(errors);
+        let mut dirs = HashSet::new();
         for output in outputs {
             let bytes = match fs::read(self.dir().join(&output.path)) {
                 Ok(bytes) if revision(&bytes) == output.digest => bytes,
@@ -522,7 +567,11 @@ impl Journal {
                 }
             };
             // Flush the generated bytes before acknowledging their journal entry.
-            let result = match flush_output(&self.dir().join(&output.path), &self.dir()) {
+            // Parent directories are synced once per distinct path in this send.
+            let arquivo = self.dir().join(&output.path);
+            let result = match sync_file(&arquivo)
+                .and_then(|()| sync_ancestors_once(&arquivo, &self.dir(), &mut dirs))
+            {
                 Ok(()) => send(&output.path, &bytes, &output.expected),
                 Err(e) => Err(SaveError::Other(e)),
             };

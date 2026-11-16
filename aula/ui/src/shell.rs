@@ -1,6 +1,6 @@
 //! Window chrome: menubar, shortcuts, CSS, status, dialogs, and platform startup.
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
@@ -558,10 +558,63 @@ pub(crate) fn language_manager() -> LanguageManager {
     lm
 }
 
+thread_local! {
+    /// `Rc` pointer of each `Ui` → its status generation. The counter also
+    /// lives on `Ui`, but `set_status` often runs while that `RefCell` is
+    /// already borrowed, so the idle path reads the clone registered here.
+    static GERACAO_STATUS: RefCell<Vec<(usize, Rc<Cell<u64>>)>> =
+        const { RefCell::new(Vec::new()) };
+}
+
+pub(crate) fn registrar_status(ui: &UiRc) {
+    let chave = Rc::as_ptr(ui) as usize;
+    let celula = Rc::clone(&ui.borrow().geracao_status);
+    GERACAO_STATUS.with(|lista| {
+        let mut lista = lista.borrow_mut();
+        if let Some(entrada) = lista.iter_mut().find(|(k, _)| *k == chave) {
+            entrada.1 = celula;
+        } else {
+            lista.push((chave, celula));
+        }
+    });
+}
+
+fn celula_do_status(ui: &UiRc) -> Option<Rc<Cell<u64>>> {
+    let chave = Rc::as_ptr(ui) as usize;
+    GERACAO_STATUS.with(|lista| {
+        lista
+            .borrow()
+            .iter()
+            .find(|(k, _)| *k == chave)
+            .map(|(_, celula)| Rc::clone(celula))
+    })
+}
+
 pub(crate) fn set_status(ui: &UiRc, text: &str) {
-    if let Ok(u) = ui.try_borrow() {
-        u.status.set_text(text);
+    let Some(celula) = celula_do_status(ui) else {
+        if let Ok(u) = ui.try_borrow() {
+            u.status.set_text(text);
+        }
+        return;
+    };
+    let geracao = celula.get().wrapping_add(1);
+    celula.set(geracao);
+    aplicar_status(Rc::clone(ui), celula, geracao, text.to_string());
+}
+
+fn aplicar_status(ui: UiRc, celula: Rc<Cell<u64>>, geracao: u64, texto: String) {
+    if celula.get() != geracao {
+        return;
     }
+    if let Ok(u) = ui.try_borrow() {
+        if celula.get() == geracao {
+            u.status.set_text(&texto);
+        }
+        return;
+    }
+    // Still borrowed. Try the same message again; a newer `set_status`
+    // has a higher generation and this one gives up.
+    glib::idle_add_local_once(move || aplicar_status(ui, celula, geracao, texto));
 }
 
 pub(crate) fn refresh_cursor(ui: &UiRc, buffer: &sourceview5::Buffer) {
@@ -585,8 +638,73 @@ pub(crate) fn remember_arquivo(ui: &UiRc, doc: &Doc) {
     sessao::salvar(ui);
 }
 
+/// Last path component without a dot gets `.lep`. A dot in a folder name
+/// (`aula.v2/prog`) does not count.
+pub(crate) fn com_extensao_lep(nome: &str) -> String {
+    let nome = nome.trim().trim_start_matches('/');
+    let arquivo = nome.rsplit('/').next().unwrap_or(nome);
+    if arquivo.contains('.') {
+        nome.to_string()
+    } else if nome.is_empty() {
+        nome.to_string()
+    } else {
+        format!("{nome}.lep")
+    }
+}
+
+/// Words separated by whitespace. `"..."` and `'...'` are one argument.
+/// A backslash keeps the next character, including inside quotes.
 pub(crate) fn parse_run_args(s: &str) -> Vec<String> {
-    s.split_whitespace().map(|w| w.to_string()).collect()
+    let mut args = Vec::new();
+    let mut atual = String::new();
+    let mut chars = s.chars().peekable();
+    let mut aspas: Option<char> = None;
+    let mut algum = false;
+    while let Some(c) = chars.next() {
+        if let Some(q) = aspas {
+            if c == '\\' {
+                if let Some(n) = chars.next() {
+                    atual.push(n);
+                    algum = true;
+                }
+                continue;
+            }
+            if c == q {
+                aspas = None;
+                algum = true;
+                continue;
+            }
+            atual.push(c);
+            algum = true;
+            continue;
+        }
+        match c {
+            '"' | '\'' => {
+                aspas = Some(c);
+                algum = true;
+            }
+            '\\' => {
+                if let Some(n) = chars.next() {
+                    atual.push(n);
+                    algum = true;
+                }
+            }
+            c if c.is_whitespace() => {
+                if algum {
+                    args.push(std::mem::take(&mut atual));
+                    algum = false;
+                }
+            }
+            c => {
+                atual.push(c);
+                algum = true;
+            }
+        }
+    }
+    if algum {
+        args.push(atual);
+    }
+    args
 }
 // ── Dialogs ────────────────────────────────────────────────────────────────
 
@@ -890,5 +1008,22 @@ mod tests {
         assert!(should_use_cairo_renderer(1, false));
         assert!(!should_use_cairo_renderer(2, true));
         assert!(!should_use_cairo_renderer(4, false));
+    }
+
+    #[test]
+    fn argumentos_com_aspas_e_extensao_lep() {
+        assert_eq!(
+            parse_run_args(r#"um "Maria Silva" 'dois tres' fim"#),
+            ["um", "Maria Silva", "dois tres", "fim"]
+        );
+        assert_eq!(parse_run_args(r#" "a b" "#), ["a b"]);
+        assert_eq!(parse_run_args(r#"vazio "" resto"#), ["vazio", "", "resto"]);
+        assert_eq!(
+            parse_run_args(r#"aspas \"internas\""#),
+            ["aspas", "\"internas\""]
+        );
+        assert_eq!(com_extensao_lep("aula.v2/prog"), "aula.v2/prog.lep");
+        assert_eq!(com_extensao_lep("aula.v2/prog.lep"), "aula.v2/prog.lep");
+        assert_eq!(com_extensao_lep("notas.txt"), "notas.txt");
     }
 }

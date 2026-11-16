@@ -205,11 +205,7 @@ impl<'a> Documents<'a> {
             if name.is_empty() {
                 return Ok(None);
             }
-            let name = if name.contains('.') {
-                name.to_string()
-            } else {
-                format!("{name}.lep")
-            };
+            let name = crate::shell::com_extensao_lep(name);
             if self.docs.iter().any(|other| {
                 !std::ptr::eq(other.as_ref(), doc)
                     && other
@@ -287,7 +283,27 @@ pub struct SaveRequest {
 }
 impl SaveRequest {
     pub fn write(&self, files: &Files, project: &str) -> Result<crate::store::Saved, SaveError> {
-        files.write_file(project, &self.name, &self.text, &self.expected)
+        match files.write_file(project, &self.name, &self.text, &self.expected) {
+            // A slow save can pass the 10s RPC deadline after the bytes are
+            // already on the server. The next save then conflicts with this
+            // same text. Identical bytes are that save, not a foreign edit.
+            Err(SaveError::Conflict) if matches!(self.expected, Expected::Revision(_)) => {
+                match files.current_bytes(project, &self.name) {
+                    Ok(Some(snapshot)) if snapshot.bytes == self.text.as_bytes() => {
+                        Ok(crate::store::Saved {
+                            revision: if snapshot.revision.is_empty() {
+                                expressa_aula_storage::revision(&snapshot.bytes)
+                            } else {
+                                snapshot.revision
+                            },
+                            warning: None,
+                        })
+                    }
+                    _ => Err(SaveError::Conflict),
+                }
+            }
+            other => other,
+        }
     }
     pub fn complete(
         &self,
@@ -810,5 +826,29 @@ mod tests {
             assert!(existing.is_dirty());
             assert!(copy.backup.paths[0].exists());
         });
+    }
+
+    #[test]
+    fn conflito_com_os_mesmos_bytes_vale_como_salvo() {
+        let dir = tempfile::tempdir().unwrap();
+        let files = Files::Local(dir.path().to_path_buf());
+        let path = dir.path().join("a.lep");
+        std::fs::write(&path, "novo").unwrap();
+        let pedido = |texto: &str| SaveRequest {
+            name: "a.lep".into(),
+            text: texto.into(),
+            expected: Expected::Revision("sha256:revisao-velha".into()),
+            creating: false,
+            original_name: "a.lep".into(),
+            edit_epoch: 1,
+            io_epoch: 1,
+        };
+        let salvo = pedido("novo").write(&files, "local").unwrap();
+        assert_eq!(salvo.revision, expressa_aula_storage::revision(b"novo"));
+        assert!(matches!(
+            pedido("outro").write(&files, "local"),
+            Err(SaveError::Conflict)
+        ));
+        assert_eq!(std::fs::read(&path).unwrap(), b"novo");
     }
 }

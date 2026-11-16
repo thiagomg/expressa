@@ -25,7 +25,7 @@ impl ExecutionBackend {
     }
 
     pub fn from_name(name: &str) -> Option<Self> {
-        match name {
+        match name.trim().to_ascii_lowercase().as_str() {
             "ast" => Some(Self::Ast),
             "bytecode" => Some(Self::Bytecode),
             _ => None,

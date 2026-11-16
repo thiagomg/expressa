@@ -160,16 +160,21 @@ impl Machine {
                         Value::Matriz(_) => vm.matriz_scale(&value, &value, -1.0, span)?,
                         _ => Value::Numero(-vm.expect_numero(&value, span)?),
                     },
-                    UnaryOp::Not => Value::Bool(!vm.expect_bool(&value, span)?),
+                    UnaryOp::Not => Value::Bool(!vm.expect_nao(&value, span)?),
                 });
             }
             Op::Binary(op) => {
                 let right = pop!();
                 let left = pop!();
-                self.values
-                    .push(stacker::maybe_grow(PILHA_RESERVA, PILHA_SEGMENTO, || {
-                        vm.apply_binary(&left, op, &right, span, frame.env())
-                    })?);
+                // Number arithmetic does not walk values. Other operands can.
+                let resultado = if matches!((&left, &right), (Value::Numero(_), Value::Numero(_))) {
+                    vm.apply_binary(&left, op, &right, span, span, span, frame.env())?
+                } else {
+                    stacker::maybe_grow(PILHA_RESERVA, PILHA_SEGMENTO, || {
+                        vm.apply_binary(&left, op, &right, span, span, span, frame.env())
+                    })?
+                };
+                self.values.push(resultado);
             }
             Op::Field(id) => {
                 let object = pop!();

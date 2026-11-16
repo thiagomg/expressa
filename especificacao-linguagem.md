@@ -20,14 +20,14 @@ Todo bloco (`inicio`/`fim` ou `{`/`}`) é uma expressão; seu resultado é o val
 
 | Tipo     | Exemplos                          |
 |----------|-----------------------------------|
-| `numero` | `10`, `3.14`, `-8`, `0` (decimal; `formato("float")` liga IEEE-754) |
+| `numero` | `10`, `3.14`, `-8`, `0`, `1_000` (decimal; `formato("float")` liga IEEE-754) |
 | `texto`  | `"olá"`, `"123"`                  |
 | `bool`   | `verdadeiro`, `falso`             |
 | `faixa`  | `0..3`, `1..=2`, `5..`            |
 
 Tipos compostos: **lista**, **par**, **mapa**, **conjunto**, **matriz**, **imagem** e **faixa**.
 
-Os contextos que exigem inteiro (chaves numéricas, elementos numéricos de conjuntos, contadores e índices) usam inteiros com sinal de 64 bits: −9223372036854775808…9223372036854775807. O tipo `numero` aceita valores fora desse intervalo; ser matematicamente inteiro não garante que um valor seja aceito nesses contextos. Dimensões e índices também devem caber no tamanho de endereço da plataforma e nos limites do host. Conversões fora do intervalo numérico produzem erro, nunca substituem o valor por zero.
+Os contextos que exigem inteiro (chaves numéricas, elementos numéricos de conjuntos, contadores e índices) usam inteiros com sinal de 64 bits: −9223372036854775808…9223372036854775807. O tipo `numero` aceita valores fora desse intervalo; ser matematicamente inteiro não garante que um valor seja aceito nesses contextos. Dimensões e índices também devem caber no tamanho de endereço da plataforma e nos limites do host. Conversões fora do intervalo numérico produzem erro, nunca substituem o valor por zero. Um `..=` cujo teto é o maior inteiro (ou maior) diz `o teto de ..= passa do maior inteiro`, sem imprimir o sucessor que o programa não escreveu. `_` entre dígitos é separador (`1_000`, `3.14_15`); `_` no fim, duplicado ou ao lado do ponto é erro. Não há notação científica (`1e5` é erro). Mensagens de erro escrevem números no padrão ativo (`2,5` em pt-BR); CSV e argumentos de processo continuam com ponto.
 
 `tipo(valor)` devolve o nome do tipo como texto (`"numero"`, `"faixa"`, `"texto"`, `"bool"`, `"lista"`, `"par"`, `"mapa"`, `"conjunto"`, `"matriz"`, `"imagem"`, `"funcao"`, `"modulo"`, `"processo"`, `"nada"`). Os nomes são os mesmos das mensagens de erro (sem acento). `escreva` e funções do aluno são `"funcao"`. `tipos()` lista esses nomes.
 
@@ -67,7 +67,7 @@ fim
 soma = funcao(a, b) { a + b }
 ```
 
-`///` nas linhas imediatamente acima de uma definição (`nome = …` ou `importe`) vira a ficha daquele nome (`ajuda(soma)`). `////` é um comentário comum.
+`///` só vale na linha imediatamente acima de uma definição (`nome = …` ou `importe`). Uma linha em branco ou um `//` no meio desfaz o bloco: o erro é `documentação só vale antes de uma definição`. Linhas `///` seguidas juntam a ficha (`ajuda(soma)`). `////` e `///` no meio da linha são comentário comum.
 
 A **primeira linha** do arquivo pode ser um shebang Unix (`#!…`). A Expressa ignora essa linha. `#` **não** é comentário em qualquer outro lugar.
 
@@ -81,9 +81,9 @@ As funções nativas estão documentadas em `docs/nativas/*.lep` (mesmo formato 
 
 ## 4. Operadores
 
-**Aritméticos:** `+` `-` `*` `/` `%`  
+**Aritméticos:** `+` `-` `*` `/` `%` (`%` trunca em direção a zero: `-7 % 3` é `-1`)  
 **Atribuição composta:** `+=` (os mesmos operandos de `+`), `-=` (os mesmos operandos de `-`). `alvo += v` lê o valor do alvo, soma `v` e grava no mesmo destino. O receptor e seus índices são avaliados uma única vez, antes de `v`, na ordem de leitura. A atribuição simples preserva a ordem existente: primeiro o lado direito; em `[i]`, depois o índice e o receptor. A troca de um caractere em texto também mantém o destino escolhido para a regravação.
-**Comparação:** `==` `!=` `>` `<` `>=` `<=`  
+**Comparação:** `==` `!=` `>` `<` `>=` `<=` (texto compara ponto de código, então `"ábaco" > "zebra"`; `nao` antes de número sugere `nao (x == 3)`, porque `nao` prende mais forte que `==`)  
 **Lógicos:** `e` `ou` `nao`  
 **Par:** `chave -> valor` produz um valor do tipo `par`. Não encadeia: `a -> b -> c` é erro.  
 **Raiz quadrada:** `importe "mat"` e então `raiz(n)` — erro se `n < 0` (tratável com `se_falhar`)  
@@ -322,7 +322,7 @@ xs[0..=2]                      // [10, 20, 30]
 
 ## 10. Pares e mapas
 
-`chave -> valor` é um **par**. Campos: `p:chave` e `p:valor`. Chaves de par são texto, número inteiro ou bool (`:nome` é o texto `"nome"`). Palavras-chave e textos com espaço continuam com aspas. Um par **não** serve de chave de mapa nem de elemento de conjunto.
+`chave -> valor` é um **par**. Campos: `p:chave` e `p:valor`. Chaves de par são texto, número inteiro ou bool (`:nome` é o texto `"nome"`). Palavras-chave e textos com espaço continuam com aspas. Um par **não** serve de chave de mapa nem de elemento de conjunto. Cada leitura copia a cadeia de pares. `x = 1 -> x` repetido fica quadrático: o par novo carrega uma cópia do anterior.
 
 `mapa` e `conjunto` são funções do núcleo. `mapa()` (ou `mapa([])`) é o mapa vazio. `mapa(xs)` recebe **uma** lista de pares; chaves duplicadas são erro.
 
@@ -384,6 +384,7 @@ maiuscula(nome)
 sem_acento("olá")          // "ola"
 minuscula(nome)
 nome contem "Silva"
+"ábaco" > "zebra"         // verdadeiro: ordem de ponto de código
 procure(nome, "Silva")    // índice 0…n−1; -1 se não achar
 substitua(nome, "Maria", "Ana")
 separe("a,b,c", ",")

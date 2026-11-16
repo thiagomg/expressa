@@ -165,13 +165,26 @@ impl Workspace {
     }
 
     pub fn write_editor_source(&mut self, source: &EditorSource) -> Result<(), String> {
-        if !crate::pendencias::valid_relative(&source.path) {
-            return Err("caminho de aba inválido".into());
+        self.write_editor_sources(std::slice::from_ref(source))
+    }
+
+    pub fn write_editor_sources(&mut self, sources: &[EditorSource]) -> Result<(), String> {
+        for source in sources {
+            if !crate::pendencias::valid_relative(&source.path) {
+                return Err("caminho de aba inválido".into());
+            }
         }
-        self.journal
-            .overlay(&source.path, source.text.as_bytes(), &source.expected)?;
-        self.revisions
-            .insert(source.path.clone(), source.expected.clone());
+        self.journal.overlay_todos(sources.iter().map(|source| {
+            (
+                source.path.as_str(),
+                source.text.as_bytes(),
+                &source.expected,
+            )
+        }))?;
+        for source in sources {
+            self.revisions
+                .insert(source.path.clone(), source.expected.clone());
+        }
         Ok(())
     }
 

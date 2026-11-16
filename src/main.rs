@@ -2,7 +2,12 @@ use std::env::args;
 use std::process;
 
 use expressa::parser::parse;
-use expressa::runtime::{debug_source_args, run_source_args, run_source_marcador_args};
+#[cfg(feature = "terminal")]
+use expressa::runtime::run_repl_com;
+use expressa::runtime::{
+    ExecutionBackend, ExecutionOptions, NumeroAritmetica, NumeroLocale, debug_source_args_com,
+    run_exb_file_args_com, run_source_args_com, run_source_marcador_args_com,
+};
 
 fn main() {
     if let Err(e) = try_main() {
@@ -13,21 +18,23 @@ fn main() {
 
 fn try_main() -> Result<(), Box<dyn std::error::Error>> {
     let mut args: Vec<String> = args().skip(1).collect();
-    // Only global options before the command/file select the backend. Script
-    // arguments named --backend must reach argumentos unchanged.
+    // Flags choose this process only. `execute` must not inherit them: a child
+    // expressa keeps its own defaults unless the script sets the environment.
+    let mut options = ExecutionOptions::default();
     let option = 0;
     while option < args.len() {
         match args[option].as_str() {
             "--backend" => {
                 let name = args
                     .get(option + 1)
-                    .filter(|s| expressa::runtime::ExecutionBackend::from_name(s).is_some())
-                    .ok_or("Uso: expressa --backend ast|bytecode [arquivo.lep]")?
-                    .clone();
-                if name == "ast" && !cfg!(feature = "ast") {
+                    .cloned()
+                    .ok_or("Uso: expressa --backend ast|bytecode [arquivo.lep]")?;
+                let backend = ExecutionBackend::from_name(&name)
+                    .ok_or("Uso: expressa --backend ast|bytecode [arquivo.lep]")?;
+                if !backend.is_available() {
                     return Err("backend AST indisponível neste build".into());
                 }
-                unsafe { std::env::set_var("EXPRESSA_BACKEND", &name) };
+                options.backend = backend;
                 args.drain(option..=option + 1);
             }
             "--numeros" => {
@@ -35,10 +42,8 @@ fn try_main() -> Result<(), Box<dyn std::error::Error>> {
                     .get(option + 1)
                     .cloned()
                     .ok_or("Uso: expressa --numeros pt|en")?;
-                if expressa::runtime::NumeroLocale::from_name(&name).is_none() {
-                    return Err(format!("padrão desconhecido `{name}` (use pt ou en)").into());
-                }
-                unsafe { std::env::set_var("EXPRESSA_NUMEROS", &name) };
+                options.numero_locale = NumeroLocale::from_name(&name)
+                    .ok_or_else(|| format!("padrão desconhecido `{name}` (use pt ou en)"))?;
                 args.drain(option..=option + 1);
             }
             "--aritmetica" => {
@@ -46,26 +51,21 @@ fn try_main() -> Result<(), Box<dyn std::error::Error>> {
                     .get(option + 1)
                     .cloned()
                     .ok_or("Uso: expressa --aritmetica decimal|float")?;
-                if expressa::runtime::NumeroAritmetica::from_name(&name).is_none() {
-                    return Err(
-                        format!("padrão desconhecido `{name}` (use decimal ou float)").into(),
-                    );
-                }
-                unsafe { std::env::set_var("EXPRESSA_ARITMETICA", &name) };
+                options.numero_aritmetica =
+                    NumeroAritmetica::from_name(&name).ok_or_else(|| {
+                        format!("padrão desconhecido `{name}` (use decimal ou float)")
+                    })?;
                 args.drain(option..=option + 1);
             }
             _ => break,
         }
     }
     if args.is_empty() {
-        if !expressa::runtime::ExecutionOptions::default()
-            .backend
-            .is_available()
-        {
+        if !options.backend.is_available() {
             return Err("backend AST indisponível neste build".into());
         }
         #[cfg(feature = "terminal")]
-        expressa::runtime::run_repl()?;
+        run_repl_com(options)?;
         #[cfg(not(feature = "terminal"))]
         return Err("REPL indisponível neste build; informe um arquivo .lep ou .exb".into());
         #[cfg(feature = "terminal")]
@@ -191,11 +191,7 @@ fn try_main() -> Result<(), Box<dyn std::error::Error>> {
             "marcador-leia" => expressa::runtime::ExbRunMode::Marker,
             _ => expressa::runtime::ExbRunMode::Run,
         };
-        exit_if_nonzero(expressa::runtime::run_exb_file_args(
-            file,
-            script_args,
-            mode,
-        )?)?;
+        exit_if_nonzero(run_exb_file_args_com(file, script_args, mode, options)?)?;
         return Ok(());
     }
     let source = std::fs::read_to_string(file)?;
@@ -207,9 +203,14 @@ fn try_main() -> Result<(), Box<dyn std::error::Error>> {
                 process::exit(1);
             }
         },
-        "debug" => exit_if_nonzero(debug_source_args(&source, file, script_args)?)?,
-        "marcador-leia" => exit_if_nonzero(run_source_marcador_args(&source, file, script_args)?)?,
-        _ => exit_if_nonzero(run_source_args(&source, file, script_args)?)?,
+        "debug" => exit_if_nonzero(debug_source_args_com(&source, file, script_args, options)?)?,
+        "marcador-leia" => exit_if_nonzero(run_source_marcador_args_com(
+            &source,
+            file,
+            script_args,
+            options,
+        )?)?,
+        _ => exit_if_nonzero(run_source_args_com(&source, file, script_args, options)?)?,
     }
     Ok(())
 }

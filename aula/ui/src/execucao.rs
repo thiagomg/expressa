@@ -133,9 +133,7 @@ pub(crate) fn executar(ui: &UiRc, debug: bool) {
         true,
         move || {
             let mut ws = Workspace::sync(&files, &project)?;
-            for source in &textos {
-                ws.write_editor_source(source)?;
-            }
+            ws.write_editor_sources(&textos)?;
             ws.arm()?;
             let sources = ws.capture_sources()?;
             Ok::<_, String>((ws, sources))

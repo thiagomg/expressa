@@ -208,6 +208,7 @@ pub(crate) fn navigation_task<T: Send + 'static>(
     ui: &UiRc,
     work: impl FnOnce() -> Result<T, String> + Send + 'static,
     done: impl FnOnce(&UiRc, T) + 'static,
+    mostrar_erro: bool,
 ) {
     let epoch = ui.borrow().navigation_epoch;
     let reply = background::Reply::spawn(epoch, work);
@@ -233,7 +234,9 @@ pub(crate) fn navigation_task<T: Send + 'static>(
                 glib::ControlFlow::Break
             }
             background::Poll::Ready(Err(e)) => {
-                set_status(&ui, &e);
+                if mostrar_erro {
+                    set_status(&ui, &e);
+                }
                 glib::ControlFlow::Break
             }
             background::Poll::Pending => glib::ControlFlow::Continue,
@@ -254,6 +257,7 @@ pub(crate) fn conectar_servidor(ui: &UiRc, url: String, aluno: String, atual: St
         ui,
         move || Rpc::connect(&address).map(Arc::new),
         move |ui, rpc| listar_e_escolher(ui, rpc, url, aluno, atual, false),
+        true,
     );
 }
 
@@ -296,6 +300,7 @@ pub(crate) fn listar_e_escolher(
                 },
             );
         },
+        true,
     );
 }
 
@@ -579,6 +584,19 @@ pub(crate) fn finish_open(ui: &UiRc) {
     projetos_menu::refresh(ui);
     refresh_title(ui);
     refresh_diag_label(ui);
+    let (files, project) = {
+        let u = ui.borrow();
+        (u.files.clone(), u.project.clone())
+    };
+    em_segundo_plano(
+        ui,
+        move || {
+            if let Ok(id) = files.identity(&project) {
+                let _ = pendencias::scan_project(&pendencias::root(), &id);
+            }
+        },
+        |_, _| {},
+    );
     // Reopen the tabs of last time once the listing says what is there.
     refresh_tree_e(ui, |ui| {
         sessao::restaurar(ui);
@@ -1052,7 +1070,8 @@ pub(crate) fn tree_popup(ui: &UiRc, x: f64, y: f64) {
             Box::new({
                 let ui = Rc::clone(ui);
                 let rel = rel.clone();
-                move || renomear_entrada(&ui, &rel)
+                let pasta = is_dir;
+                move || renomear_entrada(&ui, &rel, pasta)
             }),
         ));
         itens.push((
@@ -1129,11 +1148,7 @@ pub(crate) fn criar_arquivo(ui: &UiRc, dir: &str) {
     if name.is_empty() {
         return;
     }
-    let name = if name.contains('.') {
-        name
-    } else {
-        format!("{name}.lep")
-    };
+    let name = crate::shell::com_extensao_lep(&name);
     let path = join_path(dir, &name);
     let (files, project) = {
         let u = ui.borrow();
@@ -1185,16 +1200,22 @@ pub(crate) fn criar_pasta(ui: &UiRc, dir: &str) {
     );
 }
 
-pub(crate) fn renomear_entrada(ui: &UiRc, rel: &str) {
+pub(crate) fn renomear_entrada(ui: &UiRc, rel: &str, pasta: bool) {
     let window = ui.borrow().window.clone();
     let base = rel.rsplit('/').next().unwrap_or(rel).to_string();
     let Some(name) = perguntar_linha(&window, &format!("Renomear `{base}`:")) else {
         return;
     };
-    if name.trim().is_empty() {
+    let name = name.trim();
+    if name.is_empty() {
         return;
     }
-    let to = join_path(&parent_dir(rel, false), name.trim());
+    let name = if pasta {
+        name.to_string()
+    } else {
+        crate::shell::com_extensao_lep(name)
+    };
+    let to = join_path(&parent_dir(rel, false), &name);
     let (files, project) = {
         let u = ui.borrow();
         (u.files.clone(), u.project.clone())
@@ -1222,14 +1243,53 @@ pub(crate) fn renomear_entrada(ui: &UiRc, rel: &str) {
                         sessao::vigiar(ui, &d);
                     }
                 }
+                atualizar_caminhos_renomeados(ui, &rel, &to);
                 ui.borrow().file_cache.borrow_mut().clear();
                 refresh_tree(ui);
                 refresh_title(ui);
+                sessao::salvar(ui);
                 set_status(ui, &format!("{rel} → {to}"));
             }
             Err(e) => set_status(ui, &format!("renomear: {e}")),
         },
     );
+}
+
+fn caminho_renomeado(caminho: &str, de: &str, para: &str) -> Option<String> {
+    if caminho == de {
+        Some(para.to_string())
+    } else if let Some(resto) = caminho.strip_prefix(&format!("{de}/")) {
+        Some(format!("{para}/{resto}"))
+    } else {
+        None
+    }
+}
+
+fn atualizar_caminhos_renomeados(ui: &UiRc, de: &str, para: &str) {
+    let mut u = ui.borrow_mut();
+    if let Some(novo) = caminho_renomeado(&u.prefs.arquivo, de, para) {
+        u.prefs.arquivo = novo;
+        u.prefs.save();
+    }
+    for (nome, _) in &mut u.abas_fechadas {
+        if let Some(novo) = caminho_renomeado(nome, de, para) {
+            *nome = novo;
+        }
+    }
+    let antigos: Vec<String> = u.execucao.execution_editors.keys().cloned().collect();
+    for antigo in antigos {
+        let Some(novo) = caminho_renomeado(&antigo, de, para) else {
+            continue;
+        };
+        if let Some(doc) = u.execucao.execution_editors.remove(&antigo) {
+            u.execucao.execution_editors.insert(novo, doc);
+        }
+    }
+    for (arquivo, _) in &mut u.execucao.execution_breakpoints {
+        if let Some(novo) = caminho_renomeado(arquivo, de, para) {
+            *arquivo = novo;
+        }
+    }
 }
 
 fn caminho_no_alvo(doc: &Doc, rel: &str) -> bool {

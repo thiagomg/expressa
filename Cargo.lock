@@ -397,6 +397,7 @@ dependencies = [
  "expressa-aula-storage",
  "prost",
  "tokio",
+ "tokio-stream",
  "tonic",
 ]
 

@@ -100,6 +100,7 @@ pub fn refresh(ui: &UiRc) {
             }
             fill_projects(&menu, projetos, &atual);
         },
+        false,
     );
 }
 

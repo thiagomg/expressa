@@ -159,8 +159,14 @@ impl PainelRepl {
                 }
             });
         }
-        painel.iniciar();
         painel
+    }
+
+    /// The interpreter and its 30 ms poll start on the first use, not with the window.
+    pub fn garantir(self: &Rc<Self>) {
+        if self.sessao.borrow().is_none() {
+            self.iniciar();
+        }
     }
 
     pub fn focar(&self) {
@@ -186,8 +192,12 @@ impl PainelRepl {
     }
 
     fn enviar(self: &Rc<Self>) {
+        self.garantir();
         let linha = self.entrada.text().to_string();
         if self.sessao.borrow().is_none() {
+            return;
+        }
+        if linha.is_empty() && self.reenviar_pendente() {
             return;
         }
         if self.pendente.borrow().len() + linha.len() + 1 > REPL_MAX_CODIGO {
@@ -229,6 +239,23 @@ impl PainelRepl {
             std::mem::take(&mut *p)
         };
         self.prompt.set_text(">");
+        self.despachar(codigo);
+    }
+
+    /// Enter on an empty line resends a program the queue refused, without
+    /// folding its lines into the single-line entry.
+    fn reenviar_pendente(self: &Rc<Self>) -> bool {
+        let codigo = self.pendente.borrow().clone();
+        if codigo.is_empty() || expressa::parser::needs_more_input(&codigo) {
+            return false;
+        }
+        self.pendente.borrow_mut().clear();
+        self.prompt.set_text(">");
+        self.despachar(codigo);
+        true
+    }
+
+    fn despachar(self: &Rc<Self>, codigo: String) {
         let resultado = self
             .sessao
             .borrow_mut()
@@ -236,11 +263,21 @@ impl PainelRepl {
             .unwrap()
             .enviar(codigo.clone());
         if let Err(erro) = resultado {
-            // Preserve the complete command for retry when the bounded queue fills.
-            self.entrada.set_text(codigo.trim_end_matches('\n'));
+            self.guardar_recusa(codigo);
             self.escrever(&format!("{erro}\n"), Some("erro"));
         }
         self.atualizar_parada();
+    }
+
+    fn guardar_recusa(&self, codigo: String) {
+        let visivel = codigo.trim_end_matches('\n');
+        if visivel.contains('\n') {
+            *self.pendente.borrow_mut() = codigo;
+            self.prompt.set_text("...");
+            self.entrada.set_text("");
+        } else {
+            self.entrada.set_text(visivel);
+        }
     }
 
     fn iniciar(self: &Rc<Self>) {
@@ -521,6 +558,7 @@ mod tests {
     fn repeated_restart_rejects_old_callbacks_and_does_not_mix_new_input_or_counts() {
         crate::gtk_test::run(|| {
             let p = PainelRepl::new();
+            p.garantir();
             for _ in 0..4 {
                 let antiga = p.sessao.borrow().as_ref().unwrap().id();
                 digitar(&p, "enquanto verdadeiro { escreva(\"ANTIGA\") }");

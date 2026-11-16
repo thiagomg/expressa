@@ -11,3 +11,10 @@ aula-data/
 
 # Pasta e zip gerados por empacotar.ps1.
 /dist/
+
+# Notas locais de revisão.
+/claude-improvements/
+
+# Trava e temporário do salvamento atômico.
+.expressa-save.lock
+.expressa-save-*

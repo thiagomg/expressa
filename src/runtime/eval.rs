@@ -3,7 +3,10 @@ mod exb;
 pub use bytecode::format::{
     CompiledProgram, EXB_MAX_BYTES, EXB_VERSION, ExbError, compile_exb, load_exb, read_exb,
 };
-pub use exb::{ExbRunMode, run_compiled_with_options, run_exb_file_args, run_exb_with_options};
+pub use exb::{
+    ExbRunMode, run_compiled_with_options, run_exb_file_args, run_exb_file_args_com,
+    run_exb_with_options,
+};
 pub(crate) mod bytecode;
 pub use bytecode::ExecutionBackend;
 mod matrix;
@@ -39,7 +42,6 @@ use super::pilha::{PILHA_RESERVA, PILHA_SEGMENTO, PROFUNDIDADE_MAXIMA};
 use super::rng::Rng;
 use super::value::{
     Closure, FunctionBody, ListaRc, MapKey, NumeroLocale, Value, default_numero_locale,
-    format_numero,
 };
 
 /// Source of lines for `leia()`. Implemented for any [`BufRead`] (tests)
@@ -91,7 +93,7 @@ pub(crate) struct Vm<'a, 'c> {
     pub(crate) workspace_root: Option<PathBuf>,
     deadline: Option<Instant>,
     pub(crate) max_matrix_cells: usize,
-    backend: ExecutionBackend,
+    pub(crate) backend: ExecutionBackend,
     pub(crate) leia_host: Option<&'a mut dyn LeiaHost>,
     #[cfg(feature = "graphics")]
     pub(crate) cartesiano_host: Option<&'c mut dyn CartesianoHost>,
@@ -149,6 +151,10 @@ pub struct ExecutionOptions {
     pub time_limit: Option<Duration>,
     /// Maximum number of cells in each matrix, including arithmetic temporaries.
     pub max_matrix_cells: usize,
+    /// Printing and messages. The default reads `EXPRESSA_NUMEROS` once, at construction.
+    pub numero_locale: NumeroLocale,
+    /// Decimal or float. The default reads `EXPRESSA_ARITMETICA` once, at construction.
+    pub numero_aritmetica: NumeroAritmetica,
 }
 
 impl Default for ExecutionOptions {
@@ -158,6 +164,8 @@ impl Default for ExecutionOptions {
             workspace_root: None,
             time_limit: None,
             max_matrix_cells: DEFAULT_MAX_MATRIX_CELLS,
+            numero_locale: default_numero_locale(),
+            numero_aritmetica: default_numero_aritmetica(),
         }
     }
 }
@@ -212,18 +220,26 @@ pub fn run_source(source: &str, file: &str) -> Result<i32, RuntimeError> {
 }
 
 pub fn run_source_args(source: &str, file: &str, args: &[String]) -> Result<i32, RuntimeError> {
+    run_source_args_com(source, file, args, ExecutionOptions::default())
+}
+
+pub fn run_source_args_com(
+    source: &str,
+    file: &str,
+    args: &[String],
+    options: ExecutionOptions,
+) -> Result<i32, RuntimeError> {
     let mut input = ConsoleInput;
     let mut stdout = io::stdout();
     let mut stderr = io::stderr();
-    run_with_io(
+    run_configured_with_io(
         source,
         file,
         Box::new(NoopHook),
         &mut input,
         &mut stdout,
         &mut stderr,
-        None,
-        None,
+        options,
         None,
         None,
         true,
@@ -243,6 +259,15 @@ pub fn run_source_marcador_args(
     file: &str,
     args: &[String],
 ) -> Result<i32, RuntimeError> {
+    run_source_marcador_args_com(source, file, args, ExecutionOptions::default())
+}
+
+pub fn run_source_marcador_args_com(
+    source: &str,
+    file: &str,
+    args: &[String],
+    options: ExecutionOptions,
+) -> Result<i32, RuntimeError> {
     let stdin = io::stdin();
     let mut host = super::leia::MarkerLeiaHost {
         stdin: stdin.lock(),
@@ -250,15 +275,14 @@ pub fn run_source_marcador_args(
     let mut dummy_in = io::Cursor::new("");
     let mut stdout = io::stdout();
     let mut stderr = io::stderr();
-    run_with_io(
+    run_configured_with_io(
         source,
         file,
         Box::new(NoopHook),
         &mut dummy_in,
         &mut stdout,
         &mut stderr,
-        None,
-        None,
+        options,
         Some(&mut host),
         None,
         true,
@@ -272,9 +296,18 @@ pub fn debug_source(source: &str, file: &str) -> Result<i32, RuntimeError> {
 }
 
 pub fn debug_source_args(source: &str, file: &str, args: &[String]) -> Result<i32, RuntimeError> {
+    debug_source_args_com(source, file, args, ExecutionOptions::default())
+}
+
+pub fn debug_source_args_com(
+    source: &str,
+    file: &str,
+    args: &[String],
+    options: ExecutionOptions,
+) -> Result<i32, RuntimeError> {
     #[cfg(not(feature = "terminal"))]
     {
-        let _ = (source, args);
+        let _ = (source, args, options);
         Err(RuntimeError {
             message: "depurador de terminal indisponível neste build".into(),
             file: file.into(),
@@ -287,15 +320,14 @@ pub fn debug_source_args(source: &str, file: &str, args: &[String]) -> Result<i3
         let mut input = ConsoleInput;
         let mut stdout = io::stdout();
         let mut stderr = io::stderr();
-        run_with_io(
+        run_configured_with_io(
             source,
             file,
             Box::new(super::debug::CliDebugger::new()),
             &mut input,
             &mut stdout,
             &mut stderr,
-            None,
-            None,
+            options,
             None,
             None,
             true,
@@ -550,6 +582,8 @@ fn run_configured_with_io<'a, 'c>(
     );
     vm.max_matrix_cells = options.max_matrix_cells;
     vm.backend = options.backend;
+    vm.numero_locale = options.numero_locale;
+    vm.numero_aritmetica = options.numero_aritmetica;
     match vm.run(program) {
         Ok(()) => Ok(0),
         Err(EvalError::Quit(code)) => Ok(code),
@@ -755,21 +789,14 @@ impl<'a, 'c> Vm<'a, 'c> {
         if self.backend == ExecutionBackend::Bytecode {
             return self.execute_items(items, env);
         }
-        #[cfg(feature = "ast")]
-        {
-            let mut last = Value::Nada;
-            for item in items {
-                last = match self.eval_item_value(item, env) {
-                    Ok(v) => v,
-                    Err(e) => return self.retorne_so_em_funcao(Err(e)),
-                };
-            }
-            Ok(last)
+        let mut last = Value::Nada;
+        for item in items {
+            last = match self.eval_item_value(item, env) {
+                Ok(v) => v,
+                Err(e) => return self.retorne_so_em_funcao(Err(e)),
+            };
         }
-        #[cfg(not(feature = "ast"))]
-        {
-            Err(self.err("backend AST indisponível neste build", Span::default()))
-        }
+        Ok(last)
     }
 
     #[cfg(feature = "terminal")]
@@ -1039,7 +1066,15 @@ impl<'a, 'c> Vm<'a, 'c> {
                     let destination = self.resolve_target(target, env, true)?;
                     let left = self.read_destination(&destination)?;
                     let right = self.eval_expr(value, env)?;
-                    let result = self.apply_binary(&left, *op, &right, *span, env)?;
+                    let result = self.apply_binary(
+                        &left,
+                        *op,
+                        &right,
+                        *span,
+                        target.span(),
+                        value.span(),
+                        env,
+                    )?;
                     self.write_destination(destination, result)?;
                 } else {
                     // Ordinary assignment retains its existing RHS-first order.
@@ -1153,7 +1188,7 @@ impl<'a, 'c> Vm<'a, 'c> {
             }
             loop_env
                 .borrow_mut()
-                .define(var.to_string(), Value::Numero(Numero::from_i64(i)));
+                .define_repetido(var, Value::Numero(Numero::from_i64(i)));
             if self.eval_loop_body(stmts, loop_env)? {
                 break;
             }
@@ -1398,7 +1433,7 @@ impl<'a, 'c> Vm<'a, 'c> {
                         Value::Matriz(_) => self.matriz_scale(&v, &v, -1.0, *span),
                         _ => Ok(Value::Numero(-self.expect_numero(&v, *span)?)),
                     },
-                    UnaryOp::Not => Ok(Value::Bool(!self.expect_bool(&v, *span)?)),
+                    UnaryOp::Not => Ok(Value::Bool(!self.expect_nao(&v, *span)?)),
                 }
             }
             Expr::Binary {
@@ -1457,25 +1492,63 @@ impl<'a, 'c> Vm<'a, 'c> {
         match op {
             BinaryOp::And => {
                 let l = self.eval_expr(left, env)?;
-                if !self.expect_bool(&l, span)? {
+                if !self.expect_bool(&l, left.span())? {
                     return Ok(Value::Bool(false));
                 }
                 let r = self.eval_expr(right, env)?;
-                Ok(Value::Bool(self.expect_bool(&r, span)?))
+                Ok(Value::Bool(self.expect_bool(&r, right.span())?))
             }
             BinaryOp::Or => {
                 let l = self.eval_expr(left, env)?;
-                if self.expect_bool(&l, span)? {
+                if self.expect_bool(&l, left.span())? {
                     return Ok(Value::Bool(true));
                 }
                 let r = self.eval_expr(right, env)?;
-                Ok(Value::Bool(self.expect_bool(&r, span)?))
+                Ok(Value::Bool(self.expect_bool(&r, right.span())?))
             }
             _ => {
                 let l = self.eval_expr(left, env)?;
                 let r = self.eval_expr(right, env)?;
-                self.apply_binary(&l, op, &r, span, env)
+                self.apply_binary(&l, op, &r, span, left.span(), right.span(), env)
             }
+        }
+    }
+
+    /// Both sides of `-`, `*`, `/` and `%` are numbers. The span is the operand
+    /// that is not a number, so the column does not stay on the left value.
+    fn par_numerico(
+        &self,
+        l: &Value,
+        r: &Value,
+        sinal: char,
+        span: Span,
+        esquerda: Span,
+        direita: Span,
+    ) -> Result<(Numero, Numero), EvalError> {
+        match (l, r) {
+            (Value::Numero(a), Value::Numero(b)) => Ok((*a, *b)),
+            (Value::Numero(_), outro) => Err(self.err(
+                format!(
+                    "operador '{sinal}' não se aplica a numero e {}",
+                    outro.type_name()
+                ),
+                direita,
+            )),
+            (outro, Value::Numero(_)) => Err(self.err(
+                format!(
+                    "operador '{sinal}' não se aplica a {} e numero",
+                    outro.type_name()
+                ),
+                esquerda,
+            )),
+            _ => Err(self.err(
+                format!(
+                    "operador '{sinal}' não se aplica a {} e {}",
+                    l.type_name(),
+                    r.type_name()
+                ),
+                span,
+            )),
         }
     }
 
@@ -1485,6 +1558,8 @@ impl<'a, 'c> Vm<'a, 'c> {
         op: BinaryOp,
         r: &Value,
         span: Span,
+        esquerda: Span,
+        direita: Span,
         env: &Rc<RefCell<Env>>,
     ) -> Result<Value, EvalError> {
         match op {
@@ -1536,33 +1611,41 @@ impl<'a, 'c> Vm<'a, 'c> {
             },
             BinaryOp::Sub => match (l, r) {
                 (Value::Matriz(_), Value::Matriz(_)) => self.matriz_add(l, r, span, -1.0),
-                _ => Ok(Value::Numero(
-                    self.expect_numero(l, span)?
-                        .sub(self.expect_numero(r, span)?, self.numero_aritmetica)
-                        .map_err(|m| self.err(m, span))?,
-                )),
+                _ => {
+                    let (a, b) = self.par_numerico(l, r, '-', span, esquerda, direita)?;
+                    Ok(Value::Numero(
+                        a.sub(b, self.numero_aritmetica)
+                            .map_err(|m| self.err(m, span))?,
+                    ))
+                }
             },
             BinaryOp::Mul => match (l, r) {
                 (Value::Matriz(_), Value::Matriz(_)) => self.matriz_mul(l, r, span),
                 (Value::Matriz(_), Value::Numero(k)) | (Value::Numero(k), Value::Matriz(_)) => {
                     self.matriz_scale(l, r, k.to_f64(), span)
                 }
-                _ => Ok(Value::Numero(
-                    self.expect_numero(l, span)?
-                        .mul(self.expect_numero(r, span)?, self.numero_aritmetica)
-                        .map_err(|m| self.err(m, span))?,
-                )),
+                _ => {
+                    let (a, b) = self.par_numerico(l, r, '*', span, esquerda, direita)?;
+                    Ok(Value::Numero(
+                        a.mul(b, self.numero_aritmetica)
+                            .map_err(|m| self.err(m, span))?,
+                    ))
+                }
             },
-            BinaryOp::Div => Ok(Value::Numero(
-                self.expect_numero(l, span)?
-                    .div(self.expect_numero(r, span)?, self.numero_aritmetica)
-                    .map_err(|m| self.err(m, span))?,
-            )),
-            BinaryOp::Rem => Ok(Value::Numero(
-                self.expect_numero(l, span)?
-                    .rem(self.expect_numero(r, span)?, self.numero_aritmetica)
-                    .map_err(|m| self.err(m, span))?,
-            )),
+            BinaryOp::Div => {
+                let (a, b) = self.par_numerico(l, r, '/', span, esquerda, direita)?;
+                Ok(Value::Numero(
+                    a.div(b, self.numero_aritmetica)
+                        .map_err(|m| self.err(m, span))?,
+                ))
+            }
+            BinaryOp::Rem => {
+                let (a, b) = self.par_numerico(l, r, '%', span, esquerda, direita)?;
+                Ok(Value::Numero(
+                    a.rem(b, self.numero_aritmetica)
+                        .map_err(|m| self.err(m, span))?,
+                ))
+            }
             BinaryOp::Eq => Ok(Value::Bool(l == r)),
             BinaryOp::Ne => Ok(Value::Bool(l != r)),
             BinaryOp::Lt | BinaryOp::Le | BinaryOp::Gt | BinaryOp::Ge => {
@@ -1735,9 +1818,8 @@ impl<'a, 'c> Vm<'a, 'c> {
                 Ok(xs.borrow()[i].clone())
             }
             Value::Texto(s) => {
-                let chars: Vec<char> = s.chars().collect();
-                let i = self.to_index(index, chars.len(), span)?;
-                Ok(Value::Texto(chars[i].to_string()))
+                let i = self.to_index(index, tamanho_em_caracteres(s), span)?;
+                Ok(Value::Texto(caractere_na(s, i)))
             }
             Value::Mapa(xs) => {
                 let key = MapKey::from_value(index).ok_or_else(|| {
@@ -1777,7 +1859,7 @@ impl<'a, 'c> Vm<'a, 'c> {
     ) -> Result<Value, EvalError> {
         let start = self.expect_int(start, span)?;
         let end = match end {
-            Some(v) => Some(self.expect_int(v, span)?),
+            Some(v) => Some(self.inteiro_do_teto(v, span)?),
             None => None,
         };
         Ok(Value::Faixa { start, end })
@@ -1797,9 +1879,8 @@ impl<'a, 'c> Vm<'a, 'c> {
                 Ok(Value::lista(xs[a..b].to_vec()))
             }
             Value::Texto(s) => {
-                let chars: Vec<char> = s.chars().collect();
-                let (a, b) = self.to_slice_bounds(start, end, chars.len(), span)?;
-                Ok(Value::Texto(chars[a..b].iter().collect()))
+                let (a, b) = self.to_slice_bounds(start, end, tamanho_em_caracteres(s), span)?;
+                Ok(Value::Texto(fatia_texto(s, a, b)))
             }
             other => Err(self.err(format!("não é possível fatiar {}", other.type_name()), span)),
         }
@@ -1812,8 +1893,8 @@ impl<'a, 'c> Vm<'a, 'c> {
         value: &Value,
         span: Span,
     ) -> Result<String, EvalError> {
-        let mut chars: Vec<char> = s.chars().collect();
-        let i = self.to_index(index, chars.len(), span)?;
+        let n = tamanho_em_caracteres(s);
+        let i = self.to_index(index, n, span)?;
         let Value::Texto(t) = value else {
             return Err(self.err(
                 format!(
@@ -1836,8 +1917,7 @@ impl<'a, 'c> Vm<'a, 'c> {
                 span,
             ));
         }
-        chars[i] = ch;
-        Ok(chars.into_iter().collect())
+        Ok(substitui_caractere(s, i, ch))
     }
 
     fn assign_index(
@@ -2065,9 +2145,20 @@ impl<'a, 'c> Vm<'a, 'c> {
     }
 
     pub(crate) fn err(&self, message: impl Into<String>, span: Span) -> EvalError {
+        let message = message.into();
+        // `se_falhar` discards the error. Skip the stack snapshot and the
+        // file clone on that path; the message stays for anything that reads it.
+        if self.protected > 0 {
+            return EvalError::Runtime(RuntimeError {
+                message,
+                stack: Vec::new(),
+                file: String::new(),
+                span,
+            });
+        }
         let file = self.file.clone();
         EvalError::Runtime(RuntimeError {
-            message: message.into(),
+            message,
             stack: CallFrame::executing(&self.stack, &file, span),
             file,
             span,
@@ -2116,19 +2207,47 @@ impl<'a, 'c> Vm<'a, 'c> {
 
     pub(crate) fn expect_int(&self, v: &Value, span: Span) -> Result<i64, EvalError> {
         let n = self.expect_numero(v, span)?;
-        n.to_i64().ok_or_else(|| {
-            self.err(
-                if n.is_integer() {
-                    format!(
-                        "número inteiro fora do intervalo de 64 bits: {}",
-                        format_numero(n)
-                    )
-                } else {
-                    format!("esperado número inteiro, encontrado {}", format_numero(n))
-                },
+        n.to_i64()
+            .ok_or_else(|| self.err(self.mensagem_inteiro(n), span))
+    }
+
+    /// Upper bound of a range. `..=` is parsed as an exclusive end plus one,
+    /// so a ceiling of the largest i64 must not print that sum.
+    fn inteiro_do_teto(&self, v: &Value, span: Span) -> Result<i64, EvalError> {
+        let n = self.expect_numero(v, span)?;
+        if let Some(i) = n.to_i64() {
+            return Ok(i);
+        }
+        if n.is_integer() && self.trecho_tem(span, "..=") {
+            return Err(self.err("o teto de ..= passa do maior inteiro", span));
+        }
+        Err(self.err(self.mensagem_inteiro(n), span))
+    }
+
+    fn mensagem_inteiro(&self, n: Numero) -> String {
+        let escrito = self.numero_locale.format(n);
+        if n.is_integer() {
+            format!("número inteiro fora do intervalo de 64 bits: {escrito}")
+        } else {
+            format!("esperado número inteiro, encontrado {escrito}")
+        }
+    }
+
+    fn trecho_tem(&self, span: Span, agulha: &str) -> bool {
+        self.source
+            .get(span.start..span.end)
+            .is_some_and(|trecho| trecho.contains(agulha))
+    }
+
+    pub(crate) fn expect_nao(&self, v: &Value, span: Span) -> Result<bool, EvalError> {
+        match v {
+            Value::Bool(b) => Ok(*b),
+            Value::Numero(_) => Err(self.err(
+                "esperado bool, encontrado numero; use nao (x == 3)",
                 span,
-            )
-        })
+            )),
+            _ => self.expect_bool(v, span),
+        }
     }
 
     pub(crate) fn expect_bool(&self, v: &Value, span: Span) -> Result<bool, EvalError> {
@@ -2197,6 +2316,46 @@ fn callee_name(expr: &Expr) -> String {
         Expr::Field { field, .. } => field.clone(),
         _ => "<funcao>".into(),
     }
+}
+
+fn tamanho_em_caracteres(s: &str) -> usize {
+    if s.is_ascii() {
+        s.len()
+    } else {
+        s.chars().count()
+    }
+}
+
+fn caractere_na(s: &str, i: usize) -> String {
+    if s.is_ascii() {
+        s[i..i + 1].to_string()
+    } else {
+        s.chars()
+            .nth(i)
+            .expect("índice de texto já validado")
+            .to_string()
+    }
+}
+
+fn fatia_texto(s: &str, inicio: usize, fim: usize) -> String {
+    if s.is_ascii() {
+        s[inicio..fim].to_string()
+    } else {
+        s.chars().skip(inicio).take(fim - inicio).collect()
+    }
+}
+
+fn substitui_caractere(s: &str, i: usize, ch: char) -> String {
+    if s.is_ascii() {
+        let mut out = String::with_capacity(s.len());
+        out.push_str(&s[..i]);
+        out.push(ch);
+        out.push_str(&s[i + 1..]);
+        return out;
+    }
+    let mut chars: Vec<char> = s.chars().collect();
+    chars[i] = ch;
+    chars.into_iter().collect()
 }
 
 fn check_unique_params(params: &[Param]) -> Result<(), String> {

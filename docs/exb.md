@@ -38,7 +38,7 @@ O `.lep` original não precisa existir. Imports que ainda apontam para `.lep` co
 - `run_compiled_with_options(program, execution_file, stdin, options)`: reutiliza código já validado; cada execução cria novos globais.
 - `run_exb_file_args(path, args, ExbRunMode)`: entrada CLI com modos `Run`, `Debug` e `Marker`.
 
-`execution_file` define a base dos caminhos relativos. O texto e o nome originais ficam disponíveis por `CompiledProgram::source()`/`source_name()`. Código e tabelas internas não são mutáveis pela API. `ExbError` informa mensagem e offset; erros de execução continuam sendo `RuntimeError`, com os spans e frames do fonte original.
+`execution_file` define a base dos caminhos relativos. O nome embutido no arquivo é o caminho passado na compilação (`source_name`); um import relativo resolve a partir do diretório do `.exb` em execução, não a partir desse nome. O texto e o nome originais ficam disponíveis por `CompiledProgram::source()`/`source_name()`. Código e tabelas internas não são mutáveis pela API. `ExbError` informa mensagem e offset; erros de execução continuam sendo `RuntimeError`, com os spans e frames do fonte original.
 
 ## Contrato binário v2
 

@@ -52,8 +52,7 @@ campo_padrao = função(idx, t) {
 campo_texto =  função(idx, t) {
     // Campo texto começa com "
     se t[idx] != "\"" {
-        // TODO: Gerar falhe
-        escreva_erro("Campo de texto não começa com aspas duplas (\") => " + t)
+        falhe("Campo de texto não começa com aspas duplas (\") => " + t)
         saia(1)
     }
     

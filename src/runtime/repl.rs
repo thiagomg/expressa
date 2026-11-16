@@ -11,7 +11,7 @@ use crate::parser::{needs_more_input, parse};
 use super::debug::{DebugHook, NoopHook};
 use super::env::{Env, FrameKind};
 use super::error::{EvalError, RuntimeError};
-use super::eval::{LineInput, Vm};
+use super::eval::{ExecutionOptions, LineInput, Vm};
 use super::leia::CLEAR_SCREEN;
 use super::value::{MapKey, Value};
 
@@ -66,6 +66,16 @@ impl<'a> ReplSession<'a> {
             vm,
             env,
             exit_code: None,
+        }
+    }
+
+    fn aplicar_opcoes(&mut self, options: ExecutionOptions) {
+        self.vm.backend = options.backend;
+        self.vm.numero_locale = options.numero_locale;
+        self.vm.numero_aritmetica = options.numero_aritmetica;
+        self.vm.max_matrix_cells = options.max_matrix_cells;
+        if options.workspace_root.is_some() {
+            self.vm.workspace_root = options.workspace_root;
         }
     }
 
@@ -130,13 +140,17 @@ impl LineInput for ConsoleInput {
 /// Interactive prompt. `sair` or Ctrl+D leaves.
 /// On a terminal, ↑/↓ walk the command history.
 pub fn run_repl() -> io::Result<()> {
+    run_repl_com(ExecutionOptions::default())
+}
+
+pub fn run_repl_com(options: ExecutionOptions) -> io::Result<()> {
     println!("Expressa. Digite 'ajuda' ou 'sair'. Setas ↑ ↓ recorrem comandos.");
     if io::stdin().is_terminal()
         && let Ok(mut rl) = DefaultEditor::new()
     {
-        return run_repl_editor(&mut rl);
+        return run_repl_editor(&mut rl, options);
     }
-    run_repl_plain()
+    run_repl_plain(options)
 }
 
 fn history_path() -> Option<PathBuf> {
@@ -144,7 +158,7 @@ fn history_path() -> Option<PathBuf> {
     Some(PathBuf::from(home).join(".expressa_history"))
 }
 
-fn run_repl_editor(rl: &mut DefaultEditor) -> io::Result<()> {
+fn run_repl_editor(rl: &mut DefaultEditor, options: ExecutionOptions) -> io::Result<()> {
     if let Some(path) = history_path() {
         let _ = rl.load_history(&path);
     }
@@ -152,6 +166,7 @@ fn run_repl_editor(rl: &mut DefaultEditor) -> io::Result<()> {
     let mut stderr = io::stderr();
     let mut input = ConsoleInput;
     let mut session = ReplSession::new(&mut input, &mut stdout, &mut stderr);
+    session.aplicar_opcoes(options);
     let mut buf = String::new();
     loop {
         let prompt = if buf.is_empty() {
@@ -194,12 +209,13 @@ fn run_repl_editor(rl: &mut DefaultEditor) -> io::Result<()> {
     Ok(())
 }
 
-fn run_repl_plain() -> io::Result<()> {
+fn run_repl_plain(options: ExecutionOptions) -> io::Result<()> {
     let mut stdin_lines = io::stdin().lock();
     let mut stdout = io::stdout();
     let mut stderr = io::stderr();
     let mut input = ConsoleInput;
     let mut session = ReplSession::new(&mut input, &mut stdout, &mut stderr);
+    session.aplicar_opcoes(options);
     let mut buf = String::new();
     loop {
         let prompt = if buf.is_empty() {

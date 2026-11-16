@@ -1,31 +1,58 @@
 fracao = importe "../lib/fracao"
+importe "tela"
 
 soma_e_escreva = função(fr1, fr2) {
     res = fracao::soma(fr1, fr2)
     escreva(formate("{} + {} = {}", fracao::em_texto(fr1), fracao::em_texto(fr2), fracao::em_texto(res)))
 }
 
+txt_como_fracao = funcao(txt) {
+    itens = txt.separe("/")
+    para i em 0..itens.tamanho() {
+        t = itens[i]
+        n = numero(t) se_falhar(falso)
+        se n == falso {
+            falhe("Não é uma fração ou um número: " + txt)
+        }
+        itens[i] = n
+    }
+    
+    n = itens[0]
+    d = se itens.tamanho() == 2 {
+        itens[1]
+    } senão {
+        1
+    }
+    
+    se d == 0 {
+        falhe("Divisão por zero não é permitida")
+    }
+    
+    fracao::nova(n, d)
+}
+
+leia_opcao = funcao(txt) {
+    res = falso
+    enquanto res == falso {
+        pos = posicao_cursor()
+        fr1_txt = leia(txt)
+        // TODO: Capturar o retorno de se_falhar
+        res = txt_como_fracao(fr1_txt) se_falhar(falso)
+        se res == falso {
+            escreva("Erro: ".pinte(:vermelho) + ": XXXX")
+            posicao_cursor(pos)
+            apague_linha()
+        }
+    }
+    res
+}
+
 escreva("Calculando frações")
 escreva("------------------")
 
-fr1 = fracao::nova(1, 4)
-fr2 = fracao::nova(1, 4)
+escreva("Escreva frações usando \"/\" (1/2, 3/4) ou número inteiro (2, 3, 4).")
+fr1 = leia_opcao("Digite a primeira fração para calcular: ")
+fr2 = leia_opcao("Digite a segunda fração para calcular: ")
 soma_e_escreva(fr1, fr2)
-
-fr1 = fracao::nova(2, 8)
-fr2 = fracao::nova(2, 3)
-soma_e_escreva(fr1, fr2)
-
-fr1 = fracao::nova(1, 3)
-fr2 = fracao::nova(2, 3)
-soma_e_escreva(fr1, fr2)
-
-fr1 = fracao::nova(2, 4)
-soma_e_escreva(fr1, fr2)
-
-fr1 = fracao::nova(3, 4)
-fr2 = fracao::nova(2, 3)
-soma_e_escreva(fr1, fr2)
-
 
 // Desafio: Será que você consegue abrir fracao.lep e implementar multiplicação de frações?

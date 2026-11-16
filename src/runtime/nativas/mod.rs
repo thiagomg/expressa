@@ -966,6 +966,28 @@ pub(crate) fn builtin_doc_summary(name: &str) -> String {
         .unwrap_or_default()
 }
 
+/// Docs for `nome` inside `modulo`. Shared names (`adicione`, `fundo`, `mostre`)
+/// must not show the first module that registered the word.
+pub(crate) fn builtin_args_em(name: &str, modulo: &str) -> String {
+    doc_no_modulo(name, modulo)
+        .map(|d| d.args_text())
+        .unwrap_or_default()
+}
+
+pub(crate) fn builtin_doc_summary_em(name: &str, modulo: &str) -> String {
+    doc_no_modulo(name, modulo)
+        .map(|d| d.summary.clone())
+        .unwrap_or_default()
+}
+
+fn doc_no_modulo(name: &str, modulo: &str) -> Option<&'static crate::runtime::nativas::referencia::BuiltinDoc> {
+    if modulo.is_empty() {
+        lookup_builtin_doc(name)
+    } else {
+        lookup_alvo(&format!("{modulo}::{name}"))
+    }
+}
+
 pub(super) fn csv_cell(v: &Value) -> String {
     match v {
         Value::Texto(s) => s.clone(),
@@ -1898,6 +1920,34 @@ para f em catalogo(inc) {
         );
         assert!(run_err("catalogo(1)").contains("módulo, mapa, função"));
         assert!(run_err("catalogo(1, 2)").contains("0 ou 1"));
+    }
+
+    #[test]
+    #[cfg(feature = "graphics")]
+    fn catalogo_separa_nomes_repetidos() {
+        let out = run(
+            r#"
+para f em catalogo("cartesiano") {
+    se f:nome == "adicione" { escreva(f:args) }
+}
+para f em catalogo("crono") {
+    se f:nome == "adicione" { escreva(f:args) }
+}
+para f em catalogo("tela_grafica") {
+    se f:nome == "fundo" { escreva(f:args) }
+    se f:nome == "mostre" { escreva(f:args) }
+}
+c = importe "cartesiano"
+para f em catalogo(c) {
+    se f:nome == "adicione" { escreva(f:args) }
+}
+"#,
+        );
+        assert_eq!(
+            out,
+            "documento, grafico\ndata, n, unidade\ng, cor\ng\ndocumento, grafico\n",
+            "{out}"
+        );
     }
 
     #[test]

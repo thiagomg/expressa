@@ -1,4 +1,3 @@
-
 // transforma uma fração em texto
 em_texto = função(fr)
 inicio

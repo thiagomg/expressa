@@ -67,6 +67,7 @@ pub fn decode_png(bytes: &[u8]) -> Result<Imagem, String> {
     let mut dec = png::Decoder::new(Cursor::new(bytes));
     dec.set_transformations(png::Transformations::EXPAND | png::Transformations::STRIP_16);
     let mut reader = dec.read_info().map_err(|e| e.to_string())?;
+    check_dim(reader.info().width, reader.info().height)?;
     let mut buf = vec![0; reader.output_buffer_size()];
     let info = reader.next_frame(&mut buf).map_err(|e| e.to_string())?;
     check_dim(info.width, info.height)?;

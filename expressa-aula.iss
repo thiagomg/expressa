@@ -5,7 +5,7 @@
 ; schemas e res\ ao lado de expressa-aula.exe.
 
 #ifndef AppVersion
-  #define AppVersion "0.2.0"
+  #define AppVersion "0.5.0"
 #endif
 
 [Setup]
@@ -51,6 +51,10 @@ Source: "dist\expressa-aula\exemplos\*"; DestDir: "{userdocs}\Expressa Aula\exem
 [Icons]
 Name: "{group}\Expressa Aula"; Filename: "{app}\expressa-aula.exe"
 Name: "{group}\Tutoriais Expressa"; Filename: "{app}\expressa-tutorial.exe"
+; O editor nao sobe o servidor. --root absoluto: o padrao ./aula-data
+; cairia na pasta de trabalho (pode ser Program Files). Libere a porta
+; 50051 no firewall para os alunos da sala conectarem.
+Name: "{group}\Servidor da sala"; Filename: "{app}\expressa-aula-server.exe"; Parameters: "--root ""{localappdata}\Expressa Aula\aula-data"" --bind 0.0.0.0:50051"
 Name: "{autodesktop}\Expressa Aula"; Filename: "{app}\expressa-aula.exe"; Tasks: desktopicon
 
 [Run]

@@ -59,6 +59,95 @@ fn run_err(src: &str) -> String {
 }
 
 #[test]
+fn diagnosticos_de_tipo_faixa_e_nao() {
+    assert_eq!(
+        ExecutionBackend::from_name("AST"),
+        Some(ExecutionBackend::Ast)
+    );
+    assert_eq!(
+        ExecutionBackend::from_name(" Bytecode "),
+        Some(ExecutionBackend::Bytecode)
+    );
+
+    for backend in [ExecutionBackend::Ast, ExecutionBackend::Bytecode]
+        .into_iter()
+        .filter(|backend| backend.is_available())
+    {
+        let opts = ExecutionOptions {
+            backend,
+            ..ExecutionOptions::default()
+        };
+        let erro = |src: &str| {
+            run_with_options(src, "teste.lep", "", opts.clone())
+                .expect_err(&format!("{backend:?} {src}"))
+        };
+
+        let e = erro("x = 2\ny = 3\nx > 1 e y\n");
+        assert!(
+            e.message.contains("esperado bool, encontrado numero"),
+            "{backend:?} {}",
+            e.message
+        );
+        assert_eq!(e.span.line, 3, "{backend:?}");
+        assert_eq!(e.span.col, 9, "{backend:?} col {}", e.span.col);
+
+        let sub = erro("total = 1\nnome = \"a\"\ntotal * 2 + total - nome\n");
+        assert!(
+            sub.message.contains("operador '-' não se aplica a numero e texto"),
+            "{backend:?} {}",
+            sub.message
+        );
+        if backend == ExecutionBackend::Ast {
+            assert_eq!(sub.span.col, 21, "{backend:?}");
+        }
+
+        let conjunto = erro("c = conjunto([])\nc -= 1\n");
+        assert!(
+            conjunto
+                .message
+                .contains("operador '-' não se aplica a conjunto e numero"),
+            "{backend:?} {}",
+            conjunto.message
+        );
+
+        let nao = erro("x = 3\nnao x == 3\n");
+        assert!(
+            nao.message.contains("use nao (x == 3)"),
+            "{backend:?} {}",
+            nao.message
+        );
+
+        let teto = erro("para i em 0..=9223372036854775807 {\n  pare\n}\n");
+        assert_eq!(
+            teto.message, "o teto de ..= passa do maior inteiro",
+            "{backend:?}"
+        );
+        assert!(!teto.message.contains("808"), "{backend:?}");
+
+        let fracao = erro("para i em 0..2.5 {\n  pare\n}\n");
+        assert!(
+            fracao.message.contains("2,5"),
+            "{backend:?} {}",
+            fracao.message
+        );
+        assert!(
+            !fracao.message.contains("2.5"),
+            "{backend:?} {}",
+            fracao.message
+        );
+
+        let saida = run_with_options(
+            "m = mapa([])\nescreva(m[\"z\"] se_falhar 0)\n",
+            "teste.lep",
+            "",
+            opts,
+        )
+        .unwrap();
+        assert_eq!(saida.stdout, "0\n", "{backend:?}");
+    }
+}
+
+#[test]
 fn media_example() {
     let src = include_str!("../../../exemplos/linguagem/media.lep");
     let out = run_to_string(src, "exemplos/linguagem/media.lep").unwrap();

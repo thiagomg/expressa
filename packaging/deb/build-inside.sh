@@ -100,6 +100,8 @@ install -m0644 "$SRC/packaging/deb/expressa.desktop" \
     "$ROOT/usr/share/applications/expressa.desktop"
 install -m0644 "$SRC/packaging/deb/expressa-tutorial.desktop" \
     "$ROOT/usr/share/applications/expressa-tutorial.desktop"
+install -m0644 "$SRC/packaging/deb/expressa-aula-server.desktop" \
+    "$ROOT/usr/share/applications/expressa-aula-server.desktop"
 install -m0644 "$SRC/packaging/deb/expressa.xml" \
     "$ROOT/usr/share/mime/packages/expressa.xml"
 install -m0644 "$SRC/res/expressa-2.png" \
@@ -118,7 +120,7 @@ install -m0644 "$SRC/packaging/deb/copyright" "$ROOT/usr/share/doc/$PKG_NAME/cop
     echo " -- Thiago Massari Guedes <expressa@localhost>  $(date -R)"
 } | gzip -9n > "$ROOT/usr/share/doc/$PKG_NAME/changelog.Debian.gz"
 
-# Shared-library Depends from the four binaries.
+# Shared-library Depends from the five binaries.
 WORK="$(mktemp -d)"
 mkdir -p "$WORK/debian"
 cat > "$WORK/debian/control" <<EOF

@@ -374,10 +374,10 @@ impl Compiler {
                             target: 0,
                             value: matches!(op, BinaryOp::Or),
                         },
-                        span,
+                        left.span(),
                     );
                     self.expr(right);
-                    self.emit(Op::CheckBool, span);
+                    self.emit(Op::CheckBool, right.span());
                     self.jump(jump, self.here());
                 } else {
                     self.expr(right);

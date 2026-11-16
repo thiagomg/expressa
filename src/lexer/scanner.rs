@@ -186,8 +186,14 @@ impl<'src> Scanner<'src> {
                     break;
                 }
             }
-            // Optional fractional part: '.' only if followed by a digit
-            if self.peek() == Some('.') && self.skip_peek(1).is_some_and(|c| c.is_ascii_digit()) {
+            // Optional fractional part. A digit keeps `1.5`. A `_` keeps
+            // `1._5` and `1._` in this lexeme so the separator check rejects
+            // them. `1..5` stays a number and a range: the next char is `.`.
+            if self.peek() == Some('.')
+                && self
+                    .skip_peek(1)
+                    .is_some_and(|c| c.is_ascii_digit() || c == '_')
+            {
                 self.remove(); // .
                 while let Some(c) = self.peek() {
                     if c.is_ascii_digit() || c == '_' {
@@ -198,6 +204,28 @@ impl<'src> Scanner<'src> {
                 }
             }
             let word = &self.source[start..self.pos];
+            if separador_de_digito_invalido(word) {
+                let mensagem =
+                    format!("número inválido: {word} (separador '_' só pode ficar entre dígitos)");
+                return lex_err!("{mensagem}");
+            }
+            if matches!(self.peek(), Some('e' | 'E')) {
+                let segundo = self.skip_peek(1);
+                let cientifico = segundo.is_some_and(|d| d.is_ascii_digit())
+                    || matches!(segundo, Some('+' | '-'))
+                        && self.skip_peek(2).is_some_and(|d| d.is_ascii_digit());
+                if cientifico {
+                    self.remove();
+                    if matches!(self.peek(), Some('+' | '-')) {
+                        self.remove();
+                    }
+                    while self.peek().is_some_and(|d| d.is_ascii_digit() || d == '_') {
+                        self.remove();
+                    }
+                    let lexema = self.source[start..self.pos].to_string();
+                    return lex_err!("número inválido: {lexema} (sem notação científica)");
+                }
+            }
             let kind = TokenKind::Number(word.to_string());
             return token!(kind);
         }
@@ -644,6 +672,16 @@ impl<'src> Scanner<'src> {
         }
         true
     }
+}
+
+/// `_` is a thousands separator only between digits: `1_000` is valid,
+/// `1_`, `1__0`, `1._5` and `1_.5` are not.
+fn separador_de_digito_invalido(word: &str) -> bool {
+    let bytes = word.as_bytes();
+    word.ends_with('_')
+        || bytes
+            .windows(2)
+            .any(|par| par == b"__" || par == b"_." || par == b"._")
 }
 
 fn marca_combinante(c: char) -> bool {
@@ -1128,6 +1166,38 @@ pare continue";
                 TokenKind::Eof,
             ]
         );
+    }
+
+    #[test]
+    fn numero_rejeita_separador_torto_e_notacao_cientifica() {
+        for src in ["1_", "1__0", "1.5_", "1_.5", "1._5", "1._"] {
+            let err = tokenize(src).expect_err(src);
+            assert!(err.message.contains("separador"), "{src}: {}", err.message);
+            assert!(
+                err.message.contains(src),
+                "{src} ficou de fora do lexema: {}",
+                err.message
+            );
+        }
+        assert_eq!(
+            kinds("1..5"),
+            vec![
+                TokenKind::Number("1".into()),
+                TokenKind::DotDot,
+                TokenKind::Number("5".into()),
+                TokenKind::Eof,
+            ]
+        );
+        for src in ["1e5", "1E5", "1e+5", "1E-2"] {
+            let err = tokenize(src).expect_err(src);
+            assert!(
+                err.message.contains("sem notação científica"),
+                "{src}: {}",
+                err.message
+            );
+            assert!(err.message.contains(src), "{}", err.message);
+        }
+        assert!(tokenize("1e").is_ok());
     }
 
     #[test]

@@ -54,10 +54,14 @@ pub(crate) fn make_debug_panel(ui: &UiRc) -> GtkBox {
             .watch_entry
             .connect_activate(move |_| add_watch(&ui_a));
     }
-    connect(&btn_del, ui, remove_watch);
 
     let u = ui.borrow();
     let watch_tree = make_string_tree(&u.depuracao.watch_store, &["observado", "valor"]);
+    {
+        let ui_d = Rc::clone(ui);
+        let tree = watch_tree.clone();
+        btn_del.connect_clicked(move |_| remove_selected_watch(&ui_d, &tree));
+    }
     let vars_tree = make_string_tree(&u.depuracao.vars_store, &["onde", "nome", "valor"]);
     let stack_tree = make_string_tree(&u.depuracao.stack_store, &["função", "linha"]);
     drop(u);
@@ -127,8 +131,15 @@ pub(crate) fn add_watch(ui: &UiRc) {
     refresh_watch_values(ui, &[]);
 }
 
-pub(crate) fn remove_watch(ui: &UiRc) {
-    ui.borrow_mut().depuracao.watches.pop();
+fn remove_selected_watch(ui: &UiRc, tree: &TreeView) {
+    let Some((modelo, iter)) = tree.selection().selected() else {
+        return;
+    };
+    let nome = modelo.get::<String>(&iter, 0);
+    ui.borrow_mut()
+        .depuracao
+        .watches
+        .retain(|observado| observado != &nome);
     refresh_watch_values(ui, &[]);
 }
 

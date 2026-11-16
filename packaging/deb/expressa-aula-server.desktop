@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Servidor da sala
+Comment=Arquivos da sala na porta 50051. Libere essa porta no firewall.
+Comment[pt_BR]=Arquivos da sala na porta 50051. Libere essa porta no firewall.
+Exec=sh -c "exec expressa-aula-server --root $HOME/expressa-aula-data --bind 0.0.0.0:50051"
+Icon=expressa
+Terminal=true
+Categories=Development;Education;
+StartupNotify=false

@@ -41,11 +41,21 @@ pub(crate) fn make_help(ui: &UiRc) -> Rc<Help> {
             let r = rel.clone();
             em_segundo_plano(
                 &ui,
-                move || files.read_file(&p, &r).ok(),
-                move |ui, text| {
+                move || files.current_text(&p, &r).map(|s| s.map(|snap| snap.text)),
+                move |ui, resultado| {
                     let u = ui.borrow();
-                    if u.project_epoch == epoch {
-                        u.file_cache.borrow_mut().insert(rel, text);
+                    if u.project_epoch != epoch {
+                        return;
+                    }
+                    match resultado {
+                        Ok(texto) => {
+                            u.file_cache.borrow_mut().insert(rel, texto);
+                        }
+                        // A transport failure must not stick: the placeholder
+                        // would disable hover until the next tree refresh.
+                        Err(_) => {
+                            u.file_cache.borrow_mut().remove(&rel);
+                        }
                     }
                 },
             );
@@ -1141,6 +1151,7 @@ pub(crate) fn buscar_no_projeto(ui: &UiRc) {
 pub(crate) fn mostrar_repl(ui: &UiRc) {
     mostrar_pagina_inferior(ui, PaginaInferior::Repl);
     let repl = Rc::clone(&ui.borrow().repl);
+    repl.garantir();
     repl.focar();
 }
 

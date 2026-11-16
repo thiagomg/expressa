@@ -1,6 +1,7 @@
 //! Recursive-descent / Pratt parser: tokens → AST.
 
 use crate::lexer::scanner::{Token, tokenize};
+use crate::lexer::tokens::{texto_do_token, token_e_comando};
 use crate::lexer::{Span, TokenKind};
 use crate::parser::block_types::Block;
 use crate::parser::core_types::{Import, Item, Program};
@@ -127,6 +128,22 @@ impl<'a> Parser<'a> {
             Ok(self.remove())
         } else {
             Err(self.err(msg))
+        }
+    }
+
+    /// `(` or `[` that never closed. The error points at the current token
+    /// and names the line and column of the opener.
+    fn expect_close<F>(&mut self, pred: F, simbolo: &str, aberto: Span) -> Result<Token, ParseError>
+    where
+        F: FnOnce(&TokenKind) -> bool,
+    {
+        if pred(self.peek_kind()) {
+            Ok(self.remove())
+        } else {
+            Err(self.err(format!(
+                "esperado '{simbolo}' (aberto em {}:{})",
+                aberto.line, aberto.col
+            )))
         }
     }
 
@@ -503,6 +520,12 @@ impl<'a> Parser<'a> {
             // Commit to this operator, then parse its right-hand side.
             // We pass *right_bp* as the new min_bp so the RHS only
             // absorbs *tighter* operators (see infix_info docs).
+            if matches!(op_kind, TokenKind::DotDot | TokenKind::DotDotEq)
+                && matches!(lhs, Expr::Faixa { .. })
+            {
+                return Err(self
+                    .err("faixas não podem ser encadeadas; coloque cada faixa entre parênteses"));
+            }
             let op_tok = self.remove();
             if matches!(op_kind, TokenKind::DotDot | TokenKind::DotDotEq) {
                 let inclusive = matches!(op_kind, TokenKind::DotDotEq);
@@ -653,25 +676,7 @@ impl<'a> Parser<'a> {
     }
 
     fn can_start_expr(&self) -> bool {
-        matches!(
-            self.peek_kind(),
-            TokenKind::Number(_)
-                | TokenKind::String(_)
-                | TokenKind::Ident(_)
-                | TokenKind::Verdadeiro
-                | TokenKind::Falso
-                | TokenKind::Colon
-                | TokenKind::LParen
-                | TokenKind::LBracket
-                | TokenKind::LBrace
-                | TokenKind::Inicio
-                | TokenKind::Se
-                | TokenKind::Funcao
-                | TokenKind::Minus
-                | TokenKind::Nao
-                | TokenKind::DotDot
-                | TokenKind::DotDotEq
-        )
+        expr_can_start(self.peek_kind())
     }
 
     fn peek_span(&self) -> Span {
@@ -710,12 +715,12 @@ impl<'a> Parser<'a> {
                 TokenKind::LParen => lhs = self.finish_call(lhs)?,
                 TokenKind::LBracket => lhs = self.finish_index_or_slice(lhs)?,
                 TokenKind::ColonColon => lhs = self.finish_module_field(lhs)?,
-                TokenKind::Colon
-                    if self.allow_colon_field
-                        && self.on_same_line_as_previous()
-                        && map_field_receiver(&lhs) =>
-                {
-                    lhs = self.finish_map_field(lhs)?;
+                TokenKind::Colon if self.allow_colon_field && self.on_same_line_as_previous() => {
+                    if map_field_receiver(&lhs) {
+                        lhs = self.finish_map_field(lhs)?;
+                    } else {
+                        return Err(self.err("':' espera um mapa"));
+                    }
                 }
                 TokenKind::Dot => lhs = self.finish_ufcs(lhs)?,
                 _ => break,
@@ -768,7 +773,7 @@ impl<'a> Parser<'a> {
                 self.parenteses -= 1;
                 self.allow_colon_field = prev;
                 let expr = expr?;
-                self.expect_kind(|k| matches!(k, TokenKind::RParen), "esperado ')'")?;
+                self.expect_close(|k| matches!(k, TokenKind::RParen), ")", tok.span)?;
                 Ok(expr)
             }
             TokenKind::LBracket => self.finish_list(tok.span),
@@ -785,10 +790,15 @@ impl<'a> Parser<'a> {
                 self.pos -= 1;
                 self.parse_function()
             }
-            _ => Err(self.err_at(
-                format!("expressão inválida (token inesperado: {:?})", tok.kind),
-                tok.span,
-            )),
+            _ => {
+                let escrito = texto_do_token(&tok.kind);
+                let mensagem = if token_e_comando(&tok.kind) {
+                    format!("{escrito} é um comando, não um valor")
+                } else {
+                    format!("expressão inválida (token inesperado: {escrito})")
+                };
+                Err(self.err_at(mensagem, tok.span))
+            }
         }
     }
 
@@ -807,7 +817,7 @@ impl<'a> Parser<'a> {
                 break;
             }
         }
-        let end = self.expect_kind(|k| matches!(k, TokenKind::RBracket), "esperado ']'")?;
+        let end = self.expect_close(|k| matches!(k, TokenKind::RBracket), "]", start)?;
         Ok(Expr::List {
             elements,
             span: start.join(end.span),
@@ -816,12 +826,12 @@ impl<'a> Parser<'a> {
 
     fn finish_call(&mut self, callee: Expr) -> Result<Expr, ParseError> {
         let start = callee.span();
-        self.remove(); // (
+        let aberto = self.remove(); // (
         self.parenteses += 1;
         let args = self.finish_call_args();
         self.parenteses -= 1;
         let args = args?;
-        let end = self.expect_kind(|k| matches!(k, TokenKind::RParen), "esperado ')'")?;
+        let end = self.expect_close(|k| matches!(k, TokenKind::RParen), ")", aberto.span)?;
         Ok(Expr::Call {
             callee: Box::new(callee),
             args,
@@ -849,12 +859,12 @@ impl<'a> Parser<'a> {
 
     fn finish_index_or_slice(&mut self, object: Expr) -> Result<Expr, ParseError> {
         let start = object.span();
-        self.remove(); // [
+        let aberto = self.remove(); // [
         let first = self.parse_expr()?;
         if matches!(self.peek_kind(), TokenKind::Comma) {
             self.remove();
             let col = self.parse_expr()?;
-            let end = self.expect_kind(|k| matches!(k, TokenKind::RBracket), "esperado ']'")?;
+            let end = self.expect_close(|k| matches!(k, TokenKind::RBracket), "]", aberto.span)?;
             Ok(Expr::Index2 {
                 object: Box::new(object),
                 row: Box::new(first),
@@ -862,7 +872,7 @@ impl<'a> Parser<'a> {
                 span: start.join(end.span),
             })
         } else {
-            let end = self.expect_kind(|k| matches!(k, TokenKind::RBracket), "esperado ']'")?;
+            let end = self.expect_close(|k| matches!(k, TokenKind::RBracket), "]", aberto.span)?;
             Ok(Expr::Index {
                 object: Box::new(object),
                 index: Box::new(first),
@@ -1005,7 +1015,7 @@ impl<'a> Parser<'a> {
         let start = self
             .expect_kind(|k| matches!(k, TokenKind::Funcao), "esperado 'funcao'")?
             .span;
-        self.expect_kind(
+        let aberto = self.expect_kind(
             |k| matches!(k, TokenKind::LParen),
             "esperado '(' após 'funcao'",
         )?;
@@ -1030,7 +1040,7 @@ impl<'a> Parser<'a> {
                 break;
             }
         }
-        self.expect_kind(|k| matches!(k, TokenKind::RParen), "esperado ')'")?;
+        self.expect_close(|k| matches!(k, TokenKind::RParen), ")", aberto.span)?;
         let mut vistos = std::collections::HashSet::new();
         for p in &params {
             if !vistos.insert(p.name.as_str()) {
@@ -1119,6 +1129,8 @@ fn expr_can_start(kind: &TokenKind) -> bool {
             | TokenKind::Minus
             | TokenKind::Nao
             | TokenKind::Colon
+            | TokenKind::DotDot
+            | TokenKind::DotDotEq
     )
 }
 
@@ -1983,6 +1995,66 @@ fim
         match first_stmt(&parse_ok("xs[1] = 9")) {
             Stmt::Assign {
                 target: AssignTarget::Index { .. },
+                ..
+            } => {}
+            other => panic!("{other:?}"),
+        }
+    }
+
+    #[test]
+    fn mensagens_nomeiam_o_token_e_o_comando() {
+        let mais = parse("+").unwrap_err();
+        assert!(
+            mais.message.contains("token inesperado: '+'"),
+            "{}",
+            mais.message
+        );
+        assert!(!mais.message.contains("Plus"));
+        let pare = parse("(pare)").unwrap_err();
+        assert!(
+            pare.message.contains("'pare' é um comando, não um valor"),
+            "{}",
+            pare.message
+        );
+        let fim = parse("(").unwrap_err();
+        assert!(
+            fim.message.contains("fim do arquivo") || fim.message.contains("aberto em 1:1"),
+            "{}",
+            fim.message
+        );
+    }
+
+    #[test]
+    fn parentese_aberto_cita_a_linha() {
+        let err = parse("f(\n1").unwrap_err();
+        assert!(
+            err.message.contains("esperado ')'") && err.message.contains("aberto em 1:"),
+            "{}",
+            err.message
+        );
+    }
+
+    #[test]
+    fn dois_pontos_fora_de_mapa_e_faixa_encadeada() {
+        let campo = parse(r#"escreva("abc":x)"#).unwrap_err();
+        assert!(
+            campo.message.contains("':' espera um mapa"),
+            "{}",
+            campo.message
+        );
+        let faixa = parse("0..3 + 0..3").unwrap_err();
+        assert!(
+            faixa.message.contains("faixas não podem ser encadeadas"),
+            "{}",
+            faixa.message
+        );
+    }
+
+    #[test]
+    fn retorne_aceita_faixa_aberta() {
+        match first_stmt(&parse_ok("retorne ..5")) {
+            Stmt::Retorne {
+                value: Some(Expr::Faixa { end: Some(_), .. }),
                 ..
             } => {}
             other => panic!("{other:?}"),

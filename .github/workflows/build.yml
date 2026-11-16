@@ -16,6 +16,29 @@ env:
   CARGO_PROFILE: release-lto
 
 jobs:
+  testes:
+    name: Testes sem interface
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Dependências de compilação
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential cmake pkg-config protobuf-compiler \
+            libx11-dev libxcursor-dev libxext-dev libxi-dev \
+            libxinerama-dev libxkbcommon-dev libxrandr-dev
+      - name: Interpretador e servidor
+        env:
+          SDL_VIDEODRIVER: dummy
+        run: |
+          cargo test -p expressa --locked --lib --test ast_regressions
+          cargo test -p expressa-aula-server --locked
+
   ubuntu:
     name: Ubuntu ${{ matrix.ubuntu }} (x64)
     strategy:

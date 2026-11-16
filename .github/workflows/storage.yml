@@ -12,12 +12,33 @@ jobs:
   storage:
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        os: [ubuntu-latest, windows-2022]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
       - uses: dtolnay/rust-toolchain@stable
+      - name: Install protoc (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
+      - name: Install protoc (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $downloads = Join-Path $env:RUNNER_TEMP 'expressa-deps'
+          New-Item -ItemType Directory -Force $downloads | Out-Null
+          $protocZip = Join-Path $downloads 'protoc-36.2-win64.zip'
+          Invoke-WebRequest 'https://github.com/protocolbuffers/protobuf/releases/download/v36.2/protoc-36.2-win64.zip' -OutFile $protocZip
+          if ((Get-FileHash $protocZip -Algorithm SHA256).Hash -ne 'f0c128dc0d8492eceece83bb459a4c0e316764b929ffbf1aa416357fd644edd3') {
+            throw 'Protocol Buffers archive checksum mismatch'
+          }
+          Expand-Archive $protocZip -DestinationPath deps/protoc
+          $protocBin = Join-Path (Get-Location) 'deps/protoc/bin'
+          Add-Content -Path $env:GITHUB_PATH -Value $protocBin
+          "PROTOC=$(Join-Path $protocBin 'protoc.exe')" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
       - run: cargo test -p expressa-aula-storage --locked
+      - run: cargo test -p expressa-aula-server --locked
       - run: cargo clippy -p expressa-aula-storage --all-targets --locked -- -D warnings
+      - run: cargo clippy -p expressa-aula-server --all-targets --locked -- -D warnings
