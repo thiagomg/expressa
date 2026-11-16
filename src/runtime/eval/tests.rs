@@ -254,20 +254,66 @@ fn example_programs_run() {
             "exemplos/escola/seno_cosseno.lep",
             include_str!("../../../exemplos/escola/seno_cosseno.lep"),
         ),
-        (
-            "exemplos/escola/calc_fracoes.lep",
-            include_str!("../../../exemplos/escola/calc_fracoes.lep"),
-        ),
     ];
     for (file, src) in examples {
         run_to_string(src, file).unwrap_or_else(|e| panic!("{file} failed: {e}"));
     }
 }
 
-#[test]
-fn calc_fracoes_prints_with_como_texto() {
+fn run_calc_fracoes(inputs: &[&str]) -> String {
+    struct FractionHost<'a> {
+        inputs: std::slice::Iter<'a, &'a str>,
+        cursor_queries: usize,
+    }
+
+    impl LeiaHost for FractionHost<'_> {
+        fn cursor_position(&mut self) -> Result<(i64, i64), String> {
+            self.cursor_queries += 1;
+            Ok((4, 0))
+        }
+
+        fn ask(&mut self, _prompt: &str) -> Result<String, String> {
+            self.inputs
+                .next()
+                .map(|input| input.to_string())
+                .ok_or_else(|| "entrada de teste esgotada".into())
+        }
+    }
+
+    let mut host = FractionHost {
+        inputs: inputs.iter(),
+        cursor_queries: 0,
+    };
+    let mut out = Vec::new();
+    let mut err = Vec::new();
     let src = include_str!("../../../exemplos/escola/calc_fracoes.lep");
-    let out = run_to_string(src, "exemplos/escola/calc_fracoes.lep").unwrap();
+    run_with_leia_host(
+        src,
+        "exemplos/escola/calc_fracoes.lep",
+        None,
+        Some(Duration::from_secs(2)),
+        &mut out,
+        &mut err,
+        &mut host,
+    )
+    .unwrap_or_else(|e| panic!("{e}"));
+    assert_eq!(host.inputs.len(), 0, "nem todas as entradas foram usadas");
+    assert!(host.cursor_queries > 0, "o exemplo deve consultar o cursor");
+    assert!(err.is_empty(), "{}", String::from_utf8_lossy(&err));
+    String::from_utf8(out).unwrap()
+}
+
+#[test]
+fn calc_fracoes_sums_interactive_input() {
+    let out = run_calc_fracoes(&["1/4", "1/4"]);
+    assert!(out.contains("1/4 + 1/4 = 1/2"), "{out}");
+    assert!(!out.contains("Erro:"), "{out}");
+}
+
+#[test]
+fn calc_fracoes_retries_invalid_input() {
+    let out = run_calc_fracoes(&["abc", "1/0", "1/4", "1/4"]);
+    assert_eq!(out.matches("Erro:").count(), 2, "{out}");
     assert!(out.contains("1/4 + 1/4 = 1/2"), "{out}");
 }
 
@@ -596,12 +642,12 @@ escreva(xs)
 "#),
         "12\nAna Silva\n[1, 2, 3]\n[11, 2, 3]\n"
     );
-    assert!(
+    assert_eq!(
         run_err(
             r#"xs = [1]
 xs -= [1]"#
-        )
-        .contains("numero")
+        ),
+        "operador '-' não se aplica a lista e lista"
     );
     assert_eq!(
         run(r#"
@@ -926,7 +972,10 @@ escreva(s)
     assert_eq!(run("r = 0..\nxs = [1]\nescreva(xs[r])"), "[1]\n");
     assert!(run_err("xs = [1]\nxs.remova(1..)").contains("teto"));
     assert!(run_err("infinito(1)").contains("faixa"));
-    assert!(run_err("0..=9223372036854775807").contains("64 bits"));
+    assert_eq!(
+        run_err("0..=9223372036854775807"),
+        "o teto de ..= passa do maior inteiro"
+    );
 }
 
 #[test]
