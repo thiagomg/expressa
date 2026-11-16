@@ -3,18 +3,10 @@
 /// Coloca o cursor no canto superior esquerdo. Sem argumentos.
 /// No REPL, a linha cls (sem parênteses) também limpa a tela.
 /// Na Aula, limpa o painel de saída.
-/// Em uma animação, cls() a cada quadro pisca: use casa() no laço.
+/// Em uma animação, cls() a cada quadro pisca: use posicao_cursor(0, 0, falso) no laço.
 ///
 /// Exemplo: cls()
 cls = funcao() { 0 }
-
-/// Cursor no canto, sem apagar. Use no lugar de cls() em animações.
-///
-/// O próximo escreva desenha por cima. Sem argumentos.
-/// Na Aula, o painel de saída trata casa() como um novo quadro.
-///
-/// Exemplo: casa()
-casa = funcao() { 0 }
 
 /// Verdadeiro se a entrada é o teclado (não um pipe). Também é_terminal().
 ///
@@ -61,7 +53,7 @@ linhas = funcao() { 0 }
 /// Redesenha a tela: cursor no canto, escreve o texto, apaga o que sobrar.
 ///
 /// Em cada linha apaga o resto à direita; no fim apaga o que estava embaixo.
-/// Use no lugar de cls()/casa() + vários escreva em um jogo. O texto já vem
+/// Use no lugar de cls()/posicao_cursor() + vários escreva em um jogo. O texto já vem
 /// com nova_linha (ou "\\n"). Devolve nada.
 ///
 /// Exemplo: quadro(tela)
@@ -94,6 +86,10 @@ escreva_em = funcao(bloco, texto) { 0 }
 ///
 /// Sem argumentos, devolve um mapa {:linha, :coluna}, com posições a partir de zero.
 /// Com um mapa, move o cursor sem apagar nem alterar o mapa recebido.
+/// Com linha e coluna, move para essas coordenadas (inteiros >= 0).
+/// mostre é bool e vale verdadeiro por padrão: faz flush da saída após mover.
+/// Com falso, não faz flush: o próximo escreva pode desenhar junto com o movimento.
+/// Use posicao_cursor(0, 0, falso) para voltar ao canto em animações, sem apagar.
 /// Funciona na Aula e em terminais compatíveis. A consulta falha em pipes/arquivos
 /// ou quando o terminal não responde. Na Aula, as linhas são as quebras explícitas:
 /// o ajuste visual de uma linha longa não muda a numeração. Rolagem pode invalidar
@@ -103,6 +99,8 @@ escreva_em = funcao(bloco, texto) { 0 }
 /// Exemplo: pos = posicao_cursor()
 posicao_cursor = funcao() { 0 }
 posicao_cursor = funcao(pos) { 0 }
+posicao_cursor = funcao(linha, coluna) { 0 }
+posicao_cursor = funcao(linha, coluna, mostre) { 0 }
 
 /// Apaga a linha atual inteira e deixa o cursor no início dela.
 ///

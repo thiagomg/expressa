@@ -130,7 +130,7 @@ pub fn tema_de(module: Option<&str>, name: &str) -> &'static str {
         }
         (
             Some("tela"),
-            "cls" | "casa" | "eh_terminal" | "colunas" | "linhas" | "posicao_cursor"
+            "cls" | "eh_terminal" | "colunas" | "linhas" | "posicao_cursor"
             | "apague_linha",
         ) => "Tela",
         (Some("tela"), "pinte" | "fundo" | "negrito") => "Cor",

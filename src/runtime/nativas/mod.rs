@@ -205,11 +205,6 @@ pub const NATIVAS: &[Nativa] = &[
     },
     #[cfg(feature = "terminal")]
     Nativa {
-        names: &["casa"],
-        module: Some("tela"),
-    },
-    #[cfg(feature = "terminal")]
-    Nativa {
         names: &["eh_terminal", "é_terminal"],
         module: Some("tela"),
     },
@@ -700,8 +695,6 @@ impl Vm<'_, '_> {
             "garanta" => self.bi_garanta(args, span, ""),
             #[cfg(feature = "terminal")]
             "cls" | "limpe_tela" => self.bi_cls(args, span),
-            #[cfg(feature = "terminal")]
-            "casa" => self.bi_casa(args, span),
             #[cfg(feature = "terminal")]
             "posicao_cursor" | "posição_cursor" => self.bi_posicao_cursor(args, span),
             #[cfg(feature = "terminal")]
@@ -1496,25 +1489,31 @@ escreva("b")
         assert!(run_err("posicao_cursor()").contains("exige um terminal"));
         assert!(run_err("posicao_cursor(1)").contains("mapa"));
         assert!(run_err("posicao_cursor(mapa([:linha -> 1]))").contains(":coluna"));
-        assert!(run_err("posicao_cursor(bloco(1, 2), 3)").contains("0 ou 1"));
+        assert!(run_err("posicao_cursor(1, 2, verdadeiro, 4)").contains("0, 1, 2 ou 3"));
         assert!(run_err("posicao_cursor(mapa([:linha -> -1, :coluna -> 0]))").contains(">= 0"));
         assert!(run_err("apague_linha(1)").contains("0 argumento"));
     }
 
     #[test]
     #[cfg(feature = "terminal")]
-    fn casa_writes_cursor_home() {
-        use crate::runtime::CURSOR_HOME;
-        assert_eq!(run("casa()"), CURSOR_HOME);
-        assert_eq!(
-            run(r#"
-escreva("a")
-casa()
-escreva("b")
-"#),
-            format!("a\n{CURSOR_HOME}b\n")
-        );
-        assert!(run_err("casa(1)").contains("não espera argumentos"));
+    fn cursor_coordinates_and_removed_casa() {
+        assert_eq!(run("posicao_cursor(2, 4)"), "\x1b[3;5H");
+        assert_eq!(run("posição_cursor(0, 0, falso)"), "\x1b[1;1H");
+        assert_eq!(run("posicao_cursor(2, 4, verdadeiro)"), "\x1b[3;5H");
+        assert!(run_err("casa()").contains("não definida"));
+        for source in ["posicao_cursor(-1, 0)", "posicao_cursor(0, -1)"] {
+            assert!(run_err(source).contains(">= 0"));
+        }
+        for source in [
+            "posicao_cursor(1.5, 0)",
+            "posicao_cursor(0, 1.5)",
+            "posicao_cursor(9223372036854775807, 0)",
+            "posicao_cursor(0, 9223372036854775807)",
+            "posicao_cursor(0, 0, 1)",
+            "posicao_cursor(0, 0, nada)",
+        ] {
+            assert!(!run_err(source).is_empty(), "{source}");
+        }
     }
 
     #[test]
@@ -1925,8 +1924,7 @@ para f em catalogo(inc) {
     #[test]
     #[cfg(feature = "graphics")]
     fn catalogo_separa_nomes_repetidos() {
-        let out = run(
-            r#"
+        let out = run(r#"
 para f em catalogo("cartesiano") {
     se f:nome == "adicione" { escreva(f:args) }
 }
@@ -1941,11 +1939,9 @@ c = importe "cartesiano"
 para f em catalogo(c) {
     se f:nome == "adicione" { escreva(f:args) }
 }
-"#,
-        );
+"#);
         assert_eq!(
-            out,
-            "documento, grafico\ndata, n, unidade\ng, cor\ng\ndocumento, grafico\n",
+            out, "documento, grafico\ndata, n, unidade\ng, cor\ng\ndocumento, grafico\n",
             "{out}"
         );
     }

@@ -74,18 +74,6 @@ impl Vm<'_, '_> {
         self.out.flush().map_err(|e| self.io_err(e, span))?;
         Ok(Value::Nada)
     }
-    pub(crate) fn bi_casa(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
-        if !args.is_empty() {
-            return Err(self.err(
-                format!("casa() não espera argumentos, recebeu {}", args.len()),
-                span,
-            ));
-        }
-        // No flush: the next escreva() should paint in the same burst, so the
-        // terminal never shows a blank frame.
-        write!(self.out, "{CURSOR_HOME}").map_err(|e| self.io_err(e, span))?;
-        Ok(Value::Nada)
-    }
     pub(crate) fn bi_posicao_cursor(
         &mut self,
         args: &[Value],
@@ -110,22 +98,45 @@ impl Vm<'_, '_> {
             [Value::Mapa(pos)] => {
                 let linha = map_int(pos, "linha", span, self)?;
                 let coluna = map_int(pos, "coluna", span, self)?;
-                if linha < 0 || coluna < 0 {
-                    return Err(self.err("posicao_cursor espera linha e coluna >= 0", span));
-                }
-                let linha = linha
-                    .checked_add(1)
-                    .ok_or_else(|| self.err("linha fora do intervalo", span))?;
-                let coluna = coluna
-                    .checked_add(1)
-                    .ok_or_else(|| self.err("coluna fora do intervalo", span))?;
-                write!(self.out, "\x1b[{linha};{coluna}H").map_err(|e| self.io_err(e, span))?;
-                self.out.flush().map_err(|e| self.io_err(e, span))?;
-                Ok(Value::Nada)
+                self.mova_cursor(linha, coluna, true, span)
+            }
+            [linha, coluna] => {
+                let linha = self.expect_int(linha, span)?;
+                let coluna = self.expect_int(coluna, span)?;
+                self.mova_cursor(linha, coluna, true, span)
+            }
+            [linha, coluna, mostre] => {
+                let linha = self.expect_int(linha, span)?;
+                let coluna = self.expect_int(coluna, span)?;
+                let mostre = self.expect_bool(mostre, span)?;
+                self.mova_cursor(linha, coluna, mostre, span)
             }
             [_] => Err(self.err("posicao_cursor espera um mapa com linha e coluna", span)),
-            _ => Err(self.err("posicao_cursor espera 0 ou 1 argumento(s)", span)),
+            _ => Err(self.err("posicao_cursor espera 0, 1, 2 ou 3 argumentos", span)),
         }
+    }
+
+    fn mova_cursor(
+        &mut self,
+        linha: i64,
+        coluna: i64,
+        mostre: bool,
+        span: Span,
+    ) -> Result<Value, EvalError> {
+        if linha < 0 || coluna < 0 {
+            return Err(self.err("posicao_cursor espera linha e coluna >= 0", span));
+        }
+        let linha = linha
+            .checked_add(1)
+            .ok_or_else(|| self.err("linha fora do intervalo", span))?;
+        let coluna = coluna
+            .checked_add(1)
+            .ok_or_else(|| self.err("coluna fora do intervalo", span))?;
+        write!(self.out, "\x1b[{linha};{coluna}H").map_err(|e| self.io_err(e, span))?;
+        if mostre {
+            self.out.flush().map_err(|e| self.io_err(e, span))?;
+        }
+        Ok(Value::Nada)
     }
 
     pub(crate) fn bi_apague_linha(

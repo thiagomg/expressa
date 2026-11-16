@@ -233,8 +233,9 @@ tipos()                        // lista desses nomes
 
 importe "tela"
 cls()                          // limpa a tela  (também limpe_tela())
-casa()                         // cursor no canto, sem apagar (animações)
-quadro(tela)                   // casa + texto; apaga resto da linha e embaixo
+posicao_cursor(0, 0, falso)     // cursor no canto sem apagar nem fazer flush
+posicao_cursor(linha, coluna)   // move e faz flush (mostre = verdadeiro)
+quadro(tela)                   // cursor no canto + texto; apaga resto da linha e embaixo
 nova_linha                     // "\n" no Unix, "\r\n" no Windows
 colunas()  linhas()            // tamanho em caracteres (80×24 sem TTY)
 b = bloco(0, 27)               // mapa {:linha, :coluna}
@@ -372,7 +373,7 @@ Módulos (`importe "…"`):
 
 | | |
 |---|---|
-| `tela` | `cls` `casa` `eh_terminal` `pinte` `fundo` `negrito` `colunas` `linhas` `quadro` `bloco` `escreva_em` `nova_linha` |
+| `tela` | `cls` `posicao_cursor` `eh_terminal` `pinte` `fundo` `negrito` `colunas` `linhas` `quadro` `bloco` `escreva_em` `nova_linha` |
 | `mat` | `pi` `raiz` `aleatorio` `semente` `seno` `cosseno` `tangente` `arcoseno` `arcocosseno` `arcotangente` `arcotangente2` `radianos` `graus` `exp` `log` `log10` `potencia` `piso` `teto` `arredonde` |
 | `matriz` | `matriz` `transposta` `det` `identidade` `zeros` `uns` `cheia` `nlinhas` `ncolunas` `xy` |
 | `arquivo` | `leia_arquivo` `salve_arquivo` `adicione_arquivo` `leia_csv` `salve_csv` `existe` `eh_pasta` `liste` `crie_pasta` `apague_arquivo` `apague_pasta` `mova` `copie` `junte_caminho` `nome_do_arquivo` `pasta_de` `extensao` `pasta_atual` |

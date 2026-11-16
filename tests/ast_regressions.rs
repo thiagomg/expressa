@@ -196,7 +196,7 @@ fn failed_native_import_publishes_no_bindings() {
         run(r#"
 fundo = 1
 avalie("importe \"tela\"") se_falhar { 0 }
-escreva(tipo(casa) se_falhar { "absent" })
+escreva(tipo(posicao_cursor) se_falhar { "absent" })
 escreva(fundo)
 "#),
         "absent\n1\n"

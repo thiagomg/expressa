@@ -2662,3 +2662,93 @@ fn erro_no_modulo_importado_aponta_para_o_importe() {
     }
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+#[cfg(feature = "terminal")]
+fn cursor_mostre_controls_flush_and_validates_before_writing() {
+    #[derive(Default)]
+    struct Output {
+        bytes: Vec<u8>,
+        flushes: usize,
+        fail_flush: bool,
+    }
+    impl io::Write for Output {
+        fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+            self.bytes.extend_from_slice(bytes);
+            Ok(bytes.len())
+        }
+        fn flush(&mut self) -> io::Result<()> {
+            self.flushes += 1;
+            if self.fail_flush {
+                Err(io::Error::other("falha de flush"))
+            } else {
+                Ok(())
+            }
+        }
+    }
+    for backend in [ExecutionBackend::Ast, ExecutionBackend::Bytecode] {
+        if !backend.is_available() {
+            continue;
+        }
+        for (source, expected, flushes, fail_flush, succeeds) in [
+            ("posicao_cursor(2, 4, falso)", "\x1b[3;5H", 0, true, true),
+            (
+                "posicao_cursor(2, 4, verdadeiro)",
+                "\x1b[3;5H",
+                1,
+                false,
+                true,
+            ),
+            ("posição_cursor(2, 4)", "\x1b[3;5H", 1, false, true),
+            ("posicao_cursor(bloco(2, 4))", "\x1b[3;5H", 1, false, true),
+            (
+                "posicao_cursor(0, 0, verdadeiro)",
+                "\x1b[1;1H",
+                1,
+                true,
+                false,
+            ),
+            ("posicao_cursor(0, -1, falso)", "", 0, false, false),
+            ("posicao_cursor(0, 0, 1)", "", 0, false, false),
+            (
+                "posicao_cursor(0, 9223372036854775807, falso)",
+                "",
+                0,
+                false,
+                false,
+            ),
+        ] {
+            let mut output = Output {
+                fail_flush,
+                ..Default::default()
+            };
+            let result = run_configured_with_io(
+                &format!("importe \"tela\"\n{source}"),
+                "cursor.lep",
+                Box::new(NoopHook),
+                &mut io::Cursor::new(""),
+                &mut output,
+                &mut Vec::new(),
+                ExecutionOptions {
+                    backend,
+                    ..Default::default()
+                },
+                None,
+                None,
+                false,
+                None,
+                &[],
+            );
+            assert_eq!(
+                result.is_ok(),
+                succeeds,
+                "{backend:?}: {source}: {result:?}"
+            );
+            assert_eq!(output.bytes, expected.as_bytes(), "{backend:?}: {source}");
+            assert_eq!(output.flushes, flushes, "{backend:?}: {source}");
+            if fail_flush && !succeeds {
+                assert!(result.unwrap_err().message.contains("falha de flush"));
+            }
+        }
+    }
+}

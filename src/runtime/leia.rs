@@ -7,7 +7,7 @@ pub const LEIA_MARKER: &str = "<<<EXPRESSA-LEIA>>>";
 /// ANSI: erase the screen, then move the cursor home. Written by `cls()`.
 pub const CLEAR_SCREEN: &str = "\x1b[2J\x1b[H";
 
-/// ANSI: cursor to the top-left without erasing. Written by `casa()`.
+/// ANSI: cursor to the top-left without erasing. Used by `quadro()`.
 pub const CURSOR_HOME: &str = "\x1b[H";
 
 pub trait LeiaHost {

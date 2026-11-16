@@ -177,7 +177,7 @@ m.inicia_jogo()
 cls()
 desenha(m)
 enquanto 1 == 1 {
-    casa()
+    posicao_cursor(0, 0, falso)
     m = m.nova_geracao()
     desenha(m)
     durma(0.2)
