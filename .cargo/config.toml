@@ -2,3 +2,9 @@
 # requires this compatibility floor; CMake 3 ignores this environment setting.
 [env]
 CMAKE_POLICY_VERSION_MINIMUM = "3.5"
+
+# Use the bundled gvsbuild SDK for Windows MSVC builds. Target-specific names
+# leave pkg-config discovery on Linux and macOS unchanged. Cargo resolves these
+# paths relative to the repository root, even when invoked from a member crate.
+PKG_CONFIG_x86_64_pc_windows_msvc = { value = "deps/gtk/bin/pkgconf.exe", relative = true }
+PKG_CONFIG_PATH_x86_64_pc_windows_msvc = { value = "deps/gtk/lib/pkgconfig", relative = true }

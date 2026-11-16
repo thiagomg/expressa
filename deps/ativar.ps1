@@ -7,7 +7,7 @@
 #   . .\deps\ativar.ps1
 #
 # Nesta máquina o .cargo/config.toml já aponta o Cargo para deps/, então
-# `cargo build` e `cargo run` não precisam deste script.
+# `cargo build` não precisa deste script. Para executar a interface, ative o PATH.
 #
 # O binário do GTK precisa continuar no PATH enquanto a IDE estiver aberta:
 # o Windows carrega gtk-4-1.dll e gtksourceview-5-0.dll de deps/gtk/bin, e o
