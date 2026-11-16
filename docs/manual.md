@@ -478,12 +478,14 @@ Terminal e painel da Aula.
 
 ### `cls()` / `limpe_tela()`
 
-Limpa e põe o cursor no canto. No REPL, a linha `cls` também limpa. Em animação, `cls` a cada quadro pisca: use `casa()`.
+Limpa e põe o cursor no canto. No REPL, a linha `cls` também limpa. Em animação, `cls` a cada quadro pisca: use `posicao_cursor(0, 0, falso)`.
 
-### `casa()`
+### `posicao_cursor(linha, coluna, mostre)`
 
-Cursor no canto, sem apagar. Na Aula, o painel trata como novo quadro.
-
+Move o cursor sem apagar, com linha e coluna inteiras a partir de zero.
+`mostre` controla o flush da saída: o padrão é `verdadeiro` e pode ser omitido.
+Em animações, use `posicao_cursor(0, 0, falso)` para enviar o movimento junto
+com a próxima escrita. Essa chamada substitui `casa()`, que foi removida.
 
 ### Consultar o cursor e repetir uma entrada
 

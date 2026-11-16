@@ -402,3 +402,16 @@ g = clone(f)
 escreva(g())"#,
     );
 }
+
+#[test]
+#[cfg(feature = "terminal")]
+fn cursor_coordinates_and_removed_casa_match_in_exb() {
+    for source in [
+        "importe \"tela\"\nposicao_cursor(2, 4, falso)\nposição_cursor(0, 0)\nposicao_cursor(bloco(1, 3))",
+        "importe \"tela\"\nescreva(casa() se_falhar erro { erro })",
+        "importe \"tela\"\nposicao_cursor(-1, 0)",
+        "importe \"tela\"\nposicao_cursor(0, 0, 1)",
+    ] {
+        equivalent(source);
+    }
+}

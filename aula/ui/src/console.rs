@@ -1,5 +1,5 @@
 //! The output pane: program output with ANSI colors and a small terminal
-//! emulation (`cls()` / `casa()`), plus line input for `leia` typed right
+//! emulation (`cls()` / `posicao_cursor()`), plus line input for `leia` typed right
 //! in the pane, like a terminal.
 
 use std::cell::{Cell, RefCell};
@@ -345,7 +345,7 @@ pub(crate) fn trim_output(buf: &gtk::TextBuffer) -> i32 {
     extra
 }
 
-/// Cursor of the output pane after `cls()` / `casa()` / `quadro` / `escreva_em`.
+/// Cursor of the output pane after `cls()` / `posicao_cursor()` / `quadro` / `escreva_em`.
 /// `row: None` means plain appending (no screen codes seen in this run).
 #[derive(Default)]
 struct Screen {
@@ -833,10 +833,10 @@ mod tests {
                 return;
             };
             assert_eq!(t, "novo\n", "cls clears then appends");
-            // casa(): old frame stays until each line is overwritten.
-            let t = screen_text(&["q1 a\nq1 b\n", "\x1b[H", "q2 a\n"]).unwrap();
+            // posicao_cursor(0, 0, falso): old frame stays until each line is overwritten.
+            let t = screen_text(&["q1 a\nq1 b\n", "\x1b[1;1H", "q2 a\n"]).unwrap();
             assert_eq!(t, "q2 a\nq1 b\n");
-            let t = screen_text(&["q1 a\nq1 b\n", "\x1b[H", "q2 a\n", "q2 b\n"]).unwrap();
+            let t = screen_text(&["q1 a\nq1 b\n", "\x1b[1;1H", "q2 a\n", "q2 b\n"]).unwrap();
             assert_eq!(t, "q2 a\nq2 b\n");
             // Writes split across chunks, and SGR codes become tags, not text.
             let t = screen_text(&["\x1b[H", "\x1b[32m*", "\x1b[0m!\n"]).unwrap();

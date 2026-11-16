@@ -130,7 +130,7 @@ fn expr(e: &Expr, lines: &mut BTreeSet<u32>) {
             attempt, fallback, ..
         } => {
             expr(attempt, lines);
-            expr(fallback, lines);
+            block(fallback, lines);
         }
         Expr::Unary { expr: e, .. } => expr(e, lines),
         Expr::Field { object, .. } | Expr::MapField { object, .. } => expr(object, lines),
@@ -222,6 +222,12 @@ mod tests {
         );
         assert_eq!(executable_lines("a = (\n"), None);
     }
+    #[test]
+    fn executable_locations_include_error_handler_blocks() {
+        let source = "valor = falhe(\"erro\") se_falhar erro {\n    escreva(erro)\n    falso\n}\n";
+        assert_eq!(executable_lines(source), Some(BTreeSet::from([1, 2, 3])));
+    }
+
     #[test]
     fn source_identity_normalizes_separators_but_keeps_revision_and_content() {
         let source = Source::new("lib\\math.lep", "escreva(1)\n".into());
