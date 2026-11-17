@@ -64,7 +64,7 @@ campo_texto =  função(idx, t) {
         }
         se t[i] == "\\" {
             se i+1 >= t.tamanho() {
-                escreva_erro("Sequencia de escape inválida em " + t)
+                escreva_erro("Sequência de escape inválida em " + t)
                 sair(1)
             }
             
@@ -158,7 +158,7 @@ separe_linha = função(linha) {
 
 // Funções para serem usadas por outros arquivos
 salva = funcao(tarefas) {
-    // Cria diretorio, caso ainda não exista
+    // Cria o diretório, caso ainda não exista.
     // TODO: Mudar de crie_pasta para crie_diretorio
     crie_pasta(diretorio)
 

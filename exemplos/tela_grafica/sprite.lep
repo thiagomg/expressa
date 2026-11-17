@@ -1,4 +1,5 @@
-// /// Uma telinha vira sprite: papel transparente, depois carimba na janela.
+// Uma imagem reutilizável (sprite): desenha com fundo transparente
+// e depois repete a figura em várias posições da janela.
 
 tela_grafica = importe "tela_grafica"
 

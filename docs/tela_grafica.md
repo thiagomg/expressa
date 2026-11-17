@@ -199,7 +199,10 @@ esperar o ciclo atual de VSync para ser coletada. Isso não bloqueia a simulaç�
 A pausa de 2 ms fica apenas para janelas ocultas ou sem quadro.
 Teclas, modificadores, soltura, foco, mouse e letterbox preservam a mesma API.
 A Aula continua usando a apresentação do GTK. Os visualizadores estáticos de
-arquivos `.cart`/PNG continuam em minifb.
+arquivos `.cart`/PNG continuam em minifb. No Linux, esse visualizador usa
+X11 (via XWayland em sessões Wayland) para exibir a moldura e o botão de fechar
+também no GNOME. Ele exige um servidor X11/XWayland disponível e pode ser fechado
+pelo botão da janela ou pela tecla Esc.
 
 ### Quadros pendentes
 

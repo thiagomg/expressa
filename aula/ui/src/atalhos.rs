@@ -60,8 +60,13 @@ const ATALHOS: &[(&str, &[(&str, &str)])] = &[
         "Ver",
         &[
             ("F7", "mostrar ou esconder os arquivos"),
-            ("F8", "mostrar ou esconder o painel"),
-            ("Ver → Argumentos", "mostrar ou esconder a linha de argumentos"),
+            ("F8", "mostrar ou esconder o Painel depurar"),
+            ("Ctrl+J", "mostrar ou esconder o painel inferior"),
+            (
+                "Ctrl+Shift+F12",
+                "esconder os painéis ou restaurar a disposição anterior",
+            ),
+            ("Shift+F8", "mostrar ou esconder a linha de argumentos"),
             ("Ctrl+= · Ctrl+- · Ctrl+0", "letra maior · menor · normal"),
             ("Ctrl+?", "esta lista"),
         ],

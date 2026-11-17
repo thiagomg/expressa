@@ -5,13 +5,13 @@ importe "lib/linha_cmd"
 
 ajuda = função()
 início
-    escreva("Para stdin:")
+    escreva("Para ler texto enviado por outro comando (entrada padrão):")
     escreva("cat meu-arq.txt | grep.lep <o-que-procurar>")
     escreva("")
-    escreva("Para arquivo(s):")
+    escreva("Para ler um ou mais arquivos:")
     escreva("grep.lep [opções] <o-que-procurar> meu-arq.txt meu-arq-2.txt ...")
     escreva("Opções:")
-    escreva("-h ou --humanos: Formatado para humanos")
+    escreva("-h ou --humanos: mostra o nome de cada arquivo como cabeçalho")
 fim
 
 exec_grep = funcao(args)

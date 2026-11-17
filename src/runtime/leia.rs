@@ -18,6 +18,11 @@ pub trait LeiaHost {
 
     fn ask(&mut self, prompt: &str) -> Result<String, String>;
 
+    /// Raw standard input, without normalizing line endings or decoding UTF-8.
+    fn read_all_bytes(&mut self) -> Result<Vec<u8>, String> {
+        Err("leia_bytes() lê a entrada padrão (pipe/arquivo); neste ambiente use leia_bytes(caminho)".into())
+    }
+
     /// Drain remaining stdin as lines (no prompt). Default: not available
     /// (the Aula dialog has no EOF).
     fn read_all_lines(&mut self) -> Result<Vec<String>, String> {
@@ -34,6 +39,11 @@ pub struct MarkerLeiaHost<R: BufRead> {
 }
 
 impl<R: BufRead> LeiaHost for MarkerLeiaHost<R> {
+    fn read_all_bytes(&mut self) -> Result<Vec<u8>, String> {
+        let mut bytes = Vec::new();
+        io::Read::read_to_end(&mut self.stdin, &mut bytes).map_err(|e| e.to_string())?;
+        Ok(bytes)
+    }
     fn ask(&mut self, prompt: &str) -> Result<String, String> {
         let mut err = io::stderr();
         writeln!(err, "{LEIA_MARKER}{prompt}").map_err(|e| e.to_string())?;

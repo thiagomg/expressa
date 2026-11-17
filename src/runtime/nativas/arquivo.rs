@@ -10,6 +10,110 @@ use super::super::value::Value;
 use super::{csv_cell, lines_to_text};
 
 impl Vm<'_, '_> {
+    pub(crate) fn bi_leia_bytes(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
+        let bytes = match args {
+            [] => {
+                if let Some(host) = self.leia_host.as_mut() {
+                    host.read_all_bytes().map_err(|e| self.err(e, span))?
+                } else {
+                    let mut bytes = Vec::new();
+                    let mut chunk = [0; 8192];
+                    loop {
+                        self.check_espera(span)?;
+                        let count = match self.input.read_bytes(&mut chunk) {
+                            Err(e) if e.kind() == io::ErrorKind::Interrupted => continue,
+                            result => result.map_err(|e| self.io_err(e, span))?,
+                        };
+                        if count == 0 {
+                            break;
+                        }
+                        bytes.extend_from_slice(&chunk[..count]);
+                    }
+                    bytes
+                }
+            }
+            [path] => {
+                let path = self.resolve_data_path(&self.expect_texto(path, span)?, span)?;
+                fs::read(&path).map_err(|e| {
+                    self.err(
+                        format!("não foi possível ler '{}': {e}", path.display()),
+                        span,
+                    )
+                })?
+            }
+            _ => return Err(self.err("leia_bytes espera 0 ou 1 argumento", span)),
+        };
+        let mut values = Vec::with_capacity(bytes.len());
+        for (i, byte) in bytes.into_iter().enumerate() {
+            if i % 8192 == 0 {
+                self.check_espera(span)?;
+            }
+            values.push(Value::Numero(u32::from(byte).into()));
+        }
+        Ok(Value::lista(values))
+    }
+
+    pub(crate) fn bi_texto_utf8(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
+        if !(1..=2).contains(&args.len()) {
+            return Err(self.err(
+                "texto_utf8 espera uma lista de bytes e um modo opcional",
+                span,
+            ));
+        }
+        let mode = if args.len() == 2 {
+            self.expect_texto(&args[1], span)?
+        } else {
+            "estrito".into()
+        };
+        if !matches!(mode.as_str(), "estrito" | "substitua" | "ignore") {
+            return Err(self.err(
+                "modo de texto_utf8 deve ser :estrito, :substitua ou :ignore",
+                span,
+            ));
+        }
+        let values = self.expect_lista(&args[0], span)?;
+        let mut bytes = Vec::with_capacity(values.borrow().len());
+        for (i, value) in values.borrow().iter().enumerate() {
+            if i % 8192 == 0 {
+                self.check_espera(span)?;
+            }
+            let byte = self.expect_int(value, span)?;
+            bytes.push(
+                u8::try_from(byte)
+                    .map_err(|_| self.err("byte deve ser um inteiro de 0 a 255", span))?,
+            );
+        }
+        let text = match mode.as_str() {
+            "estrito" => String::from_utf8(bytes)
+                .map_err(|_| self.err("sequência de bytes não é UTF-8 válido", span))?,
+            "substitua" => String::from_utf8_lossy(&bytes).into_owned(),
+            _ => {
+                let mut text = String::new();
+                let mut rest = bytes.as_slice();
+                while !rest.is_empty() {
+                    self.check_espera(span)?;
+                    match std::str::from_utf8(rest) {
+                        Ok(valid) => {
+                            text.push_str(valid);
+                            break;
+                        }
+                        Err(error) => {
+                            let valid = error.valid_up_to();
+                            text.push_str(
+                                std::str::from_utf8(&rest[..valid])
+                                    .expect("validated UTF-8 prefix"),
+                            );
+                            let skip = error.error_len().unwrap_or(rest.len() - valid);
+                            rest = &rest[valid + skip..];
+                        }
+                    }
+                }
+                text
+            }
+        };
+        Ok(Value::Texto(text))
+    }
+
     pub(crate) fn bi_leia_arquivo(
         &mut self,
         args: &[Value],

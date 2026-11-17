@@ -1,36 +1,26 @@
-// MDC (algoritmo de Euclides) e MMC.
-// mdc(a, b) = mdc(b, a mod b)     mmc(a, b) = a · b / mdc(a, b)
-//
-// Altere a e b e execute: cargo run -- examples/mdc_mmc.lep
+// Euclides: mdc(a, b) = mdc(b, a % b).
+entrada = importe "../lib/entrada"
 
-a = 48
-b = 18
-
-mdc = funcao(x, y)
-inicio
-    se y == 0
-    inicio
-        x
-    fim
-    senao
-    inicio
-        mdc(y, x % y)
-    fim
-fim
-
-mmc = funcao(x, y)
-inicio
-    x * y / mdc(x, y)
-fim
-
-escreva("a = " + a + "   b = " + b)
-escreva("mdc(" + a + ", " + b + ") = " + mdc(a, b))
-escreva("mmc(" + a + ", " + b + ") = " + mmc(a, b))
-escreva("checagem: mdc · mmc = " + (mdc(a, b) * mmc(a, b)) + "  (vale a · b = " + (a * b) + ")")
-
-escreva("---")
-escreva("frações: simplificar 42/56")
-num = 42
-den = 56
-d = mdc(num, den)
-escreva(num + "/" + den + " = " + (num / d) + "/" + (den / d))
+escreva("Máximo divisor comum (MDC) e mínimo múltiplo comum (MMC).")
+escreva("O MDC é o maior inteiro que divide os dois números sem deixar resto.")
+escreva("O MMC é o menor inteiro positivo que é múltiplo dos dois números.")
+escreva("Informe dois inteiros positivos; eles também serão usados como fração a/b.")
+escreva("Para sair, pressione Enter sem digitar nada.")
+escreva()
+a = entrada::leia_numero("Primeiro número (a): ", funcao(n) { n > 0 e n % 1 == 0 }, "Digite um inteiro maior que zero.")
+se a == falso { saia(0) }
+b = entrada::leia_numero("Segundo número (b): ", funcao(n) { n > 0 e n % 1 == 0 }, "Digite um inteiro maior que zero.")
+se b == falso { saia(0) }
+x = a
+y = b
+escreva("Passos do algoritmo de Euclides:")
+enquanto y != 0 {
+    resto = x % y
+    escreva("resto de " + x + " dividido por " + y + " = " + resto)
+    x = y
+    y = resto
+}
+d = x
+multiplo = (a / d) * b
+escreva("mdc(" + a + ", " + b + ") = " + d)
+escreva("mmc(" + a + ", " + b + ") = " + multiplo)

@@ -477,7 +477,7 @@ fn build_ui_with_prefs(app: &Application, startup: bool, prefs: Prefs) -> UiRc {
     status_row.append(&ui.borrow().diag_label);
     status_row.append(&ui.borrow().project_path);
 
-    install_menubar(&win, &ui, &file_scroll, &debug_panel, &args_row);
+    install_menubar(&win, &ui, &file_scroll, &debug_panel, &args_row, &bottom);
     root.append(&args_row);
     root.append(&ui.borrow().depuracao.barra_exec.caixa);
     root.append(&ui.borrow().search_revealer);
@@ -569,6 +569,18 @@ fn build_ui_with_prefs(app: &Application, startup: bool, prefs: Prefs) -> UiRc {
         add_shortcut(&fkeys, "F8", {
             let win = win.clone();
             move || trigger_win_action(&win, "mostrar-painel")
+        });
+        add_shortcut(&fkeys, "<Shift>F8", {
+            let win = win.clone();
+            move || trigger_win_action(&win, "mostrar-argumentos")
+        });
+        add_shortcut(&fkeys, "<Primary>j", {
+            let win = win.clone();
+            move || trigger_win_action(&win, "mostrar-inferior")
+        });
+        add_shortcut(&fkeys, "<Primary><Shift>F12", {
+            let win = win.clone();
+            move || trigger_win_action(&win, "alternar-paineis")
         });
         k(&shortcuts, "<Primary>q", encerrar);
         k(&shortcuts, "<Primary>s", |ui| {

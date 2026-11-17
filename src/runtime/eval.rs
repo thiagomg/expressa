@@ -49,6 +49,12 @@ use super::value::{
 /// debugger can still prompt on the same terminal).
 pub(crate) trait LineInput {
     fn read_line(&mut self, buf: &mut String) -> io::Result<usize>;
+    fn read_bytes(&mut self, _buf: &mut [u8]) -> io::Result<usize> {
+        Err(io::Error::new(
+            io::ErrorKind::Unsupported,
+            "leitura de bytes indisponível neste ambiente",
+        ))
+    }
     #[cfg(feature = "terminal")]
     fn is_terminal(&self) -> bool {
         false
@@ -56,6 +62,9 @@ pub(crate) trait LineInput {
 }
 
 impl<T: BufRead> LineInput for T {
+    fn read_bytes(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        io::Read::read(self, buf)
+    }
     fn read_line(&mut self, buf: &mut String) -> io::Result<usize> {
         BufRead::read_line(self, buf)
     }
@@ -64,6 +73,9 @@ impl<T: BufRead> LineInput for T {
 struct ConsoleInput;
 
 impl LineInput for ConsoleInput {
+    fn read_bytes(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        io::Read::read(&mut io::stdin().lock(), buf)
+    }
     fn read_line(&mut self, buf: &mut String) -> io::Result<usize> {
         io::stdin().read_line(buf)
     }

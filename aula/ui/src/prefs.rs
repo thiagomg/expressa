@@ -55,6 +55,10 @@ pub struct Prefs {
     pub config_path: Option<PathBuf>,
     pub font_size: u32,
     pub dark: bool,
+    /// Visibility of the auxiliary panels, restored when opening the IDE.
+    pub mostrar_argumentos: bool,
+    pub mostrar_painel: bool,
+    pub mostrar_inferior: bool,
     /// Last local project folder. The chooser starts there.
     pub pasta: String,
     /// Last remote server URL.
@@ -73,6 +77,9 @@ impl Default for Prefs {
             config_path: None,
             font_size: DEFAULT_FONT,
             dark: false,
+            mostrar_argumentos: true,
+            mostrar_painel: true,
+            mostrar_inferior: true,
             pasta: String::new(),
             servidor: "http://127.0.0.1:50051".to_string(),
             projeto: String::new(),
@@ -102,6 +109,15 @@ impl Prefs {
                     }
                 }
                 "tema" => p.dark = v.trim() == "escuro",
+                "mostrar_argumentos" | "mostrar_painel" | "mostrar_inferior" => {
+                    if let Ok(visible) = v.trim().parse::<bool>() {
+                        match k.trim() {
+                            "mostrar_argumentos" => p.mostrar_argumentos = visible,
+                            "mostrar_painel" => p.mostrar_painel = visible,
+                            _ => p.mostrar_inferior = visible,
+                        }
+                    }
+                }
                 "pasta" => p.pasta = v.trim().to_string(),
                 "servidor" => p.servidor = v.trim().to_string(),
                 "projeto" => p.projeto = v.trim().to_string(),
@@ -116,13 +132,17 @@ impl Prefs {
 
     pub fn to_text(&self) -> String {
         let mut t = format!(
-            "fonte={}\ntema={}\npasta={}\nservidor={}\nprojeto={}\narquivo={}\n",
+            "fonte={}\ntema={}\npasta={}\nservidor={}\nprojeto={}\narquivo={}\n\
+             mostrar_argumentos={}\nmostrar_painel={}\nmostrar_inferior={}\n",
             self.font_size,
             if self.dark { "escuro" } else { "claro" },
             self.pasta,
             self.servidor,
             self.projeto,
             self.arquivo,
+            self.mostrar_argumentos,
+            self.mostrar_painel,
+            self.mostrar_inferior,
         );
         for r in &self.recentes {
             t.push_str(&format!("recente={}\n", r.texto()));
@@ -538,6 +558,28 @@ selection { background-color: @aula_sel; color: #ffffff; }
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn panel_visibility_round_trips_and_old_preferences_keep_panels_visible() {
+        let old = Prefs::parse("fonte=14\ntema=escuro\n");
+        assert!(old.mostrar_argumentos && old.mostrar_painel && old.mostrar_inferior);
+        for (args, debug, bottom) in [
+            (false, true, false),
+            (true, false, true),
+            (false, false, false),
+        ] {
+            let p = Prefs {
+                mostrar_argumentos: args,
+                mostrar_painel: debug,
+                mostrar_inferior: bottom,
+                ..old.clone()
+            };
+            assert_eq!(Prefs::parse(&p.to_text()), p);
+        }
+        let invalid =
+            Prefs::parse("mostrar_argumentos=lixo\nmostrar_painel=\nmostrar_inferior=0\n");
+        assert!(invalid.mostrar_argumentos && invalid.mostrar_painel && invalid.mostrar_inferior);
+    }
 
     #[test]
     fn parse_and_print() {

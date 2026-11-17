@@ -2,6 +2,7 @@
 mod jogos_2d;
 #[cfg(feature = "graphics")]
 mod laco_grafico;
+mod exemplos_interativos;
 
 use super::*;
 use crate::runtime::debug::DebugAction;
@@ -179,28 +180,12 @@ fn example_programs_run() {
             include_str!("../../../exemplos/linguagem/usa_matematica.lep"),
         ),
         (
-            "exemplos/texto/poema.lep",
-            include_str!("../../../exemplos/texto/poema.lep"),
-        ),
-        (
             "exemplos/texto/palindromo.lep",
             include_str!("../../../exemplos/texto/palindromo.lep"),
         ),
         (
             "exemplos/texto/ascii.lep",
             include_str!("../../../exemplos/texto/ascii.lep"),
-        ),
-        (
-            "exemplos/programas/receita.lep",
-            include_str!("../../../exemplos/programas/receita.lep"),
-        ),
-        (
-            "exemplos/programas/turma.lep",
-            include_str!("../../../exemplos/programas/turma.lep"),
-        ),
-        (
-            "exemplos/programas/caixa.lep",
-            include_str!("../../../exemplos/programas/caixa.lep"),
         ),
         (
             "exemplos/programas/diario.lep",
@@ -211,52 +196,8 @@ fn example_programs_run() {
             include_str!("../../../exemplos/programas/contatos.lep"),
         ),
         (
-            "exemplos/escola/bhaskara.lep",
-            include_str!("../../../exemplos/escola/bhaskara.lep"),
-        ),
-        (
-            "exemplos/escola/juros.lep",
-            include_str!("../../../exemplos/escola/juros.lep"),
-        ),
-        (
-            "exemplos/escola/regra_de_tres.lep",
-            include_str!("../../../exemplos/escola/regra_de_tres.lep"),
-        ),
-        (
-            "exemplos/escola/progressoes.lep",
-            include_str!("../../../exemplos/escola/progressoes.lep"),
-        ),
-        (
-            "exemplos/escola/estatistica.lep",
-            include_str!("../../../exemplos/escola/estatistica.lep"),
-        ),
-        (
-            "exemplos/escola/pitagoras.lep",
-            include_str!("../../../exemplos/escola/pitagoras.lep"),
-        ),
-        (
-            "exemplos/escola/geometria.lep",
-            include_str!("../../../exemplos/escola/geometria.lep"),
-        ),
-        (
-            "exemplos/escola/mdc_mmc.lep",
-            include_str!("../../../exemplos/escola/mdc_mmc.lep"),
-        ),
-        (
-            "exemplos/escola/media_ponderada.lep",
-            include_str!("../../../exemplos/escola/media_ponderada.lep"),
-        ),
-        (
-            "exemplos/escola/cinematica.lep",
-            include_str!("../../../exemplos/escola/cinematica.lep"),
-        ),
-        (
             "exemplos/escola/seno_cosseno.lep",
             include_str!("../../../exemplos/escola/seno_cosseno.lep"),
-        ),
-        (
-            "exemplos/escola/calc_fracoes.lep",
-            include_str!("../../../exemplos/escola/calc_fracoes.lep"),
         ),
     ];
     for (file, src) in examples {
@@ -264,10 +205,60 @@ fn example_programs_run() {
     }
 }
 
-#[test]
-fn calc_fracoes_prints_with_como_texto() {
+fn run_calc_fracoes(inputs: &[&str]) -> String {
+    struct FractionHost<'a> {
+        inputs: std::slice::Iter<'a, &'a str>,
+        cursor_queries: usize,
+    }
+
+    impl LeiaHost for FractionHost<'_> {
+        fn cursor_position(&mut self) -> Result<(i64, i64), String> {
+            self.cursor_queries += 1;
+            Ok((4, 0))
+        }
+
+        fn ask(&mut self, _prompt: &str) -> Result<String, String> {
+            self.inputs
+                .next()
+                .map(|input| input.to_string())
+                .ok_or_else(|| "entrada de teste esgotada".into())
+        }
+    }
+
+    let mut host = FractionHost {
+        inputs: inputs.iter(),
+        cursor_queries: 0,
+    };
+    let mut out = Vec::new();
+    let mut err = Vec::new();
     let src = include_str!("../../../exemplos/escola/calc_fracoes.lep");
-    let out = run_to_string(src, "exemplos/escola/calc_fracoes.lep").unwrap();
+    run_with_leia_host(
+        src,
+        "exemplos/escola/calc_fracoes.lep",
+        None,
+        Some(Duration::from_secs(2)),
+        &mut out,
+        &mut err,
+        &mut host,
+    )
+    .unwrap_or_else(|e| panic!("{e}"));
+    assert_eq!(host.inputs.len(), 0, "nem todas as entradas foram usadas");
+    assert!(host.cursor_queries > 0, "o exemplo deve consultar o cursor");
+    assert!(err.is_empty(), "{}", String::from_utf8_lossy(&err));
+    String::from_utf8(out).unwrap()
+}
+
+#[test]
+fn calc_fracoes_sums_interactive_input() {
+    let out = run_calc_fracoes(&["1/4", "1/4"]);
+    assert!(out.contains("1/4 + 1/4 = 1/2"), "{out}");
+    assert!(!out.contains("Erro:"), "{out}");
+}
+
+#[test]
+fn calc_fracoes_retries_invalid_input() {
+    let out = run_calc_fracoes(&["abc", "1/0", "1/4", "1/4"]);
+    assert_eq!(out.matches("Erro:").count(), 2, "{out}");
     assert!(out.contains("1/4 + 1/4 = 1/2"), "{out}");
 }
 
@@ -368,10 +359,42 @@ escreva(t:y)
 }
 
 #[test]
-fn erros_example_does_not_crash() {
+fn erros_example_prints_recovery_results() {
     let src = include_str!("../../../exemplos/linguagem/erros.lep");
-    let out = run_to_string(src, "exemplos/linguagem/erros.lep").unwrap();
-    assert_eq!(out, "");
+    // A virtual source directory keeps arquivo.txt absent regardless of the
+    // student's files next to the real example.
+    let unique = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    let file = std::env::temp_dir()
+        .join(format!("expressa-erros-{unique}"))
+        .join("erros.lep");
+    for backend in [ExecutionBackend::Ast, ExecutionBackend::Bytecode]
+        .into_iter()
+        .filter(|backend| backend.is_available())
+    {
+        let out = run_with_options(
+            src,
+            &file.to_string_lossy(),
+            "",
+            ExecutionOptions {
+                backend,
+                ..ExecutionOptions::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            out.stdout,
+            "O arquivo contém o total de linhas = 0\nO item 99 é inválido\nResultado é 1\n"
+        );
+        assert!(
+            out.stderr.starts_with("Erro ao dividir 2/0:"),
+            "{}",
+            out.stderr
+        );
+        assert!(out.stderr.contains("zero"), "{}", out.stderr);
+    }
 }
 
 #[test]
@@ -596,12 +619,12 @@ escreva(xs)
 "#),
         "12\nAna Silva\n[1, 2, 3]\n[11, 2, 3]\n"
     );
-    assert!(
+    assert_eq!(
         run_err(
             r#"xs = [1]
 xs -= [1]"#
-        )
-        .contains("numero")
+        ),
+        "operador '-' não se aplica a lista e lista"
     );
     assert_eq!(
         run(r#"
@@ -926,7 +949,10 @@ escreva(s)
     assert_eq!(run("r = 0..\nxs = [1]\nescreva(xs[r])"), "[1]\n");
     assert!(run_err("xs = [1]\nxs.remova(1..)").contains("teto"));
     assert!(run_err("infinito(1)").contains("faixa"));
-    assert!(run_err("0..=9223372036854775807").contains("64 bits"));
+    assert_eq!(
+        run_err("0..=9223372036854775807"),
+        "o teto de ..= passa do maior inteiro"
+    );
 }
 
 #[test]

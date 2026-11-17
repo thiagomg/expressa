@@ -1,4 +1,4 @@
-/// Roteiro automático: usa a mesma simulação e dt real do modo interativo.
+/// Roteiro automático: usa a mesma simulação e o tempo real entre quadros (dt) do modo interativo.
 novo = função() {
     mapa([:fase -> 0, :tempo -> 0, :quadros -> 0, :parado -> 0,
         :bateu -> falso, :atravessou -> falso, :soltou -> verdadeiro,

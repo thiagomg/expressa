@@ -128,6 +128,9 @@ pub use canal::{
 struct ConsoleInput;
 
 impl LineInput for ConsoleInput {
+    fn read_bytes(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        io::Read::read(&mut io::stdin().lock(), buf)
+    }
     fn read_line(&mut self, buf: &mut String) -> io::Result<usize> {
         io::stdin().read_line(buf)
     }

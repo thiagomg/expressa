@@ -12,20 +12,22 @@ txt_como_fracao = funcao(txt) {
         t = itens[i]
         n = numero(t) se_falhar { falso }
         se n == falso {
-            falhe("Não é uma fração ou um número: " + txt)
+            falhe("Não foi possível ler esta fração ou número: " + txt)
         }
         itens[i] = n
     }
     
     n = itens[0]
-    d = se itens.tamanho() == 2 {
+    d = se itens.tamanho() == 1 {
+        1
+    } ou se itens.tamanho() == 2 {
         itens[1]
     } senão {
-        1
+        falhe("Use uma fração como 1/2 ou um número inteiro, como 2.")
     }
     
     se d == 0 {
-        falhe("Divisão por zero não é permitida")
+        falhe("O número de baixo (denominador) não pode ser zero.")
     }
     
     fracao::nova(n, d)
@@ -36,12 +38,11 @@ leia_opcao = funcao(txt) {
     enquanto res == falso {
         pos = posicao_cursor()
         fr1_txt = leia(txt)
-        // TODO: Capturar o retorno de se_falhar
-        res = txt_como_fracao(fr1_txt) se_falhar { falso }
-        se res == falso {
-            escreva("Erro: ".pinte(:vermelho) + ": XXXX")
+        res = txt_como_fracao(fr1_txt) se_falhar erro {
+            escreva("Erro: ".pinte(:vermelho) + erro)
             posicao_cursor(pos)
             apague_linha()
+            falso
         }
     }
     res
@@ -50,7 +51,7 @@ leia_opcao = funcao(txt) {
 escreva("Calculando frações")
 escreva("------------------")
 
-escreva("Escreva frações usando \"/\" (1/2, 3/4) ou número inteiro (2, 3, 4).")
+escreva("Digite uma fração, como 1/2 ou 3/4, ou um número inteiro, como 2.")
 fr1 = leia_opcao("Digite a primeira fração para calcular: ")
 fr2 = leia_opcao("Digite a segunda fração para calcular: ")
 soma_e_escreva(fr1, fr2)

@@ -369,6 +369,14 @@ pub const NATIVAS: &[Nativa] = &[
         module: Some("arquivo"),
     },
     Nativa {
+        names: &["leia_bytes"],
+        module: Some("arquivo"),
+    },
+    Nativa {
+        names: &["texto_utf8"],
+        module: Some("arquivo"),
+    },
+    Nativa {
         names: &["salve_arquivo"],
         module: Some("arquivo"),
     },
@@ -787,6 +795,8 @@ impl Vm<'_, '_> {
             #[cfg(feature = "graphics")]
             "pare_laco" => self.bi_graf_pare(args, span),
             "leia_arquivo" => self.bi_leia_arquivo(args, span),
+            "leia_bytes" => self.bi_leia_bytes(args, span),
+            "texto_utf8" => self.bi_texto_utf8(args, span),
             "salve_arquivo" => self.bi_salve_arquivo(args, span),
             "adicione_arquivo" => self.bi_adicione_arquivo(args, span),
             "leia_csv" => self.bi_leia_csv(args, span),

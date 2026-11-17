@@ -2,7 +2,7 @@ importe "tela"
 importe "mat"
 
 /// Procura um texto dentro de outro texto, mas sem levar em conta acentos
-/// Ex: Ação == Acao para esta função
+/// Exemplo: "ação" e "acao" são equivalentes para esta função.
 procura_sem_acento = função(palavra, letra) {
     sem_acento(palavra).procure(sem_acento(letra))
 }
@@ -138,7 +138,7 @@ desenha_teclado = função(linha, coluna, cores_teclado) {
     teclas = ["QWERTYUIOP", "ASDFGHJKLÇ", "ZXCVBNM"]
     // Esses recuos servem para deixar o teclado alinhado
     recuos = ["", "", "   "]
-    // Ao inves de começar na coluna da esquerda, começa na
+    // Em vez de começar na coluna da esquerda, começa na
     // linha e coluna definidas no bloco
     b = bloco(linha, coluna)
     para i em 0..teclas.tamanho() {
@@ -182,7 +182,7 @@ e_letra = função(t) {
 nova_letra = função() {
     chute = leia("Letra: ").maiuscula()
     enquanto chute.tamanho() > 0 e nao e_letra(chute) {
-        escreva("Digite só uma letra, ou Enter vazio para sair")
+        escreva("Digite apenas uma letra. Para sair, pressione Enter sem digitar nada.")
         chute = leia("Letra: ").maiuscula()
     }
     chute
@@ -199,7 +199,7 @@ inicial = função(palavra_secreta) {
     desenha(palavra_secreta, acertos, erros, max_erros, cores_teclado)
 
     enquanto erros < max_erros {
-        // Lê uma letra; Enter vazio encerra o jogo
+        // Lê uma letra; uma resposta em branco encerra o jogo.
         chute = nova_letra()
         se chute.tamanho() == 0 {
             escreva("Obrigado por jogar. Tchau!")

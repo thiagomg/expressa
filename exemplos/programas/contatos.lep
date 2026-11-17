@@ -1,6 +1,8 @@
 importe "arquivo"
 
-// Agenda em CSV: salva, lê de volta e procura um nome.
+// Este exemplo mostra como trabalhar com arquivos csv
+// Agenda em CSV (arquivo de dados organizados em linhas e colunas).
+// Salva os contatos de exemplo, lê o arquivo e procura um nome.
 
 agenda = [
     ["nome", "cidade", "idade"],
@@ -14,8 +16,8 @@ salve_csv("saida/agenda.csv", agenda)
 dados = leia_csv("saida/agenda.csv")
 cabeca = primeiro(dados)
 
-escreva("colunas: " + junte(cabeca, " | "))
-escreva("pessoas: " + (tamanho(dados) - 1))
+escreva("campos da agenda: " + junte(cabeca, " | "))
+escreva("contatos cadastrados: " + (tamanho(dados) - 1))
 
 i = 1
 repita tamanho(dados) - 1 vezes

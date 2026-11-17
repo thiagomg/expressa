@@ -3,11 +3,11 @@
 importe "arquivo"
 importe "lib/linha_cmd"
 
-ajuda = função()
+mostrar_ajuda = função()
 início
     escreva("Para ler arquivos:")
     escreva("cat.lep <arquivo>")
-    escreva("Ex: cat.lep meu-arquivo.txt")
+    escreva("Exemplo: cat.lep meu-arquivo.txt")
 fim
 
 exec_cat = função(args)
@@ -26,7 +26,7 @@ fim
 args = separa_args(argumentos, [])
 se args:op contem "ajuda" ou args:pos.tamanho() == 0
 inicio
-    ajuda()
+    mostrar_ajuda()
 fim
 senão
 inicio
