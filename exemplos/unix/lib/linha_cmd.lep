@@ -1,5 +1,5 @@
-// args - lista de argumentos
-// ops - mapa de opções que tem valor. Ex: --nome Thiago
+// args: lista de argumentos recebidos pela linha de comando.
+// ops: lista dos nomes das opções que recebem um valor, como --nome Thiago.
 separa_args = função(args, ops) {
 
     // Opções
@@ -11,7 +11,8 @@ separa_args = função(args, ops) {
     enquanto i < args.tamanho() {
         a = args[i]
         se a.tamanho() > 1 e a[0] == "-" {
-            // é uma opção. Se estiver na lista, vamos pegar o próximo valor, senão vamos colocar branco
+            // Se a opção estiver na lista ops, o próximo argumento é seu valor.
+            // As demais opções recebem um texto vazio.
             nome_op = se a[0..2] == "--" {
                 a[2..]
             } senao {

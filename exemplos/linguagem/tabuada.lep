@@ -1,4 +1,4 @@
-// Tabuada de um número, feita com uma função de primeira classe.
+// Uma função recebe um número e escreve sua tabuada de 1 a 10.
 
 tabuada = funcao(n)
 inicio

@@ -1,0 +1,13 @@
+// Entrada compartilhada pelos exemplos interativos.
+// Uma resposta em branco ou o fim da entrada cancela o cálculo atual.
+leia_numero = funcao(pergunta, aceita, aviso) {
+    enquanto verdadeiro {
+        texto = limpe(leia(pergunta) se_falhar { "" })
+        se texto == "" { retorne falso }
+        valor = numero(texto) se_falhar { falso }
+        se valor != falso {
+            se aceita(valor) { retorne valor }
+        }
+        escreva(aviso)
+    }
+}

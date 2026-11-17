@@ -22,6 +22,11 @@ use super::letterbox::letterbox;
 use super::viewer_inbox::CaixaVisor;
 
 pub fn run_live_viewer() -> Result<(), String> {
+    // SDL's X11 title conversion uses the C character locale. Rust starts in
+    // "C" even when the environment requests UTF-8. Set LC_CTYPE before the
+    // reader/SDL threads start, leaving number and date formatting untouched.
+    #[cfg(unix)]
+    init_character_locale();
     let inbox = CaixaVisor::default();
     let reader = inbox.clone();
     thread::spawn(move || {
@@ -38,6 +43,24 @@ pub fn run_live_viewer() -> Result<(), String> {
     let result = execute(&inbox, &mut proto);
     inbox.feche(); // Also wake a reader blocked on control backpressure on error.
     result
+}
+
+#[cfg(unix)]
+fn init_character_locale() {
+    // Prefer the user's locale. A C/invalid locale needs a UTF-8 fallback so
+    // SDL can publish both WM_NAME and _NET_WM_NAME without corrupting titles.
+    for locale in [c"", c"C.UTF-8", c"en_US.UTF-8", c"UTF-8"] {
+        // This is the standalone viewer's startup, before it creates threads.
+        unsafe {
+            if libc::setlocale(libc::LC_CTYPE, locale.as_ptr()).is_null() {
+                continue;
+            }
+            let encoding = std::ffi::CStr::from_ptr(libc::nl_langinfo(libc::CODESET)).to_bytes();
+            if encoding.eq_ignore_ascii_case(b"UTF-8") || encoding.eq_ignore_ascii_case(b"UTF8") {
+                break;
+            }
+        }
+    }
 }
 
 fn execute(inbox: &CaixaVisor, proto: &mut impl Write) -> Result<(), String> {

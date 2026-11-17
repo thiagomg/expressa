@@ -22,7 +22,7 @@ mostre = funcao(ts, tudo) {
 tarefas = ps::carrega()
 
 // Ordena por data, indo da mais nova para a mais antiga
-// epoch é o numero de segundos desde 1970-01-01
+// epoch é o número de segundos desde 1º de janeiro de 1970.
 tarefas = ordene(tarefas, funcao(p) { -p:data:epoch })
 
 // Gera exemplo de lista de tarefas, só se não tiver nada salvo
@@ -36,7 +36,7 @@ se tarefas.tamanho() == 0 {
 
 // Opção do menu a ser selecionada
 op = ""
-// Mostrar todos os itens ou só os não completos
+// Mostrar todas as tarefas ou somente as pendentes.
 todos_itens = falso
 
 enquanto op != "S" {
@@ -44,8 +44,8 @@ enquanto op != "S" {
     cls()
     
     opções = [
-        "Novo", "Completar", "Editar", "Remover", 
-        se todos_itens == verdadeiro { "Mostrar não completos" } senao { "Mostrar tudo" }, 
+        "Novo", "Concluir", "Editar", "Remover",
+        se todos_itens == verdadeiro { "Mostrar pendentes" } senao { "Mostrar todas" },
         "Sair"
     ]
     
@@ -55,9 +55,9 @@ enquanto op != "S" {
     
     se op == "N" {
         // Caso seja um item novo
-        t = le_novo()
-        item = comum::nova(limpe(t), agora(), falso)
-        se item.tamanho() > 0 {
+        t = le_novo().limpe()
+        se t.tamanho() > 0 {
+            item = comum::nova(t, agora(), falso)
             tarefas += [ item ]
         }
         tarefas = ordene(tarefas, funcao(p) { -p:data:epoch })

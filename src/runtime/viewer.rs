@@ -34,7 +34,7 @@ pub fn run_viewer(path: &Path) -> Result<(), String> {
     .map_err(|e| format!("não abriu a janela: {e}"))?;
     window.set_target_fps(30);
     let mut buffer = pintar(&folha, width as u32, height as u32);
-    while window.is_open() {
+    while window.is_open() && !window.is_key_down(minifb::Key::Escape) {
         let (w, h) = window.get_size();
         let new_mtime = file_mtime(path);
         let resized = w != width || h != height;
@@ -80,7 +80,7 @@ fn run_png_viewer(path: &Path) -> Result<(), String> {
     .map_err(|e| format!("não abriu a janela: {e}"))?;
     window.set_target_fps(30);
     let mut buffer = blit_letterbox(&pixels, iw, ih, width as u32, height as u32, 0x00FFFFFF);
-    while window.is_open() {
+    while window.is_open() && !window.is_key_down(minifb::Key::Escape) {
         let (w, h) = window.get_size();
         let new_mtime = file_mtime(path);
         let resized = w != width || h != height;

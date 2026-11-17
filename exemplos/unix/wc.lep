@@ -16,20 +16,19 @@ conta_palavras = função(frase) {
     palavras = 0
     i = 0
     enquanto i < frase.tamanho() {
-        // Vamos procurar algo que não seja espaço ou caractere especial
+        // Procura a próxima letra ou número.
         enquanto i < frase.tamanho() {
             c = frase[i]
             se é_alfanumerico(c) { pare }
             i = i + 1
         }
 
-        // O não espaço foi encontrado.
-        // Agora vamos procurar algo que seja espaço ou final de string
+        // Avança até o fim da sequência de letras e números.
         encontrou = falso
         enquanto i < frase.tamanho() {
             c = frase[i]
             se é_alfanumerico(c) == falso { pare }
-            // Se chegou aqui, existe algo que não é zero
+            // Encontrou pelo menos uma letra ou número.
             encontrou = verdadeiro
             i = i + 1
         }
@@ -63,11 +62,12 @@ conta_linhas = função(linhas)
 
 ajuda = função()
 {
-    escreva("Para stdin:")
+    escreva("Para ler texto enviado por outro comando (entrada padrão):")
     escreva("cat meu-arq.txt | wc.lep [-l]")
     escreva("")
-    escreva("Para arquivo(s):")
+    escreva("Para ler um ou mais arquivos:")
     escreva("wc.lep [-l] meu-arq.txt meu-arq-2.txt ...")
+    escreva("-l conta linhas; sem essa opção, conta palavras (sequências de letras e números).")
 }
 
 exec_wc = função(args)
@@ -80,15 +80,14 @@ exec_wc = função(args)
 
     se args:pos.tamanho() == 0
     {
-        // Um argumento significa que arquivos não foram passados como
-        // argumento da aplicação
+        // Sem nomes de arquivos, lê o texto da entrada padrão.
         linhas = leia_linhas()
         total = função_contagem(linhas)
         escreva(total)
     }
     senao
     {
-        // Pulando o arg 1, já que ele é o padrão a ser procurado
+        // Conta cada arquivo informado e acumula o total.
         total_geral = 0
         para i em 0..args:pos.tamanho()
         {

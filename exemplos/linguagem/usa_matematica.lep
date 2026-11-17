@@ -1,4 +1,4 @@
-// Importa a biblioteca de duas formas: com namespace e depois sem.
+// Importa a biblioteca de duas formas: com o prefixo mat:: e depois sem prefixo.
 
 mat = importe "../lib/matematica"
 
@@ -9,5 +9,5 @@ escreva("2³: " + mat::potencia(2, 3))
 escreva("|-5|: " + mat::absoluto(-5))
 
 importe "../lib/matematica"
-escreva("soma solta: " + soma(10, 32))
+escreva("soma sem prefixo: " + soma(10, 32))
 escreva("mínimo: " + minimo(notas))

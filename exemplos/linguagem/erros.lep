@@ -1,7 +1,15 @@
 importe "arquivo"
 
 linhas = leia_arquivo("arquivo.txt") se_falhar { [] }
+escreva("O arquivo contém o total de linhas =", linhas.tamanho())
 
-valor = 10 / 0 se_falhar { 0 }
+lista = [1, 2, 3]
+item = lista[99] se_falhar { "inválido" }
+escreva("O item 99 é " + item)
 
-item = lista[99] se_falhar { "não existe" }
+valor = 2 / 0 se_falhar erro {
+    escreva_erro("Erro ao dividir 2/0:", erro)
+    1 // O bloco, tal qual antes, retorna valor
+}
+escreva("Resultado é", valor)
+

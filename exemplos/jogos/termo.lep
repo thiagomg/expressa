@@ -12,7 +12,7 @@ remove_letra = função(palavra, posição) {
 }
 
 /// Procura um texto dentro de outro texto, mas sem levar em conta acentos
-/// Ex: Ação == Acao para esta função
+/// Exemplo: "ação" e "acao" são equivalentes para esta função.
 procura_sem_acento = função(palavra, letra) {
     sem_acento(palavra).procure(sem_acento(letra))
 }
@@ -37,7 +37,7 @@ compara_palavra = função(palavra, tentativa) {
         res[i] = res[i] -> :normal
     }
 
-    // Primeiro vamos encontrar as letas que estão no lugar certo
+    // Primeiro vamos encontrar as letras que estão no lugar certo
     // e remover elas da palavra e da tentativa. Assim se outra aparecer
     // em outra posição e somente uma letra estiver na palavra, ela
     // aparecerá em preto, não amarelo
@@ -85,7 +85,7 @@ completa_tentativas = funcao(ts, total, num_letras) {
     ts
 }
 
-/// Atualiza as cores to teclado dando preferencia para o verde, quando encontrado
+/// Atualiza as cores do teclado dando preferência para o verde, quando encontrado
 atualiza_teclado = função(cores_teclado, res) {
     para i em 0..res.tamanho() {
         tok = res[i]
@@ -137,7 +137,7 @@ desenha_teclado = função(linha, coluna, cores_teclado) {
     teclas = ["QWERTYUIOP", "ASDFGHJKLÇ", "ZXCVBNM"]
     // Esses recuos servem para deixar o teclado alinhado
     recuos = ["", "", "   "]
-    // Ao inves de começar na coluna da esqueda, começa na
+    // Em vez de começar na coluna da esquerda, começa na
     // linha e coluna definidas no bloco
     b = bloco(linha, coluna)
     para i em 0..teclas.tamanho() {
@@ -206,7 +206,7 @@ nova_palavra = função(tamanho_palavra) {
     chute = leia("Palavra: ")
     enquanto chute.tamanho() != tamanho_palavra e chute.tamanho() > 0 {
         escreva("A palavra precisa ter " + tamanho_palavra + " letras")
-        escreva("ou deixa em branco para sair do jogo")
+        escreva("Para sair do jogo, pressione Enter sem digitar nada.")
         chute = leia("Palavra: ")
     }
     chute.maiuscula()
@@ -260,3 +260,5 @@ inicial = funcao(palavra_secreta) {
 
 // Para trocar a palavra secreta, passe ela como argumento desta função
 inicial("CAIXA")
+
+// Desafio: Tente fazer com que o jogo selecione uma palavra de uma lista aleatoriamente

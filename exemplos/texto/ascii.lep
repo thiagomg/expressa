@@ -1,4 +1,4 @@
-// Desenho em texto: um triângulo e um histograma, só com `para` e `repita`.
+// Desenho em texto: um triângulo e um gráfico de barras, só com `para` e `repita`.
 
 repete = funcao(pedaco, n)
 inicio

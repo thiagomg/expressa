@@ -1,4 +1,6 @@
-// Recursão: fatorial e combinações C(n, k) = n! / (k! · (n-k)!).
+// Recursão: uma função chama a si mesma para calcular o fatorial.
+// n! é o produto dos inteiros de 1 a n. C(n, k) conta grupos de k itens entre n.
+// Combinações: C(n, k) = n! / (k! · (n-k)!).
 
 fatorial = funcao(n)
 inicio

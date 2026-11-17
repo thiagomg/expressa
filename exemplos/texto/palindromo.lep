@@ -1,4 +1,5 @@
-// Um palíndromo lê igual de trás para frente (ignorando maiúsculas e espaços).
+// Um palíndromo pode ser lido da mesma forma nos dois sentidos.
+// Este exemplo ignora diferenças entre maiúsculas e minúsculas, espaços e hífens.
 
 inverta = funcao(texto)
 inicio

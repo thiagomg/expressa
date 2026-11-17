@@ -11,7 +11,7 @@ inicia_jogo = funcao(m) {
     }
 }
 
-// Cria um novo jogo com um padrão pré definido
+// Cria um novo jogo com um padrão predefinido
 predefinido = função(m) {
     // planador
     m[1, 2] = 1
@@ -32,23 +32,23 @@ desenha = funcao(m) {
     ser = "*"
     // ser = "█"
     
-    // borda to topo e executapé - +- linhas -+
+    // Bordas superior e inferior da tabela.
     borda = "+"
     para i em 0..m.ncolunas() {
         borda += "-"
     }    
     borda += "+"
     
-    escreva(borda)
+    escreva(borda.pinte(:verde))
     para i em 0..m.nlinhas() {
-        l = "|"
+        l = "|".pinte(:verde)
         para j em 0..m.ncolunas() {
             l += se m[i, j] == 0 { espaço } senao { ser }
         }
-        l += "|"
+        l += "|".pinte(:verde)
         escreva(l)
     }
-    escreva(borda)
+    escreva(borda.pinte(:verde))
 }
 
 pos_lin = função(m, l) {
@@ -64,9 +64,9 @@ pos_col = função(m, c) {
 }
 
 
-// Retorna uma matriz com a celula do meio e seus vizinhos
-// Caso a celula esteja em qualquer borda, os vizinhos serão do outro lado
-// já que tudo rotaciona como se fosse uma esfera
+// Retorna uma matriz com a célula central e seus vizinhos.
+// As bordas opostas se conectam: sair pela direita leva à esquerda,
+// e sair por cima leva à parte de baixo.
 vizinhos = função(m, l, c) {
 
     v = zeros(3)
@@ -95,11 +95,11 @@ vizinhos = função(m, l, c) {
     v
 }
 
-// Conta a quantidade de vizinhos numa matrix 3x3
-// da celula na posição (1, 1)
+// Conta a quantidade de vizinhos em uma matriz 3×3
+// da célula na posição (1, 1)
 conta_vizinhos = função(m) {
     se m.nlinhas() != 3 ou m.ncolunas() != 3 {
-        escreva_erro("a função conta_vizinhos só aceita matrizes de 3x3")
+        escreva_erro("A função conta_vizinhos só aceita matrizes com 3 linhas e 3 colunas.")
         saia(1)
     }
 
@@ -121,7 +121,7 @@ nova_geracao = função(m) {
     // Regras do jogo
     // Toda célula viva com menos de dois vizinhos vivos morre por isolamento.
     // Toda célula viva com mais de três vizinhos vivos morre por superpopulação.
-    // Toda célula viva com dois ou três vizinhos vivos permanece viva.[3]
+    // Toda célula viva com dois ou três vizinhos vivos permanece viva.
     // Toda célula morta com exatamente três vizinhos vivos torna-se viva (nascimento).
 
     // Salvando o total de linhas e colunas pois eu não quero escrever nlinhas/ncolunas
@@ -129,31 +129,31 @@ nova_geracao = função(m) {
     tl = m.nlinhas()
     tc = m.ncolunas()
 
-    // Nos precisamos criar uma nova matriz pois todas as mudanças são simulatâneas.
-    // Se eu mudar a matriz de origem, uma celula vai influenciar a outra
+    // Criamos uma nova matriz porque todas as mudanças são simultâneas.
+    // Alterar a matriz de origem faria uma célula influenciar a outra antes da hora.
     nm = zeros(tl, tc)
 
     para i em 0..m.nlinhas() {
         para j em 0..m.ncolunas() {
-            // Aqui vamos pegar os vizinhos de cada uma das celular da matriz de origem m
+            // Obtém os vizinhos de cada célula na matriz de origem.
             v = m.vizinhos(i, j)
-            // e vamos contas a quatidade de vizinhos para aplicar cada uma das regras
+            // Conta os vizinhos vivos para aplicar as regras.
             num_v = v.conta_vizinhos()
 
             // 0 = morta, qualquer outro valor, viva
             cel_viva = m[i, j]
 
             nova_celula = se cel_viva != 0 {
-                // A celula está viva
+                // A célula está viva.
                 se num_v < 2 {
                     0 // Toda célula viva com menos de dois vizinhos vivos morre por isolamento.
                 } ou se num_v > 3 {
                     0 // Toda célula viva com mais de três vizinhos vivos morre por superpopulação.
-                } senão { // Unica opção faltando - ou se num_v == 2 ou num_v == 3
-                    1 // Toda célula viva com dois ou três vizinhos vivos permanece viva.[3]
+                } senão { // Restam os casos com dois ou três vizinhos vivos.
+                    1 // Toda célula viva com dois ou três vizinhos vivos permanece viva.
                 }
             } senão {
-                // Celular está morta
+                // A célula está morta.
                 se num_v == 3 {
                     1 // Toda célula morta com exatamente três vizinhos vivos torna-se viva (nascimento).
                 } senão {

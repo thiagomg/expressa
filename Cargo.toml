@@ -60,7 +60,10 @@ terminal = ["dep:rustyline"]
 rustyline = { version = "15", optional = true }
 rust_decimal = "1"
 unicode-normalization = "0.1.24"
-minifb = { version = "0.28", optional = true }
+# The file viewer needs window-manager decorations. minifb's native Wayland
+# backend has no client-side frame when the compositor does not provide one
+# (notably GNOME). Use X11/XWayland for this viewer on Linux.
+minifb = { version = "0.28", optional = true, default-features = false, features = ["x11"] }
 sdl2 = { version = "0.38", optional = true, features = ["bundled", "static-link"] }
 png = { version = "0.17", optional = true }
 stacker = "0.1"

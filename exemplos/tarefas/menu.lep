@@ -22,7 +22,7 @@ le_opção = funcao(opcoes) {
                 retorne op
             }
         }
-        escreva("Opção inválida. Tente novamente".pinte(:vermelho))
+        escreva("Opção inválida. Digite a letra destacada de uma das opções.".pinte(:vermelho))
         posicao_cursor(pos)
         apague_linha()
     }
@@ -30,25 +30,25 @@ le_opção = funcao(opcoes) {
 }
 
 le_novo = funcao() {
-    escreva("Digite a nova tarefa ou pressione enter para voltar")
+    escreva("Digite a nova tarefa. Para voltar, pressione Enter sem digitar nada.")
     leia("Tarefa: ")
 }
 
 le_posicao = função(min, max) {
     enquanto verdadeiro {
         pos = posicao_cursor()
-        op = leia("Posição: ")
+        op = leia("Número da tarefa: ")
         se op.tamanho() == 0 {
             retorne falso
         }
         
         idx = op.numero() se_falhar { falso }
         se idx == falso {
-            escreva("Posição inválida. Tente novamente".pinte(:vermelho))
+            escreva("Número de tarefa inválido. Tente novamente.".pinte(:vermelho))
         } ou se idx >= min e idx <= max { 
             retorne idx
         } senão {
-            escreva(formate("Posição inválida. O valor deve ser entre {} e {}", min, max).pinte(:vermelho))
+            escreva(formate("Digite um número de tarefa entre {} e {}.", min, max).pinte(:vermelho))
         }
         posicao_cursor(pos)
         apague_linha()            
@@ -56,22 +56,22 @@ le_posicao = função(min, max) {
 }
 
 le_completa = funcao(min, max) {
-    escreva("Qual posição você quer completar? Enter para voltar")
+    escreva("Qual tarefa deseja marcar ou desmarcar como concluída? Enter sem digitar nada volta ao menu.")
     le_posicao(min, max)
 }
 
 le_edita = funcao(min, max) {
-    escreva("Qual posição você quer editar? Enter para voltar")
+    escreva("Qual tarefa deseja editar? Enter sem digitar nada volta ao menu.")
     le_posicao(min, max)
 }
 
 le_nova_desc = funcao(tarefa_antiga) {
-    escreva("Digite a nova descrição ou pressione enter para voltar")
-    escreva("Antiga = " + tarefa_antiga)
+    escreva("Digite a nova descrição. Para voltar, pressione Enter sem digitar nada.")
+    escreva("Descrição atual: " + tarefa_antiga)
     leia("Descrição: ")
 }
 
 le_remova = funcao(min, max) {
-    escreva("Qual posição você quer remover? Enter para voltar")
+    escreva("Qual tarefa deseja remover? Enter sem digitar nada volta ao menu.")
     le_posicao(min, max)
 }

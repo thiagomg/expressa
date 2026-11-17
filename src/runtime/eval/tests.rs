@@ -2,6 +2,7 @@
 mod jogos_2d;
 #[cfg(feature = "graphics")]
 mod laco_grafico;
+mod exemplos_interativos;
 
 use super::*;
 use crate::runtime::debug::DebugAction;
@@ -191,16 +192,8 @@ fn example_programs_run() {
             include_str!("../../../exemplos/texto/ascii.lep"),
         ),
         (
-            "exemplos/programas/receita.lep",
-            include_str!("../../../exemplos/programas/receita.lep"),
-        ),
-        (
             "exemplos/programas/turma.lep",
             include_str!("../../../exemplos/programas/turma.lep"),
-        ),
-        (
-            "exemplos/programas/caixa.lep",
-            include_str!("../../../exemplos/programas/caixa.lep"),
         ),
         (
             "exemplos/programas/diario.lep",
@@ -211,44 +204,8 @@ fn example_programs_run() {
             include_str!("../../../exemplos/programas/contatos.lep"),
         ),
         (
-            "exemplos/escola/bhaskara.lep",
-            include_str!("../../../exemplos/escola/bhaskara.lep"),
-        ),
-        (
-            "exemplos/escola/juros.lep",
-            include_str!("../../../exemplos/escola/juros.lep"),
-        ),
-        (
             "exemplos/escola/regra_de_tres.lep",
             include_str!("../../../exemplos/escola/regra_de_tres.lep"),
-        ),
-        (
-            "exemplos/escola/progressoes.lep",
-            include_str!("../../../exemplos/escola/progressoes.lep"),
-        ),
-        (
-            "exemplos/escola/estatistica.lep",
-            include_str!("../../../exemplos/escola/estatistica.lep"),
-        ),
-        (
-            "exemplos/escola/pitagoras.lep",
-            include_str!("../../../exemplos/escola/pitagoras.lep"),
-        ),
-        (
-            "exemplos/escola/geometria.lep",
-            include_str!("../../../exemplos/escola/geometria.lep"),
-        ),
-        (
-            "exemplos/escola/mdc_mmc.lep",
-            include_str!("../../../exemplos/escola/mdc_mmc.lep"),
-        ),
-        (
-            "exemplos/escola/media_ponderada.lep",
-            include_str!("../../../exemplos/escola/media_ponderada.lep"),
-        ),
-        (
-            "exemplos/escola/cinematica.lep",
-            include_str!("../../../exemplos/escola/cinematica.lep"),
         ),
         (
             "exemplos/escola/seno_cosseno.lep",

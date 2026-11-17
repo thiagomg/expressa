@@ -7,7 +7,7 @@ ajuda = função()
 início
     escreva("Para ler arquivos:")
     escreva("cat.lep <arquivo>")
-    escreva("Ex: cat.lep meu-arquivo.txt")
+    escreva("Exemplo: cat.lep meu-arquivo.txt")
 fim
 
 exec_cat = função(args)
