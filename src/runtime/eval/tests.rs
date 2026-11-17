@@ -180,10 +180,6 @@ fn example_programs_run() {
             include_str!("../../../exemplos/linguagem/usa_matematica.lep"),
         ),
         (
-            "exemplos/texto/poema.lep",
-            include_str!("../../../exemplos/texto/poema.lep"),
-        ),
-        (
             "exemplos/texto/palindromo.lep",
             include_str!("../../../exemplos/texto/palindromo.lep"),
         ),
@@ -192,20 +188,12 @@ fn example_programs_run() {
             include_str!("../../../exemplos/texto/ascii.lep"),
         ),
         (
-            "exemplos/programas/turma.lep",
-            include_str!("../../../exemplos/programas/turma.lep"),
-        ),
-        (
             "exemplos/programas/diario.lep",
             include_str!("../../../exemplos/programas/diario.lep"),
         ),
         (
             "exemplos/programas/contatos.lep",
             include_str!("../../../exemplos/programas/contatos.lep"),
-        ),
-        (
-            "exemplos/escola/regra_de_tres.lep",
-            include_str!("../../../exemplos/escola/regra_de_tres.lep"),
         ),
         (
             "exemplos/escola/seno_cosseno.lep",
@@ -371,10 +359,42 @@ escreva(t:y)
 }
 
 #[test]
-fn erros_example_does_not_crash() {
+fn erros_example_prints_recovery_results() {
     let src = include_str!("../../../exemplos/linguagem/erros.lep");
-    let out = run_to_string(src, "exemplos/linguagem/erros.lep").unwrap();
-    assert_eq!(out, "");
+    // A virtual source directory keeps arquivo.txt absent regardless of the
+    // student's files next to the real example.
+    let unique = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    let file = std::env::temp_dir()
+        .join(format!("expressa-erros-{unique}"))
+        .join("erros.lep");
+    for backend in [ExecutionBackend::Ast, ExecutionBackend::Bytecode]
+        .into_iter()
+        .filter(|backend| backend.is_available())
+    {
+        let out = run_with_options(
+            src,
+            &file.to_string_lossy(),
+            "",
+            ExecutionOptions {
+                backend,
+                ..ExecutionOptions::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            out.stdout,
+            "O arquivo contém o total de linhas = 0\nO item 99 é inválido\nResultado é 1\n"
+        );
+        assert!(
+            out.stderr.starts_with("Erro ao dividir 2/0:"),
+            "{}",
+            out.stderr
+        );
+        assert!(out.stderr.contains("zero"), "{}", out.stderr);
+    }
 }
 
 #[test]

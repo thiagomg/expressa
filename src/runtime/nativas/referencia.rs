@@ -145,7 +145,8 @@ pub fn tema_de(module: Option<&str>, name: &str) -> &'static str {
         (Some("mat"), "piso" | "teto" | "arredonde") => "Arredondar",
         (
             Some("arquivo"),
-            "leia_arquivo" | "salve_arquivo" | "adicione_arquivo" | "leia_csv" | "salve_csv",
+            "leia_arquivo" | "leia_bytes" | "texto_utf8" | "salve_arquivo" | "adicione_arquivo"
+            | "leia_csv" | "salve_csv",
         ) => "Conteúdo",
         (
             Some("arquivo"),
