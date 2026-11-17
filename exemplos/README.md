@@ -118,8 +118,40 @@ O mapa, a simulação e o roteiro ficam em `jogos/explorador/`.
 |---------|----------------|
 | `cat.lep` | concatena arquivos |
 | `grep.lep` | filtra linhas (`contem`) |
-| `wc.lep` | conta palavras ou linhas com a opção `-l` |
+| `wc.lep` | exemplo simples: conta palavras separadas por espaços em branco, ou linhas com `-l` |
+| `wc_complexo.lep` | versão completa: linhas, palavras, bytes, caracteres e opções combinadas |
 | `lib/linha_cmd.lep` | opções e argumentos da linha de comando |
+
+`wc.lep` mostra um contador simples de palavras, como `wc -w`: pontuação
+não separa palavras, mas espaços, tabulações e quebras de linha separam.
+Sem arquivos, lê a entrada padrão; `-l` conta quebras de linha. Nos dois exemplos,
+os caminhos recebidos são relativos à pasta de onde foram chamados.
+
+No Windows, chame o interpretador; o arquivo `.lep` não precisa de associação
+nem da linha `#!/usr/bin/env expressa`. Na raiz do repositório, no PowerShell:
+
+```powershell
+.\target\release\expressa.exe exemplos\unix\wc.lep .\meu-arquivo.txt
+.\target\release\expressa.exe exemplos\unix\wc.lep -l .\meu-arquivo.txt
+"um dois" | .\target\release\expressa.exe exemplos\unix\wc.lep
+```
+
+As quebras de linha LF e CRLF são aceitas. O texto é interpretado como UTF-8;
+arquivos UTF-16 ou de páginas de código antigas precisam ser convertidos antes.
+O PowerShell 7 envia texto em UTF-8 por padrão. No Windows PowerShell 5.1,
+configure `$OutputEncoding = [System.Text.UTF8Encoding]::new()` antes de enviar
+texto com acentos pelo pipe. Essa configuração afeta o pipe, não a codificação
+dos arquivos lidos diretamente pelo exemplo.
+
+`wc_complexo.lep` usa a contagem básica do `wc`: sem opções, mostra quebras de linha,
+palavras e bytes. Pontuação não separa palavras; uma última linha sem `\n` não
+entra na contagem de linhas. As opções podem ser combinadas (`-lwc`); `-m` conta
+caracteres UTF-8. Sem arquivos ou com `-`, lê a entrada padrão. Com vários
+arquivos, mostra também o total e continua após erros de leitura, encerrando
+com código 1 se algum arquivo falhar. A interpretação de texto cobre os locales
+UTF-8 e C/POSIX; outras codificações e extensões como `-L`/`--files0-from` não
+fazem parte deste exemplo. A largura das colunas pode diferir da ferramenta
+instalada no sistema.
 
 ### `escola/`
 

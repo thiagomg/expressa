@@ -3,71 +3,38 @@
 importe "arquivo"
 importe "lib/linha_cmd"
 
-é_alfanumerico = função(c) {
-    c = sem_acento(c)
-    se (c >= "A" e c <= "Z") ou (c >= "a" e c <= "z") ou (c >= "0" e c <= "9") {
-        verdadeiro
-    } senao {
-        falso
-    }
-}
-
-conta_palavras = função(frase) {
-    palavras = 0
-    i = 0
-    enquanto i < frase.tamanho() {
-        // Procura a próxima letra ou número.
-        enquanto i < frase.tamanho() {
-            c = frase[i]
-            se é_alfanumerico(c) { pare }
-            i = i + 1
+// Uma palavra é qualquer trecho entre espaços em branco; pontuação não separa.
+conta_palavras = função(texto) {
+    total = 0
+    dentro_da_palavra = falso
+    para caractere em texto {
+        se limpe(caractere) == "" {
+            dentro_da_palavra = falso
+        } ou se nao dentro_da_palavra {
+            total += 1
+            dentro_da_palavra = verdadeiro
         }
-
-        // Avança até o fim da sequência de letras e números.
-        encontrou = falso
-        enquanto i < frase.tamanho() {
-            c = frase[i]
-            se é_alfanumerico(c) == falso { pare }
-            // Encontrou pelo menos uma letra ou número.
-            encontrou = verdadeiro
-            i = i + 1
-        }
-
-        se encontrou == verdadeiro {
-            palavras = palavras + 1
-        }
-    
     }
-    palavras
+    total
 }
 
-palavras_em_linhas = função(linhas) {
-    num = 0
-    para linha em linhas
-    {
-        num = num + conta_palavras(linha)
+conta_linhas = função(texto) {
+    total = 0
+    para caractere em texto {
+        se caractere == "\n" { total += 1 }
     }
-    num
+    total
 }
 
-conta_linhas = função(linhas)
-{
-    num = 0
-    para linha em linhas
-    {
-        num = num + 1
-    }
-    num
-}
-
-ajuda = função()
-{
-    escreva("Para ler texto enviado por outro comando (entrada padrão):")
-    escreva("cat meu-arq.txt | wc.lep [-l]")
+mostrar_ajuda = função() {
+    escreva("Na raiz do projeto, com expressa disponível no PATH:")
+    escreva("expressa exemplos/unix/wc.lep meu-arquivo.txt")
+    escreva("expressa exemplos/unix/wc.lep -l meu-arquivo.txt")
     escreva("")
-    escreva("Para ler um ou mais arquivos:")
-    escreva("wc.lep [-l] meu-arq.txt meu-arq-2.txt ...")
-    escreva("-l conta linhas; sem essa opção, conta palavras (sequências de letras e números).")
+    escreva("Para ler texto enviado por outro comando (entrada padrão):")
+    escreva("echo um dois | expressa exemplos/unix/wc.lep")
+    escreva("-l conta linhas; sem essa opção, conta palavras separadas por espaços em branco.")
+    escreva("Arquivos e dados recebidos pelo pipe são interpretados como UTF-8.")
 }
 
 exec_wc = função(args)
@@ -75,14 +42,14 @@ exec_wc = função(args)
     função_contagem = se args:op contém "l" {
         conta_linhas
     } senao {
-        palavras_em_linhas
+        conta_palavras
     }
 
     se args:pos.tamanho() == 0
     {
         // Sem nomes de arquivos, lê o texto da entrada padrão.
-        linhas = leia_linhas()
-        total = função_contagem(linhas)
+        texto = texto_utf8(leia_bytes(), :substitua)
+        total = função_contagem(texto)
         escreva(total)
     }
     senao
@@ -92,7 +59,9 @@ exec_wc = função(args)
         para i em 0..args:pos.tamanho()
         {
             arg = args:pos[i]
-            total = função_contagem(leia_arquivo(arg))
+            caminho = junte_caminho(pasta_atual(), arg)
+            texto = texto_utf8(leia_bytes(caminho), :substitua)
+            total = função_contagem(texto)
             escreva(arg, "=", total)
             total_geral = total_geral + total
         }
@@ -103,7 +72,7 @@ exec_wc = função(args)
 // Programa principal
 args = separa_args(argumentos, [])
 se args:op contem "ajuda" {
-    ajuda()
+    mostrar_ajuda()
 } senao {
     exec_wc(args)
 }

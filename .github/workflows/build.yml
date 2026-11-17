@@ -80,6 +80,9 @@ jobs:
         with:
           toolchain: stable-x86_64-pc-windows-msvc
 
+      - name: Testar ferramentas de texto no Windows
+        run: cargo test -p expressa --locked --no-default-features --test unix_tools
+
       # Same native dependency versions recorded in deps/versoes.txt.
       - name: Download GTK and Protocol Buffers
         env:
