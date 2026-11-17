@@ -35,7 +35,7 @@ jobs:
         env:
           SDL_VIDEODRIVER: dummy
         run: |
-          cargo test -p expressa --locked --lib --test ast_regressions
+          cargo test -p expressa --locked --lib --test ast_regressions --test exb --test runtime_profiles
           cargo test -p expressa-aula-server --locked
 
   ubuntu:
@@ -81,7 +81,7 @@ jobs:
           toolchain: stable-x86_64-pc-windows-msvc
 
       - name: Testar ferramentas de texto no Windows
-        run: cargo test -p expressa --locked --no-default-features --test unix_tools
+        run: cargo test -p expressa --locked --no-default-features --test unix_tools --test exb
 
       # Same native dependency versions recorded in deps/versoes.txt.
       - name: Download GTK and Protocol Buffers
@@ -130,6 +130,15 @@ jobs:
           $env:PATH = "$env:SystemRoot\System32;$env:SystemRoot"
           & ./dist/expressa-aula/bin/expressa.exe --help
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $source = Join-Path $env:RUNNER_TEMP 'runner-smoke.lep'
+          $compiled = Join-Path $env:RUNNER_TEMP 'runner-smoke.lepc'
+          Set-Content -LiteralPath $source -Value 'escreva(42)' -Encoding utf8NoBOM
+          & ./dist/expressa-aula/bin/expressa.exe compilar $source -o $compiled
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Remove-Item -LiteralPath $source
+          $result = & ./dist/expressa-aula/bin/lepc.exe $compiled
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if ("$result".Trim() -ne '42') { throw "Runner output: $result" }
 
       - name: Upload Windows installer
         uses: actions/upload-artifact@v7

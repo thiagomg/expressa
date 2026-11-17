@@ -33,13 +33,14 @@ O binário `expressa` (`expressa.exe` no Windows) no PATH:
 expressa                 REPL
 expressa prog.lep        arquivo
 expressa debug prog.lep  depurador
-expressa compilar prog.lep -o prog.exb
-expressa prog.exb        bytecode previamente compilado
+expressa compilar prog.lep -o prog.lepc
+expressa prog.lepc        bytecode previamente compilado
+lepc prog.lepc [args…]    runner dedicado de programas compilados
 ```
 
 No REPL: `2 + 3`, `escreva("oi")`, `ajuda escreva`. `sair` ou Ctrl+D encerra.
 
-Compilar: `cargo build --release` (Rust, edition 2024; CMake e compilador C/C++ para o SDL2 incluído no build gráfico). Binários em `target/release/`. A pipeline empacota com `--profile release-lto` (`target/release-lto/`).
+Compilar: `cargo build --release` (Rust, edition 2024; CMake e compilador C/C++ para o SDL2 incluído no build gráfico). Binários em `target/release/`, incluindo o runner `lepc`, compilado por padrão e incluído nos pacotes `.deb` e no instalador `.exe`. A pipeline empacota com `--profile release-lto` (`target/release-lto/`).
 
 No Windows (MSVC x64), `cargo build --release --all` compila também a Aula.
 Com os pacotes nativos extraídos em `deps/gtk/` e `deps/protoc/`

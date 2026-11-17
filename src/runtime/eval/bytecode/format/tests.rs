@@ -142,7 +142,7 @@ fn checked_control_flow_is_cancellable_and_source_is_not_reparsed() {
     let bytes = forged(&p);
     let output = crate::runtime::run_exb_with_options(
         &bytes,
-        "test.exb",
+        "test.lepc",
         "",
         crate::runtime::ExecutionOptions {
             backend: ExecutionBackend::Bytecode,
@@ -165,7 +165,7 @@ fn checked_control_flow_is_cancellable_and_source_is_not_reparsed() {
     let bytes = forged(&p);
     let result = crate::runtime::run_exb_with_options(
         &bytes,
-        "test.exb",
+        "test.lepc",
         "",
         crate::runtime::ExecutionOptions {
             backend: ExecutionBackend::Bytecode,
@@ -192,7 +192,7 @@ fn arbitrary_mutations_do_not_panic() {
         let ran = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             crate::runtime::run_compiled_with_options(
                 &program,
-                "mutacao.exb",
+                "mutacao.lepc",
                 "",
                 crate::runtime::ExecutionOptions {
                     backend: ExecutionBackend::Bytecode,
@@ -348,7 +348,7 @@ fn version_two_golden_file_remains_compatible() {
     assert_eq!(forged(&program), bytes);
     let result = crate::runtime::run_compiled_with_options(
         &program,
-        "golden.exb",
+        "golden.lepc",
         "",
         ExecutionOptions {
             backend: ExecutionBackend::Bytecode,
@@ -417,7 +417,7 @@ fn opcodes_66_and_67_are_rejected() {
         let ran = std::panic::catch_unwind(|| {
             crate::runtime::run_exb_with_options(
                 &broken,
-                "test.exb",
+                "test.lepc",
                 "",
                 ExecutionOptions {
                     backend: ExecutionBackend::Bytecode,
@@ -491,7 +491,7 @@ fn loop_kind_one_is_exclusive_range_and_slice_builds_faixa() {
     assert!(matches!(loaded.code.loops[0].kind, LoopKind::Range));
     let result = crate::runtime::run_compiled_with_options(
         &loaded,
-        "faixa.exb",
+        "faixa.lepc",
         "",
         ExecutionOptions {
             backend: ExecutionBackend::Bytecode,
@@ -541,7 +541,7 @@ fn short_circuit_binary_ops_are_errors_not_panics() {
         let ran = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             crate::runtime::run_compiled_with_options(
                 &program,
-                "test.exb",
+                "test.lepc",
                 "",
                 ExecutionOptions {
                     backend: ExecutionBackend::Bytecode,

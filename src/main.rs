@@ -67,7 +67,7 @@ fn try_main() -> Result<(), Box<dyn std::error::Error>> {
         #[cfg(feature = "terminal")]
         run_repl_com(options)?;
         #[cfg(not(feature = "terminal"))]
-        return Err("REPL indisponível neste build; informe um arquivo .lep ou .exb".into());
+        return Err("REPL indisponível neste build; informe um arquivo .lep ou .lepc".into());
         #[cfg(feature = "terminal")]
         return Ok(());
     }
@@ -75,12 +75,12 @@ fn try_main() -> Result<(), Box<dyn std::error::Error>> {
         eprintln!("Uso:");
         #[cfg(feature = "terminal")]
         eprintln!("  expressa                         REPL");
-        eprintln!("  expressa <arquivo.lep|arquivo.exb> [args…]");
+        eprintln!("  expressa <arquivo.lep|arquivo.lepc> [args…]");
         #[cfg(feature = "terminal")]
-        eprintln!("  expressa debug <arquivo.lep|arquivo.exb> [args…]");
+        eprintln!("  expressa debug <arquivo.lep|arquivo.lepc> [args…]");
         eprintln!("  expressa --ast <arquivo.lep>     imprime a árvore sintática");
-        eprintln!("  expressa compilar <arquivo.lep> [-o arquivo.exb]");
-        eprintln!("  expressa --marcador-leia <arquivo.lep|arquivo.exb> [args…]");
+        eprintln!("  expressa compilar <arquivo.lep> [-o arquivo.lepc]");
+        eprintln!("  expressa --marcador-leia <arquivo.lep|arquivo.lepc> [args…]");
         #[cfg(feature = "graphics")]
         eprintln!("  expressa --grafico <arquivo.cart>\n  expressa --ao-vivo");
         eprintln!("  expressa --instalar-exemplos");
@@ -121,13 +121,13 @@ fn try_main() -> Result<(), Box<dyn std::error::Error>> {
 
     if args[0] == "compilar" {
         if !(args.len() == 2 || (args.len() == 4 && args[2] == "-o")) {
-            return Err("Uso: expressa compilar <arquivo.lep> [-o arquivo.exb]".into());
+            return Err("Uso: expressa compilar <arquivo.lep> [-o arquivo.lepc]".into());
         }
         let input = std::path::Path::new(&args[1]);
         let output = if args.len() == 4 {
             std::path::PathBuf::from(&args[3])
         } else {
-            input.with_extension("exb")
+            input.with_extension("lepc")
         };
         if input == output
             || std::fs::canonicalize(input)
@@ -140,9 +140,9 @@ fn try_main() -> Result<(), Box<dyn std::error::Error>> {
         if !output
             .extension()
             .and_then(|s| s.to_str())
-            .is_some_and(|s| s.eq_ignore_ascii_case("exb"))
+            .is_some_and(|s| s.eq_ignore_ascii_case("lepc"))
         {
-            return Err("a saída compilada deve ter extensão .exb".into());
+            return Err("a saída compilada deve ter extensão .lepc".into());
         }
         use std::io::Read;
         let mut source = String::new();
@@ -159,7 +159,7 @@ fn try_main() -> Result<(), Box<dyn std::error::Error>> {
             return Err("depurador de terminal indisponível neste build".into());
         }
         if args.len() < 2 {
-            return Err("Uso: expressa debug <arquivo.lep|arquivo.exb> [args…]".into());
+            return Err("Uso: expressa debug <arquivo.lep|arquivo.lepc> [args…]".into());
         }
         ("debug", args[1].as_str(), &args[2..])
     } else if args[0] == "--ast" {
@@ -169,7 +169,7 @@ fn try_main() -> Result<(), Box<dyn std::error::Error>> {
         ("ast", args[1].as_str(), &args[2..])
     } else if args[0] == "--marcador-leia" {
         if args.len() < 2 {
-            return Err("Uso: expressa --marcador-leia <arquivo.lep|arquivo.exb> [args…]".into());
+            return Err("Uso: expressa --marcador-leia <arquivo.lep|arquivo.lepc> [args…]".into());
         }
         ("marcador-leia", args[1].as_str(), &args[2..])
     } else {
@@ -179,12 +179,12 @@ fn try_main() -> Result<(), Box<dyn std::error::Error>> {
     if std::path::Path::new(file)
         .extension()
         .and_then(|s| s.to_str())
-        .is_some_and(|s| s.eq_ignore_ascii_case("exb"))
+        .is_some_and(|s| s.eq_ignore_ascii_case("lepc"))
     {
         let mode = match mode {
             "ast" => {
                 return Err(
-                    "--ast requer o fonte .lep; o arquivo .exb não armazena uma AST".into(),
+                    "--ast requer o fonte .lep; o arquivo .lepc não armazena uma AST".into(),
                 );
             }
             "debug" => expressa::runtime::ExbRunMode::Debug,

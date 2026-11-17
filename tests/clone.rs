@@ -19,7 +19,7 @@ fn check(source: &str, expected: &str) {
     }
     let bytes = compile_exb(source, "clone.lep").unwrap();
     let out =
-        run_exb_with_options(&bytes, "clone.exb", "", options(ExecutionBackend::Bytecode)).unwrap();
+        run_exb_with_options(&bytes, "clone.lepc", "", options(ExecutionBackend::Bytecode)).unwrap();
     assert_eq!(out.stdout, expected, "EXB");
 }
 fn error(source: &str, part: &str) {
@@ -32,7 +32,7 @@ fn error(source: &str, part: &str) {
         assert_eq!(err.file, "clone.lep");
     }
     let bytes = compile_exb(source, "clone.lep").unwrap();
-    let err = run_exb_with_options(&bytes, "clone.exb", "", options(ExecutionBackend::Bytecode))
+    let err = run_exb_with_options(&bytes, "clone.lepc", "", options(ExecutionBackend::Bytecode))
         .unwrap_err();
     assert!(err.message.contains(part), "EXB: {err}");
 }

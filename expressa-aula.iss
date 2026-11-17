@@ -38,10 +38,10 @@ Name: "brazilianportuguese"; MessagesFile: "compiler:Languages\BrazilianPortugue
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"
-Name: "envpath"; Description: "Adicionar expressa e expressa-grafico ao PATH"; GroupDescription: "Terminal:"; Flags: checkedonce
+Name: "envpath"; Description: "Adicionar expressa, lepc e expressa-grafico ao PATH"; GroupDescription: "Terminal:"; Flags: checkedonce
 
 [Files]
-; A pasta inteira: editor, GTK, exemplos e bin\ (expressa.exe e expressa-grafico.exe).
+; A pasta inteira: editor, GTK, exemplos e bin\ (expressa.exe, lepc.exe e expressa-grafico.exe).
 Source: "dist\expressa-aula\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 ; Copia para Documentos os exemplos que ainda nao existem (tambem na
 ; atualizacao: arquivos novos entram, os ja editados ficam). Desinstalar

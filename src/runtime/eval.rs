@@ -895,7 +895,7 @@ impl<'a, 'c> Vm<'a, 'c> {
         }
         let input = if exb::is_exb_path(path) {
             if self.backend != ExecutionBackend::Bytecode {
-                return Err(self.err("importar .exb exige o backend bytecode", span));
+                return Err(self.err("importar .lepc exige o backend bytecode", span));
             }
             Input::Compiled(read_exb(path).map_err(|e| {
                 self.err(

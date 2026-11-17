@@ -164,7 +164,7 @@ fn cli_help_and_unavailable_services_match_the_build() {
         let out = cli().output().unwrap();
         assert!(!out.status.success());
         assert!(String::from_utf8_lossy(&out.stderr).contains("REPL indisponível"));
-        let out = cli().args(["debug", "missing.exb"]).output().unwrap();
+        let out = cli().args(["debug", "missing.lepc"]).output().unwrap();
         assert!(!out.status.success());
         assert!(
             String::from_utf8_lossy(&out.stderr).contains("depurador de terminal indisponível")

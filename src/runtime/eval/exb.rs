@@ -58,7 +58,7 @@ pub enum ExbRunMode {
 pub(super) fn is_exb_path(path: &Path) -> bool {
     path.extension()
         .and_then(|s| s.to_str())
-        .is_some_and(|s| s.eq_ignore_ascii_case("exb"))
+        .is_some_and(|s| s.eq_ignore_ascii_case("lepc"))
 }
 
 pub fn run_exb_file_args(
@@ -141,7 +141,7 @@ fn run<'a>(
 ) -> Result<i32, RuntimeError> {
     if options.backend != ExecutionBackend::Bytecode {
         return Err(RuntimeError {
-            message: "arquivos .exb exigem o backend bytecode".into(),
+            message: "arquivos .lepc exigem o backend bytecode".into(),
             file: file.into(),
             span: Span::default(),
             stack: vec![],

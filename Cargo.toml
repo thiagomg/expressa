@@ -41,6 +41,7 @@ strip = "debuginfo"
 
 [package]
 name = "expressa"
+default-run = "expressa"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -75,3 +76,7 @@ libc = "0.2"
 name = "expressa-grafico"
 path = "src/bin/expressa-grafico.rs"
 required-features = ["graphics"]
+
+[[bin]]
+name = "lepc"
+path = "src/bin/lepc.rs"
