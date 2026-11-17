@@ -41,11 +41,9 @@ leia_opcao = funcao(txt) {
         se fr_txt == "" { retorne falso }
         res = txt_como_fracao(fr_txt) se_falhar erro {
             escreva("Erro: ".pinte(:vermelho) + erro)
-            falso
-        }
-        se res == falso {
             posicao_cursor(pos)
             apague_linha()
+            falso
         }
     }
     res
