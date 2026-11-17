@@ -1132,6 +1132,8 @@ pub(crate) enum PaginaInferior {
 }
 
 pub(crate) fn mostrar_pagina_inferior(ui: &UiRc, p: PaginaInferior) {
+    let window = ui.borrow().window.clone();
+    window.change_action_state("mostrar-inferior", &true.to_variant());
     ui.borrow().painel_inferior.set_current_page(Some(p as u32));
 }
 

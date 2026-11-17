@@ -147,6 +147,81 @@ pub(crate) fn set_action_enabled(win: &ApplicationWindow, name: &str, on: bool) 
     }
 }
 
+/// Hide the auxiliary panels together, then restore their individual visibility.
+/// Use the same actions as the menu so its checkmarks always follow the layout.
+fn install_panel_actions(
+    win: &ApplicationWindow,
+    panels: &[(&str, gtk::Widget)],
+    focus_editor: impl Fn() + 'static,
+) {
+    let actions: Vec<_> = panels
+        .iter()
+        .map(|(name, widget)| {
+            let panel = widget.clone();
+            add_win_toggle(win, name, widget.get_visible(), move |on| {
+                panel.set_visible(on)
+            })
+        })
+        .collect();
+    let saved = RefCell::new(None::<Vec<bool>>);
+    let action = gio::SimpleAction::new("alternar-paineis", None);
+    action.connect_activate(move |_, _| {
+        let previous = saved.borrow_mut().take();
+        if let Some(previous) = previous {
+            for (panel, visible) in actions.iter().zip(previous) {
+                panel.change_state(&visible.to_variant());
+            }
+        } else {
+            let previous: Vec<_> = actions
+                .iter()
+                .map(|a| a.state().and_then(|v| v.get::<bool>()).unwrap_or(true))
+                .collect();
+            // If everything is already hidden, this command reveals all panels.
+            if previous.iter().all(|visible| !visible) {
+                for panel in &actions {
+                    panel.change_state(&true.to_variant());
+                }
+            } else {
+                saved.replace(Some(previous));
+                for panel in &actions {
+                    panel.change_state(&false.to_variant());
+                }
+            }
+        }
+        focus_editor();
+    });
+    win.add_action(&action);
+}
+
+fn restore_panel_visibility(win: &ApplicationWindow, ui: &UiRc) {
+    let panels = {
+        let u = ui.borrow();
+        [
+            ("mostrar-argumentos", u.prefs.mostrar_argumentos),
+            ("mostrar-painel", u.prefs.mostrar_painel),
+            ("mostrar-inferior", u.prefs.mostrar_inferior),
+        ]
+    };
+    for (name, visible) in panels {
+        let action = win.lookup_action(name).expect("panel action installed");
+        action.change_state(&visible.to_variant());
+        let ui = Rc::downgrade(ui);
+        action.connect_state_notify(move |action| {
+            let Some(ui) = ui.upgrade() else { return };
+            let Some(visible) = action.state().and_then(|v| v.get::<bool>()) else {
+                return;
+            };
+            let mut u = ui.borrow_mut();
+            match name {
+                "mostrar-argumentos" => u.prefs.mostrar_argumentos = visible,
+                "mostrar-painel" => u.prefs.mostrar_painel = visible,
+                _ => u.prefs.mostrar_inferior = visible,
+            }
+            u.prefs.save();
+        });
+    }
+}
+
 pub(crate) fn trigger_win_action(win: &ApplicationWindow, name: &str) {
     if let Some(a) = win.lookup_action(name) {
         gio::prelude::ActionExt::activate(&a, None);
@@ -182,6 +257,7 @@ pub(crate) fn install_menubar(
     file_scroll: &ScrolledWindow,
     debug_panel: &GtkBox,
     args_row: &GtkBox,
+    bottom: &GtkBox,
 ) {
     add_win_action(win, ui, "novo", new_untitled_tab);
     add_win_action(win, ui, "salvar", |ui| {
@@ -240,22 +316,24 @@ pub(crate) fn install_menubar(
         set_action_enabled(win, name, false);
     }
 
-    {
-        let pane = file_scroll.clone();
-        add_win_toggle(win, "mostrar-arquivos", true, move |on| {
-            pane.set_visible(on)
-        });
-    }
-    {
-        let pane = debug_panel.clone();
-        add_win_toggle(win, "mostrar-painel", true, move |on| pane.set_visible(on));
-    }
-    {
-        let row = args_row.clone();
-        add_win_toggle(win, "mostrar-argumentos", true, move |on| {
-            row.set_visible(on)
-        });
-    }
+    install_panel_actions(
+        win,
+        &[
+            ("mostrar-arquivos", file_scroll.clone().upcast()),
+            ("mostrar-painel", debug_panel.clone().upcast()),
+            ("mostrar-argumentos", args_row.clone().upcast()),
+            ("mostrar-inferior", bottom.clone().upcast()),
+        ],
+        {
+            let ui = Rc::clone(ui);
+            move || {
+                if let Some(d) = current_doc(&ui) {
+                    d.view.grab_focus();
+                }
+            }
+        },
+    );
+    restore_panel_visibility(win, ui);
     {
         let dark = ui.borrow().prefs.dark;
         let initial = if dark { "escuro" } else { "claro" };
@@ -307,8 +385,26 @@ pub(crate) fn install_menubar(
 
     let ver = gio::Menu::new();
     ver.append_item(&menu_item("_Arquivos", "win.mostrar-arquivos", Some("F7")));
-    ver.append_item(&menu_item("_Painel", "win.mostrar-painel", Some("F8")));
-    ver.append_item(&menu_item("Ar_gumentos", "win.mostrar-argumentos", None));
+    ver.append_item(&menu_item(
+        "Painel _depurar",
+        "win.mostrar-painel",
+        Some("F8"),
+    ));
+    ver.append_item(&menu_item(
+        "Painel _inferior",
+        "win.mostrar-inferior",
+        Some("<Primary>j"),
+    ));
+    ver.append_item(&menu_item(
+        "Ar_gumentos",
+        "win.mostrar-argumentos",
+        Some("<Shift>F8"),
+    ));
+    ver.append_item(&menu_item(
+        "Esconder/restaurar painéis",
+        "win.alternar-paineis",
+        Some("<Primary><Shift>F12"),
+    ));
     ver.append_item(&menu_item("_Buscar", "win.buscar", Some("<Primary>f")));
     ver.append_item(&menu_item(
         "Buscar no pro_jeto",
@@ -1001,6 +1097,206 @@ pub(crate) mod win32_foreground {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn panel_preferences_survive_reopening_and_argument_shortcut_toggles() {
+        crate::gtk_test::run(|| {
+            let app = gtk::Application::builder()
+                .application_id("dev.expressa.aula.tests.panelprefs")
+                .flags(gio::ApplicationFlags::NON_UNIQUE)
+                .build();
+            app.register(None::<&gio::Cancellable>).unwrap();
+            let dir = tempfile::tempdir().unwrap();
+            let path = dir.path().join("prefs");
+            let ui = build_ui_with_prefs(
+                &app,
+                false,
+                Prefs {
+                    config_path: Some(path.clone()),
+                    ..Prefs::default()
+                },
+            );
+            let window = ui.borrow().window.clone();
+            let controllers = window.observe_controllers();
+            let shortcut = (0..controllers.n_items())
+                .filter_map(|i| {
+                    controllers
+                        .item(i)?
+                        .downcast::<gtk::ShortcutController>()
+                        .ok()
+                })
+                .filter(|c| c.propagation_phase() == gtk::PropagationPhase::Capture)
+                .flat_map(|c| {
+                    (0..c.n_items())
+                        .filter_map(|i| c.item(i)?.downcast::<gtk::Shortcut>().ok())
+                        .collect::<Vec<_>>()
+                })
+                .find(|s| s.trigger().is_some_and(|t| t.to_str() == "<Shift>F8"))
+                .expect("Shift+F8 shortcut installed");
+            assert!(shortcut.action().unwrap().activate(
+                gtk::ShortcutActionFlags::empty(),
+                &window,
+                None
+            ));
+            trigger_win_action(&window, "mostrar-painel");
+            trigger_win_action(&window, "mostrar-inferior");
+            assert!(crate::background::persistence().flush(std::time::Duration::from_secs(5)));
+            let mut saved = Prefs::parse(&std::fs::read_to_string(&path).unwrap());
+            assert!(!saved.mostrar_argumentos && !saved.mostrar_painel && !saved.mostrar_inferior);
+            ui.borrow().closing.set(true);
+            window.destroy();
+
+            saved.config_path = Some(path.clone());
+            let reopened = build_ui_with_prefs(&app, false, saved);
+            let window = reopened.borrow().window.clone();
+            for name in ["mostrar-argumentos", "mostrar-painel", "mostrar-inferior"] {
+                assert_eq!(window.action_state(name), Some(false.to_variant()));
+            }
+            assert!(
+                !reopened
+                    .borrow()
+                    .painel_inferior
+                    .parent()
+                    .unwrap()
+                    .get_visible()
+            );
+            assert!(
+                !reopened
+                    .borrow()
+                    .execucao
+                    .args_entry
+                    .parent()
+                    .unwrap()
+                    .get_visible()
+            );
+            // Explicitly opening a lower tab reveals it and saves that choice.
+            mostrar_pagina_inferior(&reopened, PaginaInferior::Saida);
+            trigger_win_action(&window, "mostrar-argumentos");
+            trigger_win_action(&window, "mostrar-painel");
+            assert!(crate::background::persistence().flush(std::time::Duration::from_secs(5)));
+            let saved = Prefs::parse(&std::fs::read_to_string(&path).unwrap());
+            assert!(saved.mostrar_argumentos && saved.mostrar_painel && saved.mostrar_inferior);
+            reopened.borrow().closing.set(true);
+            window.destroy();
+        });
+    }
+
+    fn layout_frame(window: &ApplicationWindow) {
+        let done = Rc::new(Cell::new(false));
+        let ready = done.clone();
+        window.add_tick_callback(move |_, _| {
+            ready.set(true);
+            glib::ControlFlow::Break
+        });
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        while !done.get() || glib::MainContext::default().pending() {
+            assert!(std::time::Instant::now() < deadline, "layout timed out");
+            glib::MainContext::default().iteration(false);
+            std::thread::sleep(std::time::Duration::from_millis(1));
+        }
+    }
+
+    #[test]
+    fn panels_hide_completely_and_restore_the_previous_layout() {
+        crate::gtk_test::run(|| {
+            let app = gtk::Application::builder()
+                .application_id("dev.expressa.aula.tests.panels")
+                .flags(gio::ApplicationFlags::NON_UNIQUE)
+                .build();
+            app.register(None::<&gio::Cancellable>).unwrap();
+            let editor = gtk::TextView::new();
+            let bottom = GtkBox::new(Orientation::Vertical, 0);
+            bottom.set_size_request(-1, 100);
+            let tabs = gtk::Notebook::new();
+            tabs.append_page(&Label::new(Some("saída")), Some(&Label::new(Some("Saída"))));
+            tabs.append_page(&gtk::Entry::new(), Some(&Label::new(Some("REPL"))));
+            bottom.append(&tabs);
+            tabs.set_current_page(Some(1));
+            let pane = editor_panes(&editor, &bottom);
+            pane.set_vexpand(true);
+            pane.set_position(220);
+            let files = Label::new(Some("arquivos"));
+            let debug = Label::new(Some("depurador"));
+            let args = GtkBox::new(Orientation::Horizontal, 0);
+            args.append(&Entry::new());
+            let root = GtkBox::new(Orientation::Vertical, 0);
+            root.append(&args);
+            root.append(&files);
+            root.append(&debug);
+            root.append(&pane);
+            let window = ApplicationWindow::builder()
+                .application(&app)
+                .default_width(800)
+                .default_height(500)
+                .child(&root)
+                .build();
+            install_panel_actions(
+                &window,
+                &[
+                    ("mostrar-arquivos", files.clone().upcast()),
+                    ("mostrar-painel", debug.clone().upcast()),
+                    ("mostrar-argumentos", args.clone().upcast()),
+                    ("mostrar-inferior", bottom.clone().upcast()),
+                ],
+                {
+                    let editor = editor.clone();
+                    move || {
+                        editor.grab_focus();
+                    }
+                },
+            );
+            window.present();
+            layout_frame(&window);
+            let editor_height = editor.height();
+            let position = pane.position();
+
+            // The lower pane disappears entirely, including its minimum height.
+            trigger_win_action(&window, "mostrar-inferior");
+            assert_eq!(
+                window.action_state("mostrar-inferior"),
+                Some(false.to_variant())
+            );
+            layout_frame(&window);
+            assert!(!bottom.is_mapped());
+            assert!(editor.height() > editor_height + 50);
+            trigger_win_action(&window, "mostrar-inferior");
+            layout_frame(&window);
+            assert!(bottom.is_mapped());
+            assert_eq!(pane.position(), position);
+            assert_eq!(tabs.current_page(), Some(1));
+
+            // Starting with a hidden sidebar must preserve that choice.
+            trigger_win_action(&window, "mostrar-arquivos");
+            trigger_win_action(&window, "alternar-paineis");
+            layout_frame(&window);
+            assert!(!files.is_visible() && !debug.is_visible());
+            assert!(!args.is_visible() && !bottom.is_visible());
+            assert_eq!(editor.height(), pane.height());
+            assert!(editor.has_focus());
+            trigger_win_action(&window, "alternar-paineis");
+            layout_frame(&window);
+            assert!(!files.is_visible());
+            assert!(debug.is_visible() && args.is_visible() && bottom.is_visible());
+            assert_eq!(tabs.current_page(), Some(1));
+            assert_eq!(
+                window.action_state("mostrar-arquivos"),
+                Some(false.to_variant())
+            );
+            assert_eq!(
+                window.action_state("mostrar-inferior"),
+                Some(true.to_variant())
+            );
+
+            // With every panel hidden individually, the command reveals all.
+            for name in ["mostrar-painel", "mostrar-argumentos", "mostrar-inferior"] {
+                trigger_win_action(&window, name);
+            }
+            trigger_win_action(&window, "alternar-paineis");
+            assert!(files.is_visible() && debug.is_visible());
+            assert!(args.is_visible() && bottom.is_visible());
+            window.close();
+        });
+    }
 
     #[test]
     fn core_two_duo_prefers_cairo() {
