@@ -1,34 +1,39 @@
-# Arquivos Expressa Bytecode (.exb), versão 2
+# Arquivos Expressa Bytecode (.lepc), versão 2
 
 ## Uso
 
 ```sh
-cargo build -p expressa --release --bin expressa --offline --locked
+cargo build -p expressa --release --offline --locked
 target/release/expressa compilar programa.lep
-target/release/expressa compilar programa.lep -o pasta/programa.exb
-target/release/expressa programa.exb argumento1
-target/release/expressa debug programa.exb
-target/release/expressa --marcador-leia programa.exb
+target/release/expressa compilar programa.lep -o pasta/programa.lepc
+target/release/expressa programa.lepc argumento1
+target/release/lep-exec programa.lepc argumento1
+target/release/expressa debug programa.lepc
+target/release/expressa --marcador-leia programa.lepc
 ```
 
-`compilar` não executa o programa. A saída padrão troca a extensão para `.exb`; `-o` também exige essa extensão. A escrita usa arquivo temporário no mesmo diretório e rename, preservando um artefato anterior se a compilação falhar. O fonte não pode ser usado como saída.
+O runner `lep-exec` é compilado por padrão com `cargo build --release` e acompanha os pacotes `.deb` e o instalador Windows `.exe` (em `bin\lep-exec.exe`, disponível no PATH quando essa opção está selecionada). Aceita `--numeros pt|en`, `--aritmetica decimal|float`, `--marcador-leia` e `debug` (com a feature `terminal`), antes do caminho do arquivo. Argumentos após o arquivo são repassados ao programa. O runner sempre usa bytecode, independentemente de `EXPRESSA_BACKEND`, e exige a extensão `.lepc`.
 
-O arquivo contém instruções, tabelas e o texto-fonte necessário aos diagnósticos. Não é uma forma de ocultar o fonte nem um executável nativo. A execução usa o backend bytecode; `--backend ast` é rejeitado para `.exb`. `--ast` continua destinado ao `.lep`.
+A extensão `.lepc` substitui `.exb`; renomeie os artefatos existentes e atualize seus imports. O formato EXB v2 e os nomes da API Rust (`compile_exb`, `load_exb` etc.) permanecem iguais.
+
+`compilar` não executa o programa. A saída padrão troca a extensão para `.lepc`; `-o` também exige essa extensão. A escrita usa arquivo temporário no mesmo diretório e rename, preservando um artefato anterior se a compilação falhar. O fonte não pode ser usado como saída.
+
+O arquivo contém instruções, tabelas e o texto-fonte necessário aos diagnósticos. Não é uma forma de ocultar o fonte nem um executável nativo. A execução usa o backend bytecode; `--backend ast` é rejeitado para `.lepc`. `--ast` continua destinado ao `.lep`.
 
 O loader não reinterpreta o texto-fonte embutido. Ele decodifica e valida instruções, reconstruindo os enums atuais da VM em memória. A compactação em memória descartada na etapa 05 não foi retomada: as instruções permanecem com o layout atual, de 16 bytes nesta plataforma. O formato de arquivo é independente desse layout.
 
 ## Módulos, caminhos e avaliação dinâmica
 
 ```text
-m = importe "./biblioteca.exb"
+m = importe "./biblioteca.lepc"
 escreva(m::soma(2, 3))
 ```
 
-Módulos `.exb` são validados antes da execução e usam o mesmo cache, detecção de ciclos e preflight de bindings das importações existentes. Imports sem extensão continuam procurando `.lep`; não há reescrita nem empacotamento automático de dependências. Módulos nativos continuam disponíveis. Arquivos `.lep` também podem importar `.exb` ao usar o backend bytecode.
+Módulos `.lepc` são validados antes da execução e usam o mesmo cache, detecção de ciclos e preflight de bindings das importações existentes. Imports sem extensão acompanham o formato do módulo que importa: `.lep` procura `.lep`, e `.lepc` procura `.lepc`. Extensões explícitas são respeitadas. Ao importar um módulo de outro formato, os imports internos seguem o formato desse módulo. Não há empacotamento automático de dependências. Módulos nativos continuam disponíveis. Arquivos `.lep` também podem importar `.lepc` ao usar o backend bytecode.
 
-Os caminhos relativos de imports e operações de arquivo são resolvidos a partir do arquivo executado/importado, inclusive quando o `.exb` foi movido para outra pasta. O nome do fonte armazenado é usado para diagnósticos e pilhas, não para redirecionar o diretório de execução. As regras existentes para chamadas de funções exportadas continuam valendo.
+Os caminhos relativos de imports e operações de arquivo são resolvidos a partir do arquivo executado/importado, inclusive quando o `.lepc` foi movido para outra pasta. O nome do fonte armazenado é usado para diagnósticos e pilhas, não para redirecionar o diretório de execução. As regras existentes para chamadas de funções exportadas continuam valendo.
 
-O `.lep` original não precisa existir. Imports que ainda apontam para `.lep` continuam exigindo seus fontes e usando o parser. `avalie` continua compilando explicitamente o texto recebido em runtime; isso também exige o frontend. O arquivo não congela locale nem o modo decimal/float: literais são preservados exatamente, e as opções de execução continuam controlando as operações.
+O `.lep` original não precisa existir. Para distribuir um projeto, compile o programa e seus módulos, preserve a estrutura de pastas e distribua os `.lepc`. Por exemplo, `importe "./biblioteca"` carrega `biblioteca.lep` ao executar o fonte e `biblioteca.lepc` ao executar o compilado. Imports com `.lep` explícito continuam exigindo seus fontes e usando o parser. `avalie` continua compilando explicitamente o texto recebido em runtime; isso também exige o frontend. O arquivo não congela locale nem o modo decimal/float: literais são preservados exatamente, e as opções de execução continuam controlando as operações.
 
 ## API Rust
 
@@ -38,7 +43,7 @@ O `.lep` original não precisa existir. Imports que ainda apontam para `.lep` co
 - `run_compiled_with_options(program, execution_file, stdin, options)`: reutiliza código já validado; cada execução cria novos globais.
 - `run_exb_file_args(path, args, ExbRunMode)`: entrada CLI com modos `Run`, `Debug` e `Marker`.
 
-`execution_file` define a base dos caminhos relativos. O nome embutido no arquivo é o caminho passado na compilação (`source_name`); um import relativo resolve a partir do diretório do `.exb` em execução, não a partir desse nome. O texto e o nome originais ficam disponíveis por `CompiledProgram::source()`/`source_name()`. Código e tabelas internas não são mutáveis pela API. `ExbError` informa mensagem e offset; erros de execução continuam sendo `RuntimeError`, com os spans e frames do fonte original.
+`execution_file` define a base dos caminhos relativos. O nome embutido no arquivo é o caminho passado na compilação (`source_name`); um import relativo resolve a partir do diretório do `.lepc` em execução, não a partir desse nome. O texto e o nome originais ficam disponíveis por `CompiledProgram::source()`/`source_name()`. Código e tabelas internas não são mutáveis pela API. `ExbError` informa mensagem e offset; erros de execução continuam sendo `RuntimeError`, com os spans e frames do fonte original.
 
 ## Contrato binário v2
 
@@ -161,6 +166,6 @@ O perfil atual limita arquivo a 16 MiB, soma de elementos a 250.000, aninhamento
 
 ## Testes e medições
 
-Há fixture v2 independente de otimizações do compilador, roundtrip dos opcodes aceitos (66 e 67 ficam de fora), decimais exatos, Unicode/CRLF, arquivos truncados/corrompidos e mutações com checksum válida que também executam sem pânico. A versão 1 é rejeitada. A paridade AST/bytecode agora inclui execução carregada de `.exb` para os casos de fonte válidos. A CLI é testada sem o `.lep` original, com argumentos, saída não zero, marker, depuração e módulos relativos.
+Há fixture v2 independente de otimizações do compilador, roundtrip dos opcodes aceitos (66 e 67 ficam de fora), decimais exatos, Unicode/CRLF, arquivos truncados/corrompidos e mutações com checksum válida que também executam sem pânico. A versão 1 é rejeitada. A paridade AST/bytecode agora inclui execução carregada de `.lepc` para os casos de fonte válidos. A CLI é testada sem o `.lep` original, com argumentos, saída não zero, marker, depuração e módulos relativos.
 
 [Relatório de implementação e comparação de CPU/RSS](../benchmarks/EXB-V1-REVIEW.md).

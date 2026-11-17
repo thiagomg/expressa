@@ -5,7 +5,7 @@ O build padrão mantém o interpretador completo. O primeiro perfil mínimo desa
 ## Como compilar
 
 ```sh
-# Desktop completo, incluindo o runner lepc:
+# Desktop completo, incluindo o runner lep-exec:
 cargo build -p expressa --release --offline --locked
 
 # Perfil mínimo, em outro diretório para preservar os dois executáveis:
