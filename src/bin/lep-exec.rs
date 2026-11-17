@@ -24,7 +24,7 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
     while let Some(arg) = args.get(index) {
         match arg.as_str() {
             "--help" | "-h" => {
-                println!("Uso: lepc [opções] <arquivo.lepc> [args…]");
+                println!("Uso: lep-exec [opções] <arquivo.lepc> [args…]");
                 println!("  --numeros pt|en");
                 println!("  --aritmetica decimal|float");
                 println!("  --marcador-leia");
@@ -37,14 +37,14 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
                 options.numero_locale = args
                     .get(index)
                     .and_then(|name| NumeroLocale::from_name(name))
-                    .ok_or("Uso: lepc --numeros pt|en <arquivo.lepc> [args…]")?;
+                    .ok_or("Uso: lep-exec --numeros pt|en <arquivo.lepc> [args…]")?;
             }
             "--aritmetica" => {
                 index += 1;
                 options.numero_aritmetica = args
                     .get(index)
                     .and_then(|name| NumeroAritmetica::from_name(name))
-                    .ok_or("Uso: lepc --aritmetica decimal|float <arquivo.lepc> [args…]")?;
+                    .ok_or("Uso: lep-exec --aritmetica decimal|float <arquivo.lepc> [args…]")?;
             }
             "--marcador-leia" => mode = ExbRunMode::Marker,
             "debug" => {
@@ -66,13 +66,13 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
     }
     let file = args
         .get(index)
-        .ok_or("Uso: lepc [opções] <arquivo.lepc> [args…]")?;
+        .ok_or("Uso: lep-exec [opções] <arquivo.lepc> [args…]")?;
     if !std::path::Path::new(file)
         .extension()
         .and_then(|ext| ext.to_str())
         .is_some_and(|ext| ext.eq_ignore_ascii_case("lepc"))
     {
-        return Err("o runner lepc exige um arquivo .lepc".into());
+        return Err("o runner lep-exec exige um arquivo .lepc".into());
     }
     Ok(run_exb_file_args_com(
         file,

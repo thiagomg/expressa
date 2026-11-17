@@ -31,7 +31,7 @@ if ($LASTEXITCODE -ne 0) {
     exit $LASTEXITCODE
 }
 
-foreach ($name in @("expressa.exe", "lepc.exe", "expressa-grafico.exe", "expressa-aula.exe", "expressa-aula-server.exe", "expressa-tutorial.exe")) {
+foreach ($name in @("expressa.exe", "lep-exec.exe", "expressa-grafico.exe", "expressa-aula.exe", "expressa-aula-server.exe", "expressa-tutorial.exe")) {
     if (-not (Test-Path (Join-Path $release $name))) {
         Write-Error "Faltou $release\$name."
     }
@@ -64,7 +64,7 @@ Copy-Item (Join-Path $release "expressa-tutorial.exe") $dest
 $bin = Join-Path $dest "bin"
 New-Item -ItemType Directory -Path $bin | Out-Null
 # As ferramentas ficam lado a lado: o expressa procura expressa-grafico.exe na mesma pasta.
-foreach ($name in @("expressa.exe", "lepc.exe", "expressa-grafico.exe")) {
+foreach ($name in @("expressa.exe", "lep-exec.exe", "expressa-grafico.exe")) {
     Copy-Item (Join-Path $release $name) $bin
 }
 

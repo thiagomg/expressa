@@ -77,7 +77,7 @@ fn cli_compiles_without_executing_and_runs_without_the_lep() {
     assert!(result.stderr.is_empty());
     // The dedicated runner always selects bytecode, including when the user's
     // environment selects AST. Arguments after the file belong to the program.
-    let result = std::process::Command::new(env!("CARGO_BIN_EXE_lepc"))
+    let result = std::process::Command::new(env!("CARGO_BIN_EXE_lep-exec"))
         .env("EXPRESSA_BACKEND", "ast")
         .arg(&output)
         .args(["--backend", "literal"])
@@ -122,7 +122,7 @@ fn runner_validates_artifacts_and_runs_relative_modules_with_stdin() {
         .unwrap(),
     )
     .unwrap();
-    let mut child = std::process::Command::new(env!("CARGO_BIN_EXE_lepc"))
+    let mut child = std::process::Command::new(env!("CARGO_BIN_EXE_lep-exec"))
         .arg("--marcador-leia")
         .arg(&file)
         .stdin(std::process::Stdio::piped())
@@ -137,7 +137,7 @@ fn runner_validates_artifacts_and_runs_relative_modules_with_stdin() {
     assert!(String::from_utf8_lossy(&result.stderr).contains("<<<EXPRESSA-LEIA>>>"));
 
     std::fs::write(&file, b"invalid bytecode").unwrap();
-    let result = std::process::Command::new(env!("CARGO_BIN_EXE_lepc"))
+    let result = std::process::Command::new(env!("CARGO_BIN_EXE_lep-exec"))
         .arg(&file)
         .output()
         .unwrap();
@@ -145,7 +145,7 @@ fn runner_validates_artifacts_and_runs_relative_modules_with_stdin() {
     assert!(!result.stderr.is_empty());
     let source = t.0.join("source.lep");
     std::fs::write(&source, "escreva(123)").unwrap();
-    let result = std::process::Command::new(env!("CARGO_BIN_EXE_lepc"))
+    let result = std::process::Command::new(env!("CARGO_BIN_EXE_lep-exec"))
         .arg(source)
         .output()
         .unwrap();
@@ -395,7 +395,7 @@ fn compiled_distribution_runs_nested_extensionless_imports_without_sources() {
     std::fs::rename(&project, &dist).unwrap();
     for mut command in [
         cli(),
-        std::process::Command::new(env!("CARGO_BIN_EXE_lepc")),
+        std::process::Command::new(env!("CARGO_BIN_EXE_lep-exec")),
     ] {
         let result = command.arg(dist.join("main.lepc")).output().unwrap();
         assert!(result.status.success(), "{result:?}");

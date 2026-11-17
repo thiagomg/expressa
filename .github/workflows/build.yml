@@ -136,7 +136,7 @@ jobs:
           & ./dist/expressa-aula/bin/expressa.exe compilar $source -o $compiled
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           Remove-Item -LiteralPath $source
-          $result = & ./dist/expressa-aula/bin/lepc.exe $compiled
+          $result = & ./dist/expressa-aula/bin/lep-exec.exe $compiled
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           if ("$result".Trim() -ne '42') { throw "Runner output: $result" }
 

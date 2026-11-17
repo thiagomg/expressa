@@ -78,5 +78,5 @@ path = "src/bin/expressa-grafico.rs"
 required-features = ["graphics"]
 
 [[bin]]
-name = "lepc"
-path = "src/bin/lepc.rs"
+name = "lep-exec"
+path = "src/bin/lep-exec.rs"

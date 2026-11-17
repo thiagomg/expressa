@@ -41,7 +41,7 @@ cargo build --profile "$PROFILE" --locked \
     -p expressa-tutorial
 
 BIN="$TARGET/$PROFILE"
-for name in expressa lepc expressa-grafico expressa-aula expressa-aula-server expressa-tutorial; do
+for name in expressa lep-exec expressa-grafico expressa-aula expressa-aula-server expressa-tutorial; do
     if [[ ! -x "$BIN/$name" ]]; then
         echo "erro: faltou $BIN/$name" >&2
         exit 1
@@ -65,7 +65,7 @@ mkdir -p \
     "$ROOT/usr/share/doc/$PKG_NAME"
 
 install -m0755 "$BIN/expressa" "$ROOT/usr/bin/expressa"
-install -m0755 "$BIN/lepc" "$ROOT/usr/bin/lepc"
+install -m0755 "$BIN/lep-exec" "$ROOT/usr/bin/lep-exec"
 install -m0755 "$BIN/expressa-grafico" "$ROOT/usr/bin/expressa-grafico"
 install -m0755 "$BIN/expressa-aula" "$ROOT/usr/bin/expressa-aula"
 install -m0755 "$BIN/expressa-aula-server" "$ROOT/usr/bin/expressa-aula-server"
@@ -75,14 +75,14 @@ install -m0755 "$BIN/expressa-tutorial" "$ROOT/usr/bin/expressa-tutorial"
 printf 'escreva(42)\n' > "$STAGE/smoke.lep"
 "$ROOT/usr/bin/expressa" compilar "$STAGE/smoke.lep"
 rm "$STAGE/smoke.lep"
-if [[ "$("$ROOT/usr/bin/lepc" "$STAGE/smoke.lepc")" != 42 ]]; then
-    echo "erro: o runner lepc empacotado não produziu a saída esperada" >&2
+if [[ "$("$ROOT/usr/bin/lep-exec" "$STAGE/smoke.lepc")" != 42 ]]; then
+    echo "erro: o runner lep-exec empacotado não produziu a saída esperada" >&2
     exit 1
 fi
 
 strip --strip-unneeded \
     "$ROOT/usr/bin/expressa" \
-    "$ROOT/usr/bin/lepc" \
+    "$ROOT/usr/bin/lep-exec" \
     "$ROOT/usr/bin/expressa-grafico" \
     "$ROOT/usr/bin/expressa-aula" \
     "$ROOT/usr/bin/expressa-aula-server" \
@@ -151,7 +151,7 @@ EOF
     cd "$WORK"
     dpkg-shlibdeps -Tdebian/substvars \
         "$ROOT/usr/bin/expressa" \
-        "$ROOT/usr/bin/lepc" \
+        "$ROOT/usr/bin/lep-exec" \
         "$ROOT/usr/bin/expressa-grafico" \
         "$ROOT/usr/bin/expressa-aula" \
         "$ROOT/usr/bin/expressa-aula-server" \
@@ -175,7 +175,7 @@ Depends: ${SHLIBS}
 Description: linguagem Expressa e editor Aula
  Expressa é uma linguagem de programação em português brasileiro.
  Este pacote instala o interpretador (expressa), o runner de .lepc
- (lepc), o visualizador de
+ (lep-exec), o visualizador de
  gráficos (expressa-grafico), o editor GTK Expressa Aula, os tutoriais
  (expressa-tutorial) e o servidor
  de arquivos da sala.
