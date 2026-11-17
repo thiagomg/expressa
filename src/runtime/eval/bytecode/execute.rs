@@ -54,7 +54,7 @@ struct Frame {
     kind: FrameKindCode,
     values: usize,
     destinations: usize,
-    restore: Option<(String, Rc<str>)>,
+    restore: Option<(String, Rc<str>, &'static str)>,
 }
 impl Frame {
     fn env(&self) -> &Rc<RefCell<Env>> {
@@ -230,6 +230,7 @@ impl Machine {
                     span: prototype.span,
                     file: vm.file.clone(),
                     source: Rc::clone(&vm.source),
+                    import_extension: vm.import_extension,
                     doc: prototype.doc.clone(),
                 })));
             }
@@ -548,6 +549,7 @@ impl Machine {
         kind: FrameKindCode,
         file: String,
         source: Rc<str>,
+        import_extension: &'static str,
         name: String,
         span: Span,
     ) {
@@ -559,6 +561,7 @@ impl Machine {
         let restore = Some((
             std::mem::replace(&mut vm.file, file),
             std::mem::replace(&mut vm.source, source),
+            std::mem::replace(&mut vm.import_extension, import_extension),
         ));
         self.frames.push(Frame {
             code,
@@ -580,9 +583,10 @@ impl Machine {
         frame.handlers_to(0, vm);
         frame.loops.clear();
         frame.leave_scopes(0);
-        if let Some((file, source)) = frame.restore {
+        if let Some((file, source, import_extension)) = frame.restore {
             vm.file = file;
             vm.source = source;
+            vm.import_extension = import_extension;
             vm.stack.pop();
         }
     }
@@ -633,6 +637,7 @@ impl Machine {
             FrameKindCode::Function,
             closure.file.clone(),
             Rc::clone(&closure.source),
+            closure.import_extension,
             name,
             span,
         );
@@ -658,6 +663,7 @@ impl Machine {
                 vm.check_profundidade(span)?;
                 let code = compiler::items(&program.items);
                 let env = Rc::clone(self.frames.last().expect("frame").env());
+                let import_extension = vm.import_extension;
                 self.push(
                     vm,
                     code,
@@ -665,6 +671,7 @@ impl Machine {
                     FrameKindCode::Eval,
                     "<avalie>".into(),
                     Rc::from(source),
+                    import_extension,
                     "avalie".into(),
                     span,
                 );

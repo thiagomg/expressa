@@ -175,6 +175,7 @@ fn run<'a>(
     );
     vm.source = Rc::clone(&program.source);
     vm.base_dir = base_dir_of(file);
+    vm.import_extension = "lepc";
     vm.backend = ExecutionBackend::Bytecode;
     vm.max_matrix_cells = options.max_matrix_cells;
     vm.numero_locale = options.numero_locale;

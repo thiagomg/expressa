@@ -95,6 +95,9 @@ pub(crate) struct Vm<'a, 'c> {
     /// Shared: debugger snapshots and closures keep it without copying.
     pub(crate) source: Rc<str>,
     pub(crate) base_dir: PathBuf,
+    /// Default extension for imports in the executing module. Kept separate
+    /// from `file`, which contains the original .lep name for diagnostics.
+    pub(crate) import_extension: &'static str,
     hook: Box<dyn DebugHook>,
     pub(crate) stack: Vec<CallFrame>,
     builtins: Rc<RefCell<Env>>,
@@ -654,6 +657,7 @@ impl<'a, 'c> Vm<'a, 'c> {
             file: file.to_string(),
             source: Rc::from(source),
             base_dir: base_dir_of(file),
+            import_extension: "lep",
             hook,
             stack: Vec::new(),
             builtins,
@@ -821,6 +825,7 @@ impl<'a, 'c> Vm<'a, 'c> {
         self.file = file.to_string();
         self.source = Rc::from(source);
         self.base_dir = base_dir_of(file);
+        self.import_extension = "lep";
     }
 
     #[cfg(feature = "terminal")]
@@ -839,8 +844,8 @@ impl<'a, 'c> Vm<'a, 'c> {
             if self.native_conflicts_with_file(&import.path, import.span)? {
                 return Err(self.err(
                         format!(
-                            "'{}' é um módulo nativo e existe {}.lep nesta pasta. Use importe \"./{}\" para o arquivo, ou mude o nome/pasta do arquivo para usar o nativo.",
-                            import.path, import.path, import.path
+                            "'{}' é um módulo nativo e existe {}.{} nesta pasta. Use importe \"./{}\" para o arquivo, ou mude o nome/pasta do arquivo para usar o nativo.",
+                            import.path, import.path, self.import_extension, import.path
                         ),
                         import.span,
                     ));
@@ -929,15 +934,18 @@ impl<'a, 'c> Vm<'a, 'c> {
         let saved_file = self.file.clone();
         let saved_source = std::mem::replace(&mut self.source, Rc::from(""));
         let saved_base = self.base_dir.clone();
+        let saved_extension = self.import_extension;
         self.base_dir = base_dir_of(&path.display().to_string());
         let module_env = Env::child(&self.builtins, FrameKind::Module);
         let result = match input {
             Input::Source(source, program) => {
+                self.import_extension = "lep";
                 self.file = path.display().to_string();
                 self.source = Rc::from(source);
                 self.executar_modulo(program, &module_env)
             }
             Input::Compiled(program) => {
+                self.import_extension = "lepc";
                 self.file = program.source_name.clone();
                 self.source = Rc::clone(&program.source);
                 self.execute_loaded_module(Rc::clone(&program.code), &module_env)
@@ -949,6 +957,7 @@ impl<'a, 'c> Vm<'a, 'c> {
         self.file = saved_file;
         self.source = saved_source;
         self.base_dir = saved_base;
+        self.import_extension = saved_extension;
         self.loading.remove(key);
         result?;
         self.modules
@@ -994,7 +1003,7 @@ impl<'a, 'c> Vm<'a, 'c> {
     fn resolve_import_path(&self, spec: &str, span: Span) -> Result<PathBuf, EvalError> {
         let mut p = PathBuf::from(spec);
         if p.extension().is_none() {
-            p.set_extension("lep");
+            p.set_extension(self.import_extension);
         }
         let joined = if p.is_relative() {
             self.base_dir.join(p)
@@ -1339,6 +1348,7 @@ impl<'a, 'c> Vm<'a, 'c> {
                     span: *span,
                     file: self.file.clone(),
                     source: Rc::clone(&self.source),
+                    import_extension: self.import_extension,
                     doc: doc.clone(),
                 })))
             }
@@ -1782,6 +1792,8 @@ impl<'a, 'c> Vm<'a, 'c> {
                 // resolve from the running program's folder.
                 let saved_file = std::mem::replace(&mut self.file, closure.file.clone());
                 let saved_source = std::mem::replace(&mut self.source, Rc::clone(&closure.source));
+                let saved_extension =
+                    std::mem::replace(&mut self.import_extension, closure.import_extension);
                 let result = match &closure.body {
                     #[cfg(feature = "ast")]
                     FunctionBody::Ast(body) => self.eval_stmts(&body.stmts, &call_env),
@@ -1802,6 +1814,7 @@ impl<'a, 'c> Vm<'a, 'c> {
                 self.report_runtime_error(&result, &call_env);
                 self.file = saved_file;
                 self.source = saved_source;
+                self.import_extension = saved_extension;
                 self.stack.pop();
                 Env::liberar_se_lixo(&call_env);
                 match result {

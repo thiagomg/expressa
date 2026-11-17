@@ -408,6 +408,7 @@ pub(crate) fn detached_function(
         span: closure.span,
         file: closure.file.clone(),
         source: Rc::clone(&closure.source),
+        import_extension: closure.import_extension,
         doc: closure.doc.clone(),
     }))
 }
@@ -466,6 +467,7 @@ mod tests {
             span: proto.span,
             file: "test.lep".into(),
             source: "not valid Expressa source".into(),
+            import_extension: "lep",
             doc: None,
         }
     }

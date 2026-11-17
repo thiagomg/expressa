@@ -5,16 +5,16 @@ O build padrão mantém o interpretador completo. O primeiro perfil mínimo desa
 ## Como compilar
 
 ```sh
-# Desktop completo, comportamento padrão:
-cargo build -p expressa --release --bin expressa --offline --locked
+# Desktop completo, incluindo o runner lepc:
+cargo build -p expressa --release --offline --locked
 
 # Perfil mínimo, em outro diretório para preservar os dois executáveis:
 cargo build -p expressa --release --bin expressa --no-default-features \
   --target-dir target/minimal --offline --locked
 
 target/minimal/release/expressa programa.lep
-target/minimal/release/expressa compilar programa.lep -o programa.exb
-target/minimal/release/expressa programa.exb
+target/minimal/release/expressa compilar programa.lep -o programa.lepc
+target/minimal/release/expressa programa.lepc
 
 # Exemplo: acrescentar apenas processos ao perfil mínimo:
 cargo build -p expressa --release --bin expressa --no-default-features \

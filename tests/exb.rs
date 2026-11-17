@@ -310,3 +310,153 @@ fn cli_marker_and_debug_use_embedded_source() {
         assert!(String::from_utf8_lossy(&output.stdout).contains("42"));
     }
 }
+
+#[test]
+fn extensionless_imports_follow_each_modules_format_and_restore_the_caller() {
+    let t = Temp::new();
+    let source = "m = importe \"./value\"\nescreva(m::value)";
+    std::fs::write(t.0.join("value.lep"), "value = 11").unwrap();
+    std::fs::write(
+        t.0.join("value.lepc"),
+        compile_exb("value = 22", "original/value.lep").unwrap(),
+    )
+    .unwrap();
+    let file = t.0.join("main.lep").to_str().unwrap().to_owned();
+    for backend in [ExecutionBackend::Ast, ExecutionBackend::Bytecode] {
+        if backend.is_available() {
+            assert_eq!(
+                run_with_options(
+                    source,
+                    &file,
+                    "",
+                    ExecutionOptions {
+                        backend,
+                        ..options()
+                    }
+                )
+                .unwrap()
+                .stdout,
+                "11\n"
+            );
+        }
+    }
+    let compiled = compile_exb(source, "original/main.lep").unwrap();
+    assert_eq!(
+        run_exb_with_options(&compiled, &file, "", options())
+            .unwrap()
+            .stdout,
+        "22\n"
+    );
+
+    // Explicit imports switch the default inside the imported module, then
+    // restore the caller's format for the next import.
+    std::fs::write(t.0.join("bridge.lep"), source).unwrap();
+    std::fs::write(
+        t.0.join("bridge.lepc"),
+        compile_exb(source, "original/bridge.lep").unwrap(),
+    )
+    .unwrap();
+    let mixed = "a = importe \"./bridge.lepc\"\nb = importe \"./bridge.lep\"\nm = importe \"./value\"\nescreva(m::value)";
+    assert_eq!(
+        run_with_options(mixed, &file, "", options())
+            .unwrap()
+            .stdout,
+        "22\n11\n11\n"
+    );
+    let compiled = compile_exb(mixed, "original/main.lep").unwrap();
+    assert_eq!(
+        run_exb_with_options(&compiled, &file, "", options())
+            .unwrap()
+            .stdout,
+        "22\n11\n22\n"
+    );
+}
+
+#[test]
+fn compiled_distribution_runs_nested_extensionless_imports_without_sources() {
+    let t = Temp::new();
+    let project = t.0.join("project");
+    let dist = t.0.join("dist");
+    std::fs::create_dir_all(project.join("lib")).unwrap();
+    for (name, source) in [
+        ("main", "m = importe \"./lib/helper\"\nescreva(m::answer)"),
+        (
+            "lib/helper",
+            "m = importe \"./value\"\nanswer = m::value + 1",
+        ),
+        ("lib/value", "value = 41"),
+    ] {
+        let file = project.join(format!("{name}.lep"));
+        std::fs::write(&file, source).unwrap();
+        let result = cli().arg("compilar").arg(&file).output().unwrap();
+        assert!(result.status.success(), "{result:?}");
+        std::fs::remove_file(file).unwrap();
+    }
+    std::fs::rename(&project, &dist).unwrap();
+    for mut command in [
+        cli(),
+        std::process::Command::new(env!("CARGO_BIN_EXE_lepc")),
+    ] {
+        let result = command.arg(dist.join("main.lepc")).output().unwrap();
+        assert!(result.status.success(), "{result:?}");
+        assert_eq!(result.stdout, b"42\n");
+    }
+}
+
+#[test]
+fn native_module_conflicts_follow_the_importing_format() {
+    let t = Temp::new();
+    let file = t.0.join("main.lepc").to_str().unwrap().to_owned();
+    let source = "importe \"matriz\"";
+    let compiled = compile_exb(source, "main.lep").unwrap();
+    std::fs::write(t.0.join("matriz.lep"), "value = 1").unwrap();
+    // A source file does not shadow a native import in a compiled module.
+    run_exb_with_options(&compiled, &file, "", options()).unwrap();
+    std::fs::write(
+        t.0.join("matriz.lepc"),
+        compile_exb("value = 2", "matriz.lep").unwrap(),
+    )
+    .unwrap();
+    let error = run_exb_with_options(&compiled, &file, "", options()).unwrap_err();
+    assert!(error.message.contains("matriz.lepc"), "{error}");
+    let explicit = compile_exb("m = importe \"./matriz\"\nescreva(m::value)", "main.lep").unwrap();
+    assert_eq!(
+        run_exb_with_options(&explicit, &file, "", options())
+            .unwrap()
+            .stdout,
+        "2\n"
+    );
+}
+
+#[test]
+fn imported_functions_keep_the_defining_modules_import_format() {
+    let t = Temp::new();
+    std::fs::write(t.0.join("value.lep"), "value = 11").unwrap();
+    std::fs::write(
+        t.0.join("value.lepc"),
+        compile_exb("value = 22", "value.lep").unwrap(),
+    )
+    .unwrap();
+    let function = r#"f = funcao() { avalie("m = importe \"./value\"\nm::value") }"#;
+    std::fs::write(t.0.join("functions.lep"), function).unwrap();
+    std::fs::write(
+        t.0.join("functions.lepc"),
+        compile_exb(function, "functions.lep").unwrap(),
+    )
+    .unwrap();
+    let source = "a = importe \"./functions.lepc\"\nb = importe \"./functions.lep\"\nescreva(a::f())\nescreva(b::f())\nm = importe \"./value\"\nescreva(m::value)";
+    let file = t.0.join("main.lep").to_str().unwrap().to_owned();
+    assert_eq!(
+        run_with_options(source, &file, "", options())
+            .unwrap()
+            .stdout,
+        "22\n11\n11\n"
+    );
+    let compiled = compile_exb(source, "main.lep").unwrap();
+    assert_eq!(
+        run_exb_with_options(&compiled, &file, "", options())
+            .unwrap()
+            .stdout,
+        "22\n11\n22\n"
+    );
+}

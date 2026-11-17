@@ -531,6 +531,7 @@ mod tests {
             span: Span::default(),
             file: String::new(),
             source: "".into(),
+            import_extension: "lep",
             doc: None,
         }))
     }
