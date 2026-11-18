@@ -8,6 +8,7 @@
 // 0 desenha tudo de uma vez.
 // Exemplo: velocidade(t, 0.02).
 
+_sistema = importe "sistema"
 _mat = importe "mat"
 _tela = importe "tela_grafica"
 _img = importe "imagem"
@@ -87,7 +88,7 @@ inicio
     _desenha(t)
     g = t:tela
     g._tela::mostre()
-    durma(t:pausa)
+    _sistema::durma(t:pausa)
     t
 fim
 

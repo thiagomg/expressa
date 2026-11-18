@@ -78,6 +78,7 @@ function readNativas() {
 function readDocs() {
   const files = {
     'nucleo.lep': null,
+    'sistema.lep': 'sistema',
     'tela.lep': 'tela',
     'mat.lep': 'mat',
     'matriz.lep': 'matriz',

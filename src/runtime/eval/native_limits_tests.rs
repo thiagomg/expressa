@@ -63,7 +63,11 @@ fn stop_is_polled_inside_sorting() {
 #[test]
 fn sleep_longer_than_deadline_can_be_stopped_immediately() {
     let start = Instant::now();
-    let (code, out, polls) = stopped("durma(100)\nescreva(1)", 1, Some(Duration::from_secs(2)));
+    let (code, out, polls) = stopped(
+        "importe \"sistema\"\ndurma(100)\nescreva(1)",
+        1,
+        Some(Duration::from_secs(2)),
+    );
     assert_eq!((code, out.as_str(), polls), (0, "", 1));
     assert!(start.elapsed() < Duration::from_secs(1));
 }

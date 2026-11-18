@@ -2059,7 +2059,7 @@ fn breakpoint_added_while_running_is_hit() {
 #[test]
 fn parar_interrupts_a_long_durma() {
     let started = std::time::Instant::now();
-    let (pauses, cmds, done) = debug_session("durma(30)\n");
+    let (pauses, cmds, done) = debug_session("importe \"sistema\"\ndurma(30)\n");
     pauses.recv_timeout(WAIT).expect("pause on start");
     cmds.send("continuar".into()).unwrap();
     std::thread::sleep(std::time::Duration::from_millis(100));
@@ -2075,7 +2075,7 @@ fn parar_interrupts_a_long_durma() {
         let mut input = io::Cursor::new("");
         let (mut out, mut err) = (Vec::new(), Vec::new());
         let r = run_with(
-            "durma(30)\n",
+            "importe \"sistema\"\ndurma(30)\n",
             "t.lep",
             Box::new(StopHook::new(rx)),
             &mut input,

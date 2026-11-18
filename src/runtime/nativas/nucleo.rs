@@ -57,12 +57,6 @@ impl Vm<'_, '_> {
         self.err.flush().map_err(|e| self.io_err(e, span))?;
         Ok(Value::Nada)
     }
-    pub(crate) fn bi_durma(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
-        self.expect_arity(args, 1, span)?;
-        let secs = self.expect_f64(&args[0], span)?;
-        self.sleep_secs(secs, span)?;
-        Ok(Value::Nada)
-    }
     pub(crate) fn bi_saia(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
         let code = match args {
             [] => 0,

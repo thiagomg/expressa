@@ -70,7 +70,7 @@ pub const NATIVAS: &[Nativa] = &[
     },
     Nativa {
         names: &["durma"],
-        module: None,
+        module: Some("sistema"),
     },
     Nativa {
         names: &["leia"],
@@ -174,7 +174,7 @@ pub const NATIVAS: &[Nativa] = &[
     },
     Nativa {
         names: &["ambiente"],
-        module: None,
+        module: Some("sistema"),
     },
     Nativa {
         names: &["ordene"],
@@ -1038,7 +1038,9 @@ mod tests {
         } else {
             ""
         };
-        format!("importe \"matriz\"\nimporte \"arquivo\"\nimporte \"mat\"\n{terminal}{src}")
+        format!(
+            "importe \"sistema\"\nimporte \"matriz\"\nimporte \"arquivo\"\nimporte \"mat\"\n{terminal}{src}"
+        )
     }
 
     fn run(src: &str) -> String {
@@ -1614,7 +1616,7 @@ escreva(b:linha)
 
         use crate::runtime::run_to_string_with;
         let err = run_to_string_with(
-            "durma(1)",
+            "importe \"sistema\"\ndurma(1)",
             "t.lep",
             "",
             None,

@@ -349,7 +349,7 @@ matriz = importe "matriz"      // alias: matriz::zeros, A.matriz::transposta()
 importe "./matriz"             // arquivo local se o nativo colidir
 ```
 
-Nativos: `matriz`, `arquivo`, `tela`, `mat`, `crono`, `cartesiano`, `tela_grafica`, `imagem`, `processo`. Nome nu sem `/` nem `.lep` procura o nativo; se existir também `matriz.lep` no mesmo diretório, `importe "matriz"` é erro. Dois `importe` achatados com o mesmo nome (`fundo`, `adicione`, …) é erro; use apelido.
+Nativos: `sistema`, `matriz`, `arquivo`, `tela`, `mat`, `crono`, `cartesiano`, `tela_grafica`, `imagem`, `processo`. Nome nu sem `/` nem `.lep` procura o nativo; se existir também `matriz.lep` no mesmo diretório, `importe "matriz"` é erro. Dois `importe` achatados com o mesmo nome (`fundo`, `adicione`, …) é erro; use apelido.
 
 ---
 
@@ -377,6 +377,7 @@ Módulos (`importe "…"`):
 | `mat` | `pi` `raiz` `aleatorio` `semente` `seno` `cosseno` `tangente` `arcoseno` `arcocosseno` `arcotangente` `arcotangente2` `radianos` `graus` `exp` `log` `log10` `potencia` `piso` `teto` `arredonde` |
 | `matriz` | `matriz` `transposta` `det` `identidade` `zeros` `uns` `cheia` `nlinhas` `ncolunas` `xy` |
 | `arquivo` | `leia_arquivo` `salve_arquivo` `adicione_arquivo` `leia_csv` `salve_csv` `existe` `eh_pasta` `liste` `crie_pasta` `apague_arquivo` `apague_pasta` `mova` `copie` `junte_caminho` `nome_do_arquivo` `pasta_de` `extensao` `pasta_atual` |
+| `sistema` | `durma` `ambiente` |
 | `crono` | `agora` `hoje` `data` `adicione` `dias_entre` `eh_bissexto` `formate_data` |
 | `cartesiano` | `documento` `grafico` `eixos` `plote` `adicione` `mostre` |
 | `tela_grafica` | `nova` `cor` `fundo` `linha` `circulo` `ponto` `retangulo` `texto` `imagem` `apague` `pixel` `como_imagem` `salve` `mostre` `evento` |

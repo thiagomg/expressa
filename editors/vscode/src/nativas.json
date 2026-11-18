@@ -48,6 +48,7 @@
     "mat",
     "matriz",
     "processo",
+    "sistema",
     "tela",
     "tela_grafica"
   ],
@@ -126,7 +127,7 @@
     {
       "name": "durma",
       "aliases": [],
-      "module": null,
+      "module": "sistema",
       "kind": "funcao",
       "signatures": [
         "durma(segundos)"
@@ -427,7 +428,7 @@
     {
       "name": "ambiente",
       "aliases": [],
-      "module": null,
+      "module": "sistema",
       "kind": "funcao",
       "signatures": [
         "ambiente(nome)"
@@ -953,6 +954,30 @@
       ],
       "summary": "Lê o arquivo; cada linha vira um texto (sem quebra de linha).",
       "doc": "Lê o arquivo; cada linha vira um texto (sem quebra de linha).\n\nArquivo vazio devolve []. Caminhos relativos partem da pasta do .lep.\n`~` e `~/pasta` são a pasta pessoal. Falhas de leitura são erros (se_falhar).\n\nExemplo: leia_arquivo(\"dados.txt\") se_falhar []"
+    },
+    {
+      "name": "leia_bytes",
+      "aliases": [],
+      "module": "arquivo",
+      "kind": "funcao",
+      "signatures": [
+        "leia_bytes()",
+        "leia_bytes(caminho)"
+      ],
+      "summary": "Lê os bytes sem modificar quebras de linha; devolve uma lista de números de 0 a 255. Com caminho, lê o arquivo (relativo à pasta do .lep). Sem caminho, lê a entrada padrão até o fim, incluindo bytes que não formam texto UTF-8. Na Aula, use um caminho. Exemplo: leia_bytes(\"dados.bin\")",
+      "doc": "Lê os bytes sem modificar quebras de linha; devolve uma lista de números de 0 a 255.\nCom caminho, lê o arquivo (relativo à pasta do .lep). Sem caminho, lê a entrada\npadrão até o fim, incluindo bytes que não formam texto UTF-8. Na Aula, use um caminho.\nExemplo: leia_bytes(\"dados.bin\")"
+    },
+    {
+      "name": "texto_utf8",
+      "aliases": [],
+      "module": "arquivo",
+      "kind": "funcao",
+      "signatures": [
+        "texto_utf8(bytes)",
+        "texto_utf8(bytes, modo)"
+      ],
+      "summary": "Converte uma lista de bytes em texto UTF-8. O modo padrão, :estrito, rejeita sequências inválidas. :substitua troca essas sequências pelo caractere �; :ignore descarta os bytes inválidos. Exemplo: texto_utf8([79, 108, 195, 161])",
+      "doc": "Converte uma lista de bytes em texto UTF-8.\nO modo padrão, :estrito, rejeita sequências inválidas. :substitua troca essas\nsequências pelo caractere �; :ignore descarta os bytes inválidos.\nExemplo: texto_utf8([79, 108, 195, 161])"
     },
     {
       "name": "salve_arquivo",

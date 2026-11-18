@@ -107,10 +107,12 @@ test('generated data covers the language', () => {
   assert.deepEqual(DATA.modules, [
     'arquivo',
     'cartesiano',
+    'crono',
     'imagem',
     'mat',
     'matriz',
     'processo',
+    'sistema',
     'tela',
     'tela_grafica',
   ]);

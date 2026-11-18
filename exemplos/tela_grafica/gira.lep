@@ -1,3 +1,4 @@
+importe "sistema"
 // Tartaruga andando e girando. Pressione Q ou feche a janela para sair.
 
 tela_grafica = importe "tela_grafica"

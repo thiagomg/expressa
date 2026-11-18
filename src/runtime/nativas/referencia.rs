@@ -49,6 +49,7 @@ impl BuiltinDoc {
     }
 }
 
+const SISTEMA: &str = include_str!("../../../docs/nativas/sistema.lep");
 const NUCLEO: &str = include_str!("../../../docs/nativas/nucleo.lep");
 #[cfg(feature = "terminal")]
 const TELA: &str = include_str!("../../../docs/nativas/tela.lep");
@@ -109,10 +110,9 @@ pub fn titulo_modulo(module: Option<&str>) -> String {
 /// Topic inside a module (`Texto`, `Data`, …). Empty when the module is one block.
 pub fn tema_de(module: Option<&str>, name: &str) -> &'static str {
     match (module, name) {
-        (
-            None,
-            "escreva" | "escreva_erro" | "leia" | "leia_linhas" | "saia" | "durma" | "argumentos",
-        ) => "Entrada e saída",
+        (None, "escreva" | "escreva_erro" | "leia" | "leia_linhas" | "saia" | "argumentos") => {
+            "Entrada e saída"
+        }
         (None, "numero" | "formato") => "Número",
         (
             None,
@@ -124,14 +124,13 @@ pub fn tema_de(module: Option<&str>, name: &str) -> &'static str {
             "mapa" | "conjunto" | "tamanho" | "primeiro" | "ultimo" | "infinito" | "remova"
             | "ordene",
         ) => "Coleção",
-        (None, "ambiente") => "Sistema",
-        (None, "clone" | "avalie" | "catalogo" | "ajuda" | "tipo" | "tipos" | "falhe" | "garanta") => {
-            "Linguagem"
-        }
+        (
+            None,
+            "clone" | "avalie" | "catalogo" | "ajuda" | "tipo" | "tipos" | "falhe" | "garanta",
+        ) => "Linguagem",
         (
             Some("tela"),
-            "cls" | "eh_terminal" | "colunas" | "linhas" | "posicao_cursor"
-            | "apague_linha",
+            "cls" | "eh_terminal" | "colunas" | "linhas" | "posicao_cursor" | "apague_linha",
         ) => "Tela",
         (Some("tela"), "pinte" | "fundo" | "negrito") => "Cor",
         (Some("tela"), "quadro" | "nova_linha" | "bloco" | "escreva_em") => "Quadro",
@@ -173,20 +172,14 @@ fn ordem_modulo(module: Option<&str>) -> u8 {
         Some("tela_grafica") => 7,
         Some("imagem") => 8,
         Some("processo") => 9,
-        _ => 10,
+        Some("sistema") => 10,
+        _ => 11,
     }
 }
 
 fn ordem_tema(module: Option<&str>, tema: &str) -> u8 {
     let temas: &[&str] = match module {
-        None => &[
-            "Entrada e saída",
-            "Número",
-            "Texto",
-            "Coleção",
-            "Sistema",
-            "Linguagem",
-        ],
+        None => &["Entrada e saída", "Número", "Texto", "Coleção", "Linguagem"],
         Some("tela") => &["Tela", "Cor", "Quadro"],
         Some("mat") => &["Aleatório", "Trig", "Análise", "Arredondar"],
         Some("arquivo") => &["Conteúdo", "Pastas e arquivos", "Caminho"],
@@ -218,6 +211,7 @@ fn load_all() -> Vec<BuiltinDoc> {
     let mut out = Vec::new();
     for (src, module) in [
         (NUCLEO, None),
+        (SISTEMA, Some("sistema")),
         #[cfg(feature = "terminal")]
         (TELA, Some("tela")),
         (MAT, Some("mat")),

@@ -46,16 +46,6 @@ falhe = funcao(descricao) { 0 }
 /// Exemplo: garanta(n > 0)
 garanta = funcao(condicao) { 0 }
 
-/// Espera o número de segundos (aceita fração: durma(0.5)).
-///
-/// durma(0) não espera. Na Aula, o tempo-limite do programa continua valendo.
-/// Devolve nada.
-///
-/// Erros: falta o argumento, valor que não é número, ou número negativo.
-///
-/// Exemplo: durma(1)
-durma = funcao(segundos) { 0 }
-
 /// Lê uma linha do teclado (sem o Enter). Prompt opcional.
 ///
 /// Sem argumentos, apenas espera a linha. Com um prompt (texto), imprime o
@@ -261,13 +251,6 @@ junte = funcao(lista, separador) { 0 }
 ///
 /// Exemplo: limpe("  x  ")
 limpe = funcao(texto) { 0 }
-
-/// Valor da variável de ambiente (HOME, PATH, …) como texto.
-///
-/// Variável que não existe é erro; use se_falhar para ter um padrão.
-///
-/// Exemplo: editor = ambiente("EDITOR") se_falhar "vim"
-ambiente = funcao(nome) { 0 }
 
 /// Cópia da lista em ordem crescente. Com chave, ordena por chave(item).
 ///

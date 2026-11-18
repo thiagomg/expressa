@@ -1,4 +1,5 @@
 #!/usr/bin/env expressa
+importe "sistema"
 importe "arquivo"
 
 mostrar_ajuda = funcao() {

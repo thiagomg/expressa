@@ -442,9 +442,9 @@ Com `importe "tela"`: `cls()` (também `limpe_tela()`) limpa a tela; `posicao_cu
 `colunas()` e `linhas()` são o tamanho da tela em caracteres (80×24 se não houver TTY). `nova_linha` é o texto `"\n"` no Unix e `"\r\n"` no Windows (valor, não função). `quadro(texto)` volta ao canto, escreve o texto, apaga o resto de cada linha e o que sobrar embaixo; as quebras viram `nova_linha` na saída. `bloco(linha, coluna)` devolve o mapa `{:linha, :coluna}` (base zero); `escreva_em(bloco, texto)` (UFCS `b.escreva_em("…")`) escreve uma linha nessa coluna, anda `:linha` e devolve o mesmo mapa. Sem `"\n"` no texto.
 `posicao_cursor()` (também `posição_cursor()`) consulta a posição de saída e devolve um mapa `:linha`, `:coluna`, base zero. `posicao_cursor(pos)` move para a posição do mapa sem apagá-la ou alterar o mapa. `posicao_cursor(linha, coluna, mostre)` move para coordenadas inteiras >= 0, base zero; `mostre` é bool e controla o flush após mover. É opcional, com padrão `verdadeiro`: `posicao_cursor(linha, coluna)` faz flush. Com `falso`, o movimento fica disponível para ser enviado junto da próxima escrita. A consulta sem argumentos e o movimento com mapa continuam fazendo flush. `casa()` foi removida. `apague_linha()` apaga a linha atual inteira e deixa o cursor na coluna zero, sem deslocar outras linhas. Na Aula, `leia()` começa na posição de saída e substitui o restante da linha, preservando as linhas abaixo; quebras visuais por ajuste de largura não contam como novas linhas. No terminal, a posição é relativa à tela visível, e a consulta pode falhar se não houver terminal ou suporte à consulta (tempo limite de 500 ms no Unix). Posições guardadas podem mudar com a rolagem.
 `pinte(texto, frente)` e `pinte(texto, frente, fundo)` devolvem o texto com cor ANSI e reset no fim. `fundo(texto, cor)` pinta só o papel; `negrito(texto)` deixa em negrito. Cores: `normal`, `preto`, `vermelho`, `verde`, `amarelo`, `azul`, `magenta`, `ciano`, `branco`.  
-`durma(segundos)` espera; `durma(0.5)` é meio segundo.
+Com `importe "sistema"`: `durma(segundos)` espera; `durma(0.5)` é meio segundo.
 
-`ambiente(nome)` devolve a variável de ambiente como texto (`ambiente("HOME")`). Se ela não existe, é erro: `ambiente("EDITOR") se_falhar { "vim" }`.
+Também em `sistema`, `ambiente(nome)` devolve a variável de ambiente como texto (`ambiente("HOME")`). Se ela não existe, é erro: `ambiente("EDITOR") se_falhar { "vim" }`.
 
 Com `importe "crono"`: `agora()` é a data e a hora locais: mapa `:ano`, `:mes`, `:dia`, `:hora`, `:minuto`, `:segundo`, `:dia_da_semana` (1 = domingo … 7 = sábado) e `:epoch` (segundos desde 1970). Fora do Linux/macOS o horário é UTC. `hoje()` é a data de hoje à meia-noite. `data(ano, mes, dia)` e `data(ano, mes, dia, hora, minuto, segundo)` constroem o mesmo mapa; data inválida é erro (`se_falhar`). `adicione(d, n, unidade)` soma `n` (positivo ou negativo) em `:dias`, `:meses`, `:anos`, `:horas`, `:minutos` ou `:segundos`; mês e ano prendem o dia no último dia do mês destino (31 de janeiro + 1 mês = último de fevereiro). `dias_entre(a, b)` é o número com sinal de dias de calendário, ignorando a hora. `eh_bissexto(ano)` (também `é_bissexto`) aceita o ano ou o mapa. `formate_data(data, modelo)` monta um texto com `%Y`, `%m`, `%d`, `%H`, `%M`, `%S` (dois dígitos, ano com quatro) e `%%`; outra letra depois de `%` é erro. A data é o mapa de `agora()` (bastam `:ano` … `:segundo`) ou um número de segundos (`:epoch`). `adicione` do `crono` tem 3 argumentos; o de `cartesiano` tem 2.
 
@@ -546,7 +546,7 @@ se n < 0 { falhe("negativo") }
 
 ## 16. Módulos / Importação
 
-A mesma forma vale para arquivos `.lep` e para os módulos nativos `matriz`, `arquivo`, `tela`, `mat`, `crono`, `cartesiano` e `processo`.
+A mesma forma vale para arquivos `.lep` e para os módulos nativos `sistema`, `matriz`, `arquivo`, `tela`, `mat`, `crono`, `cartesiano` e `processo`.
 
 ```text
 mat = importe "matematica"     // alias: nomes em mat::

@@ -162,7 +162,7 @@ importe "matematica"      // funções disponíveis sem prefixo
 soma(10, 5)
 ```
 
-Os módulos nativos incluem `tela`, `mat`, `matriz`, `arquivo`, `crono`, `cartesiano`, `tela_grafica`, `imagem` e `processo`. Eles fazem parte da linguagem.
+Os módulos nativos incluem `tela`, `mat`, `matriz`, `arquivo`, `sistema`, `crono`, `cartesiano`, `tela_grafica`, `imagem` e `processo`. Eles fazem parte da linguagem.
 
 Em uma importação sem `/` nem `.lep`, a Expressa procura um módulo nativo. Se houver um arquivo local com o mesmo nome, a importação é ambígua e gera erro. Use `importe "./matriz"` para escolher explicitamente o arquivo local. Os caminhos de importação são relativos à pasta do arquivo que faz o `importe`.
 
@@ -241,14 +241,6 @@ Recebe uma condição cujo valor deve ser `verdadeiro` ou `falso`. Se ela for fa
 
 ```text
 garanta(n > 0)
-```
-
-### `durma(segundos)`
-
-Pausa a execução pelo número de segundos informado. Aceita valores fracionários, como `durma(0.5)` para meio segundo. `durma(0)` não espera.
-
-```text
-durma(1)
 ```
 
 ### `leia()` / `leia(mensagem)`
@@ -460,10 +452,6 @@ Retorna uma cópia da lista em ordem crescente. Os itens devem ser todos número
 ### `comeca_com(texto, prefixo)` / `começa_com` · `termina_com(texto, sufixo)`
 
 Retornam `verdadeiro` se o texto começa com o prefixo ou termina com o sufixo informado, respectivamente; caso contrário, retornam `falso`.
-
-### `ambiente(nome)`
-
-Retorna o valor de uma variável de ambiente. Se ela não existir, gera um erro. Você pode fornecer um valor alternativo com `ambiente("EDITOR") se_falhar { "vim" }`.
 
 ### Listas e fatias
 
@@ -715,6 +703,25 @@ Eleva a base ao expoente informado, que pode ser fracionário. Zero elevado a ze
 ### `piso(x)` · `teto(x)` · `arredonde(x)`
 
 `piso` retorna o maior inteiro menor ou igual ao valor; `teto` retorna o menor inteiro maior ou igual ao valor; `arredonde` retorna o inteiro mais próximo. Quando o valor fica exatamente entre dois inteiros, `arredonde` escolhe o mais distante de zero: `arredonde(1.5)` retorna 2 e `arredonde(-1.5)` retorna -2.
+
+---
+
+## `importe "sistema"`
+
+As funções deste módulo exigem `importe "sistema"`.
+
+### `durma(segundos)`
+
+Pausa a execução pelo número de segundos informado. Aceita valores fracionários, como `durma(0.5)` para meio segundo. `durma(0)` não espera.
+
+```text
+importe "sistema"
+durma(1)
+```
+
+### `ambiente(nome)`
+
+Retorna o valor de uma variável de ambiente. Se ela não existir, gera um erro. Você pode fornecer um valor alternativo com `ambiente("EDITOR") se_falhar { "vim" }`.
 
 ---
 

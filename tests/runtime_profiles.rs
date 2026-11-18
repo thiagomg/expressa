@@ -62,6 +62,7 @@ fn all_common_workloads_run_from_source_and_exb_in_every_profile() {
 #[test]
 fn native_registration_help_and_imports_agree_with_enabled_features() {
     for (module, enabled) in [
+        ("sistema", true),
         ("tela", cfg!(feature = "terminal")),
         ("cartesiano", cfg!(feature = "graphics")),
         ("tela_grafica", cfg!(feature = "graphics")),
@@ -88,6 +89,36 @@ fn native_registration_help_and_imports_agree_with_enabled_features() {
             let err = result.unwrap_err();
             assert!(err.message.contains("indisponível neste build"), "{err}");
             assert_eq!(err.span.line, 1);
+        }
+    }
+}
+
+#[test]
+fn system_functions_require_import_and_support_aliases_in_each_backend() {
+    for backend in [ExecutionBackend::Bytecode, ExecutionBackend::Ast] {
+        if !backend.is_available() {
+            continue;
+        }
+        let opts = || ExecutionOptions {
+            backend,
+            ..options()
+        };
+        for name in ["durma", "ambiente"] {
+            let source = format!("{name}({})", if name == "durma" { "0" } else { "\"PATH\"" });
+            assert!(run_with_options(&source, "system.lep", "", opts()).is_err());
+            let doc = builtin_docs().iter().find(|d| d.name == name).unwrap();
+            assert_eq!(doc.module.as_deref(), Some("sistema"));
+        }
+        for source in [
+            "importe \"sistema\"\ndurma(0)\nescreva(tipo(ambiente(\"PATH\")))",
+            "s = importe \"sistema\"\ns::durma(0)\nescreva(tipo(s::ambiente(\"PATH\")))",
+        ] {
+            assert_eq!(
+                run_with_options(source, "system.lep", "", opts())
+                    .unwrap()
+                    .stdout,
+                "texto\n"
+            );
         }
     }
 }
