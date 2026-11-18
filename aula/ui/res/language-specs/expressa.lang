@@ -53,6 +53,7 @@
       <suffix>(?![A-Za-zÀ-ÿ0-9_])</suffix>
       <keyword>verdadeiro</keyword>
       <keyword>falso</keyword>
+      <keyword>nada</keyword>
     </context>
     <context id="keyword" style-ref="keyword">
       <prefix>(?&lt;![A-Za-zÀ-ÿ0-9_])</prefix>
@@ -128,9 +129,11 @@
       <keyword>como_imagem</keyword>
       <keyword>salve</keyword>
       <keyword>avalie</keyword>
-      <keyword>catalogo</keyword>
+      <keyword>modulos</keyword>
+      <keyword>funcoes</keyword>
       <keyword>ajuda</keyword>
-      <keyword>catálogo</keyword>
+      <keyword>módulos</keyword>
+      <keyword>funções</keyword>
       <keyword>mapa</keyword>
       <keyword>conjunto</keyword>
       <keyword>matriz</keyword>

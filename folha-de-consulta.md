@@ -34,7 +34,7 @@ chmod +x prog.lep && ./prog.lep
 | matriz | `matriz([[1, 2], [3, 4]])` só números; `importe "matriz"` |
 | conjunto | `conjunto([:ana, 1])` valores únicos |
 
-Não há literal `nada`. `escreva` e gravar arquivo devolvem `nada`.
+`nada` representa ausência de valor. Pode ser atribuído, comparado e retornado explicitamente. `escreva` e gravar arquivo também devolvem `nada`.
 
 ---
 
@@ -142,10 +142,11 @@ escreva(soma(10, 5))           // 15
 
 avalie("2 + 3 * 4")           // 14  (usa x, funções… do escopo atual)
 escreva(avalie(leia("> ")) se_falhar { "conta inválida" })
-catalogo()                     // nativas, funcao do programa, módulos
-catalogo(c)  catalogo("matriz")  // mapa, módulo ou função
+modulos()                      // imprime módulos, incluindo arquivos importados
+funcoes()  funcoes("matriz")    // imprime funções e documentação
+modulos(:dados)                // mapas com :nome e :funcoes
+funcoes(nada, :dados)             // mapas com :nome, :args e :doc
 ajuda("escreva")  ajuda("matriz::zeros")
-                               // no REPL: ls   ls matriz   ls c
 
 busca = funcao(xs, alvo) {
     para x em xs {
@@ -170,7 +171,7 @@ xs += [50]                     // xs = xs + [50]
 xs = xs.remova(2)               // sem o índice 2
 xs = xs.remova(2..4)            // sem 2 e 3
 tamanho(xs)  primeiro(xs)  ultimo(xs)
-0..3  1..=2  ..3               // faixa: gera 0, 1, 2
+0..3  1..=2  ..3               // intervalo: gera 0, 1, 2
 infinito(0..)                  // verdadeiro; tamanho(0..) é erro
 
 t = "  Maria Silva  "
@@ -349,7 +350,7 @@ matriz = importe "matriz"      // alias: matriz::zeros, A.matriz::transposta()
 importe "./matriz"             // arquivo local se o nativo colidir
 ```
 
-Nativos: `matriz`, `arquivo`, `tela`, `mat`, `crono`, `cartesiano`, `tela_grafica`, `imagem`, `processo`. Nome nu sem `/` nem `.lep` procura o nativo; se existir também `matriz.lep` no mesmo diretório, `importe "matriz"` é erro. Dois `importe` achatados com o mesmo nome (`fundo`, `adicione`, …) é erro; use apelido.
+Nativos: `sistema`, `matriz`, `arquivo`, `tela`, `mat`, `crono`, `cartesiano`, `tela_grafica`, `imagem`, `processo`. Nome nu sem `/` nem `.lep` procura o nativo; se existir também `matriz.lep` no mesmo diretório, `importe "matriz"` é erro. Dois `importe` achatados com o mesmo nome (`fundo`, `adicione`, …) é erro; use apelido.
 
 ---
 
@@ -362,7 +363,7 @@ Núcleo (sempre no escopo):
 | `escreva` `escreva_erro` `saia` `falhe` `garanta` `durma` | imprimir / encerrar / erro / esperar |
 | `leia` `leia_linhas` | teclado / pipe |
 | `argumentos` | lista (não é função) |
-| `numero` `número` `formato` `avalie` `catalogo` `ajuda` | número / executar texto / listar / ficha |
+| `numero` `número` `formato` `avalie` `modulos` `funcoes` `ajuda` | número / executar texto / listar / ficha |
 | `mapa` `conjunto` | construtores |
 | `tamanho` `primeiro` `ultimo` | coleção |
 | `maiuscula` `minuscula` `sem_acento` `remova` `substitua` `procure` `separe` `junte` `limpe` `formate` | texto / lista / mapa / conjunto |
@@ -377,6 +378,7 @@ Módulos (`importe "…"`):
 | `mat` | `pi` `raiz` `aleatorio` `semente` `seno` `cosseno` `tangente` `arcoseno` `arcocosseno` `arcotangente` `arcotangente2` `radianos` `graus` `exp` `log` `log10` `potencia` `piso` `teto` `arredonde` |
 | `matriz` | `matriz` `transposta` `det` `identidade` `zeros` `uns` `cheia` `nlinhas` `ncolunas` `xy` |
 | `arquivo` | `leia_arquivo` `salve_arquivo` `adicione_arquivo` `leia_csv` `salve_csv` `existe` `eh_pasta` `liste` `crie_pasta` `apague_arquivo` `apague_pasta` `mova` `copie` `junte_caminho` `nome_do_arquivo` `pasta_de` `extensao` `pasta_atual` |
+| `sistema` | `durma` `ambiente` |
 | `crono` | `agora` `hoje` `data` `adicione` `dias_entre` `eh_bissexto` `formate_data` |
 | `cartesiano` | `documento` `grafico` `eixos` `plote` `adicione` `mostre` |
 | `tela_grafica` | `nova` `cor` `fundo` `linha` `circulo` `ponto` `retangulo` `texto` `imagem` `apague` `pixel` `como_imagem` `salve` `mostre` `evento` |
@@ -402,7 +404,7 @@ Abre `.lep` em `expressa-mode` (palavras-chave, nativas, comentários, strings).
 
 ```text
 expressa                  // ↑ ↓ histórico
-ajuda    ajuda funcoes    ajuda linguagem    ajuda escreva    ajuda matriz::zeros
+modulos()    funcoes()    funcoes("matriz")    ajuda("escreva")
 cls                       // comando do REPL: limpa a tela
 sair
 ```

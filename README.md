@@ -35,12 +35,12 @@ expressa prog.lep        arquivo
 expressa debug prog.lep  depurador
 expressa compilar prog.lep -o prog.lepc
 expressa prog.lepc        bytecode previamente compilado
-lepc prog.lepc [args…]    runner dedicado de programas compilados
+lep-exec prog.lepc [args…]    runner dedicado de programas compilados
 ```
 
 No REPL: `2 + 3`, `escreva("oi")`, `ajuda escreva`. `sair` ou Ctrl+D encerra.
 
-Compilar: `cargo build --release` (Rust, edition 2024; CMake e compilador C/C++ para o SDL2 incluído no build gráfico). Binários em `target/release/`, incluindo o runner `lepc`, compilado por padrão e incluído nos pacotes `.deb` e no instalador `.exe`. A pipeline empacota com `--profile release-lto` (`target/release-lto/`).
+Compilar: `cargo build --release` (Rust, edition 2024; CMake e compilador C/C++ para o SDL2 incluído no build gráfico). Binários em `target/release/`, incluindo o runner `lep-exec`, compilado por padrão e incluído nos pacotes `.deb` e no instalador `.exe`. A pipeline empacota com `--profile release-lto` (`target/release-lto/`).
 
 No Windows (MSVC x64), `cargo build --release --all` compila também a Aula.
 Com os pacotes nativos extraídos em `deps/gtk/` e `deps/protoc/`
@@ -50,7 +50,7 @@ automaticamente. Para executar a interface, ative também as DLLs no PATH:
 
 O backend padrão executa bytecode, sem JIT. Para comparar com o interpretador AST de referência: `expressa --backend ast prog.lep`; `--backend bytecode` seleciona explicitamente a VM. A opção `--ast` apenas imprime a árvore sintática. Veja [a revisão da migração](lang-tasks/BYTECODE-REVIEW.md) e [a comparação de CPU e memória](benchmarks/AST-VS-BYTECODE.md).
 
-O formato [EXB v2](docs/exb.md) inclui fonte para diagnósticos, valida instruções no carregamento e dispensa o `.lep` original. Veja [a medição de CPU e memória](benchmarks/EXB-V1-REVIEW.md).
+O formato [EXB v2](docs/exb.md) inclui fonte para diagnósticos, valida instruções no carregamento e dispensa o `.lep` original. Imports sem extensão seguem o formato do módulo: `.lep` procura `.lep` e `.lepc` procura `.lepc`. Para distribuir, compile também os módulos e preserve as pastas. Veja [a medição de CPU e memória](benchmarks/EXB-V1-REVIEW.md).
 
 Um [perfil mínimo de compilação](docs/runtime-profiles.md) mantém bytecode, EXB e `avalie`, excluindo o executor AST, gráficos, processos e terminal interativo com `--no-default-features`. O build padrão continua completo.
 

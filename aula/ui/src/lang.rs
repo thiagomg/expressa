@@ -33,6 +33,7 @@ pub const KEYWORDS: &[&str] = &[
     "contém",
     "verdadeiro",
     "falso",
+    "nada",
     "se_falhar",
     "retorne",
     "pare",
@@ -661,7 +662,7 @@ pub fn word_at(line: &str, col: usize) -> Option<Word> {
 /// Expressa program whose stdout is the general catalog (natives, imported
 /// native modules, and top-level `funcao` from `text`).
 #[cfg(test)]
-pub fn catalogo_fonte(text: &str) -> String {
+pub fn descoberta_fonte(text: &str) -> String {
     let mut src = String::new();
     for imp in parse_imports(text) {
         if native_module(&imp.spec).is_none() {
@@ -690,26 +691,17 @@ pub fn catalogo_fonte(text: &str) -> String {
     }
     src.push_str(
         r#"
-para f em catalogo() {
-    sig = f:nome
-    se f:tipo != "modulo" e f:args != "" {
-        sig = sig + "(" + f:args + ")"
-    }
-    extra = ""
-    se f:modulo != "" e f:tipo != "modulo" {
-        extra = "  " + f:modulo
-    }
-    escreva(sig + "    " + f:tipo + extra)
-}
+modulos()
+funcoes()
 "#,
     );
     src
 }
 
-/// Run [`catalogo_fonte`] in the interpreter; the editor shows this text.
+/// Run [`descoberta_fonte`] in the interpreter; the editor shows this text.
 #[cfg(test)]
-pub fn catalogo_texto(text: &str) -> String {
-    expressa::runtime::run_to_string(&catalogo_fonte(text), "<catalogo.lep>")
+pub fn descoberta_texto(text: &str) -> String {
+    expressa::runtime::run_to_string(&descoberta_fonte(text), "<descoberta.lep>")
         .unwrap_or_else(|e| format!("ajuda: {}", e.message))
 }
 
@@ -766,6 +758,7 @@ mod tests {
                 "mat",
                 "matriz",
                 "processo",
+                "sistema",
                 "tela",
                 "tela_grafica",
             ]
@@ -776,15 +769,14 @@ mod tests {
     }
 
     #[test]
-    fn catalogo_texto_comes_from_expressa() {
-        let geral = catalogo_texto("");
+    fn descoberta_texto_comes_from_expressa() {
+        let geral = descoberta_texto("");
         assert!(geral.contains("escreva"), "{geral}");
-        assert!(geral.contains("nativa"), "{geral}");
+        assert!(geral.contains("Imprime"), "{geral}");
         assert!(geral.contains("matriz"), "{geral}");
-        let com_fn = catalogo_texto("soma = funcao(a, b) { a + b }\n");
+        let com_fn = descoberta_texto("soma = funcao(a, b) { a + b }\n");
         assert!(com_fn.contains("soma(a, b)"), "{com_fn}");
-        assert!(com_fn.contains("funcao"), "{com_fn}");
-        let com_imp = catalogo_texto("importe \"tela\"\n");
+        let com_imp = descoberta_texto("importe \"tela\"\n");
         assert!(com_imp.contains("pinte"), "{com_imp}");
     }
 

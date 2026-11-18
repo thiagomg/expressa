@@ -23,7 +23,7 @@
 (defconst expressa-builtins
   '("escreva" "escreva_erro" "saia" "falhe" "garanta" "cls" "limpe_tela" "quadro" "bloco" "escreva_em" "colunas" "linhas" "nova_linha" "durma" "pinte" "fundo" "negrito" "leia" "leia_linhas"
     "eh_terminal" "é_terminal" "argumentos"
-    "numero" "número" "formato" "formate" "avalie" "catalogo" "catálogo" "ajuda" "tipo" "tipos" "raiz" "aleatorio" "aleatório" "semente"
+    "numero" "número" "formato" "formate" "avalie" "modulos" "módulos" "funcoes" "funções" "ajuda" "tipo" "tipos" "raiz" "aleatorio" "aleatório" "semente"
     "nova" "linha" "circulo" "círculo" "ponto" "retangulo" "retângulo" "texto" "imagem" "apague" "pixel" "como_imagem" "salve" "evento"
     "carregue" "rotacione" "redimensione" "largura" "altura"
     "pi" "seno" "sen" "cosseno" "cos" "tangente" "tan" "arcoseno" "arcocosseno" "arcotangente" "arcotangente2"
@@ -42,7 +42,7 @@
     "documento" "grafico" "eixos" "plote" "adicione" "mostre"))
 
 (defconst expressa-constants
-  '("verdadeiro" "falso"))
+  '("verdadeiro" "falso" "nada"))
 
 (defconst expressa-font-lock-keywords
   `(("^#!.*" . font-lock-comment-face)

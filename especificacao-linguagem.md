@@ -23,13 +23,16 @@ Todo bloco (`inicio`/`fim` ou `{`/`}`) é uma expressão; seu resultado é o val
 | `numero` | `10`, `3.14`, `-8`, `0`, `1_000` (decimal; `formato("float")` liga IEEE-754) |
 | `texto`  | `"olá"`, `"123"`                  |
 | `bool`   | `verdadeiro`, `falso`             |
-| `faixa`  | `0..3`, `1..=2`, `5..`            |
+| `nada`   | `nada` (ausência de valor)        |
+| `intervalo`  | `0..3`, `1..=2`, `5..`            |
 
-Tipos compostos: **lista**, **par**, **mapa**, **conjunto**, **matriz**, **imagem** e **faixa**.
+`nada` é um literal reservado de ausência de valor. Pode ser atribuído a variáveis, comparado com `==`/`!=`, usado em coleções e retornado explicitamente. Não pode ser usado como identificador.
+
+Tipos compostos: **lista**, **par**, **mapa**, **conjunto**, **matriz**, **imagem** e **intervalo**.
 
 Os contextos que exigem inteiro (chaves numéricas, elementos numéricos de conjuntos, contadores e índices) usam inteiros com sinal de 64 bits: −9223372036854775808…9223372036854775807. O tipo `numero` aceita valores fora desse intervalo; ser matematicamente inteiro não garante que um valor seja aceito nesses contextos. Dimensões e índices também devem caber no tamanho de endereço da plataforma e nos limites do host. Conversões fora do intervalo numérico produzem erro, nunca substituem o valor por zero. Um `..=` cujo teto é o maior inteiro (ou maior) diz `o teto de ..= passa do maior inteiro`, sem imprimir o sucessor que o programa não escreveu. `_` entre dígitos é separador (`1_000`, `3.14_15`); `_` no fim, duplicado ou ao lado do ponto é erro. Não há notação científica (`1e5` é erro). Mensagens de erro escrevem números no padrão ativo (`2,5` em pt-BR); CSV e argumentos de processo continuam com ponto.
 
-`tipo(valor)` devolve o nome do tipo como texto (`"numero"`, `"faixa"`, `"texto"`, `"bool"`, `"lista"`, `"par"`, `"mapa"`, `"conjunto"`, `"matriz"`, `"imagem"`, `"funcao"`, `"modulo"`, `"processo"`, `"nada"`). Os nomes são os mesmos das mensagens de erro (sem acento). `escreva` e funções do aluno são `"funcao"`. `tipos()` lista esses nomes.
+`tipo(valor)` devolve o nome do tipo como texto (`"numero"`, `"intervalo"`, `"texto"`, `"bool"`, `"lista"`, `"par"`, `"mapa"`, `"conjunto"`, `"matriz"`, `"imagem"`, `"funcao"`, `"modulo"`, `"processo"`, `"nada"`). Os nomes são os mesmos das mensagens de erro (sem acento). `escreva` e funções do aluno são `"funcao"`. `tipos()` lista esses nomes.
 
 ---
 
@@ -202,7 +205,7 @@ fim
 
 A condição de `enquanto` tem que ser `verdadeiro` ou `falso`. O corpo usa `inicio`/`fim` ou `{`/`}`.
 
-`para x em` percorre **lista**, **texto** (um caractere por vez), **conjunto** ou **faixa**. `para i em 5` é erro (use `0..5` ou `1..=5`). `para i em 0..` é um laço sem teto (saia com `pare` ou o tempo-limite da VM).
+`para x em` percorre **lista**, **texto** (um caractere por vez), **conjunto** ou **intervalo**. `para i em 5` é erro (use `0..5` ou `1..=5`). `para i em 0..` é um laço sem teto (saia com `pare` ou o tempo-limite da VM).
 
 O antigo `para i de … até …` saiu da linguagem.
 
@@ -240,7 +243,7 @@ inicio
 fim
 ```
 
-`retorne` só vale **dentro de uma função**. `retorne` sozinho devolve `nada`. O valor, se houver, fica **na mesma linha**. Não é capturado por `se_falhar`.
+`retorne` só vale **dentro de uma função**. `retorne` sozinho devolve `nada`; `retorne nada` é equivalente. O valor, se houver, fica **na mesma linha**. Não é capturado por `se_falhar`.
 
 `se` usado **como valor** (`x = se …`, argumento ou valor de `retorne`) precisa de `senao`. Um `se` no fim do corpo da função continua sendo comando: pode omitir `senao` e devolve `nada` se nenhum ramo for executado. Como comando, o `senao` é opcional:
 
@@ -302,17 +305,17 @@ ys[0][0] = 2
 escreva(xs[0][0])    // 2: o elemento aninhado é compartilhado
 ```
 
-### 9.2. Faixas
+### 9.2. Intervalos
 
 `0..3` é um gerador de inteiros, não uma lista. O fim de `..` é **exclusivo**: `0..3` gera 0, 1, 2. `..=` e o começo omitido são açúcar: `0..=2` e `..3` viram `0..3`; `0..` e `..` são infinitos a partir de 0; `5..` a partir de 5. `1..3 == 1..=2`. `escreva` imprime a forma exclusiva (`escreva(0..=2)` é `0..3`).
 
-Limites são inteiros de 64 bits, avaliados uma vez. `n..=m` é `n..(m+1)`; se `m+1` não cabe em i64, é erro. Não há passo. Faixas vazias (`3..3`, `3..1`) não geram nada. O teto, se houver, fica na mesma linha do `..` (`r = 5..` na linha seguinte começa outro comando).
+Limites são inteiros de 64 bits, avaliados uma vez. `n..=m` é `n..(m+1)`; se `m+1` não cabe em i64, é erro. Não há passo. Intervalos vazios (`3..3`, `3..1`) não geram nada. O teto, se houver, fica na mesma linha do `..` (`r = 5..` na linha seguinte começa outro comando).
 
-Núcleo: `tamanho(3..5)` é 2; `tamanho(0..)` é erro (`se_falhar`). `primeiro(3..5)` é 3; `ultimo(3..5)` é 4 (último gerado). `primeiro(0..)` é 0; `ultimo(0..)` é erro. `infinito(r)` é verdadeiro só sem teto; em outro tipo é erro. Reconstrua uma faixa finita não vazia com `primeiro(r)..(ultimo(r)+1)`.
+Núcleo: `tamanho(3..5)` é 2; `tamanho(0..)` é erro (`se_falhar`). `primeiro(3..5)` é 3; `ultimo(3..5)` é 4 (último gerado). `primeiro(0..)` é 0; `ultimo(0..)` é erro. `infinito(r)` é verdadeiro só sem teto; em outro tipo é erro. Reconstrua um intervalo finito não vazio com `primeiro(r)..(ultimo(r)+1)`.
 
-Igualdade é canônica (começo + teto exclusivo): `3..3 != 5..5`. Só `==` e `!=`. Indexar uma faixa, `contem` e `+` entre faixas são erro.
+Igualdade é canônica (começo + teto exclusivo): `3..3 != 5..5`. Só `==` e `!=`. Indexar um intervalo, `contem` e `+` entre intervalos são erro.
 
-Fatia e `remova` usam a mesma faixa. `xs[0..2]` são os índices 0 e 1. Teto além do tamanho corta: `xs[0..1000]` numa lista de 5 devolve os 5. Sem teto, a fatia vai até o fim da lista ou do texto: `"thiago"[0..]` é `"thiago"`, `"thiago"[2..]` é `"iago"`, `xs[..]` é a coleção inteira. Vale também com a faixa guardada (`r = 2..; xs[r]`). Começo negativo é erro; começo além do tamanho devolve vazio. `xs.remova(1..)` continua erro: `remova` exige teto. `tamanho(0..)` também: a faixa sem teto não tem tamanho; quem limita a fatia é a coleção.
+Fatia e `remova` usam o mesmo intervalo. `xs[0..2]` são os índices 0 e 1. Teto além do tamanho corta: `xs[0..1000]` numa lista de 5 devolve os 5. Sem teto, a fatia vai até o fim da lista ou do texto: `"thiago"[0..]` é `"thiago"`, `"thiago"[2..]` é `"iago"`, `xs[..]` é a coleção inteira. Vale também com o intervalo guardado (`r = 2..; xs[r]`). Começo negativo é erro; começo além do tamanho devolve vazio. `xs.remova(1..)` continua erro: `remova` exige teto. `tamanho(0..)` também: o intervalo sem teto não tem tamanho; quem limita a fatia é a coleção.
 
 ```text
 para i em 0..tamanho(xs) { escreva(xs[i]) }
@@ -325,6 +328,8 @@ xs[0..=2]                      // [10, 20, 30]
 `chave -> valor` é um **par**. Campos: `p:chave` e `p:valor`. Chaves de par são texto, número inteiro ou bool (`:nome` é o texto `"nome"`). Palavras-chave e textos com espaço continuam com aspas. Um par **não** serve de chave de mapa nem de elemento de conjunto. Cada leitura copia a cadeia de pares. `x = 1 -> x` repetido fica quadrático: o par novo carrega uma cópia do anterior.
 
 `mapa` e `conjunto` são funções do núcleo. `mapa()` (ou `mapa([])`) é o mapa vazio. `mapa(xs)` recebe **uma** lista de pares; chaves duplicadas são erro.
+
+Mapas usam tabelas hash, sem preservar a ordem de inserção. A igualdade compara as chaves e seus valores, independentemente da ordem. A impressão organiza as chaves por tipo (texto, inteiro, bool), em ordem crescente dentro de cada tipo. Essa ordenação da impressão não altera a ordem interna da tabela.
 
 ```text
 devs = [:developer -> "Thiago", "co-developer" -> "Grok"]
@@ -355,7 +360,7 @@ Campo como valor de um par: `:op -> (obj:campo)`. `{ }` e `inicio`/`fim` são s�
 
 ## 11. Conjuntos
 
-Valores únicos (texto, número inteiro ou bool). Sem repetir, sem ordem de índice. `conjunto()` (ou `conjunto([])`) é vazio. `conjunto(xs)` recebe uma lista e descarta duplicatas na ordem de inserção.
+Valores únicos (texto, número inteiro ou bool). Sem repetir, sem ordem de índice. `conjunto()` (ou `conjunto([])`) é vazio. `conjunto(xs)` recebe uma lista e descarta duplicatas. O armazenamento usa tabela hash: a iteração de `para` não tem ordem garantida. A impressão ordena os elementos pelos mesmos critérios das chaves de mapa. A igualdade depende apenas dos elementos.
 
 ```text
 s = conjunto([:ana, :bia, 1])
@@ -435,16 +440,16 @@ cat nomes.txt | expressa grep.lep Thiago
 
 `avalie(texto)` executa o texto como código Expressa no escopo atual e devolve o último valor. `avalie("2 + 3 * 4")` vale `14`. Erros de sintaxe ou de execução (por exemplo divisão por zero) são capturáveis com `se_falhar`.
 
-`catalogo()` (também `catálogo()`) devolve uma lista de mapas com as funções e módulos visíveis: `:nome`, `:tipo` (`nativa`, `funcao`, `modulo`), `:args`, `:modulo`. `catalogo(alvo)` inspeciona um mapa, um módulo, uma função ou o nome de um módulo nativo (`catalogo("matriz")`). No REPL, `ls` formata o catálogo; `ls matriz` e `ls c` inspecionam o alvo. Uma `funcao` impressa mostra os parâmetros: `<funcao(x)>`.
+`modulos()` (também `módulos()`) imprime o núcleo, os módulos nativos disponíveis e os arquivos já importados, sem duplicar um arquivo importado com vários apelidos. `modulos(:dados)` devolve uma lista de mapas com `:nome` (texto) e `:funcoes` (lista estruturada de funções). Arquivos usam o primeiro caminho importado como nome; nomes em conflito usam caminhos absolutos. `funcoes()` (também `funções()`) imprime as funções públicas visíveis; `funcoes(alvo)` consulta o nome ou objeto de um módulo. `nada` indica o escopo atual; `"nucleo"` indica o núcleo. `funcoes(alvo, :dados)` devolve uma lista de mapas com `:nome` (texto), `:args` (lista de textos) e `:doc` (documentação completa, ou `""`). As listas seguem ordem alfabética; funções com nome iniciado por `_` ficam de fora. As versões de impressão devolvem `nada`. `funcoes(:dados)` é inválido: use `funcoes(nada, :dados)`. Não há comandos especiais `ls`, `ajuda` ou `catalogo` no REPL; `ajuda(alvo)` continua sendo uma função.
 
 `escreva` vai para a saída padrão (stdout). `escreva_erro` vai para a saída de erro (stderr).  
 Com `importe "tela"`: `cls()` (também `limpe_tela()`) limpa a tela; `posicao_cursor(0, 0, falso)` manda o cursor ao canto sem apagar — use no lugar de `cls()` em animações para não piscar.
 `colunas()` e `linhas()` são o tamanho da tela em caracteres (80×24 se não houver TTY). `nova_linha` é o texto `"\n"` no Unix e `"\r\n"` no Windows (valor, não função). `quadro(texto)` volta ao canto, escreve o texto, apaga o resto de cada linha e o que sobrar embaixo; as quebras viram `nova_linha` na saída. `bloco(linha, coluna)` devolve o mapa `{:linha, :coluna}` (base zero); `escreva_em(bloco, texto)` (UFCS `b.escreva_em("…")`) escreve uma linha nessa coluna, anda `:linha` e devolve o mesmo mapa. Sem `"\n"` no texto.
 `posicao_cursor()` (também `posição_cursor()`) consulta a posição de saída e devolve um mapa `:linha`, `:coluna`, base zero. `posicao_cursor(pos)` move para a posição do mapa sem apagá-la ou alterar o mapa. `posicao_cursor(linha, coluna, mostre)` move para coordenadas inteiras >= 0, base zero; `mostre` é bool e controla o flush após mover. É opcional, com padrão `verdadeiro`: `posicao_cursor(linha, coluna)` faz flush. Com `falso`, o movimento fica disponível para ser enviado junto da próxima escrita. A consulta sem argumentos e o movimento com mapa continuam fazendo flush. `casa()` foi removida. `apague_linha()` apaga a linha atual inteira e deixa o cursor na coluna zero, sem deslocar outras linhas. Na Aula, `leia()` começa na posição de saída e substitui o restante da linha, preservando as linhas abaixo; quebras visuais por ajuste de largura não contam como novas linhas. No terminal, a posição é relativa à tela visível, e a consulta pode falhar se não houver terminal ou suporte à consulta (tempo limite de 500 ms no Unix). Posições guardadas podem mudar com a rolagem.
 `pinte(texto, frente)` e `pinte(texto, frente, fundo)` devolvem o texto com cor ANSI e reset no fim. `fundo(texto, cor)` pinta só o papel; `negrito(texto)` deixa em negrito. Cores: `normal`, `preto`, `vermelho`, `verde`, `amarelo`, `azul`, `magenta`, `ciano`, `branco`.  
-`durma(segundos)` espera; `durma(0.5)` é meio segundo.
+Com `importe "sistema"`: `durma(segundos)` espera; `durma(0.5)` é meio segundo.
 
-`ambiente(nome)` devolve a variável de ambiente como texto (`ambiente("HOME")`). Se ela não existe, é erro: `ambiente("EDITOR") se_falhar { "vim" }`.
+Também em `sistema`, `ambiente(nome)` devolve a variável de ambiente como texto (`ambiente("HOME")`). Se ela não existe, é erro: `ambiente("EDITOR") se_falhar { "vim" }`.
 
 Com `importe "crono"`: `agora()` é a data e a hora locais: mapa `:ano`, `:mes`, `:dia`, `:hora`, `:minuto`, `:segundo`, `:dia_da_semana` (1 = domingo … 7 = sábado) e `:epoch` (segundos desde 1970). Fora do Linux/macOS o horário é UTC. `hoje()` é a data de hoje à meia-noite. `data(ano, mes, dia)` e `data(ano, mes, dia, hora, minuto, segundo)` constroem o mesmo mapa; data inválida é erro (`se_falhar`). `adicione(d, n, unidade)` soma `n` (positivo ou negativo) em `:dias`, `:meses`, `:anos`, `:horas`, `:minutos` ou `:segundos`; mês e ano prendem o dia no último dia do mês destino (31 de janeiro + 1 mês = último de fevereiro). `dias_entre(a, b)` é o número com sinal de dias de calendário, ignorando a hora. `eh_bissexto(ano)` (também `é_bissexto`) aceita o ano ou o mapa. `formate_data(data, modelo)` monta um texto com `%Y`, `%m`, `%d`, `%H`, `%M`, `%S` (dois dígitos, ano com quatro) e `%%`; outra letra depois de `%` é erro. A data é o mapa de `agora()` (bastam `:ano` … `:segundo`) ou um número de segundos (`:epoch`). `adicione` do `crono` tem 3 argumentos; o de `cartesiano` tem 2.
 
@@ -546,7 +551,7 @@ se n < 0 { falhe("negativo") }
 
 ## 16. Módulos / Importação
 
-A mesma forma vale para arquivos `.lep` e para os módulos nativos `matriz`, `arquivo`, `tela`, `mat`, `crono`, `cartesiano` e `processo`.
+A mesma forma vale para arquivos `.lep` e para os módulos nativos `sistema`, `matriz`, `arquivo`, `tela`, `mat`, `crono`, `cartesiano` e `processo`.
 
 ```text
 mat = importe "matematica"     // alias: nomes em mat::

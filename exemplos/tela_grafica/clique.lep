@@ -1,3 +1,4 @@
+importe "sistema"
 // Clique na janela para desenhar um círculo. Pressione Q ou feche a janela para sair.
 
 tela_grafica = importe "tela_grafica"

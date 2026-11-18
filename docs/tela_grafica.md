@@ -65,6 +65,7 @@ para programas que controlam seu próprio ciclo.
 ## Captura manual de eventos
 
 ```expressa
+importe "sistema"
 tela_grafica = importe "tela_grafica"
 g = tela_grafica::nova(160, 144, 4)
 x = 80

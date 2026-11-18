@@ -9,6 +9,13 @@ use super::super::eval::Vm;
 use super::super::value::Value;
 
 impl Vm<'_, '_> {
+    pub(crate) fn bi_durma(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
+        self.expect_arity(args, 1, span)?;
+        let secs = self.expect_f64(&args[0], span)?;
+        self.sleep_secs(secs, span)?;
+        Ok(Value::Nada)
+    }
+
     pub(crate) fn bi_ambiente(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
         self.expect_arity(args, 1, span)?;
         let nome = self.expect_texto(&args[0], span)?;
@@ -146,12 +153,20 @@ mod tests {
 
     #[test]
     fn ambiente_le_variaveis() {
-        assert_eq!(run("escreva(ambiente(\"PATH\") == \"\")"), "falso\n");
         assert_eq!(
-            run("escreva(ambiente(\"EXPRESSA_NAO_EXISTE_X\") se_falhar { \"padrão\" })"),
+            run("importe \"sistema\"\nescreva(ambiente(\"PATH\") == \"\")"),
+            "falso\n"
+        );
+        assert_eq!(
+            run(
+                "importe \"sistema\"\nescreva(ambiente(\"EXPRESSA_NAO_EXISTE_X\") se_falhar { \"padrão\" })"
+            ),
             "padrão\n"
         );
-        assert!(run_err("ambiente(\"EXPRESSA_NAO_EXISTE_X\")").contains("não definida"));
+        assert!(
+            run_err("importe \"sistema\"\nambiente(\"EXPRESSA_NAO_EXISTE_X\")")
+                .contains("não definida")
+        );
     }
 
     #[test]

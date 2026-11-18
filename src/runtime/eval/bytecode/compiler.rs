@@ -263,6 +263,9 @@ impl Compiler {
                 self.code.constants.push(Value::Texto(value.clone()));
                 self.emit(Op::Constant(id), span);
             }
+            Expr::Nada { .. } => {
+                self.emit(Op::Nada, span);
+            }
             Expr::Bool { value, .. } => {
                 self.emit(Op::Bool(*value), span);
             }
@@ -353,7 +356,7 @@ impl Compiler {
                 self.expr(col);
                 self.emit(Op::Index2, span);
             }
-            Expr::Faixa { start, end, .. } => {
+            Expr::Intervalo { start, end, .. } => {
                 self.expr(start);
                 if let Some(end) = end {
                     self.expr(end);

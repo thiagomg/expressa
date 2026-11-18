@@ -103,6 +103,7 @@ pub(crate) struct Vm<'a, 'c> {
     builtins: Rc<RefCell<Env>>,
     loading: HashSet<PathBuf>,
     modules: HashMap<PathBuf, Rc<RefCell<Env>>>,
+    module_names: HashMap<PathBuf, String>,
     pub(crate) native_modules: HashMap<String, Rc<RefCell<Env>>>,
     /// If set, file I/O and `importe` must stay under this directory.
     pub(crate) workspace_root: Option<PathBuf>,
@@ -663,6 +664,7 @@ impl<'a, 'c> Vm<'a, 'c> {
             builtins,
             loading: HashSet::new(),
             modules: HashMap::new(),
+            module_names: HashMap::new(),
             native_modules,
             workspace_root,
             deadline: time_limit.and_then(|d| Instant::now().checked_add(d)),
@@ -815,7 +817,6 @@ impl<'a, 'c> Vm<'a, 'c> {
         Ok(last)
     }
 
-    #[cfg(feature = "terminal")]
     pub(crate) fn builtins_env(&self) -> Rc<RefCell<Env>> {
         Rc::clone(&self.builtins)
     }
@@ -884,7 +885,11 @@ impl<'a, 'c> Vm<'a, 'c> {
             loaded?
         };
 
-        self.bind_imported(import, env, module_env)
+        self.bind_imported(import, env, module_env)?;
+        self.module_names
+            .entry(key)
+            .or_insert_with(|| import.path.clone());
+        Ok(())
     }
 
     /// Load a module while the `<modulo nome>` frame is already on the stack.
@@ -963,6 +968,28 @@ impl<'a, 'c> Vm<'a, 'c> {
         self.modules
             .insert(key.to_path_buf(), Rc::clone(&module_env));
         Ok(module_env)
+    }
+
+    /// File modules successfully imported in this VM. The cache's canonical
+    /// paths deduplicate aliases and alternate spellings of the same file.
+    pub(crate) fn imported_modules(&self) -> Vec<(String, Rc<RefCell<Env>>)> {
+        let mut modules = Vec::new();
+        for (path, name) in &self.module_names {
+            let Some(env) = self.modules.get(path) else {
+                continue;
+            };
+            let ambiguous = self.native_modules.contains_key(name)
+                || matches!(name.as_str(), "nucleo" | "núcleo")
+                || self.module_names.values().filter(|n| *n == name).count() > 1;
+            let name = if ambiguous {
+                path.to_string_lossy().into_owned()
+            } else {
+                name.clone()
+            };
+            modules.push((name, Rc::clone(env)));
+        }
+        modules.sort_by(|a, b| a.0.cmp(&b.0));
+        modules
     }
 
     fn bind_imported(
@@ -1142,7 +1169,7 @@ impl<'a, 'c> Vm<'a, 'c> {
                     p.borrow_mut().encerre();
                     return r;
                 }
-                if let Value::Faixa { start, end } = seq {
+                if let Value::Intervalo { start, end } = seq {
                     let span = iter.span();
                     return self.eval_in_child(env, FrameKind::Block, |vm, loop_env| {
                         vm.para_faixa(var, start, end, &body.stmts, span, loop_env)
@@ -1214,7 +1241,7 @@ impl<'a, 'c> Vm<'a, 'c> {
                 break;
             }
             let Some(next) = i.checked_add(1) else {
-                return Err(self.err("faixa passou do maior inteiro", span));
+                return Err(self.err("intervalo passou do maior inteiro", span));
             };
             i = next;
         }
@@ -1248,7 +1275,7 @@ impl<'a, 'c> Vm<'a, 'c> {
                 };
                 Err(self.err(
                     format!(
-                        "'para … em' espera lista, texto, conjunto ou faixa, encontrado {}{extra}",
+                        "'para … em' espera lista, texto, conjunto ou intervalo, encontrado {}{extra}",
                         other.type_name()
                     ),
                     span,
@@ -1316,6 +1343,7 @@ impl<'a, 'c> Vm<'a, 'c> {
                 Ok(Value::Numero(n))
             }
             Expr::String { value, .. } => Ok(Value::Texto(value.clone())),
+            Expr::Nada { .. } => Ok(Value::Nada),
             Expr::Bool { value, .. } => Ok(Value::Bool(*value)),
             Expr::List { elements, .. } => {
                 let mut xs = Vec::with_capacity(elements.len());
@@ -1438,7 +1466,7 @@ impl<'a, 'c> Vm<'a, 'c> {
                 let j = self.eval_expr(col, env)?;
                 self.index_get2(&obj, &i, &j, *span)
             }
-            Expr::Faixa { start, end, span } => {
+            Expr::Intervalo { start, end, span } => {
                 let s = self.eval_expr(start, env)?;
                 let e = match end {
                     Some(e) => Some(self.eval_expr(e, env)?),
@@ -1610,7 +1638,7 @@ impl<'a, 'c> Vm<'a, 'c> {
                     for k in b.borrow().iter() {
                         super::value::conjunto_insert(&mut out, k.clone());
                     }
-                    Ok(Value::conjunto(out))
+                    Ok(Value::conjunto_de_hash(out))
                 }
                 (Value::Conjunto(a), other) => {
                     let k = MapKey::from_value(other).ok_or_else(|| {
@@ -1624,7 +1652,7 @@ impl<'a, 'c> Vm<'a, 'c> {
                     })?;
                     let mut out = a.borrow().clone();
                     super::value::conjunto_insert(&mut out, k);
-                    Ok(Value::conjunto(out))
+                    Ok(Value::conjunto_de_hash(out))
                 }
                 (Value::Matriz(_), Value::Matriz(_)) => self.matriz_add(l, r, span, 1.0),
                 (Value::Texto(_), _) | (_, Value::Texto(_)) => Ok(Value::Texto(format!(
@@ -1728,7 +1756,7 @@ impl<'a, 'c> Vm<'a, 'c> {
                 let key = MapKey::from_value(r).ok_or_else(|| {
                     self.err(format!("chave de mapa inválida ({})", r.type_name()), span)
                 })?;
-                Ok(Value::Bool(xs.borrow().iter().any(|(k, _)| *k == key)))
+                Ok(Value::Bool(xs.borrow().contains_key(&key)))
             }
             Value::Conjunto(xs) => {
                 let key = MapKey::from_value(r).ok_or_else(|| {
@@ -1834,7 +1862,7 @@ impl<'a, 'c> Vm<'a, 'c> {
     }
 
     fn index_get(&self, obj: &Value, index: &Value, span: Span) -> Result<Value, EvalError> {
-        if let Value::Faixa { start, end } = index {
+        if let Value::Intervalo { start, end } = index {
             // Sem teto, o fim da fatia é o tamanho da lista ou do texto.
             let end_n = end.map(|n| Value::Numero(Numero::from_i64(n)));
             return self.slice_get(
@@ -1844,8 +1872,8 @@ impl<'a, 'c> Vm<'a, 'c> {
                 span,
             );
         }
-        if matches!(obj, Value::Faixa { .. }) {
-            return Err(self.err("não é possível indexar faixa", span));
+        if matches!(obj, Value::Intervalo { .. }) {
+            return Err(self.err("não é possível indexar intervalo", span));
         }
         match obj {
             Value::Lista(xs) => {
@@ -1864,9 +1892,8 @@ impl<'a, 'c> Vm<'a, 'c> {
                     )
                 })?;
                 xs.borrow()
-                    .iter()
-                    .find(|(k, _)| *k == key)
-                    .map(|(_, v)| v.clone())
+                    .get(&key)
+                    .cloned()
                     .ok_or_else(|| self.err(format!("chave {key} não existe no mapa"), span))
             }
             Value::Matriz(m) => {
@@ -1897,7 +1924,7 @@ impl<'a, 'c> Vm<'a, 'c> {
             Some(v) => Some(self.inteiro_do_teto(v, span)?),
             None => None,
         };
-        Ok(Value::Faixa { start, end })
+        Ok(Value::Intervalo { start, end })
     }
 
     fn slice_get(
@@ -1962,8 +1989,8 @@ impl<'a, 'c> Vm<'a, 'c> {
         value: Value,
         span: Span,
     ) -> Result<(), EvalError> {
-        if matches!(index, Value::Faixa { .. }) {
-            return Err(self.err("não é possível atribuir uma faixa", span));
+        if matches!(index, Value::Intervalo { .. }) {
+            return Err(self.err("não é possível atribuir um intervalo", span));
         }
         match obj {
             Value::Lista(xs) => {
@@ -1979,11 +2006,7 @@ impl<'a, 'c> Vm<'a, 'c> {
                     )
                 })?;
                 let mut map = xs.borrow_mut();
-                if let Some(slot) = map.iter_mut().find(|(k, _)| *k == key) {
-                    slot.1 = value;
-                } else {
-                    map.push((key, value));
-                }
+                map.insert(key, value);
                 Ok(())
             }
             other => Err(self.err(
@@ -2420,10 +2443,7 @@ impl Vm<'_, '_> {
         };
         let hook = {
             let key = MapKey::Texto("_como_texto".into());
-            xs.borrow()
-                .iter()
-                .find(|(k, _)| *k == key)
-                .map(|(_, v)| v.clone())
+            xs.borrow().get(&key).cloned()
         };
         let Some(hook) = hook else {
             return Ok(self.format_value(v));

@@ -14,7 +14,7 @@ fn id<T>(kind: u8, rc: &Rc<T>) -> Id {
 enum Job {
     Visit(Value, usize),
     List(ListaRc, usize),
-    Map(MapaRc, usize),
+    Map(MapaRc, MapKey),
     Pair(MapKey),
 }
 struct Path {
@@ -126,8 +126,9 @@ impl Vm<'_, '_> {
                 Job::List(list, index) => {
                     list.borrow_mut()[index] = copy.values.pop().expect("clone list")
                 }
-                Job::Map(map, index) => {
-                    map.borrow_mut()[index].1 = copy.values.pop().expect("clone map")
+                Job::Map(map, key) => {
+                    map.borrow_mut()
+                        .insert(key, copy.values.pop().expect("clone map"));
                 }
                 Job::Visit(value, path) => {
                     let result = self.clone_visit(value, path, &mut copy, span);
@@ -203,11 +204,7 @@ impl Vm<'_, '_> {
                 let original = original
                     .try_borrow()
                     .map_err(|_| "mapa emprestado pelo host")?;
-                match original
-                    .iter()
-                    .find(|(k, _)| *k == MapKey::Texto("_clonavel".into()))
-                    .map(|(_, v)| v)
-                {
+                match original.get(&MapKey::Texto("_clonavel".into())) {
                     Some(Value::Bool(false)) => {
                         return Err("mapa marcado com :_clonavel = falso".into());
                     }
@@ -218,16 +215,16 @@ impl Vm<'_, '_> {
                     return Err("mapa excede o orçamento de clone".into());
                 }
                 copy.charge(original.len())?;
-                let mut values = Vec::new();
+                let mut values = HashMap::new();
                 values
-                    .try_reserve_exact(original.len())
+                    .try_reserve(original.len())
                     .map_err(|_| "memória insuficiente para clone")?;
                 values.extend(original.iter().map(|(k, _)| (k.clone(), Value::Nada)));
-                let v = Value::mapa(values);
+                let v = Value::mapa_com_politica(values, false);
                 let Value::Mapa(map) = &v else { unreachable!() };
                 copy.maps.push(Rc::clone(map));
                 copy.memo.insert(identity.unwrap(), v.clone());
-                for (i, (key, value)) in original.iter().enumerate().rev() {
+                for (key, value) in original.iter() {
                     let child = copy.path(
                         path,
                         match key {
@@ -235,7 +232,7 @@ impl Vm<'_, '_> {
                             other => format!("[{other:?}]"),
                         },
                     );
-                    copy.jobs.push(Job::Map(Rc::clone(map), i));
+                    copy.jobs.push(Job::Map(Rc::clone(map), key.clone()));
                     copy.jobs.push(Job::Visit(value.clone(), child));
                 }
                 v
@@ -245,7 +242,7 @@ impl Vm<'_, '_> {
                     .try_borrow()
                     .map_err(|_| "conjunto emprestado pelo host")?;
                 copy.charge(items.len())?;
-                Value::conjunto(items.clone())
+                Value::conjunto_de_hash(items.clone())
             }
             Value::Matriz(rows) => {
                 let rows = rows

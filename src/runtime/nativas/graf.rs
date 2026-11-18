@@ -574,12 +574,7 @@ fn tamanho_pixel_do_mapa(mapa: &MapaRc, span: Span, vm: &Vm<'_, '_>) -> Result<u
         return Ok(1);
     }
     let k = MapKey::Texto("tamanho_pixel".into());
-    match mapa
-        .borrow()
-        .iter()
-        .find(|(kk, _)| *kk == k)
-        .map(|(_, v)| v)
-    {
+    match mapa.borrow().get(&k) {
         Some(Value::Numero(n)) => {
             let f = n.to_f64();
             if f.is_finite() && f >= 1.0 && f.fract() == 0.0 && f <= f64::from(TAMANHO_PIXEL_MAX) {
@@ -600,17 +595,12 @@ fn tamanho_pixel_do_mapa(mapa: &MapaRc, span: Span, vm: &Vm<'_, '_>) -> Result<u
 
 fn tem_chave(mapa: &MapaRc, chave: &str) -> bool {
     let k = MapKey::Texto(chave.into());
-    mapa.borrow().iter().any(|(kk, _)| *kk == k)
+    mapa.borrow().contains_key(&k)
 }
 
 fn get_lista(mapa: &MapaRc, chave: &str) -> Option<ListaRc> {
     let k = MapKey::Texto(chave.into());
-    match mapa
-        .borrow()
-        .iter()
-        .find(|(kk, _)| *kk == k)
-        .map(|(_, v)| v)
-    {
+    match mapa.borrow().get(&k) {
         Some(Value::Lista(xs)) => Some(Rc::clone(xs)),
         _ => None,
     }
@@ -641,12 +631,7 @@ fn figura_de(v: &Value, span: Span, vm: &Vm<'_, '_>) -> Result<Imagem, EvalError
 
 fn get_imagem(mapa: &MapaRc, chave: &str) -> Option<Imagem> {
     let k = MapKey::Texto(chave.into());
-    match mapa
-        .borrow()
-        .iter()
-        .find(|(kk, _)| *kk == k)
-        .map(|(_, v)| v)
-    {
+    match mapa.borrow().get(&k) {
         Some(Value::Imagem(img)) => Some(img.borrow().clone()),
         _ => None,
     }
@@ -654,12 +639,7 @@ fn get_imagem(mapa: &MapaRc, chave: &str) -> Option<Imagem> {
 
 fn get_texto(mapa: &MapaRc, chave: &str) -> Option<String> {
     let k = MapKey::Texto(chave.into());
-    match mapa
-        .borrow()
-        .iter()
-        .find(|(kk, _)| *kk == k)
-        .map(|(_, v)| v)
-    {
+    match mapa.borrow().get(&k) {
         Some(Value::Texto(s)) => Some(s.clone()),
         _ => None,
     }
@@ -667,12 +647,7 @@ fn get_texto(mapa: &MapaRc, chave: &str) -> Option<String> {
 
 fn get_u32(mapa: &MapaRc, chave: &str) -> Option<u32> {
     let k = MapKey::Texto(chave.into());
-    match mapa
-        .borrow()
-        .iter()
-        .find(|(kk, _)| *kk == k)
-        .map(|(_, v)| v)
-    {
+    match mapa.borrow().get(&k) {
         Some(Value::Numero(n)) => {
             let f = n.to_f64();
             if f.is_finite() && f >= 1.0 {
@@ -687,12 +662,7 @@ fn get_u32(mapa: &MapaRc, chave: &str) -> Option<u32> {
 
 fn get_f64(mapa: &MapaRc, chave: &str) -> Option<f64> {
     let k = MapKey::Texto(chave.into());
-    match mapa
-        .borrow()
-        .iter()
-        .find(|(kk, _)| *kk == k)
-        .map(|(_, v)| v)
-    {
+    match mapa.borrow().get(&k) {
         Some(Value::Numero(n)) => {
             let f = n.to_f64();
             f.is_finite().then_some(f)
@@ -716,12 +686,7 @@ enum NumeroCampo {
 
 fn numero_campo(mapa: &MapaRc, chave: &str) -> NumeroCampo {
     let k = MapKey::Texto(chave.into());
-    match mapa
-        .borrow()
-        .iter()
-        .find(|(kk, _)| *kk == k)
-        .map(|(_, v)| v)
-    {
+    match mapa.borrow().get(&k) {
         Some(Value::Numero(n)) => {
             let f = n.to_f64();
             if f.is_finite() {
@@ -787,7 +752,7 @@ fn evento_valor(e: EventoGraf) -> Value {
 }
 
 fn conjunto_valor(teclas: std::collections::BTreeSet<String>) -> Value {
-    Value::conjunto(teclas.into_iter().map(MapKey::Texto).collect())
+    Value::conjunto_de_hash(teclas.into_iter().map(MapKey::Texto).collect())
 }
 
 fn captura_valor(e: CapturaEvento) -> Value {
@@ -806,13 +771,9 @@ fn captura_valor(e: CapturaEvento) -> Value {
     ])
 }
 
-fn set_texto(entries: &mut Vec<(MapKey, Value)>, chave: &str, s: String) {
+fn set_texto(entries: &mut std::collections::HashMap<MapKey, Value>, chave: &str, s: String) {
     let key = MapKey::Texto(chave.into());
-    if let Some((_, v)) = entries.iter_mut().find(|(k, _)| *k == key) {
-        *v = Value::Texto(s);
-    } else {
-        entries.push((key, Value::Texto(s)));
-    }
+    entries.insert(key, Value::Texto(s));
 }
 
 #[cfg(test)]

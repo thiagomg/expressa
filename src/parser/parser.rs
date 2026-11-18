@@ -521,10 +521,10 @@ impl<'a> Parser<'a> {
             // We pass *right_bp* as the new min_bp so the RHS only
             // absorbs *tighter* operators (see infix_info docs).
             if matches!(op_kind, TokenKind::DotDot | TokenKind::DotDotEq)
-                && matches!(lhs, Expr::Faixa { .. })
+                && matches!(lhs, Expr::Intervalo { .. })
             {
                 return Err(self
-                    .err("faixas não podem ser encadeadas; coloque cada faixa entre parênteses"));
+                    .err("intervalos não podem ser encadeados; coloque cada intervalo entre parênteses"));
             }
             let op_tok = self.remove();
             if matches!(op_kind, TokenKind::DotDot | TokenKind::DotDotEq) {
@@ -535,7 +535,7 @@ impl<'a> Parser<'a> {
                     None => lhs.span().join(op_tok.span),
                 };
                 self.descer()?;
-                lhs = Expr::Faixa {
+                lhs = Expr::Intervalo {
                     start: Box::new(lhs),
                     end: end.map(Box::new),
                     span,
@@ -649,7 +649,7 @@ impl<'a> Parser<'a> {
             Some(e) => op_tok.span.join(e.span()),
             None => op_tok.span,
         };
-        Ok(Expr::Faixa {
+        Ok(Expr::Intervalo {
             start: Box::new(start),
             end: end.map(Box::new),
             span,
@@ -756,6 +756,7 @@ impl<'a> Parser<'a> {
                 value,
                 span: tok.span,
             }),
+            TokenKind::Nada => Ok(Expr::Nada { span: tok.span }),
             TokenKind::Verdadeiro => Ok(Expr::Bool {
                 value: true,
                 span: tok.span,
@@ -1133,6 +1134,7 @@ fn expr_can_start(kind: &TokenKind) -> bool {
         kind,
         TokenKind::Number(_)
             | TokenKind::String(_)
+            | TokenKind::Nada
             | TokenKind::Verdadeiro
             | TokenKind::Falso
             | TokenKind::Ident(_)
@@ -1374,6 +1376,15 @@ mod tests {
     }
 
     #[test]
+    fn nada_literal_preserves_its_span() {
+        let p = parse("nada").unwrap();
+        let expr = expr_stmt(&p);
+        assert!(matches!(expr, Expr::Nada { .. }));
+        assert_eq!(expr.span().start, 0);
+        assert_eq!(expr.span().end, 4);
+    }
+
+    #[test]
     fn number_literal() {
         let p = parse_ok("42");
         let e = expr_stmt(&p);
@@ -1542,7 +1553,7 @@ mod tests {
         ));
         match expr_stmt(&parse_ok("xs[\n0..\n]")) {
             Expr::Index { index, .. } => {
-                assert!(matches!(index.as_ref(), Expr::Faixa { end: None, .. }));
+                assert!(matches!(index.as_ref(), Expr::Intervalo { end: None, .. }));
             }
             other => panic!("{other:?}"),
         }
@@ -1672,44 +1683,44 @@ fim
         let p = parse_ok("xs[1..3]");
         match expr_stmt(&p) {
             Expr::Index { index, .. } => {
-                assert!(matches!(index.as_ref(), Expr::Faixa { end: Some(_), .. }));
+                assert!(matches!(index.as_ref(), Expr::Intervalo { end: Some(_), .. }));
             }
             other => panic!("{other:?}"),
         }
         match expr_stmt(&parse_ok("xs[2..]")) {
             Expr::Index { index, .. } => {
-                assert!(matches!(index.as_ref(), Expr::Faixa { end: None, .. }));
+                assert!(matches!(index.as_ref(), Expr::Intervalo { end: None, .. }));
             }
             other => panic!("{other:?}"),
         }
         match expr_stmt(&parse_ok("xs[..]")) {
             Expr::Index { index, .. } => {
-                assert!(matches!(index.as_ref(), Expr::Faixa { end: None, .. }));
+                assert!(matches!(index.as_ref(), Expr::Intervalo { end: None, .. }));
             }
             other => panic!("{other:?}"),
         }
         match expr_stmt(&parse_ok("0..3")) {
-            Expr::Faixa { end: Some(end), .. } => {
+            Expr::Intervalo { end: Some(end), .. } => {
                 assert!(matches!(end.as_ref(), Expr::Number { raw, .. } if raw == "3"));
             }
             other => panic!("{other:?}"),
         }
         match expr_stmt(&parse_ok("0..")) {
-            Expr::Faixa { end: None, .. } => {}
+            Expr::Intervalo { end: None, .. } => {}
             other => panic!("{other:?}"),
         }
         match first_stmt(&parse_ok("r = 5..\nescreva(r)")) {
             Stmt::Assign { value, .. } => {
-                assert!(matches!(value, Expr::Faixa { end: None, .. }));
+                assert!(matches!(value, Expr::Intervalo { end: None, .. }));
             }
             other => panic!("{other:?}"),
         }
         match expr_stmt(&parse_ok("..3")) {
-            Expr::Faixa { .. } => {}
+            Expr::Intervalo { .. } => {}
             other => panic!("{other:?}"),
         }
         match expr_stmt(&parse_ok("1..=2")) {
-            Expr::Faixa { end: Some(end), .. } => {
+            Expr::Intervalo { end: Some(end), .. } => {
                 assert!(matches!(
                     end.as_ref(),
                     Expr::Binary {
@@ -1900,7 +1911,7 @@ fim
         let src = "para i em 0.. {\n    escreva(i)\n    pare\n}\n";
         match first_stmt(&parse_ok(src)) {
             Stmt::ParaIn { iter, .. } => match iter {
-                Expr::Faixa { end: None, .. } => {}
+                Expr::Intervalo { end: None, .. } => {}
                 other => panic!("{other:?}"),
             },
             other => panic!("{other:?}"),
@@ -1908,7 +1919,7 @@ fim
         let src = "para i em 0.. inicio\n    escreva(i)\n    pare\nfim\n";
         match first_stmt(&parse_ok(src)) {
             Stmt::ParaIn { iter, .. } => match iter {
-                Expr::Faixa { end: None, .. } => {}
+                Expr::Intervalo { end: None, .. } => {}
                 other => panic!("{other:?}"),
             },
             other => panic!("{other:?}"),
@@ -2077,11 +2088,11 @@ fim
             "{}",
             campo.message
         );
-        let faixa = parse("0..3 + 0..3").unwrap_err();
+        let intervalo = parse("0..3 + 0..3").unwrap_err();
         assert!(
-            faixa.message.contains("faixas não podem ser encadeadas"),
+            intervalo.message.contains("intervalos não podem ser encadeados"),
             "{}",
-            faixa.message
+            intervalo.message
         );
     }
 
@@ -2089,7 +2100,7 @@ fim
     fn retorne_aceita_faixa_aberta() {
         match first_stmt(&parse_ok("retorne ..5")) {
             Stmt::Retorne {
-                value: Some(Expr::Faixa { end: Some(_), .. }),
+                value: Some(Expr::Intervalo { end: Some(_), .. }),
                 ..
             } => {}
             other => panic!("{other:?}"),

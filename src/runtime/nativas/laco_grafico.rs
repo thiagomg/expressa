@@ -82,11 +82,7 @@ impl Vm<'_, '_> {
                 return Err(self.err(format!("opção desconhecida no laço gráfico: {key}"), span));
             }
         }
-        let campo = |nome: &str| {
-            config
-                .iter()
-                .find_map(|(k, v)| (*k == MapKey::Texto(nome.into())).then(|| v.clone()))
-        };
+        let campo = |nome: &str| config.get(&MapKey::Texto(nome.into())).cloned();
         let fps = campo("fps").ok_or_else(|| self.err("execute: falta :fps", span))?;
         let fps = self.expect_f64(&fps, span)?;
         let periodo = if fps.is_finite() && fps > 0.0 {
@@ -137,9 +133,10 @@ impl Vm<'_, '_> {
                 let Value::Mapa(mapa) = &ev else {
                     unreachable!()
                 };
-                let sair = mapa.borrow().iter().any(|(k, v)| {
-                    *k == MapKey::Texto("sair".into()) && matches!(v, Value::Bool(true))
-                });
+                let sair = matches!(
+                    mapa.borrow().get(&MapKey::Texto("sair".into())),
+                    Some(Value::Bool(true))
+                );
                 let dt = crate::runtime::numero::Numero::try_from(dt)
                     .map_err(|e| self.err(e.to_string(), span))?;
                 self.call_value(&eventos, &[ev, Value::Numero(dt)], span, "eventos", env)?;

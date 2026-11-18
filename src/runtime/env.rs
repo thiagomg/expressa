@@ -352,7 +352,7 @@ impl Objeto {
             Value::Modulo(_)
             | Value::Nada
             | Value::Numero(_)
-            | Value::Faixa { .. }
+            | Value::Intervalo { .. }
             | Value::Texto(_)
             | Value::Bool(_)
             | Value::Conjunto(_)

@@ -5,7 +5,7 @@ O build padrão mantém o interpretador completo. O primeiro perfil mínimo desa
 ## Como compilar
 
 ```sh
-# Desktop completo, incluindo o runner lepc:
+# Desktop completo, incluindo o runner lep-exec:
 cargo build -p expressa --release --offline --locked
 
 # Perfil mínimo, em outro diretório para preservar os dois executáveis:
@@ -44,7 +44,7 @@ Os modelos de imagem/canvas e os contratos de hosts permanecem disponíveis para
 
 ## Disponibilidade e compatibilidade
 
-A sintaxe, as regras de escopo, os números, as closures e `avalie` são compartilhados. Programas que usam capacidades removidas precisam de outro perfil. O catálogo e a ajuda de funções nativas omitem os módulos desativados. `tipos()` omite `processo` quando esse tipo não é compilado; `imagem` continua como tipo de dados para hosts. `--help` lista apenas os comandos disponíveis, e comandos removidos falham com erro explícito.
+A sintaxe, as regras de escopo, os números, as closures e `avalie` são compartilhados. Programas que usam capacidades removidas precisam de outro perfil. As consultas `modulos()` e `funcoes()` e a ajuda de funções nativas omitem os módulos desativados. `tipos()` omite `processo` quando esse tipo não é compilado; `imagem` continua como tipo de dados para hosts. `--help` lista apenas os comandos disponíveis, e comandos removidos falham com erro explícito.
 
 `ExecutionBackend::Ast` permanece na API para permitir uma configuração uniforme, mas `is_available()` retorna `false` sem a feature `ast`. A seleção explícita pela CLI, variável de ambiente ou `ExecutionOptions` falha nesse build; não muda silenciosamente de executor. `--ast` imprime a árvore de parsing e continua disponível, pois é independente do executor AST.
 
@@ -54,7 +54,7 @@ As APIs de execução capturada e hooks continuam disponíveis. `CliDebugger`, R
 
 ## Validação e medição
 
-[Testes de perfis](../tests/runtime_profiles.rs) verificam as combinações de features, catálogo/ajuda/imports, seleção de executor, CLI e os nove workloads comuns tanto de fonte como de EXB. Os testes específicos de capacidades compilam apenas quando elas estão habilitadas. A suíte de conformidade AST/bytecode requer `ast`; as regressões comuns e os testes EXB também são executados no perfil mínimo.
+[Testes de perfis](../tests/runtime_profiles.rs) verificam as combinações de features, descoberta de módulos e funções, ajuda e imports, seleção de executor, CLI e os nove workloads comuns tanto de fonte como de EXB. Os testes específicos de capacidades compilam apenas quando elas estão habilitadas. A suíte de conformidade AST/bytecode requer `ast`; as regressões comuns e os testes EXB também são executados no perfil mínimo.
 
 [Tamanhos, CPU, RSS e protocolo](../benchmarks/MINIMAL-PROFILE.md).
 

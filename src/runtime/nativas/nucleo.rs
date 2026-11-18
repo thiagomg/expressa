@@ -2,7 +2,7 @@
 const SEARCH_NOT_FOUND: i64 = -1;
 
 use std::cell::RefCell;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
 use crate::lexer::Span;
@@ -13,10 +13,7 @@ use super::super::error::{CallFrame, EvalError};
 use super::super::eval::Vm;
 use super::super::numero::{Numero, NumeroAritmetica};
 use super::super::value::{MapKey, NumeroLocale, Value, conjunto_insert};
-use super::{
-    builtin_args, builtin_args_em, builtin_doc_summary, builtin_doc_summary_em, builtin_modulo,
-    lookup_ficha, sem_acento,
-};
+use super::{lookup_ficha, sem_acento};
 
 impl Vm<'_, '_> {
     pub(crate) fn bi_escreva(
@@ -55,12 +52,6 @@ impl Vm<'_, '_> {
         }
         writeln!(self.err).map_err(|e| self.io_err(e, span))?;
         self.err.flush().map_err(|e| self.io_err(e, span))?;
-        Ok(Value::Nada)
-    }
-    pub(crate) fn bi_durma(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
-        self.expect_arity(args, 1, span)?;
-        let secs = self.expect_f64(&args[0], span)?;
-        self.sleep_secs(secs, span)?;
         Ok(Value::Nada)
     }
     pub(crate) fn bi_saia(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
@@ -253,10 +244,10 @@ impl Vm<'_, '_> {
             Value::Mapa(xs) => xs.borrow().len() as u64,
             Value::Conjunto(xs) => xs.borrow().len() as u64,
             Value::Matriz(m) => m.borrow().len() as u64,
-            Value::Faixa { end: None, .. } => {
-                return Err(self.err("tamanho() de faixa sem teto", span));
+            Value::Intervalo { end: None, .. } => {
+                return Err(self.err("tamanho() de intervalo sem teto", span));
             }
-            Value::Faixa {
+            Value::Intervalo {
                 start,
                 end: Some(end),
             } => {
@@ -269,7 +260,7 @@ impl Vm<'_, '_> {
             other => {
                 return Err(self.err(
                     format!(
-                        "tamanho() espera texto, lista, mapa, conjunto, matriz ou faixa, encontrado {}",
+                        "tamanho() espera texto, lista, mapa, conjunto, matriz ou intervalo, encontrado {}",
                         other.type_name()
                     ),
                     span,
@@ -281,11 +272,11 @@ impl Vm<'_, '_> {
     pub(crate) fn bi_primeiro(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
         self.expect_arity(args, 1, span)?;
         match &args[0] {
-            Value::Faixa {
+            Value::Intervalo {
                 end: Some(end),
                 start,
-            } if start >= end => Err(self.err("primeiro() de faixa vazia", span)),
-            Value::Faixa { start, .. } => Ok(Value::Numero(Numero::from_i64(*start))),
+            } if start >= end => Err(self.err("primeiro() de intervalo vazio", span)),
+            Value::Intervalo { start, .. } => Ok(Value::Numero(Numero::from_i64(*start))),
             Value::Lista(xs) => xs
                 .borrow()
                 .first()
@@ -293,7 +284,7 @@ impl Vm<'_, '_> {
                 .ok_or_else(|| self.err("primeiro() de lista vazia", span)),
             other => Err(self.err(
                 format!(
-                    "primeiro() espera lista ou faixa, encontrado {}",
+                    "primeiro() espera lista ou intervalo, encontrado {}",
                     other.type_name()
                 ),
                 span,
@@ -303,12 +294,14 @@ impl Vm<'_, '_> {
     pub(crate) fn bi_ultimo(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
         self.expect_arity(args, 1, span)?;
         match &args[0] {
-            Value::Faixa { end: None, .. } => Err(self.err("ultimo() de faixa sem teto", span)),
-            Value::Faixa {
+            Value::Intervalo { end: None, .. } => {
+                Err(self.err("ultimo() de intervalo sem teto", span))
+            }
+            Value::Intervalo {
                 start,
                 end: Some(end),
-            } if start >= end => Err(self.err("ultimo() de faixa vazia", span)),
-            Value::Faixa { end: Some(end), .. } => Ok(Value::Numero(Numero::from_i64(end - 1))),
+            } if start >= end => Err(self.err("ultimo() de intervalo vazio", span)),
+            Value::Intervalo { end: Some(end), .. } => Ok(Value::Numero(Numero::from_i64(end - 1))),
             Value::Lista(xs) => xs
                 .borrow()
                 .last()
@@ -316,7 +309,7 @@ impl Vm<'_, '_> {
                 .ok_or_else(|| self.err("ultimo() de lista vazia", span)),
             other => Err(self.err(
                 format!(
-                    "ultimo() espera lista ou faixa, encontrado {}",
+                    "ultimo() espera lista ou intervalo, encontrado {}",
                     other.type_name()
                 ),
                 span,
@@ -326,9 +319,12 @@ impl Vm<'_, '_> {
     pub(crate) fn bi_infinito(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
         self.expect_arity(args, 1, span)?;
         match &args[0] {
-            Value::Faixa { end, .. } => Ok(Value::Bool(end.is_none())),
+            Value::Intervalo { end, .. } => Ok(Value::Bool(end.is_none())),
             other => Err(self.err(
-                format!("infinito() espera faixa, encontrado {}", other.type_name()),
+                format!(
+                    "infinito() espera intervalo, encontrado {}",
+                    other.type_name()
+                ),
                 span,
             )),
         }
@@ -363,28 +359,28 @@ impl Vm<'_, '_> {
         }
         match &args[0] {
             Value::Mapa(_) => {
-                if matches!(args[1], Value::Faixa { .. }) {
+                if matches!(args[1], Value::Intervalo { .. }) {
                     return Err(self.err(
-                        "remova em mapa espera a chave (não uma faixa de índices)",
+                        "remova em mapa espera a chave (não um intervalo de índices)",
                         span,
                     ));
                 }
                 self.remova_mapa(&args[0], &args[1], span)
             }
             Value::Conjunto(_) => {
-                if matches!(args[1], Value::Faixa { .. }) {
+                if matches!(args[1], Value::Intervalo { .. }) {
                     return Err(self.err(
-                        "remova em conjunto espera o elemento (não uma faixa de índices)",
+                        "remova em conjunto espera o elemento (não um intervalo de índices)",
                         span,
                     ));
                 }
                 self.remova_conjunto(&args[0], &args[1], span)
             }
             Value::Lista(_) | Value::Texto(_) => match &args[1] {
-                Value::Faixa { end: None, .. } => {
-                    Err(self.err("faixa sem teto não pode remover", span))
+                Value::Intervalo { end: None, .. } => {
+                    Err(self.err("intervalo sem teto não pode remover", span))
                 }
-                Value::Faixa {
+                Value::Intervalo {
                     start,
                     end: Some(end),
                 } => self.remova_faixa(
@@ -431,9 +427,7 @@ impl Vm<'_, '_> {
             )
         })?;
         let mut entries = xs.borrow().clone();
-        let before = entries.len();
-        entries.retain(|(k, _)| *k != key);
-        if entries.len() == before {
+        if entries.remove(&key).is_none() {
             return Err(self.err(format!("chave {key} não existe no mapa"), span));
         }
         Ok(Value::mapa_com_politica(entries, xs.recurso_nao_clonavel()))
@@ -454,12 +448,10 @@ impl Vm<'_, '_> {
             )
         })?;
         let mut items = xs.borrow().clone();
-        let before = items.len();
-        items.retain(|k| *k != key);
-        if items.len() == before {
+        if !items.remove(&key) {
             return Err(self.err(format!("elemento {key} não existe no conjunto"), span));
         }
-        Ok(Value::conjunto(items))
+        Ok(Value::conjunto_de_hash(items))
     }
     pub(crate) fn remova_faixa(
         &self,
@@ -564,7 +556,7 @@ impl Vm<'_, '_> {
             [] => Ok(Value::mapa(vec![])),
             [v] => {
                 let xs = self.expect_lista(v, span)?;
-                let mut map = Vec::new();
+                let mut map = HashMap::with_capacity(xs.borrow().len());
                 for item in xs.borrow().iter() {
                     self.check_espera(span)?;
                     let Value::Par(k, val) = item else {
@@ -576,12 +568,12 @@ impl Vm<'_, '_> {
                             span,
                         ));
                     };
-                    if map.iter().any(|(mk, _)| mk == k) {
+                    if map.contains_key(k) {
                         return Err(self.err(format!("chave duplicada {k} no mapa"), span));
                     }
-                    map.push((k.clone(), val.as_ref().clone()));
+                    map.insert(k.clone(), val.as_ref().clone());
                 }
-                Ok(Value::mapa(map))
+                Ok(Value::mapa_com_politica(map, false))
             }
             _ => Err(self.err(
                 format!("mapa() espera 0 ou 1 argumento(s), recebeu {}", args.len()),
@@ -595,7 +587,7 @@ impl Vm<'_, '_> {
             [] => Ok(Value::conjunto(vec![])),
             [v] => {
                 let xs = self.expect_lista(v, span)?;
-                let mut out = Vec::new();
+                let mut out = HashSet::with_capacity(xs.borrow().len());
                 for item in xs.borrow().iter() {
                     self.check_espera(span)?;
                     let k = MapKey::from_value(item).ok_or_else(|| {
@@ -606,7 +598,7 @@ impl Vm<'_, '_> {
                     })?;
                     conjunto_insert(&mut out, k);
                 }
-                Ok(Value::conjunto(out))
+                Ok(Value::conjunto_de_hash(out))
             }
             _ => Err(self.err(
                 format!(
@@ -645,97 +637,6 @@ impl Vm<'_, '_> {
         result
     }
 
-    pub(crate) fn bi_catalogo(
-        &mut self,
-        args: &[Value],
-        span: Span,
-        env: &Rc<RefCell<Env>>,
-    ) -> Result<Value, EvalError> {
-        match args {
-            [] => self.catalog_scope(env),
-            [v] => self.catalog_value(v, span),
-            _ => Err(self.err(
-                format!(
-                    "catalogo() espera 0 ou 1 argumento(s), recebeu {}",
-                    args.len()
-                ),
-                span,
-            )),
-        }
-    }
-
-    fn catalog_scope(&self, env: &Rc<RefCell<Env>>) -> Result<Value, EvalError> {
-        let mut rows: Vec<(String, Value)> = Vec::new();
-        let mut names = HashSet::new();
-        for (name, value) in Env::visible_bindings(env) {
-            if name.starts_with('_') {
-                continue;
-            }
-            if let Some(entry) = catalog_entry(&name, &value) {
-                names.insert(name.clone());
-                rows.push((name, entry));
-            }
-        }
-        let mut mods: Vec<_> = self.native_modules.keys().cloned().collect();
-        mods.sort();
-        for m in mods {
-            if names.contains(&m) {
-                continue;
-            }
-            let membros = self
-                .native_modules
-                .get(&m)
-                .map(|e| module_member_names(&e.borrow()))
-                .unwrap_or_default();
-            rows.push((m.clone(), catalog_row(&m, "modulo", &membros, &m, "")));
-            names.insert(m);
-        }
-        rows.sort_by(|a, b| a.0.cmp(&b.0));
-        Ok(Value::lista(rows.into_iter().map(|(_, v)| v).collect()))
-    }
-
-    fn catalog_value(&self, v: &Value, span: Span) -> Result<Value, EvalError> {
-        match v {
-            Value::Texto(s) => {
-                let Some(mod_env) = self.native_modules.get(s) else {
-                    return Err(self.err(format!("módulo nativo `{s}` não existe"), span));
-                };
-                Ok(catalog_frame(&mod_env.borrow(), s))
-            }
-            Value::Modulo(mod_env) => {
-                let nome = self
-                    .native_modules
-                    .iter()
-                    .find(|(_, env)| Rc::ptr_eq(env, mod_env))
-                    .map(|(nome, _)| nome.as_str())
-                    .unwrap_or("");
-                Ok(catalog_frame(&mod_env.borrow(), nome))
-            }
-            Value::Mapa(xs) => {
-                let mut rows: Vec<(String, Value)> = xs
-                    .borrow()
-                    .iter()
-                    .map(|(k, val)| {
-                        let nome = mapkey_nome(k);
-                        (nome.clone(), catalog_value_row(&nome, val))
-                    })
-                    .collect();
-                rows.sort_by(|a, b| a.0.cmp(&b.0));
-                Ok(Value::lista(rows.into_iter().map(|(_, e)| e).collect()))
-            }
-            Value::Funcao(_) | Value::Builtin(_) => {
-                Ok(Value::lista(vec![catalog_value_row("", v)]))
-            }
-            other => Err(self.err(
-                format!(
-                    "catalogo espera um módulo, mapa, função ou nome de módulo, encontrado {}",
-                    other.type_name()
-                ),
-                span,
-            )),
-        }
-    }
-
     pub(crate) fn bi_ajuda(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
         let [v] = args else {
             return Err(self.err(
@@ -767,115 +668,6 @@ impl Vm<'_, '_> {
             )),
         }
     }
-}
-
-fn catalog_entry(name: &str, value: &Value) -> Option<Value> {
-    match value {
-        Value::Builtin(_)
-        | Value::Funcao(_)
-        | Value::Modulo(_)
-        | Value::Numero(_)
-        | Value::Texto(_) => Some(catalog_value_row(name, value)),
-        _ => None,
-    }
-}
-
-fn catalog_value_row(name: &str, value: &Value) -> Value {
-    match value {
-        Value::Builtin(canon) => catalog_row(
-            name,
-            "nativa",
-            &builtin_args(canon),
-            builtin_modulo(canon),
-            &builtin_doc_summary(canon),
-        ),
-        Value::Funcao(c) => catalog_row(
-            name,
-            "funcao",
-            &c.args_text(),
-            "",
-            c.doc.as_deref().map(first_paragraph).unwrap_or(""),
-        ),
-        Value::Modulo(env) => catalog_row(
-            name,
-            "modulo",
-            &module_member_names(&env.borrow()),
-            name,
-            "",
-        ),
-        other => catalog_row(name, other.type_name(), "", "", ""),
-    }
-}
-
-fn catalog_frame(env: &Env, modulo: &str) -> Value {
-    let mut rows = Vec::new();
-    for (name, value) in env.bindings_sorted() {
-        if name.starts_with('_') {
-            continue;
-        }
-        match &value {
-            Value::Builtin(canon) => rows.push(catalog_row(
-                &name,
-                "nativa",
-                &builtin_args_em(canon, modulo),
-                modulo,
-                &builtin_doc_summary_em(canon, modulo),
-            )),
-            Value::Funcao(c) => rows.push(catalog_row(
-                &name,
-                "funcao",
-                &c.args_text(),
-                modulo,
-                c.doc.as_deref().map(first_paragraph).unwrap_or(""),
-            )),
-            Value::Modulo(_) => {
-                if let Some(e) = catalog_entry(&name, &value) {
-                    rows.push(e);
-                }
-            }
-            Value::Numero(_) | Value::Texto(_) => rows.push(catalog_value_row(&name, &value)),
-            _ => {}
-        }
-    }
-    Value::lista(rows)
-}
-
-fn mapkey_nome(k: &MapKey) -> String {
-    match k {
-        MapKey::Texto(s) => s.clone(),
-        MapKey::Numero(n) => n.to_string(),
-        MapKey::Bool(true) => "verdadeiro".into(),
-        MapKey::Bool(false) => "falso".into(),
-    }
-}
-
-fn catalog_row(nome: &str, tipo: &str, args: &str, modulo: &str, doc: &str) -> Value {
-    Value::mapa(vec![
-        (MapKey::Texto("nome".into()), Value::Texto(nome.into())),
-        (MapKey::Texto("tipo".into()), Value::Texto(tipo.into())),
-        (MapKey::Texto("args".into()), Value::Texto(args.into())),
-        (MapKey::Texto("modulo".into()), Value::Texto(modulo.into())),
-        (MapKey::Texto("doc".into()), Value::Texto(doc.into())),
-    ])
-}
-
-fn first_paragraph(doc: &str) -> &str {
-    doc.split("\n\n").next().unwrap_or(doc).trim()
-}
-
-fn module_member_names(env: &Env) -> String {
-    env.bindings_sorted()
-        .into_iter()
-        .filter(|(k, v)| {
-            !k.starts_with('_')
-                && matches!(
-                    v,
-                    Value::Builtin(_) | Value::Funcao(_) | Value::Numero(_) | Value::Texto(_)
-                )
-        })
-        .map(|(k, _)| k)
-        .collect::<Vec<_>>()
-        .join(", ")
 }
 
 pub(crate) fn texto_da_condicao(source: &str, span: Span) -> String {

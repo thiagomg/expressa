@@ -145,13 +145,17 @@ fn expr(e: &Expr, lines: &mut BTreeSet<u32>) {
             expr(row, lines);
             expr(col, lines);
         }
-        Expr::Faixa { start, end, .. } => {
+        Expr::Intervalo { start, end, .. } => {
             expr(start, lines);
             if let Some(e) = end {
                 expr(e, lines);
             }
         }
-        Expr::Number { .. } | Expr::String { .. } | Expr::Bool { .. } | Expr::Ident { .. } => (),
+        Expr::Number { .. }
+        | Expr::Nada { .. }
+        | Expr::String { .. }
+        | Expr::Bool { .. }
+        | Expr::Ident { .. } => (),
     }
 }
 

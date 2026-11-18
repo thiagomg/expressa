@@ -1,3 +1,4 @@
+importe "sistema"
 tela = importe "tela_grafica"
 importe "cartesiano"
 importe "matriz"

@@ -22,6 +22,7 @@ mod imagem;
 mod laco_grafico;
 #[cfg(feature = "graphics")]
 pub(crate) use laco_grafico::LacoGrafico;
+mod introspeccao;
 mod mat;
 mod matriz;
 mod nucleo;
@@ -70,7 +71,7 @@ pub const NATIVAS: &[Nativa] = &[
     },
     Nativa {
         names: &["durma"],
-        module: None,
+        module: Some("sistema"),
     },
     Nativa {
         names: &["leia"],
@@ -97,7 +98,11 @@ pub const NATIVAS: &[Nativa] = &[
         module: None,
     },
     Nativa {
-        names: &["catalogo", "catálogo"],
+        names: &["modulos", "módulos"],
+        module: None,
+    },
+    Nativa {
+        names: &["funcoes", "funções"],
         module: None,
     },
     Nativa {
@@ -174,7 +179,7 @@ pub const NATIVAS: &[Nativa] = &[
     },
     Nativa {
         names: &["ambiente"],
-        module: None,
+        module: Some("sistema"),
     },
     Nativa {
         names: &["ordene"],
@@ -767,7 +772,8 @@ impl Vm<'_, '_> {
             "formato" => self.bi_formato(args, span),
             "formate" => self.bi_formate(args, span, env),
             "avalie" => self.bi_avalie(args, span, env),
-            "catalogo" | "catálogo" => self.bi_catalogo(args, span, env),
+            "modulos" | "módulos" => self.bi_modulos(args, span),
+            "funcoes" | "funções" => self.bi_funcoes(args, span, env),
             "ajuda" => self.bi_ajuda(args, span),
             "tipo" => self.bi_tipo(args, span),
             "tipos" => self.bi_tipos(args, span),
@@ -957,40 +963,6 @@ pub(crate) fn builtin_modulo(name: &str) -> &'static str {
         .unwrap_or("")
 }
 
-pub(crate) fn builtin_args(name: &str) -> String {
-    lookup_builtin_doc(name)
-        .map(|d| d.args_text())
-        .unwrap_or_default()
-}
-
-pub(crate) fn builtin_doc_summary(name: &str) -> String {
-    lookup_builtin_doc(name)
-        .map(|d| d.summary.clone())
-        .unwrap_or_default()
-}
-
-/// Docs for `nome` inside `modulo`. Shared names (`adicione`, `fundo`, `mostre`)
-/// must not show the first module that registered the word.
-pub(crate) fn builtin_args_em(name: &str, modulo: &str) -> String {
-    doc_no_modulo(name, modulo)
-        .map(|d| d.args_text())
-        .unwrap_or_default()
-}
-
-pub(crate) fn builtin_doc_summary_em(name: &str, modulo: &str) -> String {
-    doc_no_modulo(name, modulo)
-        .map(|d| d.summary.clone())
-        .unwrap_or_default()
-}
-
-fn doc_no_modulo(name: &str, modulo: &str) -> Option<&'static crate::runtime::nativas::referencia::BuiltinDoc> {
-    if modulo.is_empty() {
-        lookup_builtin_doc(name)
-    } else {
-        lookup_alvo(&format!("{modulo}::{name}"))
-    }
-}
-
 pub(super) fn csv_cell(v: &Value) -> String {
     match v {
         Value::Texto(s) => s.clone(),
@@ -1038,7 +1010,9 @@ mod tests {
         } else {
             ""
         };
-        format!("importe \"matriz\"\nimporte \"arquivo\"\nimporte \"mat\"\n{terminal}{src}")
+        format!(
+            "importe \"sistema\"\nimporte \"matriz\"\nimporte \"arquivo\"\nimporte \"mat\"\n{terminal}{src}"
+        )
     }
 
     fn run(src: &str) -> String {
@@ -1091,8 +1065,10 @@ mod tests {
         assert!(names.contains(&"procure"));
         assert!(names.contains(&"tipo"));
         assert!(names.contains(&"tipos"));
-        assert!(names.contains(&"catalogo"));
-        assert!(names.contains(&"catálogo"));
+        assert!(names.contains(&"modulos"));
+        assert!(names.contains(&"funcoes"));
+        assert!(names.contains(&"módulos"));
+        assert!(names.contains(&"funções"));
         assert!(names.contains(&"mapa"));
         assert!(names.contains(&"conjunto"));
         assert!(names.contains(&"matriz"));
@@ -1124,8 +1100,8 @@ mod tests {
             Some("numero")
         );
         assert_eq!(
-            lookup_builtin_doc("catálogo").map(|d| d.name.as_str()),
-            Some("catalogo")
+            lookup_builtin_doc("funções").map(|d| d.name.as_str()),
+            Some("funcoes")
         );
         for name in &names {
             assert!(
@@ -1171,9 +1147,9 @@ escreva(tipo(f))"#),
         assert_eq!(
             run(r#"escreva(tipos())"#),
             if cfg!(feature = "process") {
-                "[\"numero\", \"faixa\", \"texto\", \"bool\", \"lista\", \"par\", \"mapa\", \"conjunto\", \"matriz\", \"imagem\", \"funcao\", \"modulo\", \"processo\", \"nada\"]\n"
+                "[\"numero\", \"intervalo\", \"texto\", \"bool\", \"lista\", \"par\", \"mapa\", \"conjunto\", \"matriz\", \"imagem\", \"funcao\", \"modulo\", \"processo\", \"nada\"]\n"
             } else {
-                "[\"numero\", \"faixa\", \"texto\", \"bool\", \"lista\", \"par\", \"mapa\", \"conjunto\", \"matriz\", \"imagem\", \"funcao\", \"modulo\", \"nada\"]\n"
+                "[\"numero\", \"intervalo\", \"texto\", \"bool\", \"lista\", \"par\", \"mapa\", \"conjunto\", \"matriz\", \"imagem\", \"funcao\", \"modulo\", \"nada\"]\n"
             }
         );
         assert_eq!(run(r#"escreva(tipos() contem "numero")"#), "verdadeiro\n");
@@ -1201,7 +1177,10 @@ escreva(f(3))
             "6\n"
         );
         assert_eq!(run(r#"escreva(avalie("1 / 0") se_falhar { 0 })"#), "0\n");
-        assert_eq!(run(r#"escreva(avalie("2 +") se_falhar { "ops" })"#), "ops\n");
+        assert_eq!(
+            run(r#"escreva(avalie("2 +") se_falhar { "ops" })"#),
+            "ops\n"
+        );
         assert!(run_err("avalie(1)").contains("texto"));
         assert!(run_err(r#"avalie("")"#).contains("expressão"));
         let err = run_to_string(r#"avalie("1 / 0")"#, "teste.lep").expect_err("divisão");
@@ -1614,7 +1593,7 @@ escreva(b:linha)
 
         use crate::runtime::run_to_string_with;
         let err = run_to_string_with(
-            "durma(1)",
+            "importe \"sistema\"\ndurma(1)",
             "t.lep",
             "",
             None,
@@ -1770,7 +1749,7 @@ escreva(A == cheia(2, 3, 7))
             "2\n"
         );
         assert!(
-            run_err("tamanho(10)").contains("espera texto, lista, mapa, conjunto, matriz ou faixa")
+            run_err("tamanho(10)").contains("espera texto, lista, mapa, conjunto, matriz ou intervalo")
         );
     }
 
@@ -1815,145 +1794,6 @@ escreva(A == cheia(2, 3, 7))
         assert!(run_err(r#"procure("onde", "")"#).contains("não vazio"));
         assert!(run_err("procure(10, 1)").contains("texto ou lista"));
         assert!(run_err(r#"procure("onde", 1)"#).contains("esperado texto"));
-    }
-
-    #[test]
-    #[cfg(feature = "terminal")]
-    fn catalogo_lists_natives_user_functions_and_modules() {
-        assert_eq!(
-            run(r#"
-achou = 0
-para f em catalogo() {
-    se f:nome == "escreva" e f:tipo == "nativa" {
-        achou = 1
-    }
-}
-escreva(achou)
-"#),
-            "1\n"
-        );
-        assert_eq!(
-            run(r#"
-soma = funcao(a, b) { a + b }
-para f em catalogo() {
-    se f:nome == "soma" {
-        escreva(f:tipo)
-        escreva(f:args)
-    }
-}
-"#),
-            "funcao\na, b\n"
-        );
-        assert_eq!(
-            run(r#"
-para f em catalogo() {
-    se f:nome == "raiz" {
-        escreva(f:modulo)
-        escreva(f:args)
-    }
-}
-"#),
-            "mat\nnumero\n"
-        );
-        assert_eq!(
-            run(r#"
-tela = importe "tela"
-para f em catalogo() {
-    se f:nome == "tela" {
-        escreva(f:tipo)
-    }
-}
-"#),
-            "modulo\n"
-        );
-        assert_eq!(
-            run(r#"escreva(tamanho(catálogo()))"#),
-            run(r#"escreva(tamanho(catalogo()))"#)
-        );
-        assert_eq!(
-            run(r#"
-c = mapa([
-    :nome -> "Thiago",
-    :mais -> funcao(x) { x + 1 }
-])
-para f em catalogo(c) {
-    se f:nome == "mais" {
-        escreva(f:tipo)
-        escreva(f:args)
-    }
-}
-escreva(c)
-"#),
-            "funcao\nx\nmapa{\"nome\": \"Thiago\", \"mais\": <funcao(x)>}\n"
-        );
-        assert_eq!(
-            run(r#"
-para f em catalogo("matriz") {
-    se f:nome == "zeros" {
-        escreva(f:modulo)
-        escreva(f:tipo)
-    }
-}
-"#),
-            "matriz\nnativa\n"
-        );
-        assert_eq!(
-            run(r#"
-para f em catalogo("mat") {
-    se f:nome == "pi" {
-        escreva(f:tipo)
-    }
-}
-"#),
-            "numero\n"
-        );
-        assert_eq!(
-            run(r#"
-para f em catalogo("tela") {
-    se f:nome == "nova_linha" {
-        escreva(f:tipo)
-    }
-}
-"#),
-            "texto\n"
-        );
-        assert_eq!(
-            run(r#"
-inc = funcao(x) { x + 1 }
-para f em catalogo(inc) {
-    escreva(f:args)
-    escreva(f:tipo)
-}
-"#),
-            "x\nfuncao\n"
-        );
-        assert!(run_err("catalogo(1)").contains("módulo, mapa, função"));
-        assert!(run_err("catalogo(1, 2)").contains("0 ou 1"));
-    }
-
-    #[test]
-    #[cfg(feature = "graphics")]
-    fn catalogo_separa_nomes_repetidos() {
-        let out = run(r#"
-para f em catalogo("cartesiano") {
-    se f:nome == "adicione" { escreva(f:args) }
-}
-para f em catalogo("crono") {
-    se f:nome == "adicione" { escreva(f:args) }
-}
-para f em catalogo("tela_grafica") {
-    se f:nome == "fundo" { escreva(f:args) }
-    se f:nome == "mostre" { escreva(f:args) }
-}
-c = importe "cartesiano"
-para f em catalogo(c) {
-    se f:nome == "adicione" { escreva(f:args) }
-}
-"#);
-        assert_eq!(
-            out, "documento, grafico\ndata, n, unidade\ng, cor\ng\ndocumento, grafico\n",
-            "{out}"
-        );
     }
 
     #[test]

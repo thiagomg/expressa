@@ -938,7 +938,7 @@ mod tests {
         // One source with every ASCII keyword from the language (space-separated).
         let src = "\
 se senao ou e nao inicio fim funcao para em \
-repita enquanto vezes importe contem verdadeiro falso se_falhar retorne \
+repita enquanto vezes importe contem verdadeiro falso nada se_falhar retorne \
 pare continue";
 
         assert_eq!(
@@ -961,6 +961,7 @@ pare continue";
                 TokenKind::Contem,
                 TokenKind::Verdadeiro,
                 TokenKind::Falso,
+                TokenKind::Nada,
                 TokenKind::SeFalhar,
                 TokenKind::Retorne,
                 TokenKind::Pare,

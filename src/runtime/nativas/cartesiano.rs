@@ -266,17 +266,12 @@ fn expect_mapa(v: &Value, papel: &str, span: Span, vm: &Vm<'_, '_>) -> Result<Ma
 
 fn tem_chave(mapa: &MapaRc, chave: &str) -> bool {
     let k = MapKey::Texto(chave.into());
-    mapa.borrow().iter().any(|(kk, _)| *kk == k)
+    mapa.borrow().contains_key(&k)
 }
 
 fn get_lista(mapa: &MapaRc, chave: &str) -> Option<ListaRc> {
     let k = MapKey::Texto(chave.into());
-    match mapa
-        .borrow()
-        .iter()
-        .find(|(kk, _)| *kk == k)
-        .map(|(_, v)| v)
-    {
+    match mapa.borrow().get(&k) {
         Some(Value::Lista(xs)) => Some(Rc::clone(xs)),
         _ => None,
     }
@@ -284,12 +279,7 @@ fn get_lista(mapa: &MapaRc, chave: &str) -> Option<ListaRc> {
 
 fn get_f64(mapa: &MapaRc, chave: &str) -> Option<f64> {
     let k = MapKey::Texto(chave.into());
-    match mapa
-        .borrow()
-        .iter()
-        .find(|(kk, _)| *kk == k)
-        .map(|(_, v)| v)
-    {
+    match mapa.borrow().get(&k) {
         Some(Value::Numero(n)) => Some(n.to_f64()),
         _ => None,
     }
@@ -297,24 +287,15 @@ fn get_f64(mapa: &MapaRc, chave: &str) -> Option<f64> {
 
 fn get_texto(mapa: &MapaRc, chave: &str) -> Option<String> {
     let k = MapKey::Texto(chave.into());
-    match mapa
-        .borrow()
-        .iter()
-        .find(|(kk, _)| *kk == k)
-        .map(|(_, v)| v)
-    {
+    match mapa.borrow().get(&k) {
         Some(Value::Texto(s)) => Some(s.clone()),
         _ => None,
     }
 }
 
-fn set_num(entries: &mut Vec<(MapKey, Value)>, chave: &str, n: Numero) {
+fn set_num(entries: &mut HashMap<MapKey, Value>, chave: &str, n: Numero) {
     let key = MapKey::Texto(chave.into());
-    if let Some((_, v)) = entries.iter_mut().find(|(k, _)| *k == key) {
-        *v = Value::Numero(n);
-    } else {
-        entries.push((key, Value::Numero(n)));
-    }
+    entries.insert(key, Value::Numero(n));
 }
 
 /// Copy of `v` that shares no list, map, set or matrix with it, so later
@@ -348,7 +329,7 @@ fn copiar(v: &Value, copias: &mut HashMap<usize, Value>) -> Value {
             }
             let copia = Value::mapa(Vec::new());
             copias.insert(id, copia.clone());
-            let entradas: Vec<(MapKey, Value)> = m
+            let entradas: HashMap<MapKey, Value> = m
                 .borrow()
                 .iter()
                 .map(|(k, x)| (k.clone(), copiar(x, copias)))
@@ -359,7 +340,7 @@ fn copiar(v: &Value, copias: &mut HashMap<usize, Value>) -> Value {
             copia
         }
         Value::Par(k, x) => Value::Par(k.clone(), Box::new(copiar(x, copias))),
-        Value::Conjunto(xs) => Value::conjunto(xs.borrow().clone()),
+        Value::Conjunto(xs) => Value::conjunto_de_hash(xs.borrow().clone()),
         Value::Matriz(m) => Value::matriz(m.borrow().clone()),
         other => other.clone(),
     })

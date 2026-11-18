@@ -2,7 +2,8 @@
   "keywords": {
     "constantes": [
       "verdadeiro",
-      "falso"
+      "falso",
+      "nada"
     ],
     "operadores": [
       "e",
@@ -48,6 +49,7 @@
     "mat",
     "matriz",
     "processo",
+    "sistema",
     "tela",
     "tela_grafica"
   ],
@@ -126,7 +128,7 @@
     {
       "name": "durma",
       "aliases": [],
-      "module": null,
+      "module": "sistema",
       "kind": "funcao",
       "signatures": [
         "durma(segundos)"
@@ -206,18 +208,33 @@
       "doc": "Executa o texto como código Expressa no escopo atual e devolve o último valor.\n\nVê as variáveis e funções já definidas; uma atribuição no texto altera o\nescopo de quem chamou (função não escreve nomes de fora).\n\nErros: o argumento não é texto; o texto está vazio; erro de sintaxe ou de\nexecução no código avaliado. Tudo isso pode ir em se_falhar.\n\nExemplo: avalie(\"2 + 3 * 4\")"
     },
     {
-      "name": "catalogo",
+      "name": "modulos",
       "aliases": [
-        "catálogo"
+        "módulos"
       ],
       "module": null,
       "kind": "funcao",
       "signatures": [
-        "catalogo()",
-        "catalogo(alvo)"
+        "modulos()",
+        "modulos(modo)"
       ],
-      "summary": "Escopo atual, ou o que tem num mapa, módulo ou função (nome, args, tipo, modulo).",
-      "doc": "Escopo atual, ou o que tem num mapa, módulo ou função (nome, args, tipo, modulo).\n\nSem argumento, devolve o que está visível agora. Com argumento: mapa (uma\nlinha por chave), módulo, texto \"matriz\" (módulo nativo) ou uma função.\nCada item tem :nome, :tipo, :args, :modulo e :doc. catálogo() é o mesmo.\n\nExemplo: catalogo(c)"
+      "summary": "Lista os módulos disponíveis: núcleo, nativos e arquivos já importados.",
+      "doc": "Lista os módulos disponíveis: núcleo, nativos e arquivos já importados.\n\nSem argumento, imprime os nomes em ordem alfabética e devolve nada.\nCom :dados, devolve uma lista de mapas com :nome (texto) e :funcoes\n(lista de mapas com :nome, :args e :doc, como funcoes).\nTambém módulos(). O núcleo aparece como \"nucleo\".\nArquivos aparecem pelo primeiro caminho usado para importá-los, sem\nduplicar aliases do mesmo arquivo. Se nomes colidirem, usa o caminho absoluto.\n\nExemplo: dados = modulos(:dados)"
+    },
+    {
+      "name": "funcoes",
+      "aliases": [
+        "funções"
+      ],
+      "module": null,
+      "kind": "funcao",
+      "signatures": [
+        "funcoes()",
+        "funcoes(alvo)",
+        "funcoes(alvo, modo)"
+      ],
+      "summary": "Lista funções públicas com argumentos e documentação completa.",
+      "doc": "Lista funções públicas com argumentos e documentação completa.\n\nSem alvo, ou com nada, consulta as funções visíveis no escopo atual.\nAceita nome de módulo (\"arquivo\", \"nucleo\", caminho importado ou apelido)\nou o próprio módulo. Nomes iniciados por _ e valores que não são funções\nficam de fora. A lista é ordenada pelo nome. Também funções().\nSem modo, imprime e devolve nada. Com :dados no segundo argumento,\ndevolve uma lista de mapas: :nome (texto), :args (lista de textos) e\n:doc (documentação completa, ou \"\" se não houver).\n\nExemplo: dados = funcoes(\"arquivo\", :dados)"
     },
     {
       "name": "ajuda",
@@ -228,7 +245,7 @@
         "ajuda(alvo)"
       ],
       "summary": "Ficha de uma função nativa ou definida: assinatura, argumentos e documentação.",
-      "doc": "Ficha de uma função nativa ou definida: assinatura, argumentos e documentação.\n\nO alvo é um texto (\"escreva\", \"matriz::zeros\"), uma função ou uma nativa.\nA mesma ficha alimenta o REPL (ajuda escreva) e a janela Ajuda da Aula.\n\nExemplo: ajuda(\"matriz::zeros\")"
+      "doc": "Ficha de uma função nativa ou definida: assinatura, argumentos e documentação.\n\nO alvo é um texto (\"escreva\", \"matriz::zeros\"), uma função ou uma nativa.\nA mesma ficha alimenta ajuda(\"escreva\") no REPL e a janela Ajuda da Aula.\n\nExemplo: ajuda(\"matriz::zeros\")"
     },
     {
       "name": "tipo",
@@ -239,7 +256,7 @@
         "tipo(valor)"
       ],
       "summary": "Quantidade de caracteres, itens, pares ou linhas.",
-      "doc": "Quantidade de caracteres, itens, pares ou linhas.\n\nNome do tipo do valor: numero, faixa, texto, bool, lista, par, mapa,\nconjunto, matriz, imagem, funcao, modulo ou nada.\n\nServe para uma função aceitar mais de um tipo (se tipo(x) == \"numero\").\nOs nomes são os mesmos das mensagens de erro (sem acento).\n\nExemplo: tipo(10)"
+      "doc": "Quantidade de caracteres, itens, pares ou linhas.\n\nNome do tipo do valor: numero, intervalo, texto, bool, lista, par, mapa,\nconjunto, matriz, imagem, funcao, modulo ou nada.\n\nServe para uma função aceitar mais de um tipo (se tipo(x) == \"numero\").\nOs nomes são os mesmos das mensagens de erro (sem acento).\n\nExemplo: tipo(10)"
     },
     {
       "name": "tipos",
@@ -260,8 +277,8 @@
       "signatures": [
         "tamanho(valor)"
       ],
-      "summary": "Texto usa caracteres Unicode, não bytes. Para colunas de matriz, use ncolunas. Quantos inteiros a faixa gera: tamanho(0..3) é 3. Faixa sem teto (0..) é erro.",
-      "doc": "Texto usa caracteres Unicode, não bytes. Para colunas de matriz, use ncolunas.\nQuantos inteiros a faixa gera: tamanho(0..3) é 3. Faixa sem teto (0..) é erro.\n\nExemplo: tamanho(\"olá\")"
+      "summary": "Texto usa caracteres Unicode, não bytes. Para colunas de matriz, use ncolunas. Quantos inteiros o intervalo gera: tamanho(0..3) é 3. Intervalo sem teto (0..) é erro.",
+      "doc": "Texto usa caracteres Unicode, não bytes. Para colunas de matriz, use ncolunas.\nQuantos inteiros o intervalo gera: tamanho(0..3) é 3. Intervalo sem teto (0..) é erro.\n\nExemplo: tamanho(\"olá\")"
     },
     {
       "name": "primeiro",
@@ -271,8 +288,8 @@
       "signatures": [
         "primeiro(lista)"
       ],
-      "summary": "Primeiro elemento da lista (índice 0) ou primeiro número da faixa. Erro se vazia.",
-      "doc": "Primeiro elemento da lista (índice 0) ou primeiro número da faixa. Erro se vazia.\n\nExemplo: primeiro([10, 20])"
+      "summary": "Primeiro elemento da lista (índice 0) ou primeiro número do intervalo. Erro se não houver elementos.",
+      "doc": "Primeiro elemento da lista (índice 0) ou primeiro número do intervalo. Erro se não houver elementos.\n\nExemplo: primeiro([10, 20])"
     },
     {
       "name": "ultimo",
@@ -284,8 +301,8 @@
       "signatures": [
         "ultimo(lista)"
       ],
-      "summary": "Último elemento da lista ou último número gerado da faixa. Erro se vazia ou sem teto.",
-      "doc": "Último elemento da lista ou último número gerado da faixa. Erro se vazia ou sem teto.\n\nExemplo: ultimo([10, 20])"
+      "summary": "Último elemento da lista ou último número gerado do intervalo. Erro se não houver elementos ou se não tiver teto.",
+      "doc": "Último elemento da lista ou último número gerado do intervalo. Erro se não houver elementos ou se não tiver teto.\n\nExemplo: ultimo([10, 20])"
     },
     {
       "name": "infinito",
@@ -295,8 +312,8 @@
       "signatures": [
         "infinito(r)"
       ],
-      "summary": "verdadeiro se a faixa não tem teto (0..). Só vale para faixa.",
-      "doc": "verdadeiro se a faixa não tem teto (0..). Só vale para faixa.\n\nExemplo: infinito(0..)"
+      "summary": "verdadeiro se o intervalo não tem teto (0..). Só vale para intervalo.",
+      "doc": "verdadeiro se o intervalo não tem teto (0..). Só vale para intervalo.\n\nExemplo: infinito(0..)"
     },
     {
       "name": "maiuscula",
@@ -341,8 +358,8 @@
         "remova(lista, r)",
         "remova(mapa, chave)"
       ],
-      "summary": "Devolve uma cópia sem o índice/faixa (0…n−1) ou sem a chave do mapa.",
-      "doc": "Devolve uma cópia sem o índice/faixa (0…n−1) ou sem a chave do mapa.\n\nÍndices começam em 0. A faixa é exclusiva no fim: remova(xs, 1..3) tira os\níndices 1 e 2. Use remova(xs, 1..=2) para incluir o 2. No conjunto, o elemento some.\n\nExemplo: xs = xs.remova(2)"
+      "summary": "Devolve uma cópia sem o índice/intervalo (0…n−1) ou sem a chave do mapa.",
+      "doc": "Devolve uma cópia sem o índice/intervalo (0…n−1) ou sem a chave do mapa.\n\nÍndices começam em 0. O intervalo é exclusivo no fim: remova(xs, 1..3) tira os\níndices 1 e 2. Use remova(xs, 1..=2) para incluir o 2. No conjunto, o elemento some.\n\nExemplo: xs = xs.remova(2)"
     },
     {
       "name": "substitua",
@@ -410,7 +427,7 @@
         "mapa(pares)"
       ],
       "summary": "Monta um mapa a partir de uma lista de pares chave -> valor.",
-      "doc": "Monta um mapa a partir de uma lista de pares chave -> valor.\n\nSem argumento (ou com []) o mapa é vazio. Chaves duplicadas são erro.\n\nExemplo: mapa([:nome -> \"Ana\", :idade -> 25])"
+      "doc": "Monta um mapa a partir de uma lista de pares chave -> valor.\n\nSem argumento (ou com []) o mapa é vazio. Chaves duplicadas são erro.\nNão preserva ordem de inserção. A impressão ordena as chaves.\n\nExemplo: mapa([:nome -> \"Ana\", :idade -> 25])"
     },
     {
       "name": "conjunto",
@@ -422,12 +439,12 @@
         "conjunto(xs)"
       ],
       "summary": "Monta um conjunto a partir de uma lista (valores únicos).",
-      "doc": "Monta um conjunto a partir de uma lista (valores únicos).\n\nSem argumento (ou com []) o conjunto é vazio. Duplicatas caem; a ordem\nde inserção permanece. Elementos: texto, número inteiro ou bool.\n\nExemplo: conjunto([:ana, :bia])"
+      "doc": "Monta um conjunto a partir de uma lista (valores únicos).\n\nSem argumento (ou com []) o conjunto é vazio. Duplicatas caem.\nElementos: texto, número inteiro ou bool. A iteração não tem ordem\ngarantida; a impressão ordena os elementos.\n\nExemplo: conjunto([:ana, :bia])"
     },
     {
       "name": "ambiente",
       "aliases": [],
-      "module": null,
+      "module": "sistema",
       "kind": "funcao",
       "signatures": [
         "ambiente(nome)"
@@ -953,6 +970,30 @@
       ],
       "summary": "Lê o arquivo; cada linha vira um texto (sem quebra de linha).",
       "doc": "Lê o arquivo; cada linha vira um texto (sem quebra de linha).\n\nArquivo vazio devolve []. Caminhos relativos partem da pasta do .lep.\n`~` e `~/pasta` são a pasta pessoal. Falhas de leitura são erros (se_falhar).\n\nExemplo: leia_arquivo(\"dados.txt\") se_falhar []"
+    },
+    {
+      "name": "leia_bytes",
+      "aliases": [],
+      "module": "arquivo",
+      "kind": "funcao",
+      "signatures": [
+        "leia_bytes()",
+        "leia_bytes(caminho)"
+      ],
+      "summary": "Lê os bytes sem modificar quebras de linha; devolve uma lista de números de 0 a 255. Com caminho, lê o arquivo (relativo à pasta do .lep). Sem caminho, lê a entrada padrão até o fim, incluindo bytes que não formam texto UTF-8. Na Aula, use um caminho. Exemplo: leia_bytes(\"dados.bin\")",
+      "doc": "Lê os bytes sem modificar quebras de linha; devolve uma lista de números de 0 a 255.\nCom caminho, lê o arquivo (relativo à pasta do .lep). Sem caminho, lê a entrada\npadrão até o fim, incluindo bytes que não formam texto UTF-8. Na Aula, use um caminho.\nExemplo: leia_bytes(\"dados.bin\")"
+    },
+    {
+      "name": "texto_utf8",
+      "aliases": [],
+      "module": "arquivo",
+      "kind": "funcao",
+      "signatures": [
+        "texto_utf8(bytes)",
+        "texto_utf8(bytes, modo)"
+      ],
+      "summary": "Converte uma lista de bytes em texto UTF-8. O modo padrão, :estrito, rejeita sequências inválidas. :substitua troca essas sequências pelo caractere �; :ignore descarta os bytes inválidos. Exemplo: texto_utf8([79, 108, 195, 161])",
+      "doc": "Converte uma lista de bytes em texto UTF-8.\nO modo padrão, :estrito, rejeita sequências inválidas. :substitua troca essas\nsequências pelo caractere �; :ignore descarta os bytes inválidos.\nExemplo: texto_utf8([79, 108, 195, 161])"
     },
     {
       "name": "salve_arquivo",

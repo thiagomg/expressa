@@ -16,6 +16,9 @@ pub enum Expr {
         value: String, // already unescaped
         span: Span,
     },
+    Nada {
+        span: Span,
+    },
     Bool {
         value: bool,
         span: Span,
@@ -80,7 +83,7 @@ pub enum Expr {
     /// `a..b`, `a..`, `..b` or `..`. `..=` is desugared to exclusive `..`.
     /// `start` is always present (`..3` becomes `0..3`). `end` is `None` when
     /// the range has no upper bound (`0..`).
-    Faixa {
+    Intervalo {
         start: Box<Expr>,
         end: Option<Box<Expr>>,
         span: Span,
@@ -138,6 +141,7 @@ impl Expr {
         match self {
             Expr::Number { span, .. }
             | Expr::String { span, .. }
+            | Expr::Nada { span }
             | Expr::Bool { span, .. }
             | Expr::List { span, .. }
             | Expr::Par { span, .. }
@@ -148,7 +152,7 @@ impl Expr {
             | Expr::Call { span, .. }
             | Expr::Index { span, .. }
             | Expr::Index2 { span, .. }
-            | Expr::Faixa { span, .. }
+            | Expr::Intervalo { span, .. }
             | Expr::Unary { span, .. }
             | Expr::Binary { span, .. }
             | Expr::If { span, .. }

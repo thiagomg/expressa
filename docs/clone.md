@@ -55,7 +55,7 @@ Parâmetros e nomes locais definitivamente disponíveis nos caminhos de execuç�
 
 Nativas do núcleo podem ser referenciadas sem capturar o programa. Uma nativa importada diretamente pode ser clonada como valor; uma função que acessa um módulo ou alias externo continua dependendo daquele binding.
 
-A classificação é **conservadora**. São recusadas funções que usam `avalie` ou `catalogo` e chamadas indiretas cuja ausência de acesso ao ambiente não é demonstrável. `ordene` também é recusada numa função clonada, pois seu callback pode ser uma nativa que avalia texto no ambiente do chamador. Essas restrições evitam aceitar código que alcance estado externo através de aliases ou callbacks. Uma função sem nomes livres pode, portanto, receber erro de classificação quando faz chamadas indiretas; isso não significa que ela foi comprovada como tendo uma captura.
+A classificação é **conservadora**. São recusadas funções que usam `avalie`, `funcoes` ou `modulos` e chamadas indiretas cuja ausência de acesso ao ambiente não é demonstrável. `ordene` também é recusada numa função clonada, pois seu callback pode ser uma nativa que avalia texto no ambiente do chamador. Essas restrições evitam aceitar código que alcance estado externo através de aliases ou callbacks. Uma função sem nomes livres pode, portanto, receber erro de classificação quando faz chamadas indiretas; isso não significa que ela foi comprovada como tendo uma captura.
 
 ```text
 fator = 2

@@ -285,10 +285,7 @@ pub(crate) fn eh_data_ou_epoch(v: &Value) -> bool {
 }
 
 fn campo(m: &super::super::value::MapaRc, nome: &str) -> Option<Value> {
-    m.borrow()
-        .iter()
-        .find(|(k, _)| matches!(k, MapKey::Texto(s) if s == nome))
-        .map(|(_, v)| v.clone())
+    m.borrow().get(&MapKey::Texto(nome.into())).cloned()
 }
 
 fn unidade(v: &Value) -> Option<&str> {

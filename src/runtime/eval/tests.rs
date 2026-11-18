@@ -308,7 +308,7 @@ escreva(g.tela_grafica::pixel(10, 9))
 
 #[test]
 #[cfg(feature = "graphics")]
-fn tartaruga_catalogo_esconde_imports_internos() {
+fn tartaruga_funcoes_esconde_imports_internos() {
     let src = r#"
 ache = funcao(lista, nome)
 inicio
@@ -322,7 +322,7 @@ fim
 falso
 fim
 tartaruga = importe "../lib/tartaruga"
-membros = catalogo(tartaruga)
+membros = funcoes(tartaruga, :dados)
 escreva(ache(membros, "ande"))
 escreva(ache(membros, "velocidade"))
 escreva(ache(membros, "_mat"))
@@ -455,7 +455,7 @@ escreva(x)
 fim
 "#,
     );
-    assert!(msg.contains("lista, texto, conjunto ou faixa"), "{msg}");
+    assert!(msg.contains("lista, texto, conjunto ou intervalo"), "{msg}");
 }
 
 #[test]
@@ -586,10 +586,9 @@ s += conjunto([:bia, :dani])
 escreva(tamanho(s))
 s = s.remova(:ana)
 escreva(s contem :ana)
-para x em conjunto([10, 20])
-inicio
-escreva(x)
-fim
+itens = []
+para x em conjunto([10, 20]) { itens += [x] }
+para x em ordene(itens) { escreva(x) }
 "#),
         "verdadeiro\nfalso\n3\nverdadeiro\n5\nfalso\n10\n20\n"
     );
@@ -926,7 +925,7 @@ s = ""
 para i em 0..3 { s = s + i }
 escreva(s)
 "#),
-        "faixa 0..3 0..3 0..3 verdadeiro falso\n3 2 3 0 1\n3 4 0 verdadeiro falso\n012\n"
+        "intervalo 0..3 0..3 0..3 verdadeiro falso\n3 2 3 0 1\n3 4 0 verdadeiro falso\n012\n"
     );
     assert_eq!(run("escreva(0..)"), "0..\n");
     assert_eq!(
@@ -939,16 +938,16 @@ escreva(s)
     );
     assert!(run_err("tamanho(0..)").contains("sem teto"));
     assert!(run_err("ultimo(0..)").contains("sem teto"));
-    assert!(run_err("primeiro(3..3)").contains("vazia"));
-    assert!(run_err("ultimo(3..3)").contains("vazia"));
-    assert!(run_err("(0..5)[2]").contains("indexar faixa"));
+    assert!(run_err("primeiro(3..3)").contains("vazio"));
+    assert!(run_err("ultimo(3..3)").contains("vazio"));
+    assert!(run_err("(0..5)[2]").contains("indexar intervalo"));
     assert!(run_err("0..3 contem 1").contains("contem"));
     assert!(run_err("(0..3) + (3..5)").contains("'+'"));
     assert!(run_err("0..3 < 1..2").contains("comparação"));
     assert!(run_err("para i em 5 { 0 }").contains("0..n"));
     assert_eq!(run("r = 0..\nxs = [1]\nescreva(xs[r])"), "[1]\n");
     assert!(run_err("xs = [1]\nxs.remova(1..)").contains("teto"));
-    assert!(run_err("infinito(1)").contains("faixa"));
+    assert!(run_err("infinito(1)").contains("intervalo"));
     assert_eq!(
         run_err("0..=9223372036854775807"),
         "o teto de ..= passa do maior inteiro"
@@ -1471,7 +1470,7 @@ fn lista_e_mapa_que_contem_a_si_mesmos_imprimem_e_comparam() {
          escreva(formate(\"{}\", [xs]))\n");
     assert_eq!(
         out,
-        "mapa{\"x\": 1, \"eu\": mapa{…}}\n\
+        "mapa{\"eu\": mapa{…}, \"x\": 1}\n\
          [[…], 2]\n\
          verdadeiro verdadeiro verdadeiro\n\
          verdadeiro\n\
@@ -2059,7 +2058,7 @@ fn breakpoint_added_while_running_is_hit() {
 #[test]
 fn parar_interrupts_a_long_durma() {
     let started = std::time::Instant::now();
-    let (pauses, cmds, done) = debug_session("durma(30)\n");
+    let (pauses, cmds, done) = debug_session("importe \"sistema\"\ndurma(30)\n");
     pauses.recv_timeout(WAIT).expect("pause on start");
     cmds.send("continuar".into()).unwrap();
     std::thread::sleep(std::time::Duration::from_millis(100));
@@ -2075,7 +2074,7 @@ fn parar_interrupts_a_long_durma() {
         let mut input = io::Cursor::new("");
         let (mut out, mut err) = (Vec::new(), Vec::new());
         let r = run_with(
-            "durma(30)\n",
+            "importe \"sistema\"\ndurma(30)\n",
             "t.lep",
             Box::new(StopHook::new(rx)),
             &mut input,
@@ -2608,9 +2607,9 @@ fn faixa_aberta_no_maior_inteiro_escreve_antes_de_estourar() {
     let numero = "9.223.372.036.854.775.807\n";
     for backend in backends() {
         let (out, result) = run_backend(estoura, "r.lep", backend);
-        let err = result.expect_err("a faixa aberta no maior inteiro deve falhar");
+        let err = result.expect_err("o intervalo aberto no maior inteiro deve falhar");
         assert!(
-            err.message.contains("faixa passou do maior inteiro"),
+            err.message.contains("intervalo passou do maior inteiro"),
             "{backend:?} {err}"
         );
         assert_eq!(String::from_utf8(out).unwrap(), numero, "{backend:?}");

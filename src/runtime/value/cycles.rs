@@ -219,10 +219,10 @@ mod tests {
         };
         let Value::Mapa(map) = &b else { unreachable!() };
         list.borrow_mut()[0] = b.clone();
-        map.borrow_mut().push((
+        map.borrow_mut().insert(
             MapKey::Texto("back".into()),
             Value::Par(MapKey::Bool(true), Box::new(a.clone())),
-        ));
+        );
         let weak_list = Rc::downgrade(list);
         let weak_map = Rc::downgrade(map);
         collect_cycles();

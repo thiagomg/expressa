@@ -629,7 +629,7 @@ mod tests {
     #[test]
     fn stopping_a_native_wait_keeps_the_session_available() {
         let mut c = CanalRepl::nova().unwrap();
-        let id = c.enviar("durma(60)".into()).unwrap();
+        let id = c.enviar("importe \"sistema\"\ndurma(60)".into()).unwrap();
         esperar(|| c.controle.atual.load(Ordering::SeqCst) == id.0);
         // Allow entry into the native wait, whose interruption uses Quit internally.
         std::thread::sleep(Duration::from_millis(20));

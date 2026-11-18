@@ -161,7 +161,7 @@ fn check_expr_inner(expr: &Expr, use_: Use) -> Result<(), ParseError> {
             check_expr(row, Use::Value)?;
             check_expr(col, Use::Value)
         }
-        Expr::Faixa { start, end, .. } => {
+        Expr::Intervalo { start, end, .. } => {
             check_expr(start, Use::Value)?;
             if let Some(end) = end {
                 check_expr(end, Use::Value)?;
@@ -178,7 +178,7 @@ fn check_expr_inner(expr: &Expr, use_: Use) -> Result<(), ParseError> {
             }
             Ok(())
         }
-        Expr::String { .. } | Expr::Bool { .. } | Expr::Ident { .. } => Ok(()),
+        Expr::Nada { .. } | Expr::String { .. } | Expr::Bool { .. } | Expr::Ident { .. } => Ok(()),
     }
 }
 

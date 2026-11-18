@@ -359,7 +359,7 @@ impl Machine {
                         match seq {
                             #[cfg(feature = "process")]
                             Value::Processo(p) => Iteration::Process(p),
-                            Value::Faixa { start, end } => Iteration::Range {
+                            Value::Intervalo { start, end } => Iteration::Range {
                                 next: match end {
                                     None => Some(start),
                                     Some(e) if start < e => Some(start),
@@ -407,7 +407,7 @@ impl Machine {
                         estourou,
                     } => {
                         if *estourou {
-                            return Err(vm.err("faixa passou do maior inteiro", spec.first_span));
+                            return Err(vm.err("intervalo passou do maior inteiro", spec.first_span));
                         }
                         match next.take() {
                             None => None,
