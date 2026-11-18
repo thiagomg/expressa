@@ -257,7 +257,7 @@ impl Value {
     /// Nomes que `tipo()` devolve e `tipos()` lista (iguais às mensagens de erro).
     pub const NOMES_DE_TIPO: &'static [&'static str] = &[
         "numero",
-        "faixa",
+        "intervalo",
         "texto",
         "bool",
         "lista",
@@ -277,7 +277,7 @@ impl Value {
         match self {
             Value::Nada => "nada",
             Value::Numero(_) => "numero",
-            Value::Faixa { .. } => "faixa",
+            Value::Faixa { .. } => "intervalo",
             Value::Texto(_) => "texto",
             Value::Bool(_) => "bool",
             Value::Lista(_) => "lista",

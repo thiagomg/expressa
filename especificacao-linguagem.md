@@ -24,15 +24,15 @@ Todo bloco (`inicio`/`fim` ou `{`/`}`) é uma expressão; seu resultado é o val
 | `texto`  | `"olá"`, `"123"`                  |
 | `bool`   | `verdadeiro`, `falso`             |
 | `nada`   | `nada` (ausência de valor)        |
-| `faixa`  | `0..3`, `1..=2`, `5..`            |
+| `intervalo`  | `0..3`, `1..=2`, `5..`            |
 
 `nada` é um literal reservado de ausência de valor. Pode ser atribuído a variáveis, comparado com `==`/`!=`, usado em coleções e retornado explicitamente. Não pode ser usado como identificador.
 
-Tipos compostos: **lista**, **par**, **mapa**, **conjunto**, **matriz**, **imagem** e **faixa**.
+Tipos compostos: **lista**, **par**, **mapa**, **conjunto**, **matriz**, **imagem** e **intervalo**.
 
 Os contextos que exigem inteiro (chaves numéricas, elementos numéricos de conjuntos, contadores e índices) usam inteiros com sinal de 64 bits: −9223372036854775808…9223372036854775807. O tipo `numero` aceita valores fora desse intervalo; ser matematicamente inteiro não garante que um valor seja aceito nesses contextos. Dimensões e índices também devem caber no tamanho de endereço da plataforma e nos limites do host. Conversões fora do intervalo numérico produzem erro, nunca substituem o valor por zero. Um `..=` cujo teto é o maior inteiro (ou maior) diz `o teto de ..= passa do maior inteiro`, sem imprimir o sucessor que o programa não escreveu. `_` entre dígitos é separador (`1_000`, `3.14_15`); `_` no fim, duplicado ou ao lado do ponto é erro. Não há notação científica (`1e5` é erro). Mensagens de erro escrevem números no padrão ativo (`2,5` em pt-BR); CSV e argumentos de processo continuam com ponto.
 
-`tipo(valor)` devolve o nome do tipo como texto (`"numero"`, `"faixa"`, `"texto"`, `"bool"`, `"lista"`, `"par"`, `"mapa"`, `"conjunto"`, `"matriz"`, `"imagem"`, `"funcao"`, `"modulo"`, `"processo"`, `"nada"`). Os nomes são os mesmos das mensagens de erro (sem acento). `escreva` e funções do aluno são `"funcao"`. `tipos()` lista esses nomes.
+`tipo(valor)` devolve o nome do tipo como texto (`"numero"`, `"intervalo"`, `"texto"`, `"bool"`, `"lista"`, `"par"`, `"mapa"`, `"conjunto"`, `"matriz"`, `"imagem"`, `"funcao"`, `"modulo"`, `"processo"`, `"nada"`). Os nomes são os mesmos das mensagens de erro (sem acento). `escreva` e funções do aluno são `"funcao"`. `tipos()` lista esses nomes.
 
 ---
 
@@ -205,7 +205,7 @@ fim
 
 A condição de `enquanto` tem que ser `verdadeiro` ou `falso`. O corpo usa `inicio`/`fim` ou `{`/`}`.
 
-`para x em` percorre **lista**, **texto** (um caractere por vez), **conjunto** ou **faixa**. `para i em 5` é erro (use `0..5` ou `1..=5`). `para i em 0..` é um laço sem teto (saia com `pare` ou o tempo-limite da VM).
+`para x em` percorre **lista**, **texto** (um caractere por vez), **conjunto** ou **intervalo**. `para i em 5` é erro (use `0..5` ou `1..=5`). `para i em 0..` é um laço sem teto (saia com `pare` ou o tempo-limite da VM).
 
 O antigo `para i de … até …` saiu da linguagem.
 
@@ -305,17 +305,17 @@ ys[0][0] = 2
 escreva(xs[0][0])    // 2: o elemento aninhado é compartilhado
 ```
 
-### 9.2. Faixas
+### 9.2. Intervalos
 
 `0..3` é um gerador de inteiros, não uma lista. O fim de `..` é **exclusivo**: `0..3` gera 0, 1, 2. `..=` e o começo omitido são açúcar: `0..=2` e `..3` viram `0..3`; `0..` e `..` são infinitos a partir de 0; `5..` a partir de 5. `1..3 == 1..=2`. `escreva` imprime a forma exclusiva (`escreva(0..=2)` é `0..3`).
 
-Limites são inteiros de 64 bits, avaliados uma vez. `n..=m` é `n..(m+1)`; se `m+1` não cabe em i64, é erro. Não há passo. Faixas vazias (`3..3`, `3..1`) não geram nada. O teto, se houver, fica na mesma linha do `..` (`r = 5..` na linha seguinte começa outro comando).
+Limites são inteiros de 64 bits, avaliados uma vez. `n..=m` é `n..(m+1)`; se `m+1` não cabe em i64, é erro. Não há passo. Intervalos vazios (`3..3`, `3..1`) não geram nada. O teto, se houver, fica na mesma linha do `..` (`r = 5..` na linha seguinte começa outro comando).
 
-Núcleo: `tamanho(3..5)` é 2; `tamanho(0..)` é erro (`se_falhar`). `primeiro(3..5)` é 3; `ultimo(3..5)` é 4 (último gerado). `primeiro(0..)` é 0; `ultimo(0..)` é erro. `infinito(r)` é verdadeiro só sem teto; em outro tipo é erro. Reconstrua uma faixa finita não vazia com `primeiro(r)..(ultimo(r)+1)`.
+Núcleo: `tamanho(3..5)` é 2; `tamanho(0..)` é erro (`se_falhar`). `primeiro(3..5)` é 3; `ultimo(3..5)` é 4 (último gerado). `primeiro(0..)` é 0; `ultimo(0..)` é erro. `infinito(r)` é verdadeiro só sem teto; em outro tipo é erro. Reconstrua um intervalo finito não vazio com `primeiro(r)..(ultimo(r)+1)`.
 
-Igualdade é canônica (começo + teto exclusivo): `3..3 != 5..5`. Só `==` e `!=`. Indexar uma faixa, `contem` e `+` entre faixas são erro.
+Igualdade é canônica (começo + teto exclusivo): `3..3 != 5..5`. Só `==` e `!=`. Indexar um intervalo, `contem` e `+` entre intervalos são erro.
 
-Fatia e `remova` usam a mesma faixa. `xs[0..2]` são os índices 0 e 1. Teto além do tamanho corta: `xs[0..1000]` numa lista de 5 devolve os 5. Sem teto, a fatia vai até o fim da lista ou do texto: `"thiago"[0..]` é `"thiago"`, `"thiago"[2..]` é `"iago"`, `xs[..]` é a coleção inteira. Vale também com a faixa guardada (`r = 2..; xs[r]`). Começo negativo é erro; começo além do tamanho devolve vazio. `xs.remova(1..)` continua erro: `remova` exige teto. `tamanho(0..)` também: a faixa sem teto não tem tamanho; quem limita a fatia é a coleção.
+Fatia e `remova` usam o mesmo intervalo. `xs[0..2]` são os índices 0 e 1. Teto além do tamanho corta: `xs[0..1000]` numa lista de 5 devolve os 5. Sem teto, a fatia vai até o fim da lista ou do texto: `"thiago"[0..]` é `"thiago"`, `"thiago"[2..]` é `"iago"`, `xs[..]` é a coleção inteira. Vale também com o intervalo guardado (`r = 2..; xs[r]`). Começo negativo é erro; começo além do tamanho devolve vazio. `xs.remova(1..)` continua erro: `remova` exige teto. `tamanho(0..)` também: o intervalo sem teto não tem tamanho; quem limita a fatia é a coleção.
 
 ```text
 para i em 0..tamanho(xs) { escreva(xs[i]) }

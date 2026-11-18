@@ -171,7 +171,7 @@ xs += [50]                     // xs = xs + [50]
 xs = xs.remova(2)               // sem o índice 2
 xs = xs.remova(2..4)            // sem 2 e 3
 tamanho(xs)  primeiro(xs)  ultimo(xs)
-0..3  1..=2  ..3               // faixa: gera 0, 1, 2
+0..3  1..=2  ..3               // intervalo: gera 0, 1, 2
 infinito(0..)                  // verdadeiro; tamanho(0..) é erro
 
 t = "  Maria Silva  "

@@ -407,7 +407,7 @@ impl Machine {
                         estourou,
                     } => {
                         if *estourou {
-                            return Err(vm.err("faixa passou do maior inteiro", spec.first_span));
+                            return Err(vm.err("intervalo passou do maior inteiro", spec.first_span));
                         }
                         match next.take() {
                             None => None,

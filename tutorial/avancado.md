@@ -90,7 +90,7 @@ Para mais exemplos: `../exemplos/texto/poema.lep`. Verificação de palíndromos
 
 Arquivo: `exemplos/11_enquanto.lep`
 
-`para` percorre os itens de uma coleção ou faixa. Já `enquanto` testa uma condição antes de cada repetição e continua enquanto ela for verdadeira.
+`para` percorre os itens de uma coleção ou intervalo. Já `enquanto` testa uma condição antes de cada repetição e continua enquanto ela for verdadeira.
 
 O laço mais simples conta até 5:
 

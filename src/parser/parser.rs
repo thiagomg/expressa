@@ -524,7 +524,7 @@ impl<'a> Parser<'a> {
                 && matches!(lhs, Expr::Faixa { .. })
             {
                 return Err(self
-                    .err("faixas não podem ser encadeadas; coloque cada faixa entre parênteses"));
+                    .err("intervalos não podem ser encadeados; coloque cada intervalo entre parênteses"));
             }
             let op_tok = self.remove();
             if matches!(op_kind, TokenKind::DotDot | TokenKind::DotDotEq) {
@@ -2088,11 +2088,11 @@ fim
             "{}",
             campo.message
         );
-        let faixa = parse("0..3 + 0..3").unwrap_err();
+        let intervalo = parse("0..3 + 0..3").unwrap_err();
         assert!(
-            faixa.message.contains("faixas não podem ser encadeadas"),
+            intervalo.message.contains("intervalos não podem ser encadeados"),
             "{}",
-            faixa.message
+            intervalo.message
         );
     }
 

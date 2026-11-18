@@ -455,7 +455,7 @@ escreva(x)
 fim
 "#,
     );
-    assert!(msg.contains("lista, texto, conjunto ou faixa"), "{msg}");
+    assert!(msg.contains("lista, texto, conjunto ou intervalo"), "{msg}");
 }
 
 #[test]
@@ -926,7 +926,7 @@ s = ""
 para i em 0..3 { s = s + i }
 escreva(s)
 "#),
-        "faixa 0..3 0..3 0..3 verdadeiro falso\n3 2 3 0 1\n3 4 0 verdadeiro falso\n012\n"
+        "intervalo 0..3 0..3 0..3 verdadeiro falso\n3 2 3 0 1\n3 4 0 verdadeiro falso\n012\n"
     );
     assert_eq!(run("escreva(0..)"), "0..\n");
     assert_eq!(
@@ -939,16 +939,16 @@ escreva(s)
     );
     assert!(run_err("tamanho(0..)").contains("sem teto"));
     assert!(run_err("ultimo(0..)").contains("sem teto"));
-    assert!(run_err("primeiro(3..3)").contains("vazia"));
-    assert!(run_err("ultimo(3..3)").contains("vazia"));
-    assert!(run_err("(0..5)[2]").contains("indexar faixa"));
+    assert!(run_err("primeiro(3..3)").contains("vazio"));
+    assert!(run_err("ultimo(3..3)").contains("vazio"));
+    assert!(run_err("(0..5)[2]").contains("indexar intervalo"));
     assert!(run_err("0..3 contem 1").contains("contem"));
     assert!(run_err("(0..3) + (3..5)").contains("'+'"));
     assert!(run_err("0..3 < 1..2").contains("comparação"));
     assert!(run_err("para i em 5 { 0 }").contains("0..n"));
     assert_eq!(run("r = 0..\nxs = [1]\nescreva(xs[r])"), "[1]\n");
     assert!(run_err("xs = [1]\nxs.remova(1..)").contains("teto"));
-    assert!(run_err("infinito(1)").contains("faixa"));
+    assert!(run_err("infinito(1)").contains("intervalo"));
     assert_eq!(
         run_err("0..=9223372036854775807"),
         "o teto de ..= passa do maior inteiro"
@@ -2608,9 +2608,9 @@ fn faixa_aberta_no_maior_inteiro_escreve_antes_de_estourar() {
     let numero = "9.223.372.036.854.775.807\n";
     for backend in backends() {
         let (out, result) = run_backend(estoura, "r.lep", backend);
-        let err = result.expect_err("a faixa aberta no maior inteiro deve falhar");
+        let err = result.expect_err("o intervalo aberto no maior inteiro deve falhar");
         assert!(
-            err.message.contains("faixa passou do maior inteiro"),
+            err.message.contains("intervalo passou do maior inteiro"),
             "{backend:?} {err}"
         );
         assert_eq!(String::from_utf8(out).unwrap(), numero, "{backend:?}");

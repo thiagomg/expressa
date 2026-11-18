@@ -1147,9 +1147,9 @@ escreva(tipo(f))"#),
         assert_eq!(
             run(r#"escreva(tipos())"#),
             if cfg!(feature = "process") {
-                "[\"numero\", \"faixa\", \"texto\", \"bool\", \"lista\", \"par\", \"mapa\", \"conjunto\", \"matriz\", \"imagem\", \"funcao\", \"modulo\", \"processo\", \"nada\"]\n"
+                "[\"numero\", \"intervalo\", \"texto\", \"bool\", \"lista\", \"par\", \"mapa\", \"conjunto\", \"matriz\", \"imagem\", \"funcao\", \"modulo\", \"processo\", \"nada\"]\n"
             } else {
-                "[\"numero\", \"faixa\", \"texto\", \"bool\", \"lista\", \"par\", \"mapa\", \"conjunto\", \"matriz\", \"imagem\", \"funcao\", \"modulo\", \"nada\"]\n"
+                "[\"numero\", \"intervalo\", \"texto\", \"bool\", \"lista\", \"par\", \"mapa\", \"conjunto\", \"matriz\", \"imagem\", \"funcao\", \"modulo\", \"nada\"]\n"
             }
         );
         assert_eq!(run(r#"escreva(tipos() contem "numero")"#), "verdadeiro\n");
@@ -1749,7 +1749,7 @@ escreva(A == cheia(2, 3, 7))
             "2\n"
         );
         assert!(
-            run_err("tamanho(10)").contains("espera texto, lista, mapa, conjunto, matriz ou faixa")
+            run_err("tamanho(10)").contains("espera texto, lista, mapa, conjunto, matriz ou intervalo")
         );
     }
 

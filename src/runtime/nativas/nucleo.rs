@@ -244,7 +244,7 @@ impl Vm<'_, '_> {
             Value::Conjunto(xs) => xs.borrow().len() as u64,
             Value::Matriz(m) => m.borrow().len() as u64,
             Value::Faixa { end: None, .. } => {
-                return Err(self.err("tamanho() de faixa sem teto", span));
+                return Err(self.err("tamanho() de intervalo sem teto", span));
             }
             Value::Faixa {
                 start,
@@ -259,7 +259,7 @@ impl Vm<'_, '_> {
             other => {
                 return Err(self.err(
                     format!(
-                        "tamanho() espera texto, lista, mapa, conjunto, matriz ou faixa, encontrado {}",
+                        "tamanho() espera texto, lista, mapa, conjunto, matriz ou intervalo, encontrado {}",
                         other.type_name()
                     ),
                     span,
@@ -274,7 +274,7 @@ impl Vm<'_, '_> {
             Value::Faixa {
                 end: Some(end),
                 start,
-            } if start >= end => Err(self.err("primeiro() de faixa vazia", span)),
+            } if start >= end => Err(self.err("primeiro() de intervalo vazio", span)),
             Value::Faixa { start, .. } => Ok(Value::Numero(Numero::from_i64(*start))),
             Value::Lista(xs) => xs
                 .borrow()
@@ -283,7 +283,7 @@ impl Vm<'_, '_> {
                 .ok_or_else(|| self.err("primeiro() de lista vazia", span)),
             other => Err(self.err(
                 format!(
-                    "primeiro() espera lista ou faixa, encontrado {}",
+                    "primeiro() espera lista ou intervalo, encontrado {}",
                     other.type_name()
                 ),
                 span,
@@ -293,11 +293,11 @@ impl Vm<'_, '_> {
     pub(crate) fn bi_ultimo(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
         self.expect_arity(args, 1, span)?;
         match &args[0] {
-            Value::Faixa { end: None, .. } => Err(self.err("ultimo() de faixa sem teto", span)),
+            Value::Faixa { end: None, .. } => Err(self.err("ultimo() de intervalo sem teto", span)),
             Value::Faixa {
                 start,
                 end: Some(end),
-            } if start >= end => Err(self.err("ultimo() de faixa vazia", span)),
+            } if start >= end => Err(self.err("ultimo() de intervalo vazio", span)),
             Value::Faixa { end: Some(end), .. } => Ok(Value::Numero(Numero::from_i64(end - 1))),
             Value::Lista(xs) => xs
                 .borrow()
@@ -306,7 +306,7 @@ impl Vm<'_, '_> {
                 .ok_or_else(|| self.err("ultimo() de lista vazia", span)),
             other => Err(self.err(
                 format!(
-                    "ultimo() espera lista ou faixa, encontrado {}",
+                    "ultimo() espera lista ou intervalo, encontrado {}",
                     other.type_name()
                 ),
                 span,
@@ -318,7 +318,7 @@ impl Vm<'_, '_> {
         match &args[0] {
             Value::Faixa { end, .. } => Ok(Value::Bool(end.is_none())),
             other => Err(self.err(
-                format!("infinito() espera faixa, encontrado {}", other.type_name()),
+                format!("infinito() espera intervalo, encontrado {}", other.type_name()),
                 span,
             )),
         }
@@ -355,7 +355,7 @@ impl Vm<'_, '_> {
             Value::Mapa(_) => {
                 if matches!(args[1], Value::Faixa { .. }) {
                     return Err(self.err(
-                        "remova em mapa espera a chave (não uma faixa de índices)",
+                        "remova em mapa espera a chave (não um intervalo de índices)",
                         span,
                     ));
                 }
@@ -364,7 +364,7 @@ impl Vm<'_, '_> {
             Value::Conjunto(_) => {
                 if matches!(args[1], Value::Faixa { .. }) {
                     return Err(self.err(
-                        "remova em conjunto espera o elemento (não uma faixa de índices)",
+                        "remova em conjunto espera o elemento (não um intervalo de índices)",
                         span,
                     ));
                 }
@@ -372,7 +372,7 @@ impl Vm<'_, '_> {
             }
             Value::Lista(_) | Value::Texto(_) => match &args[1] {
                 Value::Faixa { end: None, .. } => {
-                    Err(self.err("faixa sem teto não pode remover", span))
+                    Err(self.err("intervalo sem teto não pode remover", span))
                 }
                 Value::Faixa {
                     start,

@@ -1241,7 +1241,7 @@ impl<'a, 'c> Vm<'a, 'c> {
                 break;
             }
             let Some(next) = i.checked_add(1) else {
-                return Err(self.err("faixa passou do maior inteiro", span));
+                return Err(self.err("intervalo passou do maior inteiro", span));
             };
             i = next;
         }
@@ -1275,7 +1275,7 @@ impl<'a, 'c> Vm<'a, 'c> {
                 };
                 Err(self.err(
                     format!(
-                        "'para … em' espera lista, texto, conjunto ou faixa, encontrado {}{extra}",
+                        "'para … em' espera lista, texto, conjunto ou intervalo, encontrado {}{extra}",
                         other.type_name()
                     ),
                     span,
@@ -1873,7 +1873,7 @@ impl<'a, 'c> Vm<'a, 'c> {
             );
         }
         if matches!(obj, Value::Faixa { .. }) {
-            return Err(self.err("não é possível indexar faixa", span));
+            return Err(self.err("não é possível indexar intervalo", span));
         }
         match obj {
             Value::Lista(xs) => {
@@ -1991,7 +1991,7 @@ impl<'a, 'c> Vm<'a, 'c> {
         span: Span,
     ) -> Result<(), EvalError> {
         if matches!(index, Value::Faixa { .. }) {
-            return Err(self.err("não é possível atribuir uma faixa", span));
+            return Err(self.err("não é possível atribuir um intervalo", span));
         }
         match obj {
             Value::Lista(xs) => {

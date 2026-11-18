@@ -38,7 +38,7 @@ Em sistemas Unix, você pode colocar `#!/usr/bin/env expressa` na primeira linha
 | número | `10` `3.14` `-8` | no código, ponto; valor decimal exato (`0.1+0.2` é `0.3`) |
 | texto | `"olá"` | |
 | bool | `verdadeiro` `falso` | valor lógico |
-| faixa | `0..3` `1..=3` | sequência de inteiros |
+| intervalo | `0..3` `1..=3` | sequência de inteiros |
 | lista | `[1, 2, 3]` | `xs[0]` é o primeiro |
 | par | `:nome -> "Ana"` | `p:chave` `p:valor` |
 | mapa | `mapa([:nome -> "Ana"])` | `pessoa:nome` |
@@ -271,7 +271,7 @@ escreva(argumentos[0])
 
 ### `tipo(valor)`
 
-Retorna o nome do tipo como texto: `numero`, `faixa`, `texto`, `bool`, `lista`, `par`, `mapa`, `conjunto`, `matriz`, `imagem`, `funcao`, `modulo`, `processo` ou `nada`. Os nomes são os mesmos usados nas mensagens de erro, sem acentos. Tanto funções nativas quanto funções definidas no programa têm o tipo `"funcao"`.
+Retorna o nome do tipo como texto: `numero`, `intervalo`, `texto`, `bool`, `lista`, `par`, `mapa`, `conjunto`, `matriz`, `imagem`, `funcao`, `modulo`, `processo` ou `nada`. Os nomes são os mesmos usados nas mensagens de erro, sem acentos. Tanto funções nativas quanto funções definidas no programa têm o tipo `"funcao"`.
 
 ```text
 se tipo(x) == "numero" { x * 2 } senão { x }
@@ -412,7 +412,7 @@ sem_acento("São Paulo")
 
 ### `remova(lista, i)` / `remova(lista, r)` / `remova(mapa, chave)`
 
-Retorna uma cópia sem o item do índice indicado, sem os itens da faixa ou sem a chave do mapa. O índice final da faixa não é incluído. Em um conjunto, remove o valor informado.
+Retorna uma cópia sem o item do índice indicado, sem os itens do intervalo ou sem a chave do mapa. O índice final do intervalo não é incluído. Em um conjunto, remove o valor informado.
 
 ```text
 xs = xs.remova(2)
@@ -478,7 +478,7 @@ xs + [50]
 xs += [50]
 "abc"[0..2]     // "ab"
 "abc"[1..]      // "bc"
-0..3            // faixa 0, 1, 2; 0..=2 é o mesmo
+0..3            // intervalo 0, 1, 2; 0..=2 é o mesmo
 t = "abc"
 t[1] = "x"      // substitui um caractere; t passa a ser "axc"
 ```

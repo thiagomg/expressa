@@ -154,7 +154,7 @@ A coluna abaixo fixa os números de arquivo. `(value)`/`target` são operandos u
 | 71 | `Op::Call { argc, name }` |
 | 72 | `Op::Garanta { cond }` |
 
-Esses números são independentes dos discriminantes Rust. As tags 66 e 67 ficam vagas de propósito e o loader as rejeita com `opcode EXB inválido`. `e` e `ou` não são instruções binárias: o compilador emite curto-circuito nas tags 69 e 70. Mudanças incompatíveis de layout, operandos ou semântica de instruções exigem uma revisão de versão. O loader atual aceita somente a versão 2 e os recursos 3. A versão 1 é rejeitada (`versão EXB não suportada`): o significado de algumas instruções mudou (laço de faixa exclusivo e fatia que produz uma faixa) sem um arquivo publicado nessa versão. A resolução de bibliotecas nativas continua sendo responsabilidade do runtime instalado.
+Esses números são independentes dos discriminantes Rust. As tags 66 e 67 ficam vagas de propósito e o loader as rejeita com `opcode EXB inválido`. `e` e `ou` não são instruções binárias: o compilador emite curto-circuito nas tags 69 e 70. Mudanças incompatíveis de layout, operandos ou semântica de instruções exigem uma revisão de versão. O loader atual aceita somente a versão 2 e os recursos 3. A versão 1 é rejeitada (`versão EXB não suportada`): o significado de algumas instruções mudou (laço de intervalo exclusivo e fatia que produz um intervalo) sem um arquivo publicado nessa versão. A resolução de bibliotecas nativas continua sendo responsabilidade do runtime instalado.
 
 ## Validação e limites do leitor desktop
 
