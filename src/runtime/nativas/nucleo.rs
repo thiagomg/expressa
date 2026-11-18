@@ -243,10 +243,10 @@ impl Vm<'_, '_> {
             Value::Mapa(xs) => xs.borrow().len() as u64,
             Value::Conjunto(xs) => xs.borrow().len() as u64,
             Value::Matriz(m) => m.borrow().len() as u64,
-            Value::Faixa { end: None, .. } => {
+            Value::Intervalo { end: None, .. } => {
                 return Err(self.err("tamanho() de intervalo sem teto", span));
             }
-            Value::Faixa {
+            Value::Intervalo {
                 start,
                 end: Some(end),
             } => {
@@ -271,11 +271,11 @@ impl Vm<'_, '_> {
     pub(crate) fn bi_primeiro(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
         self.expect_arity(args, 1, span)?;
         match &args[0] {
-            Value::Faixa {
+            Value::Intervalo {
                 end: Some(end),
                 start,
             } if start >= end => Err(self.err("primeiro() de intervalo vazio", span)),
-            Value::Faixa { start, .. } => Ok(Value::Numero(Numero::from_i64(*start))),
+            Value::Intervalo { start, .. } => Ok(Value::Numero(Numero::from_i64(*start))),
             Value::Lista(xs) => xs
                 .borrow()
                 .first()
@@ -293,12 +293,12 @@ impl Vm<'_, '_> {
     pub(crate) fn bi_ultimo(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
         self.expect_arity(args, 1, span)?;
         match &args[0] {
-            Value::Faixa { end: None, .. } => Err(self.err("ultimo() de intervalo sem teto", span)),
-            Value::Faixa {
+            Value::Intervalo { end: None, .. } => Err(self.err("ultimo() de intervalo sem teto", span)),
+            Value::Intervalo {
                 start,
                 end: Some(end),
             } if start >= end => Err(self.err("ultimo() de intervalo vazio", span)),
-            Value::Faixa { end: Some(end), .. } => Ok(Value::Numero(Numero::from_i64(end - 1))),
+            Value::Intervalo { end: Some(end), .. } => Ok(Value::Numero(Numero::from_i64(end - 1))),
             Value::Lista(xs) => xs
                 .borrow()
                 .last()
@@ -316,7 +316,7 @@ impl Vm<'_, '_> {
     pub(crate) fn bi_infinito(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
         self.expect_arity(args, 1, span)?;
         match &args[0] {
-            Value::Faixa { end, .. } => Ok(Value::Bool(end.is_none())),
+            Value::Intervalo { end, .. } => Ok(Value::Bool(end.is_none())),
             other => Err(self.err(
                 format!("infinito() espera intervalo, encontrado {}", other.type_name()),
                 span,
@@ -353,7 +353,7 @@ impl Vm<'_, '_> {
         }
         match &args[0] {
             Value::Mapa(_) => {
-                if matches!(args[1], Value::Faixa { .. }) {
+                if matches!(args[1], Value::Intervalo { .. }) {
                     return Err(self.err(
                         "remova em mapa espera a chave (não um intervalo de índices)",
                         span,
@@ -362,7 +362,7 @@ impl Vm<'_, '_> {
                 self.remova_mapa(&args[0], &args[1], span)
             }
             Value::Conjunto(_) => {
-                if matches!(args[1], Value::Faixa { .. }) {
+                if matches!(args[1], Value::Intervalo { .. }) {
                     return Err(self.err(
                         "remova em conjunto espera o elemento (não um intervalo de índices)",
                         span,
@@ -371,10 +371,10 @@ impl Vm<'_, '_> {
                 self.remova_conjunto(&args[0], &args[1], span)
             }
             Value::Lista(_) | Value::Texto(_) => match &args[1] {
-                Value::Faixa { end: None, .. } => {
+                Value::Intervalo { end: None, .. } => {
                     Err(self.err("intervalo sem teto não pode remover", span))
                 }
-                Value::Faixa {
+                Value::Intervalo {
                     start,
                     end: Some(end),
                 } => self.remova_faixa(

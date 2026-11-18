@@ -1169,7 +1169,7 @@ impl<'a, 'c> Vm<'a, 'c> {
                     p.borrow_mut().encerre();
                     return r;
                 }
-                if let Value::Faixa { start, end } = seq {
+                if let Value::Intervalo { start, end } = seq {
                     let span = iter.span();
                     return self.eval_in_child(env, FrameKind::Block, |vm, loop_env| {
                         vm.para_faixa(var, start, end, &body.stmts, span, loop_env)
@@ -1466,7 +1466,7 @@ impl<'a, 'c> Vm<'a, 'c> {
                 let j = self.eval_expr(col, env)?;
                 self.index_get2(&obj, &i, &j, *span)
             }
-            Expr::Faixa { start, end, span } => {
+            Expr::Intervalo { start, end, span } => {
                 let s = self.eval_expr(start, env)?;
                 let e = match end {
                     Some(e) => Some(self.eval_expr(e, env)?),
@@ -1862,7 +1862,7 @@ impl<'a, 'c> Vm<'a, 'c> {
     }
 
     fn index_get(&self, obj: &Value, index: &Value, span: Span) -> Result<Value, EvalError> {
-        if let Value::Faixa { start, end } = index {
+        if let Value::Intervalo { start, end } = index {
             // Sem teto, o fim da fatia é o tamanho da lista ou do texto.
             let end_n = end.map(|n| Value::Numero(Numero::from_i64(n)));
             return self.slice_get(
@@ -1872,7 +1872,7 @@ impl<'a, 'c> Vm<'a, 'c> {
                 span,
             );
         }
-        if matches!(obj, Value::Faixa { .. }) {
+        if matches!(obj, Value::Intervalo { .. }) {
             return Err(self.err("não é possível indexar intervalo", span));
         }
         match obj {
@@ -1925,7 +1925,7 @@ impl<'a, 'c> Vm<'a, 'c> {
             Some(v) => Some(self.inteiro_do_teto(v, span)?),
             None => None,
         };
-        Ok(Value::Faixa { start, end })
+        Ok(Value::Intervalo { start, end })
     }
 
     fn slice_get(
@@ -1990,7 +1990,7 @@ impl<'a, 'c> Vm<'a, 'c> {
         value: Value,
         span: Span,
     ) -> Result<(), EvalError> {
-        if matches!(index, Value::Faixa { .. }) {
+        if matches!(index, Value::Intervalo { .. }) {
             return Err(self.err("não é possível atribuir um intervalo", span));
         }
         match obj {

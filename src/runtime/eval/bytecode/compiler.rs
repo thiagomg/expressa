@@ -356,7 +356,7 @@ impl Compiler {
                 self.expr(col);
                 self.emit(Op::Index2, span);
             }
-            Expr::Faixa { start, end, .. } => {
+            Expr::Intervalo { start, end, .. } => {
                 self.expr(start);
                 if let Some(end) = end {
                     self.expr(end);

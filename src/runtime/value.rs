@@ -21,7 +21,7 @@ pub enum Value {
     Nada,
     Numero(Numero),
     /// Half-open integer generator `start..end` (`end` is `None` if unbounded).
-    Faixa {
+    Intervalo {
         start: i64,
         end: Option<i64>,
     },
@@ -49,7 +49,7 @@ impl Clone for Value {
         match self {
             Self::Nada => Self::Nada,
             Self::Numero(n) => Self::Numero(*n),
-            Self::Faixa { start, end } => Self::Faixa {
+            Self::Intervalo { start, end } => Self::Intervalo {
                 start: *start,
                 end: *end,
             },
@@ -277,7 +277,7 @@ impl Value {
         match self {
             Value::Nada => "nada",
             Value::Numero(_) => "numero",
-            Value::Faixa { .. } => "intervalo",
+            Value::Intervalo { .. } => "intervalo",
             Value::Texto(_) => "texto",
             Value::Bool(_) => "bool",
             Value::Lista(_) => "lista",
@@ -313,7 +313,7 @@ fn iguais(a: &Value, b: &Value, comparando: &mut HashSet<(usize, usize)>) -> boo
     stacker::maybe_grow(PILHA_RESERVA, PILHA_SEGMENTO, || match (a, b) {
         (Value::Nada, Value::Nada) => true,
         (Value::Numero(a), Value::Numero(b)) => a == b,
-        (Value::Faixa { start: a, end: ae }, Value::Faixa { start: b, end: be }) => {
+        (Value::Intervalo { start: a, end: ae }, Value::Intervalo { start: b, end: be }) => {
             a == b && ae == be
         }
         (Value::Texto(a), Value::Texto(b)) => a == b,
@@ -389,7 +389,7 @@ fn escrever(
     use std::fmt::Write as _;
     stacker::maybe_grow(PILHA_RESERVA, PILHA_SEGMENTO, || match v {
         Value::Nada => out.push_str("nada"),
-        Value::Faixa { start, end } => match end {
+        Value::Intervalo { start, end } => match end {
             Some(end) => {
                 let _ = write!(out, "{start}..{end}");
             }

@@ -81,22 +81,104 @@ Uma função pode ler variáveis de um escopo externo, mas não pode reatribuir 
 
 ## Operadores
 
-```text
-+  -  *  /  %             // + junta os valores como texto se um deles for texto
-==  !=  >  <  >=  <=
-e  ou  nao
-xs contem 20
-"Maria Silva" contem "Silva"
-mapa contem "idade"
-:nome -> "Ana"            // par
-pessoa:nome               // chave de mapa
-xs.tamanho()              // igual a tamanho(xs); () obrigatório
-mat::soma(1, 2)           // nome no módulo
-i += 1                    // números: += e -=
-nome += " Silva"          // texto: só +=
-```
+### Cálculos
+
+| Operador | Operação | Exemplo |
+|----------|----------|---------|
+| `+` | soma | `2 + 3` → `5` |
+| `-` | subtração | `8 - 3` → `5` |
+| `*` | multiplicação | `4 * 3` → `12` |
+| `/` | divisão | `7 / 2` → `3,5` no formato padrão |
+| `%` | resto da divisão | `7 % 3` → `1`; `-7 % 3` → `-1` |
+| `-valor` | troca o sinal | `-(-3)` → `3` |
+
+`+` também junta textos (`"Idade: " + 10`) e listas (`[1, 2] + [3]`). Em conjuntos, faz a união de dois conjuntos ou acrescenta um elemento: `s + :ana`. As operações `+`, `-` e `*` com matrizes estão descritas na seção [matriz](#importe-matriz).
+
+### Comparações
+
+O resultado de uma comparação é `verdadeiro` ou `falso`.
+
+| Operador | Significado | Exemplo |
+|----------|-------------|---------|
+| `==` | igual | `resultado == nada` |
+| `!=` | diferente | `nome != ""` |
+| `<` / `<=` | menor / menor ou igual | `idade < 18` |
+| `>` / `>=` | maior / maior ou igual | `nota >= 7` |
+
+As comparações de ordem (`<`, `<=`, `>` e `>=`) aceitam dois números ou dois textos. Textos seguem a ordem dos pontos de código Unicode: `"ábaco" > "zebra"` é `verdadeiro`.
 
 A forma `a < b < c` é inválida. Use `a < b e b < c`.
+
+### Condições lógicas
+
+| Operador | Significado | Exemplo |
+|----------|-------------|---------|
+| `e` | as duas condições são verdadeiras | `nota >= 7 e faltas <= 5` |
+| `ou` | pelo menos uma condição é verdadeira | `idade < 18 ou estudante` |
+| `nao` / `não` | inverte o valor lógico | `não encontrado` |
+
+Os operandos devem ser valores lógicos. Em `a e b`, `b` só é avaliado se `a` for verdadeiro. Em `a ou b`, `b` só é avaliado se `a` for falso.
+
+### Pertencimento: `contem` / `contém`
+
+| Valor à esquerda | O que procura | Exemplo |
+|------------------|---------------|---------|
+| lista | um item | `[10, 20] contem 20` |
+| texto | um trecho de texto | `"Maria Silva" contem "Silva"` |
+| mapa | uma chave | `pessoa contem :idade` |
+| conjunto | um elemento | `nomes contem :ana` |
+
+O resultado é `verdadeiro` ou `falso`.
+
+### Atribuição e atualização
+
+| Forma | Significado | Exemplo |
+|-------|-------------|---------|
+| `alvo = valor` | guarda ou substitui o valor | `idade = 18` |
+| `alvo += valor` | soma ou junta ao valor atual | `nomes += ["Ana"]` |
+| `alvo -= valor` | subtrai do valor atual | `saldo -= 10` |
+
+`+=` aceita os mesmos tipos de `+`; `-=` aceita os mesmos tipos de `-`. Por exemplo, `nome += " Silva"` acrescenta texto e `s += :ana` acrescenta um elemento ao conjunto. O alvo também pode ser um elemento, como em `xs[0] += 1`; o receptor e seus índices são avaliados uma única vez.
+
+### Intervalos, pares e acesso
+
+| Forma | Significado | Exemplo |
+|-------|-------------|---------|
+| `a..b` | intervalo com fim exclusivo | `0..3` gera `0`, `1`, `2` |
+| `a..=b` | intervalo que inclui o fim | `1..=3` gera `1`, `2`, `3` |
+| `chave -> valor` | cria um par | `:nome -> "Ana"` |
+| `colecao[indice]` | acessa um elemento | `xs[0]` |
+| `colecao[a..b]` | obtém uma fatia | `"Maria"[0..3]` → `"Mar"` |
+| `mapa:chave` | acessa o valor de uma chave | `pessoa:nome` |
+| `modulo::nome` | acessa um nome do módulo | `mat::raiz(9)` após `mat = importe "mat"` |
+| `valor.f(...)` | passa o valor como primeiro argumento | `xs.tamanho()` equivale a `tamanho(xs)` |
+
+Índices começam em zero. Intervalos também podem omitir o começo (`..3` começa em zero) ou o fim (`2..` não tem teto). Os parênteses são obrigatórios nas chamadas: `xs.tamanho()`.
+
+### Prioridade e parênteses
+
+Operações nas primeiras linhas da tabela têm prioridade sobre as seguintes. Use parênteses para agrupar uma expressão.
+
+| Prioridade | Operações |
+|------------|-----------|
+| 1 — maior | chamadas e acessos: `f(x)`, `xs[i]`, `pessoa:nome`, `mat::raiz`, `xs.tamanho()` |
+| 2 | sinal negativo e negação: `-valor`, `nao`, `não` |
+| 3 | `*`, `/`, `%` |
+| 4 | `+`, `-` |
+| 5 | `..`, `..=` |
+| 6 | `==`, `!=`, `<`, `<=`, `>`, `>=`, `contem`, `contém` |
+| 7 | `e` |
+| 8 | `ou` |
+| 9 | `->` |
+| 10 — menor | `se_falhar` (veja [Erros](#erros)) |
+
+```text
+2 + 3 * 4                // 14
+(2 + 3) * 4              // 20
+nao (idade == 18)         // inverte o resultado da comparação
+```
+
+`nao` tem prioridade sobre `==`: para negar uma comparação, agrupe-a como no último exemplo.
 
 ---
 
@@ -138,7 +220,7 @@ Quando o resultado de `se` é usado como **valor**, o `senão` é obrigatório. 
 
 O valor da última expressão do bloco é o resultado da função.
 
-```text
+```expressa
 soma = função(x, y) { x + y }
 escreva(soma(10, 5))      // 15
 
@@ -150,13 +232,25 @@ busca = função(xs, alvo) {
 }
 ```
 
-`função` e `funcao` são formas equivalentes. Você pode escrever o primeiro argumento antes do nome da função, separado por um ponto: `xs.tamanho()` equivale a `tamanho(xs)`.
+`função` e `funcao` são formas equivalentes. Você pode escrever usar de duas formas:
+1. `tamanho(xs)`
+2. `xs.tamanho()`
+
+O primeiro argumento pode preceder a funcão. O segundo se torna o primeiro e assim por diante.
+
+```expressa
+expressa> comeca_com("Hoje eu acordei", "Hoje")
+verdadeiro
+expressa> "Hoje eu acordei".comeca_com("Hoje")
+verdadeiro
+```
+
 
 ---
 
 ## Módulos
 
-```text
+```expressa
 mat = importe "matematica"
 mat::soma(10, 5)
 
@@ -176,7 +270,7 @@ Sem apelido, os nomes do módulo ficam disponíveis diretamente no escopo da imp
 
 Um erro não tratado encerra o programa. Com `se_falhar`, o bloco de tratamento é executado quando a expressão falha, e seu resultado substitui o da expressão.
 
-```text
+```expressa
 valor = 10 / 0 se_falhar { 0 }
 importe "arquivo"
 linhas = leia_arquivo("x.txt") se_falhar { [] }
@@ -184,9 +278,9 @@ linhas = leia_arquivo("x.txt") se_falhar { [] }
 
 Para acessar a mensagem do erro, coloque um nome entre `se_falhar` e o bloco. Essa variável recebe a mensagem como texto e só existe dentro do bloco:
 
-```text
+```expressa
 valor = numero("abc") se_falhar erro {
-    escreva("Falha:", erro)
+    escreva("Erro ao converter um número:", erro)
     falso
 }
 ```
@@ -194,15 +288,17 @@ valor = numero("abc") se_falhar erro {
 O bloco é obrigatório, inclusive sem captura: `numero("abc") se_falhar { falso }`.
 Se o próprio bloco de tratamento gerar outro erro, esse novo erro precisa ser tratado por outro `se_falhar`; caso contrário, ele encerra o programa.
 
-`saia(1)` encerra de propósito e **não** é capturado por `se_falhar`.
+`saia(1)` não é um erro, portanto **não** é capturado por `se_falhar`.
 
-`falhe("negativo")` gera um erro com a mensagem informada e indica o local da chamada. `garanta(n > 0)` gera um erro se a condição for falsa, com a mensagem `condição incorreta n > 0`. Ambos podem ser tratados com `se_falhar`.
+`falhe("negativo")` gera um erro com a mensagem informada e indica o local da chamada. 
+
+`garanta(n > 0)` gera um erro se a condição for falsa, com a mensagem `condição incorreta n > 0`. Ambos podem ser tratados com `se_falhar`.
 
 ---
 
 ## Núcleo
 
-As funções e os valores do núcleo estão sempre disponíveis, sem necessidade de `importe`. As funções fornecidas pela linguagem são chamadas de **funções nativas**.
+As funções e os valores do núcleo são importadas automaticamente e estão sempre disponíveis, sem necessidade de `importe`. As funções fornecidas pela linguagem são chamadas de **funções nativas**.
 
 ### `escreva(valor, …)` / `escreva()`
 
@@ -223,7 +319,7 @@ escreva_erro("nome vazio")
 
 ### `saia()` / `saia(codigo)`
 
-Encerra o programa com o código informado. Sem argumento, usa o código 0. Os comandos após a chamada não são executados. No REPL do terminal, a linha `sair` (sem `()`) sai do interpretador; `saia()` encerra o processo. No painel REPL do expressa-aula, `saia()` encerra apenas a sessão; **Reiniciar** começa outra.
+Encerra o programa com o código informado. Sem argumento, usa o código 0. Os comandos após a chamada não são executados. No REPL do terminal, a linha `sair` (sem `()`) sai do interpretador; `saia()` encerra o processo. No painel REPL do expressa-aula, `saia()` encerra apenas a sessão; **Reiniciar** começa outra. O sistema operacional considera o código de saída 0 como **sucesso** e qualquer outro como **erro**.
 
 ```text
 se nome == "" { saia(1) }
@@ -276,7 +372,6 @@ Retorna o nome do tipo como texto: `numero`, `intervalo`, `texto`, `bool`, `list
 ```text
 se tipo(x) == "numero" { x * 2 } senão { x }
 x.tipo()
-tipos()    // lista dos nomes
 ```
 
 ### `tipos()`
@@ -320,6 +415,19 @@ formate("{:<8} {:>5}", "Ana", 10)
 
 Um mapa pode definir `:_como_texto` (função de um argumento que devolve texto). `formate`, `escreva` e o `+` com texto chamam essa função. Sem o campo, o mapa continua `mapa{…}`. Você define essa função no programa, por exemplo com `como_texto = função(fr) { … }`, e a associa ao mapa com `fr:_como_texto = como_texto`.
 
+Ex:
+
+```expressa
+como_texto = função(t) { formate("{}/{}", t:num, t:div) }
+fracao = mapa([
+    :num -> 1,
+    :div -> 2,
+    :_como_texto -> como_texto,
+])
+escreva(fracao)
+// Retorna 1/2
+```
+
 ### `avalie(texto)`
 
 Executa o texto como código Expressa no escopo atual e retorna o último valor. Erros de sintaxe ou de execução podem ser tratados com `se_falhar`.
@@ -351,7 +459,7 @@ funcoes(biblioteca)
 
 ### `ajuda(alvo)`
 
-Mostra a ficha de ajuda de uma função. O argumento pode ser um nome como `"escreva"` ou `"matriz::zeros"`, ou a própria função.
+Mostra a ajuda de uma função. O argumento pode ser um nome como `"escreva"` ou `"matriz::zeros"`, ou a própria função.
 
 ```text
 ajuda("escreva")
