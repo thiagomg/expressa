@@ -2,6 +2,7 @@
 const SEARCH_NOT_FOUND: i64 = -1;
 
 use std::cell::RefCell;
+use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
 use crate::lexer::Span;
@@ -293,7 +294,9 @@ impl Vm<'_, '_> {
     pub(crate) fn bi_ultimo(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
         self.expect_arity(args, 1, span)?;
         match &args[0] {
-            Value::Intervalo { end: None, .. } => Err(self.err("ultimo() de intervalo sem teto", span)),
+            Value::Intervalo { end: None, .. } => {
+                Err(self.err("ultimo() de intervalo sem teto", span))
+            }
             Value::Intervalo {
                 start,
                 end: Some(end),
@@ -318,7 +321,10 @@ impl Vm<'_, '_> {
         match &args[0] {
             Value::Intervalo { end, .. } => Ok(Value::Bool(end.is_none())),
             other => Err(self.err(
-                format!("infinito() espera intervalo, encontrado {}", other.type_name()),
+                format!(
+                    "infinito() espera intervalo, encontrado {}",
+                    other.type_name()
+                ),
                 span,
             )),
         }
@@ -421,9 +427,7 @@ impl Vm<'_, '_> {
             )
         })?;
         let mut entries = xs.borrow().clone();
-        let before = entries.len();
-        entries.retain(|(k, _)| *k != key);
-        if entries.len() == before {
+        if entries.remove(&key).is_none() {
             return Err(self.err(format!("chave {key} não existe no mapa"), span));
         }
         Ok(Value::mapa_com_politica(entries, xs.recurso_nao_clonavel()))
@@ -444,12 +448,10 @@ impl Vm<'_, '_> {
             )
         })?;
         let mut items = xs.borrow().clone();
-        let before = items.len();
-        items.retain(|k| *k != key);
-        if items.len() == before {
+        if !items.remove(&key) {
             return Err(self.err(format!("elemento {key} não existe no conjunto"), span));
         }
-        Ok(Value::conjunto(items))
+        Ok(Value::conjunto_de_hash(items))
     }
     pub(crate) fn remova_faixa(
         &self,
@@ -554,7 +556,7 @@ impl Vm<'_, '_> {
             [] => Ok(Value::mapa(vec![])),
             [v] => {
                 let xs = self.expect_lista(v, span)?;
-                let mut map = Vec::new();
+                let mut map = HashMap::with_capacity(xs.borrow().len());
                 for item in xs.borrow().iter() {
                     self.check_espera(span)?;
                     let Value::Par(k, val) = item else {
@@ -566,12 +568,12 @@ impl Vm<'_, '_> {
                             span,
                         ));
                     };
-                    if map.iter().any(|(mk, _)| mk == k) {
+                    if map.contains_key(k) {
                         return Err(self.err(format!("chave duplicada {k} no mapa"), span));
                     }
-                    map.push((k.clone(), val.as_ref().clone()));
+                    map.insert(k.clone(), val.as_ref().clone());
                 }
-                Ok(Value::mapa(map))
+                Ok(Value::mapa_com_politica(map, false))
             }
             _ => Err(self.err(
                 format!("mapa() espera 0 ou 1 argumento(s), recebeu {}", args.len()),
@@ -585,7 +587,7 @@ impl Vm<'_, '_> {
             [] => Ok(Value::conjunto(vec![])),
             [v] => {
                 let xs = self.expect_lista(v, span)?;
-                let mut out = Vec::new();
+                let mut out = HashSet::with_capacity(xs.borrow().len());
                 for item in xs.borrow().iter() {
                     self.check_espera(span)?;
                     let k = MapKey::from_value(item).ok_or_else(|| {
@@ -596,7 +598,7 @@ impl Vm<'_, '_> {
                     })?;
                     conjunto_insert(&mut out, k);
                 }
-                Ok(Value::conjunto(out))
+                Ok(Value::conjunto_de_hash(out))
             }
             _ => Err(self.err(
                 format!(

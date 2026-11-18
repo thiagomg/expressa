@@ -2,7 +2,7 @@ mod cycles;
 pub(crate) use cycles::{collect_cycles, collect_cycles_if_due};
 
 use std::cell::RefCell;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::rc::Rc;
 
@@ -30,7 +30,7 @@ pub enum Value {
     Lista(ListaRc),
     Par(MapKey, Box<Value>),
     Mapa(MapaRc),
-    Conjunto(Rc<RefCell<Vec<MapKey>>>),
+    Conjunto(Rc<RefCell<HashSet<MapKey>>>),
     Matriz(Rc<RefCell<Vec<Vec<f64>>>>),
     Imagem(Rc<RefCell<Imagem>>),
     Funcao(Rc<Closure>),
@@ -92,7 +92,7 @@ fn clone_pair(original: &Value, key: &MapKey, value: &Value) -> Value {
 
 /// A list's items, shared by every copy of the list value.
 pub type ListaRc = Rc<ItensLista>;
-/// A map's entries, in insertion order, shared by every copy.
+/// A map's hash table, shared by every copy; iteration order is unspecified.
 pub type MapaRc = Rc<ItensMapa>;
 
 /// Storage of a list. Derefs to the `RefCell`, so `xs.borrow()` works; it
@@ -100,7 +100,7 @@ pub type MapaRc = Rc<ItensMapa>;
 pub struct ItensLista(RefCell<Vec<Value>>);
 
 /// Storage of a map; like [`ItensLista`].
-pub struct ItensMapa(RefCell<Vec<(MapKey, Value)>>, bool);
+pub struct ItensMapa(RefCell<HashMap<MapKey, Value>>, bool);
 
 impl std::ops::Deref for ItensLista {
     type Target = RefCell<Vec<Value>>;
@@ -116,7 +116,7 @@ impl ItensMapa {
 }
 
 impl std::ops::Deref for ItensMapa {
-    type Target = RefCell<Vec<(MapKey, Value)>>;
+    type Target = RefCell<HashMap<MapKey, Value>>;
     fn deref(&self) -> &Self::Target {
         &self.0
     }
@@ -162,7 +162,7 @@ pub(crate) fn desmontar(mut pilha: Vec<Value>) {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum MapKey {
     Texto(String),
     Numero(i64),
@@ -208,10 +208,10 @@ impl Value {
     }
 
     pub fn mapa(entries: Vec<(MapKey, Value)>) -> Self {
-        Self::mapa_com_politica(entries, false)
+        Self::mapa_com_politica(entries.into_iter().collect(), false)
     }
 
-    pub(crate) fn mapa_com_politica(entries: Vec<(MapKey, Value)>, recurso: bool) -> Self {
+    pub(crate) fn mapa_com_politica(entries: HashMap<MapKey, Value>, recurso: bool) -> Self {
         let entries = Rc::new(ItensMapa(RefCell::new(entries), recurso));
         cycles::track_map(&entries);
         Value::Mapa(entries)
@@ -221,7 +221,7 @@ impl Value {
     #[cfg(feature = "graphics")]
     pub(crate) fn mapa_recurso(mut entries: Vec<(MapKey, Value)>) -> Self {
         entries.push((MapKey::Texto("_clonavel".into()), Value::Bool(false)));
-        let entries = Rc::new(ItensMapa(RefCell::new(entries), true));
+        let entries = Rc::new(ItensMapa(RefCell::new(entries.into_iter().collect()), true));
         cycles::track_map(&entries);
         Value::Mapa(entries)
     }
@@ -231,6 +231,10 @@ impl Value {
     }
 
     pub fn conjunto(items: Vec<MapKey>) -> Self {
+        Self::conjunto_de_hash(items.into_iter().collect())
+    }
+
+    pub(crate) fn conjunto_de_hash(items: HashSet<MapKey>) -> Self {
         Value::Conjunto(Rc::new(RefCell::new(items)))
     }
 
@@ -348,8 +352,7 @@ fn iguais(a: &Value, b: &Value, comparando: &mut HashSet<(usize, usize)>) -> boo
             let r = xs.len() == ys.len()
                 && xs
                     .iter()
-                    .zip(ys.iter())
-                    .all(|((ka, va), (kb, vb))| ka == kb && iguais(va, vb, comparando));
+                    .all(|(k, v)| ys.get(k).is_some_and(|other| iguais(v, other, comparando)));
             comparando.remove(&par);
             r
         }
@@ -432,7 +435,10 @@ fn escrever(
                 return;
             }
             out.push_str("mapa{");
-            for (i, (k, valor)) in m.borrow().iter().enumerate() {
+            let entries = m.borrow();
+            let mut ordered: Vec<_> = entries.iter().collect();
+            ordered.sort_unstable_by(|a, b| a.0.cmp(b.0));
+            for (i, (k, valor)) in ordered.into_iter().enumerate() {
                 if i > 0 {
                     out.push_str(", ");
                 }
@@ -444,7 +450,10 @@ fn escrever(
         }
         Value::Conjunto(xs) => {
             out.push_str("conjunto{");
-            for (i, k) in xs.borrow().iter().enumerate() {
+            let items = xs.borrow();
+            let mut ordered: Vec<_> = items.iter().collect();
+            ordered.sort_unstable();
+            for (i, k) in ordered.into_iter().enumerate() {
                 if i > 0 {
                     out.push_str(", ");
                 }
@@ -731,10 +740,8 @@ impl MapKey {
     }
 }
 
-pub fn conjunto_insert(xs: &mut Vec<MapKey>, k: MapKey) {
-    if !xs.contains(&k) {
-        xs.push(k);
-    }
+pub fn conjunto_insert(xs: &mut HashSet<MapKey>, k: MapKey) {
+    xs.insert(k);
 }
 
 #[cfg(test)]

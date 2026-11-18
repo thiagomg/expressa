@@ -161,6 +161,7 @@ ajuda = funcao(alvo) { 0 }
 /// Monta um mapa a partir de uma lista de pares chave -> valor.
 ///
 /// Sem argumento (ou com []) o mapa é vazio. Chaves duplicadas são erro.
+/// Não preserva ordem de inserção. A impressão ordena as chaves.
 ///
 /// Exemplo: mapa([:nome -> "Ana", :idade -> 25])
 mapa = funcao() { 0 }
@@ -168,8 +169,9 @@ mapa = funcao(pares) { 0 }
 
 /// Monta um conjunto a partir de uma lista (valores únicos).
 ///
-/// Sem argumento (ou com []) o conjunto é vazio. Duplicatas caem; a ordem
-/// de inserção permanece. Elementos: texto, número inteiro ou bool.
+/// Sem argumento (ou com []) o conjunto é vazio. Duplicatas caem.
+/// Elementos: texto, número inteiro ou bool. A iteração não tem ordem
+/// garantida; a impressão ordena os elementos.
 ///
 /// Exemplo: conjunto([:ana, :bia])
 conjunto = funcao() { 0 }

@@ -304,16 +304,15 @@ fn map_int(xs: &MapaRc, chave: &str, span: Span, vm: &Vm<'_, '_>) -> Result<i64,
     let key = MapKey::Texto(chave.into());
     let v = xs
         .borrow()
-        .iter()
-        .find(|(k, _)| *k == key)
-        .map(|(_, v)| v.clone())
+        .get(&key)
+        .cloned()
         .ok_or_else(|| vm.err(format!("bloco precisa de :{chave}"), span))?;
     vm.expect_int(&v, span)
 }
 
-fn set_map_numero(entries: &mut [(MapKey, Value)], chave: &str, n: i64) {
+fn set_map_numero(entries: &mut std::collections::HashMap<MapKey, Value>, chave: &str, n: i64) {
     let key = MapKey::Texto(chave.into());
-    if let Some((_, v)) = entries.iter_mut().find(|(k, _)| *k == key) {
+    if let Some(v) = entries.get_mut(&key) {
         *v = Value::Numero(n.into());
     }
 }

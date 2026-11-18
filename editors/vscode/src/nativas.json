@@ -427,7 +427,7 @@
         "mapa(pares)"
       ],
       "summary": "Monta um mapa a partir de uma lista de pares chave -> valor.",
-      "doc": "Monta um mapa a partir de uma lista de pares chave -> valor.\n\nSem argumento (ou com []) o mapa é vazio. Chaves duplicadas são erro.\n\nExemplo: mapa([:nome -> \"Ana\", :idade -> 25])"
+      "doc": "Monta um mapa a partir de uma lista de pares chave -> valor.\n\nSem argumento (ou com []) o mapa é vazio. Chaves duplicadas são erro.\nNão preserva ordem de inserção. A impressão ordena as chaves.\n\nExemplo: mapa([:nome -> \"Ana\", :idade -> 25])"
     },
     {
       "name": "conjunto",
@@ -439,7 +439,7 @@
         "conjunto(xs)"
       ],
       "summary": "Monta um conjunto a partir de uma lista (valores únicos).",
-      "doc": "Monta um conjunto a partir de uma lista (valores únicos).\n\nSem argumento (ou com []) o conjunto é vazio. Duplicatas caem; a ordem\nde inserção permanece. Elementos: texto, número inteiro ou bool.\n\nExemplo: conjunto([:ana, :bia])"
+      "doc": "Monta um conjunto a partir de uma lista (valores únicos).\n\nSem argumento (ou com []) o conjunto é vazio. Duplicatas caem.\nElementos: texto, número inteiro ou bool. A iteração não tem ordem\ngarantida; a impressão ordena os elementos.\n\nExemplo: conjunto([:ana, :bia])"
     },
     {
       "name": "ambiente",

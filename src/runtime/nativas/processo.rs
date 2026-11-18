@@ -475,7 +475,7 @@ mod tests {
     fn execute_devolve_codigo_saida_e_erro() {
         assert_eq!(
             run("escreva(execute(\"printf 'a\\nb\\n'\"))"),
-            "mapa{\"codigo\": 0, \"ok\": verdadeiro, \"saida\": [\"a\", \"b\"], \"erro\": []}\n"
+            "mapa{\"codigo\": 0, \"erro\": [], \"ok\": verdadeiro, \"saida\": [\"a\", \"b\"]}\n"
         );
         assert_eq!(
             run("r = execute([\"sh\", \"-c\", \"echo x >&2; exit 3\"])\n\

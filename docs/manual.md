@@ -467,7 +467,7 @@ ajuda("escreva")
 
 ### `mapa()` / `mapa(pares)`
 
-Cria um mapa vazio ou um mapa a partir de uma lista de pares. Chaves duplicadas geram erro.
+Cria um mapa vazio ou um mapa a partir de uma lista de pares. Chaves duplicadas geram erro. A ordem de inserção não é preservada; mapas são iguais quando têm as mesmas chaves com valores iguais. A impressão ordena as chaves: primeiro textos, depois inteiros e valores lógicos, cada grupo em ordem crescente.
 
 ```text
 pessoa = mapa([:nome -> "Ana", :idade -> 25])
@@ -478,7 +478,7 @@ pessoa = pessoa.remova("idade")
 
 ### `conjunto()` / `conjunto(xs)`
 
-Cria um conjunto de valores únicos, que podem ser textos, números inteiros ou valores lógicos. Valores repetidos são ignorados, e a ordem de inserção é preservada.
+Cria um conjunto de valores únicos, que podem ser textos, números inteiros ou valores lógicos. Valores repetidos são ignorados. A iteração não tem ordem garantida. A impressão ordena os elementos como as chaves de mapa; a igualdade depende apenas dos elementos.
 
 ```text
 s = conjunto([:ana, :bia])
@@ -518,7 +518,11 @@ Retorna uma cópia sem acentos nem cedilha, como `ã` e `á` → `a`, e `ç` →
 sem_acento("São Paulo")
 ```
 
-### `remova(lista, i)` / `remova(lista, r)` / `remova(mapa, chave)`
+### `remova`
+
+`remova(lista, indice)` /
+`remova(lista, intervalo)` /
+`remova(mapa, chave)`
 
 Retorna uma cópia sem o item do índice indicado, sem os itens do intervalo ou sem a chave do mapa. O índice final do intervalo não é incluído. Em um conjunto, remove o valor informado.
 
@@ -575,15 +579,15 @@ Retorna uma cópia da lista em ordem crescente. Os itens devem ser todos número
 
 Retornam `verdadeiro` se o texto começa com o prefixo ou termina com o sufixo informado, respectivamente; caso contrário, retornam `falso`.
 
-### Listas e fatias
+### Listas e sub-listas
 
 ```text
 xs = [10, 20, 30, 40]
 xs[0]           // 10
 xs[1..3]        // [20, 30]
 xs[1..]         // até o fim
-xs + [50]
-xs += [50]
+xs + [50]       // retorna [10, 20, 30, 40]
+xs += [50]      // Insere 50 no final da lista
 "abc"[0..2]     // "ab"
 "abc"[1..]      // "bc"
 0..3            // intervalo 0, 1, 2; 0..=2 é o mesmo

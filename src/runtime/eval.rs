@@ -1638,7 +1638,7 @@ impl<'a, 'c> Vm<'a, 'c> {
                     for k in b.borrow().iter() {
                         super::value::conjunto_insert(&mut out, k.clone());
                     }
-                    Ok(Value::conjunto(out))
+                    Ok(Value::conjunto_de_hash(out))
                 }
                 (Value::Conjunto(a), other) => {
                     let k = MapKey::from_value(other).ok_or_else(|| {
@@ -1652,7 +1652,7 @@ impl<'a, 'c> Vm<'a, 'c> {
                     })?;
                     let mut out = a.borrow().clone();
                     super::value::conjunto_insert(&mut out, k);
-                    Ok(Value::conjunto(out))
+                    Ok(Value::conjunto_de_hash(out))
                 }
                 (Value::Matriz(_), Value::Matriz(_)) => self.matriz_add(l, r, span, 1.0),
                 (Value::Texto(_), _) | (_, Value::Texto(_)) => Ok(Value::Texto(format!(
@@ -1756,7 +1756,7 @@ impl<'a, 'c> Vm<'a, 'c> {
                 let key = MapKey::from_value(r).ok_or_else(|| {
                     self.err(format!("chave de mapa inválida ({})", r.type_name()), span)
                 })?;
-                Ok(Value::Bool(xs.borrow().iter().any(|(k, _)| *k == key)))
+                Ok(Value::Bool(xs.borrow().contains_key(&key)))
             }
             Value::Conjunto(xs) => {
                 let key = MapKey::from_value(r).ok_or_else(|| {
@@ -1892,9 +1892,8 @@ impl<'a, 'c> Vm<'a, 'c> {
                     )
                 })?;
                 xs.borrow()
-                    .iter()
-                    .find(|(k, _)| *k == key)
-                    .map(|(_, v)| v.clone())
+                    .get(&key)
+                    .cloned()
                     .ok_or_else(|| self.err(format!("chave {key} não existe no mapa"), span))
             }
             Value::Matriz(m) => {
@@ -2007,11 +2006,7 @@ impl<'a, 'c> Vm<'a, 'c> {
                     )
                 })?;
                 let mut map = xs.borrow_mut();
-                if let Some(slot) = map.iter_mut().find(|(k, _)| *k == key) {
-                    slot.1 = value;
-                } else {
-                    map.push((key, value));
-                }
+                map.insert(key, value);
                 Ok(())
             }
             other => Err(self.err(
@@ -2448,10 +2443,7 @@ impl Vm<'_, '_> {
         };
         let hook = {
             let key = MapKey::Texto("_como_texto".into());
-            xs.borrow()
-                .iter()
-                .find(|(k, _)| *k == key)
-                .map(|(_, v)| v.clone())
+            xs.borrow().get(&key).cloned()
         };
         let Some(hook) = hook else {
             return Ok(self.format_value(v));

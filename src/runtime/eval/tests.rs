@@ -586,10 +586,9 @@ s += conjunto([:bia, :dani])
 escreva(tamanho(s))
 s = s.remova(:ana)
 escreva(s contem :ana)
-para x em conjunto([10, 20])
-inicio
-escreva(x)
-fim
+itens = []
+para x em conjunto([10, 20]) { itens += [x] }
+para x em ordene(itens) { escreva(x) }
 "#),
         "verdadeiro\nfalso\n3\nverdadeiro\n5\nfalso\n10\n20\n"
     );
@@ -1471,7 +1470,7 @@ fn lista_e_mapa_que_contem_a_si_mesmos_imprimem_e_comparam() {
          escreva(formate(\"{}\", [xs]))\n");
     assert_eq!(
         out,
-        "mapa{\"x\": 1, \"eu\": mapa{…}}\n\
+        "mapa{\"eu\": mapa{…}, \"x\": 1}\n\
          [[…], 2]\n\
          verdadeiro verdadeiro verdadeiro\n\
          verdadeiro\n\

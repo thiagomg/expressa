@@ -329,6 +329,8 @@ xs[0..=2]                      // [10, 20, 30]
 
 `mapa` e `conjunto` são funções do núcleo. `mapa()` (ou `mapa([])`) é o mapa vazio. `mapa(xs)` recebe **uma** lista de pares; chaves duplicadas são erro.
 
+Mapas usam tabelas hash, sem preservar a ordem de inserção. A igualdade compara as chaves e seus valores, independentemente da ordem. A impressão organiza as chaves por tipo (texto, inteiro, bool), em ordem crescente dentro de cada tipo. Essa ordenação da impressão não altera a ordem interna da tabela.
+
 ```text
 devs = [:developer -> "Thiago", "co-developer" -> "Grok"]
 pessoa = mapa([
@@ -358,7 +360,7 @@ Campo como valor de um par: `:op -> (obj:campo)`. `{ }` e `inicio`/`fim` são s�
 
 ## 11. Conjuntos
 
-Valores únicos (texto, número inteiro ou bool). Sem repetir, sem ordem de índice. `conjunto()` (ou `conjunto([])`) é vazio. `conjunto(xs)` recebe uma lista e descarta duplicatas na ordem de inserção.
+Valores únicos (texto, número inteiro ou bool). Sem repetir, sem ordem de índice. `conjunto()` (ou `conjunto([])`) é vazio. `conjunto(xs)` recebe uma lista e descarta duplicatas. O armazenamento usa tabela hash: a iteração de `para` não tem ordem garantida. A impressão ordena os elementos pelos mesmos critérios das chaves de mapa. A igualdade depende apenas dos elementos.
 
 ```text
 s = conjunto([:ana, :bia, 1])
