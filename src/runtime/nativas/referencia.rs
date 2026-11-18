@@ -126,7 +126,8 @@ pub fn tema_de(module: Option<&str>, name: &str) -> &'static str {
         ) => "Coleção",
         (
             None,
-            "clone" | "avalie" | "catalogo" | "ajuda" | "tipo" | "tipos" | "falhe" | "garanta",
+            "clone" | "avalie" | "modulos" | "funcoes" | "ajuda" | "tipo" | "tipos" | "falhe"
+            | "garanta",
         ) => "Linguagem",
         (
             Some("tela"),

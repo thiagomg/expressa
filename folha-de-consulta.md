@@ -142,10 +142,11 @@ escreva(soma(10, 5))           // 15
 
 avalie("2 + 3 * 4")           // 14  (usa x, funções… do escopo atual)
 escreva(avalie(leia("> ")) se_falhar { "conta inválida" })
-catalogo()                     // nativas, funcao do programa, módulos
-catalogo(c)  catalogo("matriz")  // mapa, módulo ou função
+modulos()                      // imprime módulos, incluindo arquivos importados
+funcoes()  funcoes("matriz")    // imprime funções e documentação
+modulos(:dados)                // mapas com :nome e :funcoes
+funcoes("", :dados)             // mapas com :nome, :args e :doc
 ajuda("escreva")  ajuda("matriz::zeros")
-                               // no REPL: ls   ls matriz   ls c
 
 busca = funcao(xs, alvo) {
     para x em xs {
@@ -362,7 +363,7 @@ Núcleo (sempre no escopo):
 | `escreva` `escreva_erro` `saia` `falhe` `garanta` `durma` | imprimir / encerrar / erro / esperar |
 | `leia` `leia_linhas` | teclado / pipe |
 | `argumentos` | lista (não é função) |
-| `numero` `número` `formato` `avalie` `catalogo` `ajuda` | número / executar texto / listar / ficha |
+| `numero` `número` `formato` `avalie` `modulos` `funcoes` `ajuda` | número / executar texto / listar / ficha |
 | `mapa` `conjunto` | construtores |
 | `tamanho` `primeiro` `ultimo` | coleção |
 | `maiuscula` `minuscula` `sem_acento` `remova` `substitua` `procure` `separe` `junte` `limpe` `formate` | texto / lista / mapa / conjunto |
@@ -403,7 +404,7 @@ Abre `.lep` em `expressa-mode` (palavras-chave, nativas, comentários, strings).
 
 ```text
 expressa                  // ↑ ↓ histórico
-ajuda    ajuda funcoes    ajuda linguagem    ajuda escreva    ajuda matriz::zeros
+modulos()    funcoes()    funcoes("matriz")    ajuda("escreva")
 cls                       // comando do REPL: limpa a tela
 sair
 ```

@@ -103,6 +103,7 @@ pub(crate) struct Vm<'a, 'c> {
     builtins: Rc<RefCell<Env>>,
     loading: HashSet<PathBuf>,
     modules: HashMap<PathBuf, Rc<RefCell<Env>>>,
+    module_names: HashMap<PathBuf, String>,
     pub(crate) native_modules: HashMap<String, Rc<RefCell<Env>>>,
     /// If set, file I/O and `importe` must stay under this directory.
     pub(crate) workspace_root: Option<PathBuf>,
@@ -663,6 +664,7 @@ impl<'a, 'c> Vm<'a, 'c> {
             builtins,
             loading: HashSet::new(),
             modules: HashMap::new(),
+            module_names: HashMap::new(),
             native_modules,
             workspace_root,
             deadline: time_limit.and_then(|d| Instant::now().checked_add(d)),
@@ -815,7 +817,6 @@ impl<'a, 'c> Vm<'a, 'c> {
         Ok(last)
     }
 
-    #[cfg(feature = "terminal")]
     pub(crate) fn builtins_env(&self) -> Rc<RefCell<Env>> {
         Rc::clone(&self.builtins)
     }
@@ -884,7 +885,11 @@ impl<'a, 'c> Vm<'a, 'c> {
             loaded?
         };
 
-        self.bind_imported(import, env, module_env)
+        self.bind_imported(import, env, module_env)?;
+        self.module_names
+            .entry(key)
+            .or_insert_with(|| import.path.clone());
+        Ok(())
     }
 
     /// Load a module while the `<modulo nome>` frame is already on the stack.
@@ -963,6 +968,28 @@ impl<'a, 'c> Vm<'a, 'c> {
         self.modules
             .insert(key.to_path_buf(), Rc::clone(&module_env));
         Ok(module_env)
+    }
+
+    /// File modules successfully imported in this VM. The cache's canonical
+    /// paths deduplicate aliases and alternate spellings of the same file.
+    pub(crate) fn imported_modules(&self) -> Vec<(String, Rc<RefCell<Env>>)> {
+        let mut modules = Vec::new();
+        for (path, name) in &self.module_names {
+            let Some(env) = self.modules.get(path) else {
+                continue;
+            };
+            let ambiguous = self.native_modules.contains_key(name)
+                || matches!(name.as_str(), "nucleo" | "núcleo")
+                || self.module_names.values().filter(|n| *n == name).count() > 1;
+            let name = if ambiguous {
+                path.to_string_lossy().into_owned()
+            } else {
+                name.clone()
+            };
+            modules.push((name, Rc::clone(env)));
+        }
+        modules.sort_by(|a, b| a.0.cmp(&b.0));
+        modules
     }
 
     fn bind_imported(

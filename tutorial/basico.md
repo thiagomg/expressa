@@ -47,32 +47,23 @@ expressa tutorial/exemplos/01_ola.lep
 Não precisa decorar a lista de funções. Abra o REPL (`expressa`) e pergunte.
 
 ```text
-ajuda                 o que o REPL entende
-ajuda linguagem       se, para, função, enquanto…
-ajuda funcoes         funções disponíveis no núcleo e nos módulos
-ajuda escreva         ficha de uma função (assinatura + exemplo)
-ajuda raiz
+modulos()             // módulos disponíveis, incluindo o núcleo
+funcoes()             // funções visíveis na sessão
+funcoes("mat")        // funções de um módulo, mesmo antes de importar
+ajuda("escreva")      // ficha de uma função
+ajuda("mat::raiz")
 ```
 
-`ls` lista os nomes disponíveis na sessão atual. `ls matriz` (ou `ls tela`, `ls mat`, `ls arquivo`) lista um módulo, mesmo antes do `importe`.
-
-```text
-ls
-ls mat
-importe "mat"
-raiz(9)
-```
-
-Depois de criar a sua própria função, ela aparece no `ls`:
+Depois de criar a sua própria função, ela aparece em `funcoes()`:
 
 ```text
 dobro = função(n) { n * 2 }
-ls
+funcoes()
 ```
 
 No expressa-aula, **F1** ou o botão **Ajuda** abre o catálogo de funções. Para consultar uma função específica, passe o mouse sobre o nome dela ou posicione o cursor nesse nome e pressione F1. Enquanto você digita, o editor sugere funções da linguagem e funções definidas no arquivo.
 
-`catalogo()` retorna informações sobre os nomes disponíveis em uma lista que você pode usar no próprio programa.
+`funcoes("", :dados)` retorna uma lista de mapas com nome, argumentos e documentação. `modulos(:dados)` retorna os módulos com suas listas de funções. Essas consultas não imprimem e podem ser usadas no próprio programa.
 
 As setas ↑ e ↓ permitem consultar e reutilizar comandos anteriores. `cls` limpa a tela do REPL. `sair` (sem parênteses) encerra; Ctrl+D também.
 
@@ -239,7 +230,7 @@ O mesmo programa está em `../exemplos/linguagem/tabuada.lep` (lá usa `funcao` 
 
 **Desafio:** acrescente uma chamada a `tabuada(9)` e execute o programa.
 
-No REPL, digite `ls` depois de definir a função: `tabuada` aparece na lista. Para consultar uma função da linguagem, experimente `ajuda tamanho`.
+No REPL, digite `funcoes()` depois de definir a função: `tabuada` aparece na lista. Para consultar uma função da linguagem, experimente `ajuda("tamanho")`.
 
 ---
 
@@ -328,7 +319,7 @@ Erros comuns no começo:
 | gravar arquivo | `../exemplos/programas/diario.lep` |
 | conta de caderno (Bhaskara, juros) | `../exemplos/escola/` |
 | Termo, Conway, desenhos de bicho | `../exemplos/jogos/` |
-| lista de funções | REPL: `ajuda` / `ls` / `ajuda escreva` · expressa-aula: **F1** · [manual](../docs/manual.md) |
+| lista de funções | REPL: `modulos()` / `funcoes()` / `ajuda("escreva")` · expressa-aula: **F1** · [manual](../docs/manual.md) |
 
 A [folha de consulta](../folha-de-consulta.md) reúne a sintaxe e os nomes mais usados. Consulte quando precisar lembrar como usar `tamanho`, `contem` ou `para`, por exemplo.
 

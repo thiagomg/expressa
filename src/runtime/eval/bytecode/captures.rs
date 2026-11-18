@@ -228,7 +228,7 @@ pub(crate) fn detached_function(
                         .checked_sub(n)
                         .ok_or("pilha inválida para clone")?;
                     let native=s.values[base].ok_or("função tem chamada indireta; não é possível provar ausência de acesso ao ambiente")?;
-                    if matches!(native, "avalie" | "catalogo" | "catálogo" | "ordene") {
+                    if matches!(native, "avalie" | "funcoes" | "funções" | "modulos" | "módulos" | "ordene") {
                         return Err(format!("função pode consultar o ambiente por `{native}`"));
                     }
                     effect(&mut s, n, 1)?;
@@ -243,7 +243,7 @@ pub(crate) fn detached_function(
                     let native = s.values[base].ok_or(
                         "função tem chamada indireta; não é possível provar ausência de acesso ao ambiente",
                     )?;
-                    if matches!(native, "avalie" | "catalogo" | "catálogo" | "ordene") {
+                    if matches!(native, "avalie" | "funcoes" | "funções" | "modulos" | "módulos" | "ordene") {
                         return Err(format!("função pode consultar o ambiente por `{native}`"));
                     }
                     effect(&mut s, n, 1)?;
@@ -437,7 +437,7 @@ fn resolve_native(
             if frame.kind == FrameKind::Builtins
                 && let Value::Builtin(canonical) = value
             {
-                if matches!(*canonical, "avalie" | "catalogo" | "catálogo") {
+                if matches!(*canonical, "avalie" | "funcoes" | "funções" | "modulos" | "módulos") {
                     return Err(format!(
                         "função consulta o ambiente dinamicamente por `{name}`"
                     ));

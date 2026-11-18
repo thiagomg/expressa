@@ -122,20 +122,38 @@ formate = funcao(modelo, valor) { 0 }
 /// Exemplo: avalie("2 + 3 * 4")
 avalie = funcao(texto) { 0 }
 
-/// Escopo atual, ou o que tem num mapa, módulo ou função (nome, args, tipo, modulo).
+/// Lista os módulos disponíveis: núcleo, nativos e arquivos já importados.
 ///
-/// Sem argumento, devolve o que está visível agora. Com argumento: mapa (uma
-/// linha por chave), módulo, texto "matriz" (módulo nativo) ou uma função.
-/// Cada item tem :nome, :tipo, :args, :modulo e :doc. catálogo() é o mesmo.
+/// Sem argumento, imprime os nomes em ordem alfabética e devolve nada.
+/// Com :dados, devolve uma lista de mapas com :nome (texto) e :funcoes
+/// (lista de mapas com :nome, :args e :doc, como funcoes).
+/// Também módulos(). O núcleo aparece como "nucleo".
+/// Arquivos aparecem pelo primeiro caminho usado para importá-los, sem
+/// duplicar aliases do mesmo arquivo. Se nomes colidirem, usa o caminho absoluto.
 ///
-/// Exemplo: catalogo(c)
-catalogo = funcao() { 0 }
-catalogo = funcao(alvo) { 0 }
+/// Exemplo: dados = modulos(:dados)
+modulos = funcao() { 0 }
+modulos = funcao(modo) { 0 }
+
+/// Lista funções públicas com argumentos e documentação completa.
+///
+/// Sem alvo, ou com "", consulta as funções visíveis no escopo atual.
+/// Aceita nome de módulo ("arquivo", "nucleo", caminho importado ou apelido)
+/// ou o próprio módulo. Nomes iniciados por _ e valores que não são funções
+/// ficam de fora. A lista é ordenada pelo nome. Também funções().
+/// Sem modo, imprime e devolve nada. Com :dados no segundo argumento,
+/// devolve uma lista de mapas: :nome (texto), :args (lista de textos) e
+/// :doc (documentação completa, ou "" se não houver).
+///
+/// Exemplo: dados = funcoes("arquivo", :dados)
+funcoes = funcao() { 0 }
+funcoes = funcao(alvo) { 0 }
+funcoes = funcao(alvo, modo) { 0 }
 
 /// Ficha de uma função nativa ou definida: assinatura, argumentos e documentação.
 ///
 /// O alvo é um texto ("escreva", "matriz::zeros"), uma função ou uma nativa.
-/// A mesma ficha alimenta o REPL (ajuda escreva) e a janela Ajuda da Aula.
+/// A mesma ficha alimenta ajuda("escreva") no REPL e a janela Ajuda da Aula.
 ///
 /// Exemplo: ajuda("matriz::zeros")
 ajuda = funcao(alvo) { 0 }

@@ -151,7 +151,7 @@ fn captured_bindings_recursion_and_dynamic_environment_are_rejected() {
         "f = funcao() { avalie(\"1 + 2\") }\nclone(f)",
         "dinamicamente",
     );
-    error("f = funcao() { catalogo() }\nclone(f)", "dinamicamente");
+    error("f = funcao() { funcoes() }\nclone(f)", "dinamicamente");
     error(
         "outer = funcao(x) { funcao() { x } }\nclone(outer(2))",
         "`x`",

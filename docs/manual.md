@@ -10,7 +10,7 @@ Este manual reúne a sintaxe, as operações e as funções da Expressa para con
 | [Folha de consulta](../folha-de-consulta.md) | resumo da sintaxe e das funções |
 | [Especificação](../especificacao-linguagem.md) | regras detalhadas para quem implementa a linguagem |
 
-No expressa-aula, pressione **F1** para consultar a ajuda das funções. Você também pode chamar `ajuda("escreva")` em um programa ou digitar `ajuda escreva` no REPL, o modo interativo. As fichas usadas pela ajuda estão em `docs/nativas/` no repositório.
+No expressa-aula, pressione **F1** para consultar a ajuda das funções. Você também pode chamar `ajuda("escreva")` em um programa ou no REPL, o modo interativo. As fichas usadas pela ajuda estão em `docs/nativas/` no repositório.
 
 Os programas são salvos em arquivos com a extensão `.lep`. Os índices começam em **0**. Em uma coleção não vazia, o último índice é o tamanho menos um; índices negativos geram erro. Nas fatias, o índice final não é incluído: `[0..2]` contém os índices 0 e 1. Quando o índice final é omitido, como em `[2..]`, a fatia vai até o fim.
 
@@ -94,13 +94,13 @@ i += 1                    // números: += e -=
 nome += " Silva"          // texto: só +=
 ```
 
-Sem `a < b < c`: use `a < b e b < c`.
+A forma `a < b < c` é inválida. Use `a < b e b < c`.
 
 ---
 
-## Controle
+## Controle de fluxo
 
-```text
+```expressa
 se nota >= 7 { "aprovado" } senão { "reprovado" }
 se n < 0 { escreva("negativo") }     // senão é opcional como comando
 
@@ -326,13 +326,25 @@ Executa o texto como código Expressa no escopo atual e retorna o último valor.
 avalie("2 + 3 * 4")     // 14
 ```
 
-### `catalogo()` / `catalogo(alvo)` / `catálogo()` / `catálogo(alvo)`
+### `modulos()` / `módulos()`
 
-Sem argumento, lista os nomes disponíveis no escopo atual. Com um mapa, módulo, nome de módulo como `"matriz"` ou função, retorna informações sobre o alvo. As entradas incluem os campos `:nome`, `:tipo`, `:args`, `:modulo` e `:doc`.
+Imprime os módulos disponíveis, em ordem alfabética, e devolve `nada`. Inclui `nucleo`, os módulos nativos disponíveis e arquivos já importados na sessão. Cada arquivo aparece uma vez, mesmo quando importado por vários apelidos. O nome é o primeiro caminho usado na importação; caminhos absolutos distinguem nomes em conflito.
+
+`modulos(:dados)` devolve uma lista de mapas com `:nome` (texto) e `:funcoes` (a lista estruturada de funções do módulo), sem imprimir.
+
+### `funcoes()` / `funções()`
+
+Imprime as funções públicas com argumentos e documentação completa, em ordem alfabética, e devolve `nada`. Sem argumento, ou com `""`, consulta o escopo atual. O alvo pode ser o nome de um módulo nativo, `"nucleo"`, o caminho de um arquivo já importado, um apelido ou o próprio módulo. Valores que não são funções e nomes iniciados por `_` ficam de fora.
+
+Com `:dados` no segundo argumento, devolve uma lista de mapas com `:nome` (texto), `:args` (lista de textos) e `:doc` (documentação completa; `""` se não houver), sem imprimir.
 
 ```text
-catalogo()
-catalogo("matriz")
+modulos()
+funcoes("arquivo")
+f = funcoes("", :dados)
+m = modulos(:dados)
+biblioteca = importe "./minha_biblioteca"
+funcoes(biblioteca)
 ```
 
 ### `ajuda(alvo)`
@@ -883,12 +895,11 @@ No terminal:
 
 ```text
 expressa
-ajuda
-ajuda funcoes
-ajuda linguagem
-ajuda escreva
-ajuda matriz::zeros
-ls              // no REPL, como catalogo
+modulos()
+funcoes()
+funcoes("matriz")
+ajuda("escreva")
+ajuda("matriz::zeros")
 cls             // limpa a tela do REPL
 sair
 ```

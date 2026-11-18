@@ -207,18 +207,33 @@
       "doc": "Executa o texto como código Expressa no escopo atual e devolve o último valor.\n\nVê as variáveis e funções já definidas; uma atribuição no texto altera o\nescopo de quem chamou (função não escreve nomes de fora).\n\nErros: o argumento não é texto; o texto está vazio; erro de sintaxe ou de\nexecução no código avaliado. Tudo isso pode ir em se_falhar.\n\nExemplo: avalie(\"2 + 3 * 4\")"
     },
     {
-      "name": "catalogo",
+      "name": "modulos",
       "aliases": [
-        "catálogo"
+        "módulos"
       ],
       "module": null,
       "kind": "funcao",
       "signatures": [
-        "catalogo()",
-        "catalogo(alvo)"
+        "modulos()",
+        "modulos(modo)"
       ],
-      "summary": "Escopo atual, ou o que tem num mapa, módulo ou função (nome, args, tipo, modulo).",
-      "doc": "Escopo atual, ou o que tem num mapa, módulo ou função (nome, args, tipo, modulo).\n\nSem argumento, devolve o que está visível agora. Com argumento: mapa (uma\nlinha por chave), módulo, texto \"matriz\" (módulo nativo) ou uma função.\nCada item tem :nome, :tipo, :args, :modulo e :doc. catálogo() é o mesmo.\n\nExemplo: catalogo(c)"
+      "summary": "Lista os módulos disponíveis: núcleo, nativos e arquivos já importados.",
+      "doc": "Lista os módulos disponíveis: núcleo, nativos e arquivos já importados.\n\nSem argumento, imprime os nomes em ordem alfabética e devolve nada.\nCom :dados, devolve uma lista de mapas com :nome (texto) e :funcoes\n(lista de mapas com :nome, :args e :doc, como funcoes).\nTambém módulos(). O núcleo aparece como \"nucleo\".\nArquivos aparecem pelo primeiro caminho usado para importá-los, sem\nduplicar aliases do mesmo arquivo. Se nomes colidirem, usa o caminho absoluto.\n\nExemplo: dados = modulos(:dados)"
+    },
+    {
+      "name": "funcoes",
+      "aliases": [
+        "funções"
+      ],
+      "module": null,
+      "kind": "funcao",
+      "signatures": [
+        "funcoes()",
+        "funcoes(alvo)",
+        "funcoes(alvo, modo)"
+      ],
+      "summary": "Lista funções públicas com argumentos e documentação completa.",
+      "doc": "Lista funções públicas com argumentos e documentação completa.\n\nSem alvo, ou com \"\", consulta as funções visíveis no escopo atual.\nAceita nome de módulo (\"arquivo\", \"nucleo\", caminho importado ou apelido)\nou o próprio módulo. Nomes iniciados por _ e valores que não são funções\nficam de fora. A lista é ordenada pelo nome. Também funções().\nSem modo, imprime e devolve nada. Com :dados no segundo argumento,\ndevolve uma lista de mapas: :nome (texto), :args (lista de textos) e\n:doc (documentação completa, ou \"\" se não houver).\n\nExemplo: dados = funcoes(\"arquivo\", :dados)"
     },
     {
       "name": "ajuda",
@@ -229,7 +244,7 @@
         "ajuda(alvo)"
       ],
       "summary": "Ficha de uma função nativa ou definida: assinatura, argumentos e documentação.",
-      "doc": "Ficha de uma função nativa ou definida: assinatura, argumentos e documentação.\n\nO alvo é um texto (\"escreva\", \"matriz::zeros\"), uma função ou uma nativa.\nA mesma ficha alimenta o REPL (ajuda escreva) e a janela Ajuda da Aula.\n\nExemplo: ajuda(\"matriz::zeros\")"
+      "doc": "Ficha de uma função nativa ou definida: assinatura, argumentos e documentação.\n\nO alvo é um texto (\"escreva\", \"matriz::zeros\"), uma função ou uma nativa.\nA mesma ficha alimenta ajuda(\"escreva\") no REPL e a janela Ajuda da Aula.\n\nExemplo: ajuda(\"matriz::zeros\")"
     },
     {
       "name": "tipo",

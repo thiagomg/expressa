@@ -13,7 +13,7 @@ use super::env::{Env, FrameKind};
 use super::error::{EvalError, RuntimeError};
 use super::eval::{ExecutionOptions, LineInput, Vm};
 use super::leia::CLEAR_SCREEN;
-use super::value::{MapKey, Value};
+use super::value::Value;
 
 pub struct ReplSession<'a> {
     vm: Vm<'a, 'static>,
@@ -147,7 +147,9 @@ pub fn run_repl() -> io::Result<()> {
 }
 
 pub fn run_repl_com(options: ExecutionOptions) -> io::Result<()> {
-    println!("Expressa. Digite 'ajuda' ou 'sair'. Setas ↑ ↓ recorrem comandos.");
+    println!(
+        "Expressa. Use modulos(), funcoes() ou ajuda(\"escreva\"). Digite 'sair' para encerrar."
+    );
     if io::stdin().is_terminal()
         && let Ok(mut rl) = DefaultEditor::new()
     {
@@ -257,22 +259,9 @@ fn apply_line(session: &mut ReplSession<'_>, buf: &mut String, line: &str) -> Li
     if buf.is_empty() {
         match parse_repl_command(trimmed) {
             Some(ReplCommand::Sair) => return LineResult::Quit(0),
-            Some(ReplCommand::Ajuda(topic)) => {
-                print_help(topic);
-                return LineResult::Ran(trimmed.to_string());
-            }
             Some(ReplCommand::Cls) => {
                 print!("{CLEAR_SCREEN}");
                 let _ = io::stdout().flush();
-                return LineResult::Ran(trimmed.to_string());
-            }
-            Some(ReplCommand::Catalogo { pretty, alvo }) => {
-                let src = catalogo_src(alvo);
-                match session.eval(&src) {
-                    Ok(v) if pretty => print_catalogo(&v),
-                    Ok(v) => println!("{}", v.repl_format(session.vm.numero_locale)),
-                    Err(e) => eprintln!("{e}"),
-                }
                 return LineResult::Ran(trimmed.to_string());
             }
             Some(ReplCommand::Vazio) => return LineResult::Continue,
@@ -296,38 +285,27 @@ fn apply_line(session: &mut ReplSession<'_>, buf: &mut String, line: &str) -> Li
     LineResult::Ran(source.trim().to_string())
 }
 
-enum ReplCommand<'a> {
+enum ReplCommand {
     Sair,
-    Ajuda(Option<&'a str>),
     Cls,
-    Catalogo { pretty: bool, alvo: Option<&'a str> },
     Vazio,
 }
 
-fn parse_repl_command(line: &str) -> Option<ReplCommand<'_>> {
+fn parse_repl_command(line: &str) -> Option<ReplCommand> {
     if line.is_empty() {
         return Some(ReplCommand::Vazio);
     }
     let line = line.strip_prefix('.').unwrap_or(line);
     let mut parts = line.split_whitespace();
     let cmd = parts.next()?;
-    // `ls = [1, 2]` and `sair = 3` are Expressa, not the REPL commands.
+    // `cls = 3` and `sair = 3` are Expressa assignments.
     if continua_como_codigo(line, cmd) {
         return None;
     }
     let rest = parts.next();
     match normalize_topic(cmd).as_str() {
         "sair" | "exit" | "quit" => Some(ReplCommand::Sair),
-        "ajuda" | "help" => Some(ReplCommand::Ajuda(rest)),
         "cls" | "limpe_tela" | "clear" if rest.is_none() => Some(ReplCommand::Cls),
-        "ls" => Some(ReplCommand::Catalogo {
-            pretty: true,
-            alvo: alvo_de_catalogo(rest_of(line, cmd))?,
-        }),
-        "catalogo" => Some(ReplCommand::Catalogo {
-            pretty: false,
-            alvo: alvo_de_catalogo(rest_of(line, cmd))?,
-        }),
         _ => None,
     }
 }
@@ -347,55 +325,6 @@ fn continua_como_codigo(line: &str, cmd: &str) -> bool {
         || rest.starts_with("-=")
 }
 
-/// `Some(None)` is a command with no target. `None` means the text is not a
-/// catalog target, so the line stays ordinary code.
-fn alvo_de_catalogo(alvo: Option<&str>) -> Option<Option<&str>> {
-    let Some(alvo) = alvo else {
-        return Some(None);
-    };
-    let campo = alvo.split_once(':');
-    let ok = match campo {
-        None => ident_simples(alvo),
-        Some((obj, campo)) => ident_simples(obj) && ident_simples(campo),
-    };
-    ok.then_some(Some(alvo))
-}
-
-fn ident_simples(s: &str) -> bool {
-    let mut cs = s.chars();
-    let Some(first) = cs.next() else {
-        return false;
-    };
-    (first.is_alphabetic() || first == '_') && cs.all(|c| c.is_alphanumeric() || c == '_')
-}
-
-fn rest_of<'a>(line: &'a str, cmd: &str) -> Option<&'a str> {
-    let rest = line.trim_start().get(cmd.len()..)?.trim();
-    if rest.is_empty() { None } else { Some(rest) }
-}
-
-fn catalogo_src(alvo: Option<&str>) -> String {
-    match alvo {
-        None => "catalogo()".into(),
-        Some(a) if is_native_module_ident(a) => format!("catalogo(\"{a}\")"),
-        Some(a) => format!("catalogo({a})"),
-    }
-}
-
-fn is_native_module_ident(s: &str) -> bool {
-    let mut cs = s.chars();
-    let Some(first) = cs.next() else {
-        return false;
-    };
-    if !(first.is_alphabetic() || first == '_') {
-        return false;
-    }
-    if !cs.all(|c| c.is_alphanumeric() || c == '_') {
-        return false;
-    }
-    super::nativas::NATIVAS.iter().any(|n| n.module == Some(s))
-}
-
 fn normalize_topic(s: &str) -> String {
     s.trim()
         .chars()
@@ -409,213 +338,6 @@ fn normalize_topic(s: &str) -> String {
             _ => c.to_ascii_lowercase(),
         })
         .collect()
-}
-
-fn print_help(topic: Option<&str>) {
-    match topic {
-        None => print_help_geral(),
-        Some(t) => {
-            let key = normalize_topic(t);
-            match key.as_str() {
-                "funcoes" | "funcao" | "nativas" | "builtins" => print_help_funcoes(),
-                "linguagem" | "sintaxe" => print_help_linguagem(),
-                name => {
-                    if let Some(text) = super::nativas::lookup_ficha(t)
-                        .or_else(|| super::nativas::lookup_ficha(name))
-                    {
-                        println!("{text}");
-                    } else {
-                        println!(
-                            "Não conheço o tópico `{t}`.\n  \
-                             Tente: ajuda, ajuda funcoes, ajuda linguagem, ajuda escreva"
-                        );
-                    }
-                }
-            }
-        }
-    }
-}
-
-fn print_help_geral() {
-    println!(
-        "  2 + 2                 avalia e mostra o resultado\n  \
-         x = 10                 guarda o valor (não imprime)\n  \
-         x                      mostra 10\n\n  \
-         ajuda                  esta mensagem\n  \
-         ajuda funcoes          lista as funções nativas\n  \
-         ajuda linguagem        se, para, funcao, se_falhar…\n  \
-         ajuda escreva          detalhe de uma função\n  \
-         ls / ls matriz         catálogo formatado (escopo ou módulo)\n  \
-         catalogo / catalogo c  a lista de mapas (valor)\n  \
-         formato(\"pt\") / en     texto dos números (1.000,5 / 1,000.5)\n  \
-         formato(\"decimal\") / float  aritmética (padrão decimal)\n  \
-         sair                   encerra o REPL (também Ctrl+D)\n  \
-         saia() / saia(1)       nativa: encerra o processo\n  \
-         cls                    comando do REPL: limpa a tela\n  \
-         importe \"tela\"         cls() / posicao_cursor() / quadro() / nova_linha\n  \
-         ↑ ↓                    comandos anteriores"
-    );
-}
-
-fn mapa_campo(v: &Value, key: &str) -> String {
-    let Value::Mapa(xs) = v else {
-        return String::new();
-    };
-    for (k, val) in xs.borrow().iter() {
-        if let MapKey::Texto(t) = k
-            && t == key
-            && let Value::Texto(s) = val
-        {
-            return s.clone();
-        }
-    }
-    String::new()
-}
-
-fn print_catalogo(v: &Value) {
-    let Value::Lista(xs) = v else {
-        println!("{v}");
-        return;
-    };
-    let mut nucleo = Vec::new();
-    let mut funcoes = Vec::new();
-    let mut por_modulo: Vec<(String, String, String)> = Vec::new();
-    let mut modulos = Vec::new();
-    let mut outros = Vec::new();
-    for item in xs.borrow().iter() {
-        let nome = mapa_campo(item, "nome");
-        let tipo = mapa_campo(item, "tipo");
-        let args = mapa_campo(item, "args");
-        let modulo = mapa_campo(item, "modulo");
-        let sig = if args.is_empty() || tipo == "modulo" {
-            nome.clone()
-        } else {
-            format!("{nome}({args})")
-        };
-        match tipo.as_str() {
-            "funcao" => funcoes.push(sig),
-            "modulo" => modulos.push((sig, args)),
-            "nativa" if modulo.is_empty() => nucleo.push(sig),
-            "nativa" => por_modulo.push((modulo, sig, String::new())),
-            _ => outros.push((sig, tipo)),
-        }
-    }
-    if !nucleo.is_empty() {
-        println!("Núcleo");
-        for s in &nucleo {
-            println!("  {s}");
-        }
-    }
-    if !funcoes.is_empty() {
-        println!("\nFunções");
-        for s in &funcoes {
-            println!("  {s}");
-        }
-    }
-    let mut seen_mod = std::collections::BTreeSet::new();
-    for (m, _, _) in &por_modulo {
-        seen_mod.insert(m.clone());
-    }
-    for m in seen_mod {
-        println!("\nimporte \"{m}\"");
-        for (mod_name, sig, _) in &por_modulo {
-            if *mod_name == m {
-                println!("  {sig}");
-            }
-        }
-    }
-    if !modulos.is_empty() {
-        println!("\nMódulos");
-        for (nome, membros) in &modulos {
-            if membros.is_empty() {
-                println!("  {nome}");
-            } else {
-                println!("  {nome}    {membros}");
-            }
-        }
-    }
-    if !outros.is_empty() {
-        if !nucleo.is_empty() || !funcoes.is_empty() || !por_modulo.is_empty() {
-            println!();
-        }
-        for (sig, tipo) in &outros {
-            println!("  {sig}    {tipo}");
-        }
-    }
-}
-
-fn print_help_funcoes() {
-    print!("{}", texto_ajuda_funcoes());
-}
-
-fn texto_ajuda_funcoes() -> String {
-    use super::nativas::{docs_agrupados, tema_de};
-    let mut out = String::new();
-    let mut last_mod: Option<Option<&str>> = None;
-    let mut last_tema: Option<&str> = None;
-    for doc in docs_agrupados() {
-        let m = doc.module.as_deref();
-        if last_mod != Some(m) {
-            if last_mod.is_some() {
-                out.push('\n');
-            }
-            match m {
-                None => out.push_str("Núcleo (sempre no escopo):\n"),
-                Some(nome) => out.push_str(&format!("importe \"{nome}\":\n")),
-            }
-            last_mod = Some(m);
-            last_tema = None;
-        }
-        let tema = tema_de(m, &doc.name);
-        if !tema.is_empty() && last_tema != Some(tema) {
-            out.push_str(&format!("\n  {tema}\n"));
-            last_tema = Some(tema);
-        }
-        let label = if doc.signatures.is_empty() {
-            doc.name.as_str()
-        } else {
-            doc.sig.as_str()
-        };
-        let indent = if tema.is_empty() { "  " } else { "    " };
-        out.push_str(&format!("{indent}{label:<22} {}\n", doc.summary));
-    }
-    out.push_str("\n  ajuda <nome>          detalhe, ex.: ajuda raiz\n");
-    out
-}
-
-fn print_help_linguagem() {
-    println!(
-        "  se cond inicio … fim  [ou se …]  [senao …]\n  \
-         se como valor precisa de senao; como comando, senao é opcional\n  \
-         retorne / retorne expr     sai da função\n  \
-         se cond {{ … }} senao {{ … }}   '{{' e '}}' valem como inicio/fim\n  \
-         para i em 1..=10 {{ … }}\n  \
-         para x em lista ou texto {{ … }}\n  \
-         enquanto cond {{ … }}\n  \
-         repita n vezes {{ … }}\n  \
-         pare / continue         sai do laço / próxima volta\n  \
-         argumentos[0]           primeiro argumento após o .lep\n  \
-         funcao(a, b) {{ … }}            último valor é o resultado\n  \
-         expr se_falhar {{ outro }}        trata erro (divisão, arquivo, índice)\n  \
-         falhe(\"msg\")  garanta(n > 0)  erro capturável (pilha na chamada)\n  \
-         :nome                           o texto \"nome\" (chave de mapa)\n  \
-         :nome -> \"Ana\"                par; mapa([:nome -> \"Ana\"])\n  \
-         conjunto([:ana, 1])             únicos; s += :bia; s.remova(:ana)\n  \
-         importe \"matriz\"              matriz([[1, 2], [3, 4]])\n  \
-         importe \"arquivo\" / \"tela\" / \"mat\"\n  \
-         seno(radianos(30))              módulo mat; pi é valor\n  \
-         avalie(\"2 + 3 * 4\")          executa o texto no escopo atual\n  \
-         \"HP\".pinte(:verde)            cor no terminal (módulo tela)\n  \
-         lista[0]  t[1] = \"x\"  texto[0..2]  t[2..]   teto exclusivo; sem teto vai até o fim; t[1] fora ainda é erro\n  \
-         pessoa:nome                     chave de mapa (pessoa[\"nome\"])\n  \
-         mat::soma(1, 2)                 nome em um módulo\n  \
-         xs.tamanho()                    igual a tamanho(xs)\n  \
-         i += 1  xs += [x]  nome += \" a\"\n  \
-         xs.remova(2)  t.remova(1..3)  m.remova(\"k\")\n  \
-         procure(\"onde\", \"n\")       1; -1 se não achar\n  \
-         e  ou  nao  contem\n  \
-         #!/usr/bin/env expressa primeira linha (arquivo executável)"
-    );
 }
 
 #[cfg(test)]
@@ -668,72 +390,82 @@ mod tests {
     }
 
     #[test]
-    fn ajuda_funcoes_lista_temas() {
-        let t = texto_ajuda_funcoes();
-        let i_texto = t.find("  Texto\n").expect(&t);
-        let i_maiuscula = t.find("maiuscula").expect(&t);
-        let i_crono = t.find("importe \"crono\":").expect(&t);
-        let i_agora = t.find("agora()").expect(&t);
-        assert!(i_texto < i_maiuscula, "{t}");
-        assert!(i_crono < i_agora, "{t}");
-        assert!(t.contains("importe \"cartesiano\":"), "{t}");
-        assert!(t.contains("importe \"tela_grafica\":"), "{t}");
-        assert!(t.contains("  Pastas e arquivos\n"), "{t}");
+    fn removed_commands_are_ordinary_code() {
+        for line in [
+            "ls",
+            "ls matriz",
+            "ajuda",
+            "help",
+            "ajuda funções",
+            "catalogo",
+            "catálogo",
+        ] {
+            assert!(parse_repl_command(line).is_none(), "{line}");
+        }
+        assert!(matches!(parse_repl_command("cls"), Some(ReplCommand::Cls)));
+        assert!(matches!(
+            parse_repl_command("sair"),
+            Some(ReplCommand::Sair)
+        ));
+        assert!(parse_repl_command("cls()").is_none());
+        assert!(parse_repl_command("sair = 3").is_none());
     }
 
     #[test]
-    fn ajuda_parses_topics_with_accents() {
-        assert!(matches!(
-            parse_repl_command("ajuda funções"),
-            Some(ReplCommand::Ajuda(Some("funções")))
+    fn discovery_keeps_imported_files_and_user_docs_between_repl_lines() {
+        let path = std::env::temp_dir().join(format!(
+            "expressa-repl-discovery-{}.lep",
+            std::process::id()
         ));
-        assert!(matches!(
-            parse_repl_command("ajuda funcoes"),
-            Some(ReplCommand::Ajuda(Some("funcoes")))
-        ));
-        assert!(matches!(
-            parse_repl_command("ajuda raiz"),
-            Some(ReplCommand::Ajuda(Some("raiz")))
-        ));
-        assert!(matches!(
-            parse_repl_command("ls"),
-            Some(ReplCommand::Catalogo {
-                pretty: true,
-                alvo: None
-            })
-        ));
-        assert!(matches!(
-            parse_repl_command("catálogo"),
-            Some(ReplCommand::Catalogo {
-                pretty: false,
-                alvo: None
-            })
-        ));
-        assert!(matches!(
-            parse_repl_command("ls matriz"),
-            Some(ReplCommand::Catalogo {
-                pretty: true,
-                alvo: Some("matriz")
-            })
-        ));
-        assert!(matches!(
-            parse_repl_command("ls c:mais"),
-            Some(ReplCommand::Catalogo {
-                pretty: true,
-                alvo: Some("c:mais")
-            })
-        ));
-        assert_eq!(normalize_topic("funções"), "funcoes");
-        assert!(super::super::nativas::lookup_builtin_doc("escreva").is_some());
-        assert!(matches!(parse_repl_command("cls"), Some(ReplCommand::Cls)));
-        assert!(matches!(
-            parse_repl_command("limpe_tela"),
-            Some(ReplCommand::Cls)
-        ));
-        assert!(parse_repl_command("cls()").is_none());
-        assert!(parse_repl_command("ls = [1, 2]").is_none());
-        assert!(parse_repl_command("sair = 3").is_none());
-        assert!(parse_repl_command("ls[0]").is_none());
+        std::fs::write(
+            &path,
+            "/// Documento do arquivo.\ndobra = funcao(n) { n * 2 }\n",
+        )
+        .unwrap();
+        for backend in [
+            super::super::ExecutionBackend::Ast,
+            super::super::ExecutionBackend::Bytecode,
+        ] {
+            if !backend.is_available() {
+                continue;
+            }
+            let mut input = io::Cursor::new("");
+            let (mut out, mut err) = (Vec::new(), Vec::new());
+            let mut session = ReplSession::new(&mut input, &mut out, &mut err);
+            session.vm.backend = backend;
+            session
+                .eval(&format!("m = importe {:?}", path.to_string_lossy()))
+                .unwrap();
+            session
+                .eval(&format!("outro = importe {:?}", path.to_string_lossy()))
+                .unwrap();
+            session
+                .eval("/// Documento da sessão.\nsoma = funcao(a, b) { a + b }")
+                .unwrap();
+            session
+                .eval(
+                    r#"
+                count = 0
+                para m em modulos(:dados) {
+                    se m:funcoes == funcoes(outro, :dados) { count += 1 }
+                }
+                garanta(count == 1)
+                garanta(funcoes(m, :dados)[0]:doc == "Documento do arquivo.")
+                para f em funcoes("", :dados) {
+                    se f:nome == "soma" { garanta(f:doc == "Documento da sessão.") }
+                }
+            "#,
+                )
+                .unwrap();
+            session.eval("funcoes(m)").unwrap();
+            drop(session);
+            assert_eq!(
+                String::from_utf8(out).unwrap(),
+                "dobra(n)\n    Documento do arquivo.\n"
+            );
+            assert!(err.is_empty());
+        }
+        std::fs::remove_file(path).unwrap();
     }
 
     #[test]

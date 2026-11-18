@@ -2,7 +2,6 @@
 const SEARCH_NOT_FOUND: i64 = -1;
 
 use std::cell::RefCell;
-use std::collections::HashSet;
 use std::rc::Rc;
 
 use crate::lexer::Span;
@@ -13,10 +12,7 @@ use super::super::error::{CallFrame, EvalError};
 use super::super::eval::Vm;
 use super::super::numero::{Numero, NumeroAritmetica};
 use super::super::value::{MapKey, NumeroLocale, Value, conjunto_insert};
-use super::{
-    builtin_args, builtin_args_em, builtin_doc_summary, builtin_doc_summary_em, builtin_modulo,
-    lookup_ficha, sem_acento,
-};
+use super::{lookup_ficha, sem_acento};
 
 impl Vm<'_, '_> {
     pub(crate) fn bi_escreva(
@@ -639,97 +635,6 @@ impl Vm<'_, '_> {
         result
     }
 
-    pub(crate) fn bi_catalogo(
-        &mut self,
-        args: &[Value],
-        span: Span,
-        env: &Rc<RefCell<Env>>,
-    ) -> Result<Value, EvalError> {
-        match args {
-            [] => self.catalog_scope(env),
-            [v] => self.catalog_value(v, span),
-            _ => Err(self.err(
-                format!(
-                    "catalogo() espera 0 ou 1 argumento(s), recebeu {}",
-                    args.len()
-                ),
-                span,
-            )),
-        }
-    }
-
-    fn catalog_scope(&self, env: &Rc<RefCell<Env>>) -> Result<Value, EvalError> {
-        let mut rows: Vec<(String, Value)> = Vec::new();
-        let mut names = HashSet::new();
-        for (name, value) in Env::visible_bindings(env) {
-            if name.starts_with('_') {
-                continue;
-            }
-            if let Some(entry) = catalog_entry(&name, &value) {
-                names.insert(name.clone());
-                rows.push((name, entry));
-            }
-        }
-        let mut mods: Vec<_> = self.native_modules.keys().cloned().collect();
-        mods.sort();
-        for m in mods {
-            if names.contains(&m) {
-                continue;
-            }
-            let membros = self
-                .native_modules
-                .get(&m)
-                .map(|e| module_member_names(&e.borrow()))
-                .unwrap_or_default();
-            rows.push((m.clone(), catalog_row(&m, "modulo", &membros, &m, "")));
-            names.insert(m);
-        }
-        rows.sort_by(|a, b| a.0.cmp(&b.0));
-        Ok(Value::lista(rows.into_iter().map(|(_, v)| v).collect()))
-    }
-
-    fn catalog_value(&self, v: &Value, span: Span) -> Result<Value, EvalError> {
-        match v {
-            Value::Texto(s) => {
-                let Some(mod_env) = self.native_modules.get(s) else {
-                    return Err(self.err(format!("módulo nativo `{s}` não existe"), span));
-                };
-                Ok(catalog_frame(&mod_env.borrow(), s))
-            }
-            Value::Modulo(mod_env) => {
-                let nome = self
-                    .native_modules
-                    .iter()
-                    .find(|(_, env)| Rc::ptr_eq(env, mod_env))
-                    .map(|(nome, _)| nome.as_str())
-                    .unwrap_or("");
-                Ok(catalog_frame(&mod_env.borrow(), nome))
-            }
-            Value::Mapa(xs) => {
-                let mut rows: Vec<(String, Value)> = xs
-                    .borrow()
-                    .iter()
-                    .map(|(k, val)| {
-                        let nome = mapkey_nome(k);
-                        (nome.clone(), catalog_value_row(&nome, val))
-                    })
-                    .collect();
-                rows.sort_by(|a, b| a.0.cmp(&b.0));
-                Ok(Value::lista(rows.into_iter().map(|(_, e)| e).collect()))
-            }
-            Value::Funcao(_) | Value::Builtin(_) => {
-                Ok(Value::lista(vec![catalog_value_row("", v)]))
-            }
-            other => Err(self.err(
-                format!(
-                    "catalogo espera um módulo, mapa, função ou nome de módulo, encontrado {}",
-                    other.type_name()
-                ),
-                span,
-            )),
-        }
-    }
-
     pub(crate) fn bi_ajuda(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
         let [v] = args else {
             return Err(self.err(
@@ -761,115 +666,6 @@ impl Vm<'_, '_> {
             )),
         }
     }
-}
-
-fn catalog_entry(name: &str, value: &Value) -> Option<Value> {
-    match value {
-        Value::Builtin(_)
-        | Value::Funcao(_)
-        | Value::Modulo(_)
-        | Value::Numero(_)
-        | Value::Texto(_) => Some(catalog_value_row(name, value)),
-        _ => None,
-    }
-}
-
-fn catalog_value_row(name: &str, value: &Value) -> Value {
-    match value {
-        Value::Builtin(canon) => catalog_row(
-            name,
-            "nativa",
-            &builtin_args(canon),
-            builtin_modulo(canon),
-            &builtin_doc_summary(canon),
-        ),
-        Value::Funcao(c) => catalog_row(
-            name,
-            "funcao",
-            &c.args_text(),
-            "",
-            c.doc.as_deref().map(first_paragraph).unwrap_or(""),
-        ),
-        Value::Modulo(env) => catalog_row(
-            name,
-            "modulo",
-            &module_member_names(&env.borrow()),
-            name,
-            "",
-        ),
-        other => catalog_row(name, other.type_name(), "", "", ""),
-    }
-}
-
-fn catalog_frame(env: &Env, modulo: &str) -> Value {
-    let mut rows = Vec::new();
-    for (name, value) in env.bindings_sorted() {
-        if name.starts_with('_') {
-            continue;
-        }
-        match &value {
-            Value::Builtin(canon) => rows.push(catalog_row(
-                &name,
-                "nativa",
-                &builtin_args_em(canon, modulo),
-                modulo,
-                &builtin_doc_summary_em(canon, modulo),
-            )),
-            Value::Funcao(c) => rows.push(catalog_row(
-                &name,
-                "funcao",
-                &c.args_text(),
-                modulo,
-                c.doc.as_deref().map(first_paragraph).unwrap_or(""),
-            )),
-            Value::Modulo(_) => {
-                if let Some(e) = catalog_entry(&name, &value) {
-                    rows.push(e);
-                }
-            }
-            Value::Numero(_) | Value::Texto(_) => rows.push(catalog_value_row(&name, &value)),
-            _ => {}
-        }
-    }
-    Value::lista(rows)
-}
-
-fn mapkey_nome(k: &MapKey) -> String {
-    match k {
-        MapKey::Texto(s) => s.clone(),
-        MapKey::Numero(n) => n.to_string(),
-        MapKey::Bool(true) => "verdadeiro".into(),
-        MapKey::Bool(false) => "falso".into(),
-    }
-}
-
-fn catalog_row(nome: &str, tipo: &str, args: &str, modulo: &str, doc: &str) -> Value {
-    Value::mapa(vec![
-        (MapKey::Texto("nome".into()), Value::Texto(nome.into())),
-        (MapKey::Texto("tipo".into()), Value::Texto(tipo.into())),
-        (MapKey::Texto("args".into()), Value::Texto(args.into())),
-        (MapKey::Texto("modulo".into()), Value::Texto(modulo.into())),
-        (MapKey::Texto("doc".into()), Value::Texto(doc.into())),
-    ])
-}
-
-fn first_paragraph(doc: &str) -> &str {
-    doc.split("\n\n").next().unwrap_or(doc).trim()
-}
-
-fn module_member_names(env: &Env) -> String {
-    env.bindings_sorted()
-        .into_iter()
-        .filter(|(k, v)| {
-            !k.starts_with('_')
-                && matches!(
-                    v,
-                    Value::Builtin(_) | Value::Funcao(_) | Value::Numero(_) | Value::Texto(_)
-                )
-        })
-        .map(|(k, _)| k)
-        .collect::<Vec<_>>()
-        .join(", ")
 }
 
 pub(crate) fn texto_da_condicao(source: &str, span: Span) -> String {

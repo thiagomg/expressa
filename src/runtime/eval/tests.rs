@@ -308,7 +308,7 @@ escreva(g.tela_grafica::pixel(10, 9))
 
 #[test]
 #[cfg(feature = "graphics")]
-fn tartaruga_catalogo_esconde_imports_internos() {
+fn tartaruga_funcoes_esconde_imports_internos() {
     let src = r#"
 ache = funcao(lista, nome)
 inicio
@@ -322,7 +322,7 @@ fim
 falso
 fim
 tartaruga = importe "../lib/tartaruga"
-membros = catalogo(tartaruga)
+membros = funcoes(tartaruga, :dados)
 escreva(ache(membros, "ande"))
 escreva(ache(membros, "velocidade"))
 escreva(ache(membros, "_mat"))
