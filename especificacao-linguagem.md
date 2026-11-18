@@ -23,7 +23,10 @@ Todo bloco (`inicio`/`fim` ou `{`/`}`) é uma expressão; seu resultado é o val
 | `numero` | `10`, `3.14`, `-8`, `0`, `1_000` (decimal; `formato("float")` liga IEEE-754) |
 | `texto`  | `"olá"`, `"123"`                  |
 | `bool`   | `verdadeiro`, `falso`             |
+| `nada`   | `nada` (ausência de valor)        |
 | `faixa`  | `0..3`, `1..=2`, `5..`            |
+
+`nada` é um literal reservado de ausência de valor. Pode ser atribuído a variáveis, comparado com `==`/`!=`, usado em coleções e retornado explicitamente. Não pode ser usado como identificador.
 
 Tipos compostos: **lista**, **par**, **mapa**, **conjunto**, **matriz**, **imagem** e **faixa**.
 
@@ -240,7 +243,7 @@ inicio
 fim
 ```
 
-`retorne` só vale **dentro de uma função**. `retorne` sozinho devolve `nada`. O valor, se houver, fica **na mesma linha**. Não é capturado por `se_falhar`.
+`retorne` só vale **dentro de uma função**. `retorne` sozinho devolve `nada`; `retorne nada` é equivalente. O valor, se houver, fica **na mesma linha**. Não é capturado por `se_falhar`.
 
 `se` usado **como valor** (`x = se …`, argumento ou valor de `retorne`) precisa de `senao`. Um `se` no fim do corpo da função continua sendo comando: pode omitir `senao` e devolve `nada` se nenhum ramo for executado. Como comando, o `senao` é opcional:
 
@@ -435,7 +438,7 @@ cat nomes.txt | expressa grep.lep Thiago
 
 `avalie(texto)` executa o texto como código Expressa no escopo atual e devolve o último valor. `avalie("2 + 3 * 4")` vale `14`. Erros de sintaxe ou de execução (por exemplo divisão por zero) são capturáveis com `se_falhar`.
 
-`modulos()` (também `módulos()`) imprime o núcleo, os módulos nativos disponíveis e os arquivos já importados, sem duplicar um arquivo importado com vários apelidos. `modulos(:dados)` devolve uma lista de mapas com `:nome` (texto) e `:funcoes` (lista estruturada de funções). Arquivos usam o primeiro caminho importado como nome; nomes em conflito usam caminhos absolutos. `funcoes()` (também `funções()`) imprime as funções públicas visíveis; `funcoes(alvo)` consulta o nome ou objeto de um módulo. `""` indica o escopo atual; `"nucleo"` indica o núcleo. `funcoes(alvo, :dados)` devolve uma lista de mapas com `:nome` (texto), `:args` (lista de textos) e `:doc` (documentação completa, ou `""`). As listas seguem ordem alfabética; funções com nome iniciado por `_` ficam de fora. As versões de impressão devolvem `nada`. `funcoes(:dados)` é inválido: use `funcoes("", :dados)`. Não há comandos especiais `ls`, `ajuda` ou `catalogo` no REPL; `ajuda(alvo)` continua sendo uma função.
+`modulos()` (também `módulos()`) imprime o núcleo, os módulos nativos disponíveis e os arquivos já importados, sem duplicar um arquivo importado com vários apelidos. `modulos(:dados)` devolve uma lista de mapas com `:nome` (texto) e `:funcoes` (lista estruturada de funções). Arquivos usam o primeiro caminho importado como nome; nomes em conflito usam caminhos absolutos. `funcoes()` (também `funções()`) imprime as funções públicas visíveis; `funcoes(alvo)` consulta o nome ou objeto de um módulo. `nada` indica o escopo atual; `"nucleo"` indica o núcleo. `funcoes(alvo, :dados)` devolve uma lista de mapas com `:nome` (texto), `:args` (lista de textos) e `:doc` (documentação completa, ou `""`). As listas seguem ordem alfabética; funções com nome iniciado por `_` ficam de fora. As versões de impressão devolvem `nada`. `funcoes(:dados)` é inválido: use `funcoes(nada, :dados)`. Não há comandos especiais `ls`, `ajuda` ou `catalogo` no REPL; `ajuda(alvo)` continua sendo uma função.
 
 `escreva` vai para a saída padrão (stdout). `escreva_erro` vai para a saída de erro (stderr).  
 Com `importe "tela"`: `cls()` (também `limpe_tela()`) limpa a tela; `posicao_cursor(0, 0, falso)` manda o cursor ao canto sem apagar — use no lugar de `cls()` em animações para não piscar.

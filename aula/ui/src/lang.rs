@@ -33,6 +33,7 @@ pub const KEYWORDS: &[&str] = &[
     "contém",
     "verdadeiro",
     "falso",
+    "nada",
     "se_falhar",
     "retorne",
     "pare",

@@ -34,7 +34,7 @@ chmod +x prog.lep && ./prog.lep
 | matriz | `matriz([[1, 2], [3, 4]])` só números; `importe "matriz"` |
 | conjunto | `conjunto([:ana, 1])` valores únicos |
 
-Não há literal `nada`. `escreva` e gravar arquivo devolvem `nada`.
+`nada` representa ausência de valor. Pode ser atribuído, comparado e retornado explicitamente. `escreva` e gravar arquivo também devolvem `nada`.
 
 ---
 
@@ -145,7 +145,7 @@ escreva(avalie(leia("> ")) se_falhar { "conta inválida" })
 modulos()                      // imprime módulos, incluindo arquivos importados
 funcoes()  funcoes("matriz")    // imprime funções e documentação
 modulos(:dados)                // mapas com :nome e :funcoes
-funcoes("", :dados)             // mapas com :nome, :args e :doc
+funcoes(nada, :dados)             // mapas com :nome, :args e :doc
 ajuda("escreva")  ajuda("matriz::zeros")
 
 busca = funcao(xs, alvo) {

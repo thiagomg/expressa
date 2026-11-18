@@ -53,6 +53,7 @@
       <suffix>(?![A-Za-zÀ-ÿ0-9_])</suffix>
       <keyword>verdadeiro</keyword>
       <keyword>falso</keyword>
+      <keyword>nada</keyword>
     </context>
     <context id="keyword" style-ref="keyword">
       <prefix>(?&lt;![A-Za-zÀ-ÿ0-9_])</prefix>

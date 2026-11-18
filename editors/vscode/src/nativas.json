@@ -2,7 +2,8 @@
   "keywords": {
     "constantes": [
       "verdadeiro",
-      "falso"
+      "falso",
+      "nada"
     ],
     "operadores": [
       "e",
@@ -233,7 +234,7 @@
         "funcoes(alvo, modo)"
       ],
       "summary": "Lista funções públicas com argumentos e documentação completa.",
-      "doc": "Lista funções públicas com argumentos e documentação completa.\n\nSem alvo, ou com \"\", consulta as funções visíveis no escopo atual.\nAceita nome de módulo (\"arquivo\", \"nucleo\", caminho importado ou apelido)\nou o próprio módulo. Nomes iniciados por _ e valores que não são funções\nficam de fora. A lista é ordenada pelo nome. Também funções().\nSem modo, imprime e devolve nada. Com :dados no segundo argumento,\ndevolve uma lista de mapas: :nome (texto), :args (lista de textos) e\n:doc (documentação completa, ou \"\" se não houver).\n\nExemplo: dados = funcoes(\"arquivo\", :dados)"
+      "doc": "Lista funções públicas com argumentos e documentação completa.\n\nSem alvo, ou com nada, consulta as funções visíveis no escopo atual.\nAceita nome de módulo (\"arquivo\", \"nucleo\", caminho importado ou apelido)\nou o próprio módulo. Nomes iniciados por _ e valores que não são funções\nficam de fora. A lista é ordenada pelo nome. Também funções().\nSem modo, imprime e devolve nada. Com :dados no segundo argumento,\ndevolve uma lista de mapas: :nome (texto), :args (lista de textos) e\n:doc (documentação completa, ou \"\" se não houver).\n\nExemplo: dados = funcoes(\"arquivo\", :dados)"
     },
     {
       "name": "ajuda",

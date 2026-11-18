@@ -16,6 +16,9 @@ pub enum Expr {
         value: String, // already unescaped
         span: Span,
     },
+    Nada {
+        span: Span,
+    },
     Bool {
         value: bool,
         span: Span,
@@ -138,6 +141,7 @@ impl Expr {
         match self {
             Expr::Number { span, .. }
             | Expr::String { span, .. }
+            | Expr::Nada { span }
             | Expr::Bool { span, .. }
             | Expr::List { span, .. }
             | Expr::Par { span, .. }

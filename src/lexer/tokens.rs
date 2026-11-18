@@ -33,6 +33,7 @@ pub enum TokenKind {
     Contem,     // contem (infix operator, but reserved word)
     Verdadeiro, // verdadeiro
     Falso,      // falso
+    Nada,       // nada
     SeFalhar,   // se_falhar
     Retorne,    // retorne
     Pare,       // pare
@@ -98,6 +99,7 @@ pub fn keyword(s: &str) -> Option<TokenKind> {
         "contem" | "contém" => TokenKind::Contem,
         "verdadeiro" => TokenKind::Verdadeiro,
         "falso" => TokenKind::Falso,
+        "nada" => TokenKind::Nada,
         "se_falhar" => TokenKind::SeFalhar,
         "retorne" => TokenKind::Retorne,
         "pare" => TokenKind::Pare,
@@ -130,6 +132,7 @@ pub fn texto_do_token(kind: &TokenKind) -> String {
         TokenKind::Importe => "'importe'".to_string(),
         TokenKind::Contem => "'contem'".to_string(),
         TokenKind::Verdadeiro => "'verdadeiro'".to_string(),
+        TokenKind::Nada => "'nada'".to_string(),
         TokenKind::Falso => "'falso'".to_string(),
         TokenKind::SeFalhar => "'se_falhar'".to_string(),
         TokenKind::Retorne => "'retorne'".to_string(),

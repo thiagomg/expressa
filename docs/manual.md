@@ -48,7 +48,9 @@ Em sistemas Unix, você pode colocar `#!/usr/bin/env expressa` na primeira linha
 | função | `função(x) { x + 1 }` | também `funcao` |
 | módulo | `importe "mat"` | |
 | processo | `linhas_de("ls")` | programa em execução; `importe "processo"` |
-| nada | — | sem literal; `escreva` devolve nada |
+| nada | `nada` | ausência de valor; `escreva` também devolve nada |
+
+`nada` é um literal reservado, como `verdadeiro` e `falso`: `resultado = nada`, `resultado == nada` e `retorne nada`. Seu tipo é `"nada"`. Não pode ser usado como nome de variável ou parâmetro.
 
 `:nome` é o texto `"nome"`.
 
@@ -128,7 +130,7 @@ continue      // próxima volta
 
 Quando o resultado de `se` é usado como **valor**, o `senão` é obrigatório. Como **comando**, `senão` é opcional. Em uma sequência com `ou se`, apenas o primeiro bloco cuja condição for verdadeira é executado. `pare` e `continue` só podem ser usados dentro de laços.
 
-`retorne x` encerra a função imediatamente e retorna o valor de `x`. Só pode ser usado dentro de uma função. Sem valor, `retorne` retorna `nada`.
+`retorne x` encerra a função imediatamente e retorna o valor de `x`. Só pode ser usado dentro de uma função. Sem valor, `retorne` retorna `nada`. Também é possível escrever `retorne nada`.
 
 ---
 
@@ -334,14 +336,14 @@ Imprime os módulos disponíveis, em ordem alfabética, e devolve `nada`. Inclui
 
 ### `funcoes()` / `funções()`
 
-Imprime as funções públicas com argumentos e documentação completa, em ordem alfabética, e devolve `nada`. Sem argumento, ou com `""`, consulta o escopo atual. O alvo pode ser o nome de um módulo nativo, `"nucleo"`, o caminho de um arquivo já importado, um apelido ou o próprio módulo. Valores que não são funções e nomes iniciados por `_` ficam de fora.
+Imprime as funções públicas com argumentos e documentação completa, em ordem alfabética, e devolve `nada`. Sem argumento, ou com `nada`, consulta o escopo atual. O alvo pode ser o nome de um módulo nativo, `"nucleo"`, o caminho de um arquivo já importado, um apelido ou o próprio módulo. Valores que não são funções e nomes iniciados por `_` ficam de fora.
 
 Com `:dados` no segundo argumento, devolve uma lista de mapas com `:nome` (texto), `:args` (lista de textos) e `:doc` (documentação completa; `""` se não houver), sem imprimir.
 
 ```text
 modulos()
 funcoes("arquivo")
-f = funcoes("", :dados)
+f = funcoes(nada, :dados)
 m = modulos(:dados)
 biblioteca = importe "./minha_biblioteca"
 funcoes(biblioteca)

@@ -166,8 +166,16 @@
       }
     },
     "constantes": {
-      "name": "constant.language.boolean.expressa",
-      "match": "(?<![\\p{L}\\p{N}_])(?:verdadeiro|falso)(?![\\p{L}\\p{N}_])"
+      "patterns": [
+        {
+          "name": "constant.language.boolean.expressa",
+          "match": "(?<![\\p{L}\\p{N}_])(?:verdadeiro|falso)(?![\\p{L}\\p{N}_])"
+        },
+        {
+          "name": "constant.language.null.expressa",
+          "match": "(?<![\\p{L}\\p{N}_])(?:nada)(?![\\p{L}\\p{N}_])"
+        }
+      ]
     },
     "operadores-palavra": {
       "name": "keyword.operator.word.expressa",

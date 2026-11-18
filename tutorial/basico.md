@@ -63,7 +63,7 @@ funcoes()
 
 No expressa-aula, **F1** ou o botão **Ajuda** abre o catálogo de funções. Para consultar uma função específica, passe o mouse sobre o nome dela ou posicione o cursor nesse nome e pressione F1. Enquanto você digita, o editor sugere funções da linguagem e funções definidas no arquivo.
 
-`funcoes("", :dados)` retorna uma lista de mapas com nome, argumentos e documentação. `modulos(:dados)` retorna os módulos com suas listas de funções. Essas consultas não imprimem e podem ser usadas no próprio programa.
+`funcoes(nada, :dados)` retorna uma lista de mapas com nome, argumentos e documentação. `modulos(:dados)` retorna os módulos com suas listas de funções. Essas consultas não imprimem e podem ser usadas no próprio programa.
 
 As setas ↑ e ↓ permitem consultar e reutilizar comandos anteriores. `cls` limpa a tela do REPL. `sair` (sem parênteses) encerra; Ctrl+D também.
 

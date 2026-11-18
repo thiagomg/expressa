@@ -42,7 +42,7 @@
     "documento" "grafico" "eixos" "plote" "adicione" "mostre"))
 
 (defconst expressa-constants
-  '("verdadeiro" "falso"))
+  '("verdadeiro" "falso" "nada"))
 
 (defconst expressa-font-lock-keywords
   `(("^#!.*" . font-lock-comment-face)

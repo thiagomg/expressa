@@ -1343,6 +1343,7 @@ impl<'a, 'c> Vm<'a, 'c> {
                 Ok(Value::Numero(n))
             }
             Expr::String { value, .. } => Ok(Value::Texto(value.clone())),
+            Expr::Nada { .. } => Ok(Value::Nada),
             Expr::Bool { value, .. } => Ok(Value::Bool(*value)),
             Expr::List { elements, .. } => {
                 let mut xs = Vec::with_capacity(elements.len());

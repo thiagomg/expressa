@@ -50,7 +50,7 @@ function readKeywords() {
       return words;
     });
   const groups = {
-    constantes: take('Verdadeiro', 'Falso'),
+    constantes: take('Verdadeiro', 'Falso', 'Nada'),
     operadores: take('E', 'Ou', 'Nao', 'Contem'),
     blocos: take('Inicio', 'Fim'),
     funcao: take('Funcao'),
@@ -202,7 +202,10 @@ function grammarWith(data) {
     if (!g.repository[key]) fail(`grammar has no repository.${key}`);
     g.repository[key].match = wordsPattern(words);
   };
-  set('constantes', k.constantes);
+  g.repository.constantes = { patterns: [
+    { name: 'constant.language.boolean.expressa', match: wordsPattern(k.constantes.filter((w) => w !== 'nada')) },
+    { name: 'constant.language.null.expressa', match: wordsPattern(['nada']) },
+  ] };
   set('operadores-palavra', k.operadores);
   set('blocos', k.blocos);
   set('palavra-funcao', k.funcao);

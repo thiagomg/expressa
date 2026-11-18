@@ -137,7 +137,7 @@ modulos = funcao(modo) { 0 }
 
 /// Lista funções públicas com argumentos e documentação completa.
 ///
-/// Sem alvo, ou com "", consulta as funções visíveis no escopo atual.
+/// Sem alvo, ou com nada, consulta as funções visíveis no escopo atual.
 /// Aceita nome de módulo ("arquivo", "nucleo", caminho importado ou apelido)
 /// ou o próprio módulo. Nomes iniciados por _ e valores que não são funções
 /// ficam de fora. A lista é ordenada pelo nome. Também funções().

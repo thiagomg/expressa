@@ -123,7 +123,7 @@ impl Vm<'_, '_> {
         }
         let data = self.discovery_data_mode(args.get(1), span)?;
         let rows = match args.first() {
-            None => functions(Env::visible_bindings(env), None),
+            None | Some(Value::Nada) => functions(Env::visible_bindings(env), None),
             Some(Value::Texto(name)) if name.is_empty() => {
                 functions(Env::visible_bindings(env), None)
             }

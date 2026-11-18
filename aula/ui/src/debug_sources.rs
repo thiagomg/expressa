@@ -151,7 +151,11 @@ fn expr(e: &Expr, lines: &mut BTreeSet<u32>) {
                 expr(e, lines);
             }
         }
-        Expr::Number { .. } | Expr::String { .. } | Expr::Bool { .. } | Expr::Ident { .. } => (),
+        Expr::Number { .. }
+        | Expr::Nada { .. }
+        | Expr::String { .. }
+        | Expr::Bool { .. }
+        | Expr::Ident { .. } => (),
     }
 }
 

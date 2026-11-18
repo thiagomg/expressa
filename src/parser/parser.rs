@@ -756,6 +756,7 @@ impl<'a> Parser<'a> {
                 value,
                 span: tok.span,
             }),
+            TokenKind::Nada => Ok(Expr::Nada { span: tok.span }),
             TokenKind::Verdadeiro => Ok(Expr::Bool {
                 value: true,
                 span: tok.span,
@@ -1133,6 +1134,7 @@ fn expr_can_start(kind: &TokenKind) -> bool {
         kind,
         TokenKind::Number(_)
             | TokenKind::String(_)
+            | TokenKind::Nada
             | TokenKind::Verdadeiro
             | TokenKind::Falso
             | TokenKind::Ident(_)
@@ -1371,6 +1373,15 @@ mod tests {
                 other => panic!("{other:?}"),
             }
         }
+    }
+
+    #[test]
+    fn nada_literal_preserves_its_span() {
+        let p = parse("nada").unwrap();
+        let expr = expr_stmt(&p);
+        assert!(matches!(expr, Expr::Nada { .. }));
+        assert_eq!(expr.span().start, 0);
+        assert_eq!(expr.span().end, 4);
     }
 
     #[test]

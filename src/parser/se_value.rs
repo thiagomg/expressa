@@ -178,7 +178,7 @@ fn check_expr_inner(expr: &Expr, use_: Use) -> Result<(), ParseError> {
             }
             Ok(())
         }
-        Expr::String { .. } | Expr::Bool { .. } | Expr::Ident { .. } => Ok(()),
+        Expr::Nada { .. } | Expr::String { .. } | Expr::Bool { .. } | Expr::Ident { .. } => Ok(()),
     }
 }
 

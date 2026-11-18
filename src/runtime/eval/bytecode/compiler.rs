@@ -263,6 +263,9 @@ impl Compiler {
                 self.code.constants.push(Value::Texto(value.clone()));
                 self.emit(Op::Constant(id), span);
             }
+            Expr::Nada { .. } => {
+                self.emit(Op::Nada, span);
+            }
             Expr::Bool { value, .. } => {
                 self.emit(Op::Bool(*value), span);
             }
