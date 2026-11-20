@@ -29,32 +29,75 @@ fn home_dir() -> Option<PathBuf> {
         .map(PathBuf::from)
 }
 
-/// `Documentos/Expressa Aula/exemplos` (or Documents).
+/// `Documentos/Expressa/exemplos` (or the configured Documents folder).
 pub fn dest_dir() -> Option<PathBuf> {
     let docs = documents_dir()?;
-    Some(docs.join("Expressa Aula").join("exemplos"))
+    Some(docs.join("Expressa").join("exemplos"))
 }
 
 fn documents_dir() -> Option<PathBuf> {
-    if let Ok(p) = std::env::var("XDG_DOCUMENTS_DIR") {
-        let p = PathBuf::from(p);
-        if !p.as_os_str().is_empty() {
-            return Some(p);
-        }
-    }
     let home = home_dir()?;
-    for name in ["Documents", "Documentos"] {
-        let p = home.join(name);
-        if p.is_dir() {
-            return Some(p);
+    let config_home = std::env::var_os("XDG_CONFIG_HOME")
+        .map(PathBuf::from)
+        .filter(|p| p.is_absolute())
+        .unwrap_or_else(|| home.join(".config"));
+    let config = std::fs::read_to_string(config_home.join("user-dirs.dirs")).unwrap_or_default();
+    Some(documents_dir_for(
+        &home,
+        std::env::var("XDG_DOCUMENTS_DIR").ok().as_deref(),
+        &config,
+    ))
+}
+
+fn documents_dir_for(home: &Path, override_dir: Option<&str>, config: &str) -> PathBuf {
+    fn expand(home: &Path, value: &str) -> Option<PathBuf> {
+        let value = value.trim();
+        let value = value
+            .strip_prefix('"')
+            .and_then(|s| s.strip_suffix('"'))
+            .unwrap_or(value);
+        let path = if value == "$HOME" || value == "${HOME}" {
+            home.to_path_buf()
+        } else if let Some(tail) = value
+            .strip_prefix("$HOME/")
+            .or_else(|| value.strip_prefix("${HOME}/"))
+        {
+            home.join(tail)
+        } else {
+            PathBuf::from(value)
+        };
+        path.is_absolute().then_some(path)
+    }
+
+    if let Some(path) = override_dir.and_then(|value| expand(home, value)) {
+        return path;
+    }
+    for line in config.lines() {
+        if let Some((key, value)) = line.trim().split_once('=')
+            && key.trim() == "XDG_DOCUMENTS_DIR"
+            && let Some(path) = expand(home, value)
+        {
+            return path;
         }
     }
-    Some(home.join("Documents"))
+    for name in ["Documentos", "Documents"] {
+        let path = home.join(name);
+        if path.is_dir() {
+            return path;
+        }
+    }
+    home.join("Documentos")
 }
 
 /// Copy files that are not already at `dst`. Existing files stay as the user left them.
 pub fn copy_missing(src: &Path, dst: &Path) -> io::Result<()> {
-    std::fs::create_dir_all(dst)?;
+    // Do not follow a destination symlink or replace a file with a directory.
+    match std::fs::symlink_metadata(dst) {
+        Ok(metadata) if !metadata.is_dir() => return Ok(()),
+        Ok(_) => {}
+        Err(error) if error.kind() == io::ErrorKind::NotFound => std::fs::create_dir_all(dst)?,
+        Err(error) => return Err(error),
+    }
     for entry in std::fs::read_dir(src)? {
         let entry = entry?;
         let kind = entry.file_type()?;
@@ -64,8 +107,23 @@ pub fn copy_missing(src: &Path, dst: &Path) -> io::Result<()> {
         let to = dst.join(entry.file_name());
         if kind.is_dir() {
             copy_missing(&entry.path(), &to)?;
-        } else if kind.is_file() && !to.exists() {
-            std::fs::copy(entry.path(), &to)?;
+        } else if kind.is_file() {
+            if std::fs::symlink_metadata(&to).is_ok() {
+                continue;
+            }
+            let mut source = std::fs::File::open(entry.path())?;
+            // Atomic creation also protects edits made while installation runs.
+            match std::fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(&to)
+            {
+                Ok(mut target) => {
+                    io::copy(&mut source, &mut target)?;
+                }
+                Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {}
+                Err(error) => return Err(error),
+            }
         }
     }
     Ok(())
@@ -88,7 +146,68 @@ pub fn instalar() -> io::Result<PathBuf> {
 
 #[cfg(test)]
 mod tests {
-    use super::copy_missing;
+    use super::{copy_missing, documents_dir_for};
+
+    #[test]
+    fn documents_respects_xdg_configuration_without_shell_expansion() {
+        let home = std::env::temp_dir().join("expressa-documents-home");
+        assert_eq!(
+            documents_dir_for(
+                &home,
+                None,
+                "# configuração\nXDG_DOCUMENTS_DIR=\"$HOME/Meus Documentos\"\n"
+            ),
+            home.join("Meus Documentos")
+        );
+        assert_eq!(
+            documents_dir_for(
+                &home,
+                Some("${HOME}/Documentos"),
+                "XDG_DOCUMENTS_DIR=\"/outro\""
+            ),
+            home.join("Documentos")
+        );
+        assert_eq!(
+            documents_dir_for(&home, Some(""), "XDG_DOCUMENTS_DIR=relativo"),
+            home.join("Documentos")
+        );
+        assert_eq!(
+            documents_dir_for(&home, None, "XDG_DOCUMENTS_DIR=\"$HOME\""),
+            home
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn copy_missing_preserves_destination_symlinks_and_type_conflicts() {
+        let root =
+            std::env::temp_dir().join(format!("expressa-exemplos-links-{}", std::process::id()));
+        let src = root.join("src");
+        let dst = root.join("dst");
+        std::fs::create_dir_all(src.join("pasta")).unwrap();
+        std::fs::create_dir_all(&dst).unwrap();
+        std::fs::write(src.join("pasta/novo.lep"), "novo").unwrap();
+        std::fs::write(src.join("existente.lep"), "modelo").unwrap();
+        std::fs::write(src.join("novo.lep"), "novo").unwrap();
+        std::os::unix::fs::symlink(root.join("ausente"), dst.join("existente.lep")).unwrap();
+        std::os::unix::fs::symlink(root.join("fora"), dst.join("pasta")).unwrap();
+        copy_missing(&src, &dst).unwrap();
+        assert!(dst.join("existente.lep").is_symlink());
+        assert!(!root.join("ausente").exists());
+        assert!(!root.join("fora").exists());
+        assert_eq!(
+            std::fs::read_to_string(dst.join("novo.lep")).unwrap(),
+            "novo"
+        );
+        std::fs::remove_file(dst.join("pasta")).unwrap();
+        std::fs::write(dst.join("pasta"), "arquivo do aluno").unwrap();
+        copy_missing(&src, &dst).unwrap();
+        assert_eq!(
+            std::fs::read_to_string(dst.join("pasta")).unwrap(),
+            "arquivo do aluno"
+        );
+        std::fs::remove_dir_all(root).unwrap();
+    }
 
     #[test]
     fn copy_missing_keeps_edits_and_adds_new_files() {
@@ -104,7 +223,11 @@ mod tests {
         let dst = root.join("dst");
         std::fs::create_dir_all(src.join("linguagem")).unwrap();
         std::fs::write(src.join("linguagem").join("media.lep"), "novo").unwrap();
-        std::fs::create_dir_all(dst.join("linguagem")).unwrap();
+        copy_missing(&src, &dst).unwrap();
+        assert_eq!(
+            std::fs::read_to_string(dst.join("linguagem/media.lep")).unwrap(),
+            "novo"
+        );
         std::fs::write(dst.join("linguagem").join("media.lep"), "editado").unwrap();
         copy_missing(&src, &dst).unwrap();
         assert_eq!(

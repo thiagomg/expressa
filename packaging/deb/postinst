@@ -1,0 +1,27 @@
+#!/bin/sh
+set -e
+if [ "${1:-}" = configure ]; then
+    # Graphical installers and root shells need not provide SUDO_USER.
+    # Seed existing regular accounts, always running with the student's identity
+    # so Documents configuration and ownership belong to that student.
+    uid_min=$(awk '$1 == "UID_MIN" {print $2; exit}' /etc/login.defs)
+    uid_max=$(awk '$1 == "UID_MAX" {print $2; exit}' /etc/login.defs)
+    getent passwd | while IFS=: read -r user password uid gid gecos home shell; do
+        if [ "$uid" -ge "${uid_min:-1000}" ] && [ "$uid" -le "${uid_max:-60000}" ] &&
+           [ "$uid" -ne 0 ] && [ -d "$home" ]; then
+            if ! su -s /bin/sh - "$user" -c '/usr/bin/expressa --instalar-exemplos'; then
+                echo "expressa: não foi possível instalar exemplos para $user" >&2
+            fi
+        fi
+    done
+    if command -v update-desktop-database >/dev/null 2>&1; then
+        update-desktop-database -q /usr/share/applications || true
+    fi
+    if command -v update-mime-database >/dev/null 2>&1; then
+        update-mime-database /usr/share/mime || true
+    fi
+    if command -v gtk-update-icon-cache >/dev/null 2>&1; then
+        gtk-update-icon-cache -q /usr/share/icons/hicolor || true
+    fi
+fi
+exit 0

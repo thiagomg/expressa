@@ -7,7 +7,7 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 use crate::docs::Doc;
-use crate::prefs::{expand_tilde, path_for_display};
+use crate::prefs::expand_tilde;
 use crate::rpc::Rpc;
 use crate::store::{Files, valid_aluno};
 use crate::*;
@@ -17,22 +17,6 @@ use gtk::prelude::*;
 use gtk::{Box as GtkBox, Button, Entry, Label, Orientation, ScrolledWindow, TreeViewColumn};
 
 // ── Project and file tree ──────────────────────────────────────────────────
-
-/// First launch: open the Documents copy if the installer already put it there.
-pub(crate) fn open_shipped_exemplos(ui: &UiRc) -> bool {
-    let Some(dst) = existing_exemplos_dir() else {
-        return false;
-    };
-    open_local_project(ui, dst.clone());
-    let opened = matches!(&ui.borrow().files, Files::Local(_));
-    if opened {
-        set_status(
-            ui,
-            &format!("exemplos em {} — pode editar", path_for_display(&dst)),
-        );
-    }
-    opened
-}
 
 /// Ask for a local project folder. Does not block the GTK loop.
 pub(crate) fn choose_local_folder(ui: &UiRc) {
@@ -44,6 +28,9 @@ pub(crate) fn choose_local_folder(ui: &UiRc) {
         let u = ui.borrow();
         match &u.files {
             Files::Local(p) => p.display().to_string(),
+            _ if u.prefs.pasta.is_empty() => existing_exemplos_dir()
+                .map(|path| path.to_string_lossy().into_owned())
+                .unwrap_or_default(),
             _ => u.prefs.pasta.clone(),
         }
     };

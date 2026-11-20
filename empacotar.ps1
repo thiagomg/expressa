@@ -90,7 +90,7 @@ foreach ($loc in @("pt", "pt_BR")) {
 }
 Copy-Tree (Join-Path $root "aula\ui\res") (Join-Path $dest "res")
 # Modelos somente leitura. O instalador Windows copia para
-# Documentos\Expressa Aula\exemplos os arquivos que ainda nao existem;
+# Documentos\Expressa\exemplos os arquivos que ainda nao existem;
 # o que o aluno ja editou permanece.
 Copy-Tree (Join-Path $root "exemplos") (Join-Path $dest "exemplos")
 Copy-Tree (Join-Path $root "tutorial") (Join-Path $dest "tutorial")

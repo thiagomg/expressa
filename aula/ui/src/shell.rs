@@ -553,6 +553,8 @@ pub(crate) fn existing_exemplos_dir() -> Option<PathBuf> {
     if let Some(docs) = glib::user_special_dir(glib::UserDirectory::Documents)
         && !docs.as_os_str().is_empty()
     {
+        candidates.push(docs.join("Expressa").join("exemplos"));
+        // Keep examples from older installers accessible until the new copy exists.
         candidates.push(docs.join("Expressa Aula").join("exemplos"));
     }
     candidates.push(glib::user_data_dir().join("expressa-aula").join("exemplos"));

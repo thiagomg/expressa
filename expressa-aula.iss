@@ -46,7 +46,7 @@ Source: "dist\expressa-aula\*"; DestDir: "{app}"; Flags: ignoreversion recursesu
 ; Copia para Documentos os exemplos que ainda nao existem (tambem na
 ; atualizacao: arquivos novos entram, os ja editados ficam). Desinstalar
 ; nao apaga essa pasta.
-Source: "dist\expressa-aula\exemplos\*"; DestDir: "{userdocs}\Expressa Aula\exemplos"; Flags: ignoreversion recursesubdirs createallsubdirs onlyifdoesntexist uninsneveruninstall
+Source: "dist\expressa-aula\exemplos\*"; DestDir: "{userdocs}\Expressa\exemplos"; Flags: ignoreversion recursesubdirs createallsubdirs onlyifdoesntexist uninsneveruninstall
 
 [Icons]
 Name: "{group}\Expressa Aula"; Filename: "{app}\expressa-aula.exe"

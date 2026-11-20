@@ -778,12 +778,8 @@ fn build_ui_with_prefs(app: &Application, startup: bool, prefs: Prefs) -> UiRc {
                                 drop(u);
                                 set_project_path(ui_p, "", None);
                             }
-                            if open_shipped_exemplos(ui_p) {
-                                true
-                            } else {
-                                choose_local_folder(ui_p);
-                                false
-                            }
+                            choose_local_folder(ui_p);
+                            false
                         };
                         schedule_raise();
                         if !opened {

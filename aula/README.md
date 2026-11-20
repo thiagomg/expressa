@@ -80,7 +80,7 @@ expressa-aula-server --root "$HOME/expressa-aula-data" --bind 0.0.0.0:50051
 
 No Windows o atalho usa `%LOCALAPPDATA%\Expressa Aula\aula-data` e `--bind 0.0.0.0:50051`. Libere a porta 50051 no firewall do computador do professor; sem isso os alunos não conectam.
 
-O instalador (Windows e `.deb`) copia os exemplos para `Documentos/Expressa Aula/exemplos`. Arquivos novos do pacote entram na pasta; o que o aluno já tiver ali não é substituído. O editor não copia de novo ao abrir. No Linux, `expressa --instalar-exemplos` faz a mesma cópia (o `postinst` chama isso para o usuário que instalou).
+O instalador (Windows e `.deb`) copia os exemplos para `Documentos/Expressa/exemplos`. Arquivos novos do pacote entram na pasta; o que o aluno já tiver ali não é substituído. Na primeira abertura, o diálogo de projeto começa na pasta dos exemplos instalados. Nas próximas aberturas, o editor restaura o último projeto. O editor não copia de novo ao abrir. No Linux, `expressa --instalar-exemplos` faz a mesma cópia (o `postinst` chama isso para os usuários comuns já existentes, inclusive em instalações gráficas).
 
 **Ajuda → Tutoriais** abre o binário `expressa-tutorial`. A Aula reabre a última pasta e o último arquivo. A barra de baixo mostra `linha:coluna`. **Ver → Ir para linha** (Ctrl+G) salta para um número.
 

@@ -181,25 +181,7 @@ Description: linguagem Expressa e editor Aula
  de arquivos da sala.
 EOF
 
-cat > "$ROOT/DEBIAN/postinst" <<'EOF'
-#!/bin/sh
-set -e
-if [ "$1" = configure ]; then
-    if [ -n "${SUDO_USER:-}" ] && [ "$SUDO_USER" != root ]; then
-        su -s /bin/sh - "$SUDO_USER" -c "/usr/bin/expressa --instalar-exemplos" >/dev/null 2>&1 || true
-    fi
-    if command -v update-desktop-database >/dev/null 2>&1; then
-        update-desktop-database -q /usr/share/applications || true
-    fi
-    if command -v update-mime-database >/dev/null 2>&1; then
-        update-mime-database /usr/share/mime || true
-    fi
-    if command -v gtk-update-icon-cache >/dev/null 2>&1; then
-        gtk-update-icon-cache -q /usr/share/icons/hicolor || true
-    fi
-fi
-exit 0
-EOF
+install -m0755 "$SRC/packaging/deb/postinst" "$ROOT/DEBIAN/postinst"
 cat > "$ROOT/DEBIAN/postrm" <<'EOF'
 #!/bin/sh
 set -e
