@@ -48,7 +48,7 @@ fn run_em(source: &str, file: &str) -> Result<String, RuntimeError> {
 fn inclusive_ranges_at_integer_limits_terminate() {
     assert_eq!(
         run(
-            "n = 0\npara i em 9223372036854775805..=9223372036854775806 { n += 1 continue }\nescreva(n)"
+            "n = 0\npara i em 9223372036854775805..=9223372036854775806 {\n    n += 1\n    continue\n}\nescreva(n)"
         ),
         "2\n"
     );
@@ -97,9 +97,19 @@ fn compound_target_is_evaluated_once_in_read_order() {
         run(r#"
 xs = [10, 20]
 m = mapa([:n -> 0, :log -> ""])
-receiver = funcao() { m:log += "R" xs }
-idx = funcao() { m:log += "I" m:n += 1 m:n - 1 }
-rhs = funcao() { m:log += "V" 1 }
+receiver = funcao() {
+    m:log += "R"
+    xs
+}
+idx = funcao() {
+    m:log += "I"
+    m:n += 1
+    m:n - 1
+}
+rhs = funcao() {
+    m:log += "V"
+    1
+}
 receiver()[idx()] += rhs()
 escreva(xs)
 escreva(m:n)
@@ -115,9 +125,18 @@ fn ordinary_assignment_retains_rhs_first_and_index_before_receiver() {
         run(r#"
 xs = [10]
 m = mapa([:log -> ""])
-receiver = funcao() { m:log += "R" xs }
-idx = funcao() { m:log += "I" 0 }
-rhs = funcao() { m:log += "V" 9 }
+receiver = funcao() {
+    m:log += "R"
+    xs
+}
+idx = funcao() {
+    m:log += "I"
+    0
+}
+rhs = funcao() {
+    m:log += "V"
+    9
+}
 receiver()[idx()] = rhs()
 escreva(xs)
 escreva(m:log)
@@ -129,7 +148,7 @@ escreva(m:log)
 #[test]
 fn compound_destination_survives_rhs_rebinding() {
     assert_eq!(
-        run("xs = [10]\nold = xs\nxs[0] += { xs = [99] 1 }\nescreva(old)\nescreva(xs)"),
+        run("xs = [10]\nold = xs\nxs[0] += {\n    xs = [99]\n    1\n}\nescreva(old)\nescreva(xs)"),
         "[11]\n[99]\n"
     );
 }
@@ -140,7 +159,10 @@ fn nested_text_writeback_keeps_the_original_slot() {
         run(r#"
 xs = ["ab", "cd"]
 m = mapa([:n -> 0])
-idx = funcao() { m:n += 1 m:n - 1 }
+idx = funcao() {
+    m:n += 1
+    m:n - 1
+}
 xs[idx()][1] = "á"
 escreva(xs)
 escreva(m:n)
@@ -154,7 +176,10 @@ fn nested_text_map_receiver_is_evaluated_once() {
     assert_eq!(
         run(r#"
 m = mapa([:text -> "ab", :n -> 0])
-receiver = funcao() { m:n += 1 m }
+receiver = funcao() {
+    m:n += 1
+    m
+}
 receiver():text[0] = "X"
 escreva(m:text)
 escreva(m:n)
@@ -170,8 +195,14 @@ fn compound_matrix_indices_and_map_receivers_are_evaluated_once() {
 importe "matriz"
 A = matriz([[5]])
 m = mapa([:n -> 0, :value -> 7])
-idx = funcao() { m:n += 1 0 }
-receiver = funcao() { m:n += 1 m }
+idx = funcao() {
+    m:n += 1
+    0
+}
+receiver = funcao() {
+    m:n += 1
+    m
+}
 A[idx(), idx()] -= 2
 receiver():value += 4
 escreva(A[0,0])
@@ -313,7 +344,7 @@ saia(7)
 fn typed_incomplete_input_does_not_depend_on_error_wording() {
     use expressa::parser::{ParseErrorKind, needs_more_input, parse};
     for source in [
-        "2 +",
+        "(2 +",
         "\"text",
         "/* comment",
         "\"\\u{12",
@@ -326,7 +357,14 @@ fn typed_incomplete_input_does_not_depend_on_error_wording() {
         assert!(error.is_incomplete());
         assert!(needs_more_input(source));
     }
-    for source in ["}", "f(1 + *", "\"\\q", "se verdadeiro { 1 fim"] {
+    for source in [
+        "}",
+        "f(1 + *",
+        "\"\\q",
+        "se verdadeiro { 1 fim",
+        "2 +",
+        "x = 1 e",
+    ] {
         assert!(!needs_more_input(source), "{source}");
     }
     assert_eq!(
@@ -372,11 +410,11 @@ escreva(g())
 #[test]
 fn text_writeback_preserves_rhs_updates_to_other_characters() {
     assert_eq!(
-        run("s = \"abc\"\ns[0] += { s[1] = \"X\" \"\" }\nescreva(s)"),
+        run("s = \"abc\"\ns[0] += {\n    s[1] = \"X\"\n    \"\"\n}\nescreva(s)"),
         "aXc\n"
     );
     assert_eq!(
-        run("xs = [\"abc\"]\nxs[0][0] += { xs[0][1] = \"X\" \"\" }\nescreva(xs[0])"),
+        run("xs = [\"abc\"]\nxs[0][0] += {\n    xs[0][1] = \"X\"\n    \"\"\n}\nescreva(xs[0])"),
         "aXc\n"
     );
 }
@@ -392,4 +430,64 @@ fn cancellable_sort_matches_reference_order_across_merge_boundaries() {
             format!("{expected:?}\n")
         );
     }
+}
+
+#[test]
+fn colecoes_e_textos_da_versao_0_5() {
+    assert_eq!(
+        run(r#"
+m = mapa([:b -> 2, :a -> 1, 3 -> verdadeiro])
+para p em m {
+    escreva(p:chave, p:valor)
+}
+escreva(chaves_de(m), valores_de(m))
+m2 = m + (:c -> 9)
+escreva(tamanho(m2), tamanho(m))
+escreva((0..10) contem 3, (0..10) contem 10, (0..) contem 999, (0..3) contem 1.5)
+escreva(primeiro("olá"), ultimo("olá"))
+escreva(procure("abc", "z"), procure([1, 2], 2))
+escreva(como_texto(2.5), como_texto([2.5]), [1.5, 2], mapa([:x -> 0.5]))
+r = {
+    escreva("bloco")
+    se falso { 2 }
+}
+escreva(r)
+"#),
+        "a 1\nb 2\n3 verdadeiro\n[\"a\", \"b\", 3] [1, 2, verdadeiro]\n4 3\n\
+         verdadeiro falso verdadeiro falso\no á\nnada 1\n2,5 [2.5] [1.5, 2] mapa{\"x\": 0.5}\n\
+         bloco\nnada\n"
+    );
+}
+
+#[test]
+fn numero_le_so_o_formato_ativo() {
+    assert_eq!(
+        run(r#"
+escreva(numero("2,5"), numero("1.500"), numero("-1.000,25"))
+escreva(numero("2.5") se_falhar erro { erro })
+formato("en")
+escreva(numero("2.5"), numero("1,500"))
+escreva(numero("2,5") se_falhar { "erro" })
+"#),
+        "2,5 1.500 -1.000,25\n\
+         não foi possível transformar `2.5` em número: no formato pt, a vírgula separa os \
+         decimais (2,5) e o ponto separa os milhares (1.000); para ler 2.5, use formato(\"en\")\n\
+         2.5 1,500\nerro\n"
+    );
+}
+
+#[test]
+fn ponto_flutuante_de_mat_e_matriz_sem_ruido_no_modo_decimal() {
+    assert_eq!(
+        run(r#"
+importe "mat"
+importe "matriz"
+escreva(seno(radianos(30)), cosseno(radianos(60)), raiz(2))
+A = 3 * matriz([[0.1]])
+escreva(A[0, 0], A)
+formato("float")
+escreva(seno(radianos(30)))
+"#),
+        "0,5 0,5 1,4142135623730951\n0,3 [ 0,3 ]\n0,49999999999999994\n"
+    );
 }

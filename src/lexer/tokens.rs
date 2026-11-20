@@ -37,7 +37,7 @@ pub enum TokenKind {
     SeFalhar,   // se_falhar
     Retorne,    // retorne
     Pare,       // pare
-    Continue,   // continue / continua   (ONE keyword, not Se + Ident)
+    Continue,   // continue
 
     // ── Arithmetic ────────────────────────────────────────────────
     Plus,    // +
@@ -103,7 +103,7 @@ pub fn keyword(s: &str) -> Option<TokenKind> {
         "se_falhar" => TokenKind::SeFalhar,
         "retorne" => TokenKind::Retorne,
         "pare" => TokenKind::Pare,
-        "continue" | "continua" => TokenKind::Continue,
+        "continue" => TokenKind::Continue,
         _ => return None,
     })
 }

@@ -53,7 +53,7 @@ impl Vm<'_, '_> {
             }
         }
         Err(self.err(
-            "esperado laço gráfico criado por tela_grafica::laço_grafico()",
+            "esperado laço gráfico criado por tela_grafica::laço_gráfico()",
             span,
         ))
     }

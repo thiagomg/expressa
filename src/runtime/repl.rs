@@ -407,7 +407,7 @@ mod tests {
             parse_repl_command("sair"),
             Some(ReplCommand::Sair)
         ));
-        assert!(parse_repl_command("cls()").is_none());
+        assert!(parse_repl_command("limpe_tela()").is_none());
         assert!(parse_repl_command("sair = 3").is_none());
     }
 

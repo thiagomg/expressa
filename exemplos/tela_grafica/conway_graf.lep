@@ -5,8 +5,8 @@ importe "matriz"
 importe "mat"
 
 inicia_jogo = funcao(m) {
-    para i em 0..m.nlinhas() {
-        para j em 0..m.ncolunas() {
+    para i em 0..m.linhas() {
+        para j em 0..m.colunas() {
             m[i, j] = aleatorio(0, 1)
         }
     }
@@ -61,8 +61,8 @@ ser = funcao(w, x, y) {
 }
 
 desenha = funcao(w, m) {
-    para l em 0..m.nlinhas() {
-        para c em 0..m.ncolunas() {
+    para l em 0..m.linhas() {
+        para c em 0..m.colunas() {
             estado = se m[l, c] == 0 {
                 :morto
             } senao {
@@ -76,14 +76,14 @@ desenha = funcao(w, m) {
 }
 
 pos_lin = função(m, l) {
-    se l < 0 { m.nlinhas() - 1 }
-    ou se l >= m.nlinhas() { 0 }
+    se l < 0 { m.linhas() - 1 }
+    ou se l >= m.linhas() { 0 }
     senão { l }
 }
 
 pos_col = função(m, c) {
-    se c < 0 { m.ncolunas() - 1 }
-    ou se c >= m.ncolunas() { 0 }
+    se c < 0 { m.colunas() - 1 }
+    ou se c >= m.colunas() { 0 }
     senão { c }
 }
 
@@ -122,7 +122,7 @@ vizinhos = função(m, l, c) {
 // Conta a quantidade de vizinhos em uma matriz 3×3
 // da célula na posição (1, 1)
 conta_vizinhos = função(m) {
-    se m.nlinhas() != 3 ou m.ncolunas() != 3 {
+    se m.linhas() != 3 ou m.colunas() != 3 {
         escreva_erro("A função conta_vizinhos só aceita matrizes com 3 linhas e 3 colunas.")
         saia(1)
     }
@@ -150,15 +150,15 @@ nova_geracao = função(m) {
 
     // Salvando o total de linhas e colunas pois eu não quero escrever nlinhas/ncolunas
     // o tempo todo
-    tl = m.nlinhas()
-    tc = m.ncolunas()
+    tl = m.linhas()
+    tc = m.colunas()
 
     // Criamos uma nova matriz porque todas as mudanças são simultâneas.
     // Alterar a matriz de origem faria uma célula influenciar a outra antes da hora.
     nm = zeros(tl, tc)
 
-    para i em 0..m.nlinhas() {
-        para j em 0..m.ncolunas() {
+    para i em 0..m.linhas() {
+        para j em 0..m.colunas() {
             // Obtém os vizinhos de cada célula na matriz de origem.
             v = m.vizinhos(i, j)
             // Conta os vizinhos vivos para aplicar as regras.

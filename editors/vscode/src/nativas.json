@@ -37,8 +37,7 @@
       "se_falhar",
       "retorne",
       "pare",
-      "continue",
-      "continua"
+      "continue"
     ]
   },
   "modules": [
@@ -171,7 +170,7 @@
         "numero(numero)"
       ],
       "summary": "Transforma texto em número (aceita 3.14 ou 3,14). Também número().",
-      "doc": "Transforma texto em número (aceita 3.14 ou 3,14). Também número().\n\nAceita espaços nas pontas e _ como em literais. O padrão de texto é pt-BR\n(1.000,5). Mude com formato(\"en\") para en-US (1,000.5).\nSe o argumento já é número, devolve o mesmo valor.\n\nExemplo: idade = numero(leia(\"Idade: \")) se_falhar 0"
+      "doc": "Transforma texto em número (aceita 3.14 ou 3,14). Também número().\n\nAceita espaços nas pontas e _ como em literais. O padrão de texto é pt-BR\n(1.000,5). Mude com formato(\"en\") para en-US (1,000.5).\nSe o argumento já é número, devolve o mesmo valor.\n\nExemplo: idade = numero(leia(\"Idade: \")) se_falhar { 0 }"
     },
     {
       "name": "formato",
@@ -255,8 +254,8 @@
       "signatures": [
         "tipo(valor)"
       ],
-      "summary": "Quantidade de caracteres, itens, pares ou linhas.",
-      "doc": "Quantidade de caracteres, itens, pares ou linhas.\n\nNome do tipo do valor: numero, intervalo, texto, bool, lista, par, mapa,\nconjunto, matriz, imagem, funcao, modulo ou nada.\n\nServe para uma função aceitar mais de um tipo (se tipo(x) == \"numero\").\nOs nomes são os mesmos das mensagens de erro (sem acento).\n\nExemplo: tipo(10)"
+      "summary": "Nome do tipo do valor: numero, intervalo, texto, bool, lista, par, mapa, conjunto, matriz, imagem, funcao, modulo, processo ou nada.",
+      "doc": "Nome do tipo do valor: numero, intervalo, texto, bool, lista, par, mapa,\nconjunto, matriz, imagem, funcao, modulo, processo ou nada.\n\nServe para uma função aceitar mais de um tipo (se tipo(x) == \"numero\").\nOs nomes são os mesmos das mensagens de erro (sem acento).\n\nExemplo: tipo(10)"
     },
     {
       "name": "tipos",
@@ -277,8 +276,8 @@
       "signatures": [
         "tamanho(valor)"
       ],
-      "summary": "Texto usa caracteres Unicode, não bytes. Para colunas de matriz, use ncolunas. Quantos inteiros o intervalo gera: tamanho(0..3) é 3. Intervalo sem teto (0..) é erro.",
-      "doc": "Texto usa caracteres Unicode, não bytes. Para colunas de matriz, use ncolunas.\nQuantos inteiros o intervalo gera: tamanho(0..3) é 3. Intervalo sem teto (0..) é erro.\n\nExemplo: tamanho(\"olá\")"
+      "summary": "Quantidade de caracteres, itens, pares ou linhas.",
+      "doc": "Quantidade de caracteres, itens, pares ou linhas.\n\nTexto usa caracteres Unicode, não bytes. Para colunas de matriz, use colunas.\nQuantos inteiros o intervalo gera: tamanho(0..3) é 3. Intervalo sem teto (0..) é erro.\n\nExemplo: tamanho(\"olá\")"
     },
     {
       "name": "primeiro",
@@ -288,8 +287,8 @@
       "signatures": [
         "primeiro(lista)"
       ],
-      "summary": "Primeiro elemento da lista (índice 0) ou primeiro número do intervalo. Erro se não houver elementos.",
-      "doc": "Primeiro elemento da lista (índice 0) ou primeiro número do intervalo. Erro se não houver elementos.\n\nExemplo: primeiro([10, 20])"
+      "summary": "Primeiro elemento da lista (índice 0), primeiro caractere do texto ou primeiro número do intervalo. Erro se não houver elementos.",
+      "doc": "Primeiro elemento da lista (índice 0), primeiro caractere do texto ou\nprimeiro número do intervalo. Erro se não houver elementos.\n\nExemplo: primeiro([10, 20])"
     },
     {
       "name": "ultimo",
@@ -301,41 +300,80 @@
       "signatures": [
         "ultimo(lista)"
       ],
-      "summary": "Último elemento da lista ou último número gerado do intervalo. Erro se não houver elementos ou se não tiver teto.",
-      "doc": "Último elemento da lista ou último número gerado do intervalo. Erro se não houver elementos ou se não tiver teto.\n\nExemplo: ultimo([10, 20])"
+      "summary": "Último elemento da lista, último caractere do texto ou último número gerado do intervalo. Erro se não houver elementos ou se não tiver teto.",
+      "doc": "Último elemento da lista, último caractere do texto ou último número\ngerado do intervalo. Erro se não houver elementos ou se não tiver teto.\n\nExemplo: ultimo([10, 20])"
     },
     {
-      "name": "infinito",
+      "name": "eh_infinito",
+      "aliases": [
+        "é_infinito"
+      ],
+      "module": null,
+      "kind": "funcao",
+      "signatures": [
+        "eh_infinito(r)"
+      ],
+      "summary": "verdadeiro se o intervalo não tem teto (0..). Só vale para intervalo. Também é_infinito().",
+      "doc": "verdadeiro se o intervalo não tem teto (0..). Só vale para intervalo.\nTambém é_infinito().\n\nExemplo: eh_infinito(0..)"
+    },
+    {
+      "name": "como_texto",
       "aliases": [],
       "module": null,
       "kind": "funcao",
       "signatures": [
-        "infinito(r)"
+        "como_texto(valor)"
       ],
-      "summary": "verdadeiro se o intervalo não tem teto (0..). Só vale para intervalo.",
-      "doc": "verdadeiro se o intervalo não tem teto (0..). Só vale para intervalo.\n\nExemplo: infinito(0..)"
+      "summary": "O texto que escreva mostraria para o valor. Números seguem formato() (2,5 em pt) fora de coleções; um mapa com :_como_texto usa essa função.",
+      "doc": "O texto que escreva mostraria para o valor. Números seguem formato()\n(2,5 em pt) fora de coleções; um mapa com :_como_texto usa essa função.\n\nExemplo: como_texto(2.5)"
+    },
+    {
+      "name": "chaves_de",
+      "aliases": [],
+      "module": null,
+      "kind": "funcao",
+      "signatures": [
+        "chaves_de(mapa)"
+      ],
+      "summary": "Lista das chaves do mapa, na ordem da impressão.",
+      "doc": "Lista das chaves do mapa, na ordem da impressão.\n\nExemplo: chaves_de(mapa([:b -> 2, :a -> 1]))"
+    },
+    {
+      "name": "valores_de",
+      "aliases": [],
+      "module": null,
+      "kind": "funcao",
+      "signatures": [
+        "valores_de(mapa)"
+      ],
+      "summary": "Lista dos valores do mapa, na ordem das chaves na impressão.",
+      "doc": "Lista dos valores do mapa, na ordem das chaves na impressão.\n\nExemplo: valores_de(mapa([:b -> 2, :a -> 1]))"
     },
     {
       "name": "maiuscula",
-      "aliases": [],
+      "aliases": [
+        "maiúscula"
+      ],
       "module": null,
       "kind": "funcao",
       "signatures": [
         "maiuscula(texto)"
       ],
-      "summary": "Copia o texto em letras maiúsculas.",
-      "doc": "Copia o texto em letras maiúsculas.\n\nExemplo: maiuscula(\"olá\")"
+      "summary": "Copia o texto em letras maiúsculas. Também maiúscula().",
+      "doc": "Copia o texto em letras maiúsculas. Também maiúscula().\n\nExemplo: maiuscula(\"olá\")"
     },
     {
       "name": "minuscula",
-      "aliases": [],
+      "aliases": [
+        "minúscula"
+      ],
       "module": null,
       "kind": "funcao",
       "signatures": [
         "minuscula(texto)"
       ],
-      "summary": "Copia o texto em letras minúsculas.",
-      "doc": "Copia o texto em letras minúsculas.\n\nExemplo: minuscula(\"Olá\")"
+      "summary": "Copia o texto em letras minúsculas. Também minúscula().",
+      "doc": "Copia o texto em letras minúsculas. Também minúscula().\n\nExemplo: minuscula(\"Olá\")"
     },
     {
       "name": "sem_acento",
@@ -381,8 +419,8 @@
         "procure(texto, trecho)",
         "procure(lista, item)"
       ],
-      "summary": "Índice (0…n−1) da primeira ocorrência; -1 se não achar.",
-      "doc": "Índice (0…n−1) da primeira ocorrência; -1 se não achar.\n\nNo texto, trecho é um pedaço. Na lista, compara o item com ==.\nTrecho vazio (\"\") é erro.\n\nExemplo: procure(\"onde\", \"n\")"
+      "summary": "Índice (0…n−1) da primeira ocorrência; nada se não achar.",
+      "doc": "Índice (0…n−1) da primeira ocorrência; nada se não achar.\n\nNo texto, trecho é um pedaço. Na lista, compara o item com ==.\nTrecho vazio (\"\") é erro.\n\nExemplo: procure(\"onde\", \"n\")"
     },
     {
       "name": "separe",
@@ -427,7 +465,7 @@
         "mapa(pares)"
       ],
       "summary": "Monta um mapa a partir de uma lista de pares chave -> valor.",
-      "doc": "Monta um mapa a partir de uma lista de pares chave -> valor.\n\nSem argumento (ou com []) o mapa é vazio. Chaves duplicadas são erro.\nNão preserva ordem de inserção. A impressão ordena as chaves.\n\nExemplo: mapa([:nome -> \"Ana\", :idade -> 25])"
+      "doc": "Monta um mapa a partir de uma lista de pares chave -> valor.\n\nSem argumento (ou com []) o mapa é vazio. Chaves duplicadas são erro.\nNão preserva ordem de inserção. A impressão ordena as chaves.\npara p em m percorre os pares (p:chave, p:valor) na ordem da impressão.\nm + (chave -> valor) é um mapa novo com essa chave.\n\nExemplo: mapa([:nome -> \"Ana\", :idade -> 25])"
     },
     {
       "name": "conjunto",
@@ -450,7 +488,7 @@
         "ambiente(nome)"
       ],
       "summary": "Valor da variável de ambiente (HOME, PATH, …) como texto.",
-      "doc": "Valor da variável de ambiente (HOME, PATH, …) como texto.\n\nVariável que não existe é erro; use se_falhar para ter um padrão.\n\nExemplo: editor = ambiente(\"EDITOR\") se_falhar \"vim\""
+      "doc": "Valor da variável de ambiente (HOME, PATH, …) como texto.\n\nVariável que não existe é erro; use se_falhar para ter um padrão.\n\nExemplo: editor = ambiente(\"EDITOR\") se_falhar { \"vim\" }"
     },
     {
       "name": "ordene",
@@ -489,17 +527,15 @@
       "doc": "Verdadeiro se o texto termina com o sufixo.\n\nExemplo: termina_com(\"relatorio.csv\", \".csv\")"
     },
     {
-      "name": "cls",
-      "aliases": [
-        "limpe_tela"
-      ],
+      "name": "limpe_tela",
+      "aliases": [],
       "module": "tela",
       "kind": "funcao",
       "signatures": [
-        "cls()"
+        "limpe_tela()"
       ],
       "summary": "Limpa a tela do terminal. Também limpe_tela().",
-      "doc": "Limpa a tela do terminal. Também limpe_tela().\n\nColoca o cursor no canto superior esquerdo. Sem argumentos.\nNo REPL, a linha cls (sem parênteses) também limpa a tela.\nNa Aula, limpa o painel de saída.\nEm uma animação, cls() a cada quadro pisca: use posicao_cursor(0, 0, falso) no laço.\n\nExemplo: cls()"
+      "doc": "Limpa a tela do terminal. Também limpe_tela().\n\nColoca o cursor no canto superior esquerdo. Sem argumentos.\nNo REPL, a linha limpe_tela (sem parênteses) também limpa a tela.\nNa Aula, limpa o painel de saída.\nEm uma animação, limpe_tela() a cada quadro pisca: use posicao_cursor(0, 0, falso) no laço.\n\nExemplo: limpe_tela()"
     },
     {
       "name": "posicao_cursor",
@@ -576,26 +612,15 @@
       "doc": "Devolve o texto em negrito (ANSI) e reset no fim.\n\nExemplo: \"GAME OVER\".negrito()"
     },
     {
-      "name": "colunas",
+      "name": "tamanho_tela",
       "aliases": [],
       "module": "tela",
       "kind": "funcao",
       "signatures": [
-        "colunas()"
+        "tamanho_tela()"
       ],
-      "summary": "Largura da tela em caracteres.",
-      "doc": "Largura da tela em caracteres.\n\nNo terminal, o tamanho atual. Sem TTY (pipe, testes, Aula sem painel), 80.\n\nExemplo: se colunas() >= 48 { ... }"
-    },
-    {
-      "name": "linhas",
-      "aliases": [],
-      "module": "tela",
-      "kind": "funcao",
-      "signatures": [
-        "linhas()"
-      ],
-      "summary": "Altura da tela em caracteres.",
-      "doc": "Altura da tela em caracteres.\n\nNo terminal, o tamanho atual. Sem TTY, 24.\n\nExemplo: linhas()"
+      "summary": "Tamanho da tela em caracteres: mapa com :linhas e :colunas.",
+      "doc": "Tamanho da tela em caracteres: mapa com :linhas e :colunas.\n\nNo terminal, o tamanho atual. Sem TTY (pipe, testes, Aula sem painel),\n24 linhas e 80 colunas.\n\nExemplo: se tamanho_tela():colunas >= 48 { ... }"
     },
     {
       "name": "quadro",
@@ -693,27 +718,25 @@
     },
     {
       "name": "tangente",
-      "aliases": [
-        "tan"
-      ],
+      "aliases": [],
       "module": "mat",
       "kind": "funcao",
       "signatures": [
         "tangente(x)"
       ],
-      "summary": "Tangente de x em radianos. Também tan().",
-      "doc": "Tangente de x em radianos. Também tan().\n\nErro se o resultado não for um número finito (use se_falhar).\n\nExemplo: tangente(0)"
+      "summary": "Tangente de x em radianos.",
+      "doc": "Tangente de x em radianos.\n\nErro se o resultado não for um número finito (use se_falhar).\n\nExemplo: tangente(0)"
     },
     {
-      "name": "arcoseno",
+      "name": "arcosseno",
       "aliases": [],
       "module": "mat",
       "kind": "funcao",
       "signatures": [
-        "arcoseno(x)"
+        "arcosseno(x)"
       ],
       "summary": "Ângulo em radianos cujo seno é x. x entre -1 e 1.",
-      "doc": "Ângulo em radianos cujo seno é x. x entre -1 e 1.\n\nExemplo: arcoseno(0)"
+      "doc": "Ângulo em radianos cujo seno é x. x entre -1 e 1.\n\nExemplo: arcosseno(0)"
     },
     {
       "name": "arcocosseno",
@@ -805,14 +828,16 @@
     },
     {
       "name": "potencia",
-      "aliases": [],
+      "aliases": [
+        "potência"
+      ],
       "module": "mat",
       "kind": "funcao",
       "signatures": [
         "potencia(base, exp)"
       ],
-      "summary": "base elevado a exp (expoente pode ser fração).",
-      "doc": "base elevado a exp (expoente pode ser fração).\n\n0^0 vale 1. Erro se o resultado não for um número finito (base negativa\ncom expoente não inteiro, divisão por zero, …).\n\nExemplo: potencia(2, 3)"
+      "summary": "base elevado a exp (expoente pode ser fração). Também potência().",
+      "doc": "base elevado a exp (expoente pode ser fração). Também potência().\n\n0^0 vale 1. Erro se o resultado não for um número finito (base negativa\ncom expoente não inteiro, divisão por zero, …).\n\nExemplo: potencia(2, 3)"
     },
     {
       "name": "piso",
@@ -927,26 +952,26 @@
       "doc": "Matriz retangular preenchida com o mesmo número.\n\nExemplo: cheia(2, 3, 7)"
     },
     {
-      "name": "nlinhas",
+      "name": "linhas",
       "aliases": [],
       "module": "matriz",
       "kind": "funcao",
       "signatures": [
-        "nlinhas(matriz)"
+        "linhas(matriz)"
       ],
       "summary": "Quantidade de linhas da matriz.",
-      "doc": "Quantidade de linhas da matriz.\n\nExemplo: nlinhas(A)"
+      "doc": "Quantidade de linhas da matriz.\n\nExemplo: linhas(A)"
     },
     {
-      "name": "ncolunas",
+      "name": "colunas",
       "aliases": [],
       "module": "matriz",
       "kind": "funcao",
       "signatures": [
-        "ncolunas(matriz)"
+        "colunas(matriz)"
       ],
       "summary": "Quantidade de colunas da matriz.",
-      "doc": "Quantidade de colunas da matriz.\n\nExemplo: ncolunas(A)"
+      "doc": "Quantidade de colunas da matriz.\n\nExemplo: colunas(A)"
     },
     {
       "name": "xy",
@@ -969,7 +994,7 @@
         "leia_arquivo(caminho)"
       ],
       "summary": "Lê o arquivo; cada linha vira um texto (sem quebra de linha).",
-      "doc": "Lê o arquivo; cada linha vira um texto (sem quebra de linha).\n\nArquivo vazio devolve []. Caminhos relativos partem da pasta do .lep.\n`~` e `~/pasta` são a pasta pessoal. Falhas de leitura são erros (se_falhar).\n\nExemplo: leia_arquivo(\"dados.txt\") se_falhar []"
+      "doc": "Lê o arquivo; cada linha vira um texto (sem quebra de linha).\n\nArquivo vazio devolve []. Caminhos relativos partem da pasta do .lep.\n`~` e `~/pasta` são a pasta pessoal. Falhas de leitura são erros (se_falhar).\n\nExemplo: leia_arquivo(\"dados.txt\") se_falhar { [] }"
     },
     {
       "name": "leia_bytes",
@@ -1095,7 +1120,7 @@
         "apague_arquivo(caminho)"
       ],
       "summary": "Apaga um arquivo. Pasta é erro (use apague_pasta).",
-      "doc": "Apaga um arquivo. Pasta é erro (use apague_pasta).\n\nExemplo: apague_arquivo(\"temp.txt\") se_falhar nada"
+      "doc": "Apaga um arquivo. Pasta é erro (use apague_pasta).\n\nExemplo: apague_arquivo(\"temp.txt\") se_falhar { nada }"
     },
     {
       "name": "apague_pasta",
@@ -1226,14 +1251,16 @@
     },
     {
       "name": "grafico",
-      "aliases": [],
+      "aliases": [
+        "gráfico"
+      ],
       "module": "cartesiano",
       "kind": "funcao",
       "signatures": [
         "grafico()"
       ],
-      "summary": "Plano xy vazio. Defina eixos e depois plote.",
-      "doc": "Plano xy vazio. Defina eixos e depois plote.\n\ntipo(g) continua \"mapa\".\n\nExemplo: g = grafico()"
+      "summary": "Plano xy vazio. Defina eixos e depois plote. Também gráfico().",
+      "doc": "Plano xy vazio. Defina eixos e depois plote. Também gráfico().\n\ntipo(g) continua \"mapa\".\n\nExemplo: g = grafico()"
     },
     {
       "name": "eixos",
@@ -1524,15 +1551,15 @@
     {
       "name": "laco_grafico",
       "aliases": [
-        "laço_grafico"
+        "laço_gráfico"
       ],
       "module": "tela_grafica",
       "kind": "funcao",
       "signatures": [
         "laco_grafico(g)"
       ],
-      "summary": "Cria um laço associado à tela, sem abrir janela nem iniciar a execução. Também laço_grafico(). O recurso não pode ser clonado; pode ser executado novamente depois de terminar. Cada tela admite somente um laço ativo.",
-      "doc": "Cria um laço associado à tela, sem abrir janela nem iniciar a execução.\nTambém laço_grafico(). O recurso não pode ser clonado; pode ser executado\nnovamente depois de terminar. Cada tela admite somente um laço ativo.\n\nExemplo: l = g.tela_grafica::laço_grafico()"
+      "summary": "Cria um laço associado à tela, sem abrir janela nem iniciar a execução. Também laço_gráfico(). O recurso não pode ser clonado; pode ser executado novamente depois de terminar. Cada tela admite somente um laço ativo.",
+      "doc": "Cria um laço associado à tela, sem abrir janela nem iniciar a execução.\nTambém laço_gráfico(). O recurso não pode ser clonado; pode ser executado\nnovamente depois de terminar. Cada tela admite somente um laço ativo.\n\nExemplo: l = g.tela_grafica::laço_gráfico()"
     },
     {
       "name": "execute",

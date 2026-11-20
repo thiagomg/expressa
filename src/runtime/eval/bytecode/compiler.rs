@@ -568,7 +568,7 @@ mod tests {
 
     #[test]
     fn parameters_use_slots_only_in_the_function_scope() {
-        let program = parse("f = funcao(x) { x += 1 { x } x }").unwrap();
+        let program = parse("f = funcao(x) {\n x += 1\n escreva({ x })\n x\n}").unwrap();
         let code = items(&program.items);
         let body = &code.functions[0].code;
         assert!(

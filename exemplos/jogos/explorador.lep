@@ -5,7 +5,7 @@ mundo = importe "explorador/mundo"
 roteiro = importe "explorador/roteiro"
 
 g = tela_grafica::nova(240, 160, 3)
-l = g.tela_grafica::laço_grafico()
+l = g.tela_grafica::laço_gráfico()
 estado = mundo::novo()
 imagens = mundo::arte(estado)
 // O primeiro mostre do laço já carrega o cenário e o sprite inicial.

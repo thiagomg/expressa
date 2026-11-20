@@ -105,7 +105,7 @@ fn rejects_valid_checksum_programs_with_unsafe_stack_and_scope_shapes() {
 }
 #[test]
 fn malformed_metadata_and_decimal_flags_are_rejected() {
-    let mut p = fixture("repita 1 vezes { 1 }");
+    let mut p = fixture("repita 1 vezes { escreva(1) }");
     Rc::get_mut(&mut p.code).unwrap().loops[0].exit = u32::MAX;
     assert!(load_exb(&forged(&p)).is_err());
     let mut p = fixture("escreva(1)");

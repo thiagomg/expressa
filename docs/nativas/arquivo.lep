@@ -3,7 +3,7 @@
 /// Arquivo vazio devolve []. Caminhos relativos partem da pasta do .lep.
 /// `~` e `~/pasta` são a pasta pessoal. Falhas de leitura são erros (se_falhar).
 ///
-/// Exemplo: leia_arquivo("dados.txt") se_falhar []
+/// Exemplo: leia_arquivo("dados.txt") se_falhar { [] }
 leia_arquivo = funcao(caminho) { 0 }
 
 /// Lê os bytes sem modificar quebras de linha; devolve uma lista de números de 0 a 255.
@@ -74,7 +74,7 @@ crie_pasta = funcao(caminho) { 0 }
 
 /// Apaga um arquivo. Pasta é erro (use apague_pasta).
 ///
-/// Exemplo: apague_arquivo("temp.txt") se_falhar nada
+/// Exemplo: apague_arquivo("temp.txt") se_falhar { nada }
 apague_arquivo = funcao(caminho) { 0 }
 
 /// Apaga a pasta e tudo o que está dentro dela. Não há lixeira.

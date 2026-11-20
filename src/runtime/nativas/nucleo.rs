@@ -1,5 +1,4 @@
 // Search must distinguish the first index (0) from absence.
-const SEARCH_NOT_FOUND: i64 = -1;
 
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
@@ -175,7 +174,12 @@ impl Vm<'_, '_> {
             Value::Texto(s) => match self.numero_locale.parse_texto(s) {
                 Some(n) => Ok(Value::Numero(n)),
                 None => Err(self.err(
-                    format!("não foi possível transformar `{s}` em número"),
+                    match self.numero_locale.dica(s) {
+                        Some(dica) => {
+                            format!("não foi possível transformar `{s}` em número: {dica}")
+                        }
+                        None => format!("não foi possível transformar `{s}` em número"),
+                    },
                     span,
                 )),
             },
@@ -282,9 +286,14 @@ impl Vm<'_, '_> {
                 .first()
                 .cloned()
                 .ok_or_else(|| self.err("primeiro() de lista vazia", span)),
+            Value::Texto(s) => s
+                .chars()
+                .next()
+                .map(|c| Value::Texto(c.to_string()))
+                .ok_or_else(|| self.err("primeiro() de texto vazio", span)),
             other => Err(self.err(
                 format!(
-                    "primeiro() espera lista ou intervalo, encontrado {}",
+                    "primeiro() espera lista, texto ou intervalo, encontrado {}",
                     other.type_name()
                 ),
                 span,
@@ -307,22 +316,68 @@ impl Vm<'_, '_> {
                 .last()
                 .cloned()
                 .ok_or_else(|| self.err("ultimo() de lista vazia", span)),
+            Value::Texto(s) => s
+                .chars()
+                .next_back()
+                .map(|c| Value::Texto(c.to_string()))
+                .ok_or_else(|| self.err("ultimo() de texto vazio", span)),
             other => Err(self.err(
                 format!(
-                    "ultimo() espera lista ou intervalo, encontrado {}",
+                    "ultimo() espera lista, texto ou intervalo, encontrado {}",
                     other.type_name()
                 ),
                 span,
             )),
         }
     }
+    /// `como_texto(valor)`: the text `escreva` would print (uses `:_como_texto`).
+    pub(crate) fn bi_como_texto(
+        &mut self,
+        args: &[Value],
+        span: Span,
+        env: &Rc<RefCell<Env>>,
+    ) -> Result<Value, EvalError> {
+        self.expect_arity(args, 1, span)?;
+        Ok(Value::Texto(self.como_texto_de(&args[0], span, env)?))
+    }
+
+    /// `chaves_de(m)` / `valores_de(m)`: in the order a map prints its keys.
+    pub(crate) fn bi_chaves_de(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
+        self.expect_arity(args, 1, span)?;
+        let pares = self.pares_ordenados(&args[0], "chaves_de", span)?;
+        Ok(Value::lista(
+            pares.into_iter().map(|(k, _)| k.to_value()).collect(),
+        ))
+    }
+
+    pub(crate) fn bi_valores_de(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
+        self.expect_arity(args, 1, span)?;
+        let pares = self.pares_ordenados(&args[0], "valores_de", span)?;
+        Ok(Value::lista(pares.into_iter().map(|(_, v)| v).collect()))
+    }
+
+    fn pares_ordenados(
+        &self,
+        v: &Value,
+        nome: &str,
+        span: Span,
+    ) -> Result<Vec<(MapKey, Value)>, EvalError> {
+        match v {
+            Value::Mapa(m) => Ok(super::super::value::pares_em_ordem(&m.borrow())),
+            other => Err(self.err(
+                format!("{nome}() espera mapa, encontrado {}", other.type_name()),
+                span,
+            )),
+        }
+    }
+
     pub(crate) fn bi_infinito(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
         self.expect_arity(args, 1, span)?;
         match &args[0] {
             Value::Intervalo { end, .. } => Ok(Value::Bool(end.is_none())),
             other => Err(self.err(
                 format!(
-                    "infinito() espera intervalo, encontrado {}",
+                    "eh_infinito() espera intervalo, encontrado {}",
                     other.type_name()
                 ),
                 span,
@@ -496,21 +551,17 @@ impl Vm<'_, '_> {
                 if needle.is_empty() {
                     return Err(self.err("procure espera um trecho não vazio", span));
                 }
-                let pos = match s.find(&needle) {
-                    Some(byte_i) => s[..byte_i].chars().count() as i64,
-                    None => SEARCH_NOT_FOUND,
-                };
-                Ok(Value::Numero(pos.into()))
+                Ok(match s.find(&needle) {
+                    Some(byte_i) => Value::Numero((s[..byte_i].chars().count() as i64).into()),
+                    None => Value::Nada,
+                })
             }
-            Value::Lista(xs) => {
-                let pos = xs
-                    .borrow()
-                    .iter()
-                    .position(|x| x == &args[1])
-                    .map(|i| i as i64)
-                    .unwrap_or(SEARCH_NOT_FOUND);
-                Ok(Value::Numero(pos.into()))
-            }
+            Value::Lista(xs) => Ok(xs
+                .borrow()
+                .iter()
+                .position(|x| x == &args[1])
+                .map(|i| Value::Numero((i as i64).into()))
+                .unwrap_or(Value::Nada)),
             other => Err(self.err(
                 format!(
                     "procure espera texto ou lista, encontrado {}",

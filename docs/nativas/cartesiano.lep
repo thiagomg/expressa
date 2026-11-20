@@ -5,7 +5,7 @@
 /// Exemplo: c = documento()
 documento = funcao() { mapa() }
 
-/// Plano xy vazio. Defina eixos e depois plote.
+/// Plano xy vazio. Defina eixos e depois plote. Também gráfico().
 ///
 /// tipo(g) continua "mapa".
 ///

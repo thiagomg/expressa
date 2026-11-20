@@ -57,7 +57,7 @@ compara_palavra = função(palavra, tentativa) {
             continue
         }
         idx = procura_sem_acento(p, t[i])
-        se idx >= 0 {
+        se idx != nada {
             res[i] = t[i] -> :amarelo
             p[idx] = " "
             t[i] = " "
@@ -188,7 +188,7 @@ desenha_tentativa = função(palavra, ts, cores_teclado) {
     altura = 1 + 2 * ts.tamanho()
     coluna_tec = largura + 2
     linha_tec = 1
-    se colunas() < coluna_tec + 20 {
+    se tamanho_tela():colunas < coluna_tec + 20 {
         linha_tec = altura + 1
         coluna_tec = 1
     }

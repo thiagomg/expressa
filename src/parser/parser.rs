@@ -45,6 +45,11 @@ struct Parser<'a> {
     em_para: bool,
     /// `(` still open around the expression being parsed.
     parenteses: u32,
+    /// `(` and `[` open in the current block, one entry per nested block.
+    /// While the top is above zero, a line break does not end the expression;
+    /// `{`/`inicio` push a new entry, so a block inside brackets separates
+    /// statements by line again.
+    abertos: Vec<u32>,
 }
 
 impl<'a> Parser<'a> {
@@ -57,6 +62,7 @@ impl<'a> Parser<'a> {
             profundidade: 0,
             em_para: false,
             parenteses: 0,
+            abertos: vec![0],
         }
     }
 
@@ -106,6 +112,41 @@ impl<'a> Parser<'a> {
         }
         let previous_end = self.tokens[self.pos - 1].span.end;
         !self.source.as_bytes()[previous_end..self.peek().span.start].contains(&b'\n')
+    }
+
+    /// Inside `(…)` or `[…]` of the current block, line breaks are free.
+    fn dentro_de_colchetes(&self) -> bool {
+        self.abertos.last().is_some_and(|n| *n > 0)
+    }
+
+    /// The current token continues the expression: same line as the previous
+    /// token, or inside brackets.
+    fn continua(&self) -> bool {
+        self.dentro_de_colchetes() || self.on_same_line_as_previous()
+    }
+
+    fn abre(&mut self) {
+        if let Some(n) = self.abertos.last_mut() {
+            *n += 1;
+        }
+    }
+
+    fn fecha(&mut self) {
+        if let Some(n) = self.abertos.last_mut() {
+            *n = n.saturating_sub(1);
+        }
+    }
+
+    /// After a statement, the next one must start on a new line.
+    fn exige_nova_linha(&self) -> Result<(), ParseError> {
+        let fecha_bloco = matches!(
+            self.peek_kind(),
+            TokenKind::Eof | TokenKind::Fim | TokenKind::RBrace
+        );
+        if !fecha_bloco && self.on_same_line_as_previous() {
+            return Err(self.err("dois comandos na mesma linha; coloque cada comando em uma linha"));
+        }
+        Ok(())
     }
 
     fn at_eof(&self) -> bool {
@@ -179,6 +220,7 @@ impl<'a> Parser<'a> {
 
         while !self.at_eof() {
             items.push(self.parse_item()?);
+            self.exige_nova_linha()?;
         }
 
         let span = if let (Some(first), Some(last)) = (items.first(), items.last()) {
@@ -421,20 +463,10 @@ impl<'a> Parser<'a> {
             }
         };
         let mut stmts = Vec::new();
-        loop {
-            match self.peek_kind() {
-                TokenKind::Eof => break,
-                TokenKind::Fim if !brace => break,
-                TokenKind::RBrace if brace => break,
-                TokenKind::Fim if brace => {
-                    return Err(self.err("esperado '}' (bloco aberto com '{')"));
-                }
-                TokenKind::RBrace if !brace => {
-                    return Err(self.err("esperado 'fim' (bloco aberto com 'inicio')"));
-                }
-                _ => stmts.push(self.parse_stmt()?),
-            }
-        }
+        self.abertos.push(0);
+        let corpo = self.parse_block_stmts(brace, &mut stmts);
+        self.abertos.pop();
+        corpo?;
         let end = if brace {
             self.expect_kind(|k| matches!(k, TokenKind::RBrace), "esperado '}'")?
         } else {
@@ -447,6 +479,27 @@ impl<'a> Parser<'a> {
             stmts,
             span: open.span.join(end.span),
         })
+    }
+
+    fn parse_block_stmts(&mut self, brace: bool, stmts: &mut Vec<Stmt>) -> Result<(), ParseError> {
+        loop {
+            match self.peek_kind() {
+                TokenKind::Eof => break,
+                TokenKind::Fim if !brace => break,
+                TokenKind::RBrace if brace => break,
+                TokenKind::Fim if brace => {
+                    return Err(self.err("esperado '}' (bloco aberto com '{')"));
+                }
+                TokenKind::RBrace if !brace => {
+                    return Err(self.err("esperado 'fim' (bloco aberto com 'inicio')"));
+                }
+                _ => {
+                    stmts.push(self.parse_stmt()?);
+                    self.exige_nova_linha()?;
+                }
+            }
+        }
+        Ok(())
     }
 
     // ── expressions (Pratt / "binding power" parser) ─────────────
@@ -503,10 +556,21 @@ impl<'a> Parser<'a> {
             if l_bp < min_bp {
                 break;
             }
-            // `x = 5` then a line `-3` is the next statement. `x = 1 +`
-            // then a line `2` still continues: the operator shares the line.
-            if !self.on_same_line_as_previous() {
-                break;
+            // Outside brackets a line break ends the expression. An operator
+            // that can start an expression (`-3`, `..5`) begins the next
+            // statement; any other operator here is an error.
+            if !self.continua() {
+                if matches!(
+                    op_kind,
+                    TokenKind::Minus | TokenKind::DotDot | TokenKind::DotDotEq
+                ) {
+                    break;
+                }
+                return Err(self.err(format!(
+                    "{} no começo da linha não continua a linha anterior; \
+                     coloque a expressão entre parênteses para quebrar a linha",
+                    texto_do_token(&op_kind)
+                )));
             }
 
             // Spec: no `a < b < c` (would be confusing with bool vs number).
@@ -523,10 +587,32 @@ impl<'a> Parser<'a> {
             if matches!(op_kind, TokenKind::DotDot | TokenKind::DotDotEq)
                 && matches!(lhs, Expr::Intervalo { .. })
             {
-                return Err(self
-                    .err("intervalos não podem ser encadeados; coloque cada intervalo entre parênteses"));
+                return Err(self.err(
+                    "intervalos não podem ser encadeados; coloque cada intervalo entre parênteses",
+                ));
             }
             let op_tok = self.remove();
+            // The right operand must follow on the same line (or inside
+            // brackets). `se_falhar` may put its block on the next line, and
+            // `..` without a ceiling is an open interval.
+            // At the end of the input outside brackets nothing can follow
+            // either: the REPL must not wait for a line that would be an error.
+            let sem_continuacao =
+                !self.continua() || (self.at_eof() && !self.dentro_de_colchetes());
+            if !matches!(
+                op_kind,
+                TokenKind::SeFalhar | TokenKind::DotDot | TokenKind::DotDotEq
+            ) && sem_continuacao
+            {
+                return Err(self.err_at(
+                    format!(
+                        "a expressão não continua depois de {} no fim da linha; \
+                         coloque a expressão entre parênteses para quebrar a linha",
+                        texto_do_token(&op_kind)
+                    ),
+                    op_tok.span,
+                ));
+            }
             if matches!(op_kind, TokenKind::DotDot | TokenKind::DotDotEq) {
                 let inclusive = matches!(op_kind, TokenKind::DotDotEq);
                 let end = self.parse_faixa_end(inclusive, op_tok.span)?;
@@ -661,7 +747,8 @@ impl<'a> Parser<'a> {
         inclusive: bool,
         op_span: Span,
     ) -> Result<Option<Expr>, ParseError> {
-        let same_line = self.peek().span.line == op_span.line;
+        let _ = op_span;
+        let same_line = self.continua();
         if inclusive {
             if !same_line || !self.can_start_expr() {
                 let kind = if matches!(self.peek_kind(), TokenKind::Eof) {
@@ -712,9 +799,14 @@ impl<'a> Parser<'a> {
         loop {
             // A list or a call on the next line starts another expression.
             // The contents may still span lines once the opener is consumed.
-            if matches!(self.peek_kind(), TokenKind::LParen | TokenKind::LBracket)
-                && !self.on_same_line_as_previous()
-            {
+            if !self.continua() {
+                if matches!(self.peek_kind(), TokenKind::Dot | TokenKind::ColonColon) {
+                    return Err(self.err(format!(
+                        "{} no começo da linha não continua a linha anterior; \
+                         junte à linha anterior ou coloque a expressão entre parênteses",
+                        texto_do_token(self.peek_kind())
+                    )));
+                }
                 break;
             }
             if matches!(
@@ -731,7 +823,7 @@ impl<'a> Parser<'a> {
                 TokenKind::LParen => lhs = self.finish_call(lhs)?,
                 TokenKind::LBracket => lhs = self.finish_index_or_slice(lhs)?,
                 TokenKind::ColonColon => lhs = self.finish_module_field(lhs)?,
-                TokenKind::Colon if self.allow_colon_field && self.on_same_line_as_previous() => {
+                TokenKind::Colon if self.allow_colon_field => {
                     if map_field_receiver(&lhs) {
                         lhs = self.finish_map_field(lhs)?;
                     } else {
@@ -786,7 +878,9 @@ impl<'a> Parser<'a> {
                 let prev = self.allow_colon_field;
                 self.allow_colon_field = true;
                 self.parenteses += 1;
+                self.abre();
                 let expr = self.parse_expr();
+                self.fecha();
                 self.parenteses -= 1;
                 self.allow_colon_field = prev;
                 let expr = expr?;
@@ -820,6 +914,13 @@ impl<'a> Parser<'a> {
     }
 
     fn finish_list(&mut self, start: Span) -> Result<Expr, ParseError> {
+        self.abre();
+        let r = self.finish_list_inner(start);
+        self.fecha();
+        r
+    }
+
+    fn finish_list_inner(&mut self, start: Span) -> Result<Expr, ParseError> {
         let mut elements = Vec::new();
         if !matches!(self.peek_kind(), TokenKind::RBracket) {
             loop {
@@ -845,7 +946,9 @@ impl<'a> Parser<'a> {
         let start = callee.span();
         let aberto = self.remove(); // (
         self.parenteses += 1;
+        self.abre();
         let args = self.finish_call_args();
+        self.fecha();
         self.parenteses -= 1;
         let args = args?;
         let end = self.expect_close(|k| matches!(k, TokenKind::RParen), ")", aberto.span)?;
@@ -875,6 +978,13 @@ impl<'a> Parser<'a> {
     }
 
     fn finish_index_or_slice(&mut self, object: Expr) -> Result<Expr, ParseError> {
+        self.abre();
+        let r = self.finish_index_or_slice_inner(object);
+        self.fecha();
+        r
+    }
+
+    fn finish_index_or_slice_inner(&mut self, object: Expr) -> Result<Expr, ParseError> {
         let start = object.span();
         let aberto = self.remove(); // [
         let first = self.parse_expr()?;
@@ -1523,9 +1633,9 @@ mod tests {
             ));
         }
         for source in [
-            "1\n[2]",
-            "xs[0]\n[]",
-            "[1]\n[2]",
+            "x = 1\n[2]",
+            "x = xs[0]\n[]",
+            "x = [1]\n[2]",
             "f()\n[1, 2]",
             "f()\r\n[1, 2]",
         ] {
@@ -1561,14 +1671,36 @@ mod tests {
             expr_stmt(&parse_ok("f(\n[1,\n2]\n)[0]")),
             Expr::Index { .. }
         ));
+        let err = parse("xs\n.tamanho()").unwrap_err();
+        assert!(err.message.contains("começo da linha"), "{err}");
+        let err = parse("m\n::f()").unwrap_err();
+        assert!(err.message.contains("começo da linha"), "{err}");
         assert!(matches!(
-            expr_stmt(&parse_ok("xs\n.tamanho()")),
+            expr_stmt(&parse_ok("(xs\n.tamanho())")),
             Expr::Call { .. }
         ));
         assert!(matches!(
-            expr_stmt(&parse_ok("1 +\n2")),
+            expr_stmt(&parse_ok("(1 +\n2)")),
             Expr::Binary { .. }
         ));
+    }
+
+    #[test]
+    fn dois_comandos_na_mesma_linha_sao_erro() {
+        for source in [
+            "x = 1 y = 2",
+            "escreva(1) escreva(2)",
+            "f = funcao() { x = 1 x }",
+        ] {
+            let err = parse(source).unwrap_err();
+            assert!(err.message.contains("mesma linha"), "{source}: {err}");
+        }
+        parse_ok("se verdadeiro { escreva(1) } senao { escreva(2) }");
+        parse_ok("f = funcao(x) { x + 1 }");
+        parse_ok(
+            "se verdadeiro\ninicio\n    escreva(1)\nfim\nou se falso\ninicio\n    escreva(2)\nfim\nsenao\ninicio\n    escreva(3)\nfim",
+        );
+        parse_ok("x = 1 se_falhar\n{\n    2\n}");
     }
 
     #[test]
@@ -1683,7 +1815,10 @@ fim
         let p = parse_ok("xs[1..3]");
         match expr_stmt(&p) {
             Expr::Index { index, .. } => {
-                assert!(matches!(index.as_ref(), Expr::Intervalo { end: Some(_), .. }));
+                assert!(matches!(
+                    index.as_ref(),
+                    Expr::Intervalo { end: Some(_), .. }
+                ));
             }
             other => panic!("{other:?}"),
         }
@@ -1841,11 +1976,11 @@ mapa([
         parse_ok("mapa([:op -> (opções:campo), :args -> 1])");
         parse_ok("pessoa:nome");
         parse_ok("escreva(pessoa:nome)");
-        let err = parse("escreva(pessoa\n:nome)").unwrap_err();
-        assert!(
-            err.message.contains("inesperado") || err.message.contains(")"),
-            "{err}"
-        );
+        // Inside parentheses a line break is free: still a field.
+        parse_ok("escreva(pessoa\n:nome)");
+        // Outside, `:nome` on the next line is a new (discarded) value.
+        let err = parse("pessoa\n:nome\nescreva(1)").unwrap_err();
+        assert!(err.message.contains("não é usado"), "{err}");
         let err = parse(":se").unwrap_err();
         assert!(err.message.contains("nome após ':'"), "{err}");
     }
@@ -1930,7 +2065,40 @@ fim
     fn operador_no_inicio_da_linha_nao_continua() {
         let p = parse_ok("x = 5\n-3\n");
         assert_eq!(p.items.len(), 2, "{p:?}");
-        parse_ok("x = 1 +\n2\n");
+        let err = parse("x = 5\n-3\nescreva(x)").unwrap_err();
+        assert!(err.message.contains("'-'"), "{err}");
+        let err = parse("x = 1 +\n2\n").unwrap_err();
+        assert!(err.message.contains("parênteses"), "{err}");
+        let err = parse("x = 1\n+ 2\n").unwrap_err();
+        assert!(err.message.contains("começo da linha"), "{err}");
+        let err = parse("x = verdadeiro\ne falso\n").unwrap_err();
+        assert!(err.message.contains("começo da linha"), "{err}");
+        let err = parse("x = 1 -> \n2\n").unwrap_err();
+        assert!(err.message.contains("parênteses"), "{err}");
+        assert!(matches!(
+            first_stmt(&parse_ok("x = (1 +\n2)")),
+            Stmt::Assign {
+                value: Expr::Binary { .. },
+                ..
+            }
+        ));
+        assert!(matches!(
+            first_stmt(&parse_ok("x = (10\n- 3)")),
+            Stmt::Assign {
+                value: Expr::Binary { .. },
+                ..
+            }
+        ));
+        assert!(matches!(
+            first_stmt(&parse_ok("xs = [10\n- 3]")),
+            Stmt::Assign {
+                value: Expr::List { .. },
+                ..
+            }
+        ));
+        // A block inside brackets separates statements by line again.
+        let err = parse("f(funcao() {\n    1\n    + 2\n})").unwrap_err();
+        assert!(err.message.contains("começo da linha"), "{err}");
         let p = parse_ok("se verdadeiro { escreva(\"sim\") }\n(1 + 2)\n");
         assert_eq!(p.items.len(), 2, "{p:?}");
     }
@@ -2004,9 +2172,10 @@ fim
             first_stmt(&parse_ok("continue")),
             Stmt::Continue { .. }
         ));
+        // `continua` is an ordinary name now.
         assert!(matches!(
-            first_stmt(&parse_ok("continua")),
-            Stmt::Continue { .. }
+            first_stmt(&parse_ok("continua = 1")),
+            Stmt::Assign { .. }
         ));
     }
 
@@ -2090,7 +2259,9 @@ fim
         );
         let intervalo = parse("0..3 + 0..3").unwrap_err();
         assert!(
-            intervalo.message.contains("intervalos não podem ser encadeados"),
+            intervalo
+                .message
+                .contains("intervalos não podem ser encadeados"),
             "{}",
             intervalo.message
         );

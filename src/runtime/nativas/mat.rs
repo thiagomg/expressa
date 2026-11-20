@@ -44,7 +44,7 @@ impl Vm<'_, '_> {
             span,
             |x| (-1.0..=1.0).contains(&x),
             f64::asin,
-            "arcoseno espera número entre -1 e 1",
+            "arcosseno espera número entre -1 e 1",
         )
     }
     pub(crate) fn bi_arcocosseno(

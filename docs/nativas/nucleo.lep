@@ -79,7 +79,7 @@ argumentos = []
 /// (1.000,5). Mude com formato("en") para en-US (1,000.5).
 /// Se o argumento já é número, devolve o mesmo valor.
 ///
-/// Exemplo: idade = numero(leia("Idade: ")) se_falhar 0
+/// Exemplo: idade = numero(leia("Idade: ")) se_falhar { 0 }
 numero = funcao(texto) { 0 }
 numero = funcao(numero) { 0 }
 
@@ -162,10 +162,22 @@ ajuda = funcao(alvo) { 0 }
 ///
 /// Sem argumento (ou com []) o mapa é vazio. Chaves duplicadas são erro.
 /// Não preserva ordem de inserção. A impressão ordena as chaves.
+/// para p em m percorre os pares (p:chave, p:valor) na ordem da impressão.
+/// m + (chave -> valor) é um mapa novo com essa chave.
 ///
 /// Exemplo: mapa([:nome -> "Ana", :idade -> 25])
 mapa = funcao() { 0 }
 mapa = funcao(pares) { 0 }
+
+/// Lista das chaves do mapa, na ordem da impressão.
+///
+/// Exemplo: chaves_de(mapa([:b -> 2, :a -> 1]))
+chaves_de = funcao(mapa) { 0 }
+
+/// Lista dos valores do mapa, na ordem das chaves na impressão.
+///
+/// Exemplo: valores_de(mapa([:b -> 2, :a -> 1]))
+valores_de = funcao(mapa) { 0 }
 
 /// Monta um conjunto a partir de uma lista (valores únicos).
 ///
@@ -177,10 +189,8 @@ mapa = funcao(pares) { 0 }
 conjunto = funcao() { 0 }
 conjunto = funcao(xs) { 0 }
 
-/// Quantidade de caracteres, itens, pares ou linhas.
-///
 /// Nome do tipo do valor: numero, intervalo, texto, bool, lista, par, mapa,
-/// conjunto, matriz, imagem, funcao, modulo ou nada.
+/// conjunto, matriz, imagem, funcao, modulo, processo ou nada.
 ///
 /// Serve para uma função aceitar mais de um tipo (se tipo(x) == "numero").
 /// Os nomes são os mesmos das mensagens de erro (sem acento).
@@ -193,33 +203,38 @@ tipo = funcao(valor) { 0 }
 /// Exemplo: tipos()
 tipos = funcao() { 0 }
 
-/// Texto usa caracteres Unicode, não bytes. Para colunas de matriz, use ncolunas.
+/// Quantidade de caracteres, itens, pares ou linhas.
+///
+/// Texto usa caracteres Unicode, não bytes. Para colunas de matriz, use colunas.
 /// Quantos inteiros o intervalo gera: tamanho(0..3) é 3. Intervalo sem teto (0..) é erro.
 ///
 /// Exemplo: tamanho("olá")
 tamanho = funcao(valor) { 0 }
 
-/// Primeiro elemento da lista (índice 0) ou primeiro número do intervalo. Erro se não houver elementos.
+/// Primeiro elemento da lista (índice 0), primeiro caractere do texto ou
+/// primeiro número do intervalo. Erro se não houver elementos.
 ///
 /// Exemplo: primeiro([10, 20])
 primeiro = funcao(lista) { 0 }
 
-/// Último elemento da lista ou último número gerado do intervalo. Erro se não houver elementos ou se não tiver teto.
+/// Último elemento da lista, último caractere do texto ou último número
+/// gerado do intervalo. Erro se não houver elementos ou se não tiver teto.
 ///
 /// Exemplo: ultimo([10, 20])
 ultimo = funcao(lista) { 0 }
 
 /// verdadeiro se o intervalo não tem teto (0..). Só vale para intervalo.
+/// Também é_infinito().
 ///
-/// Exemplo: infinito(0..)
-infinito = funcao(r) { 0 }
+/// Exemplo: eh_infinito(0..)
+eh_infinito = funcao(r) { 0 }
 
-/// Copia o texto em letras maiúsculas.
+/// Copia o texto em letras maiúsculas. Também maiúscula().
 ///
 /// Exemplo: maiuscula("olá")
 maiuscula = funcao(texto) { 0 }
 
-/// Copia o texto em letras minúsculas.
+/// Copia o texto em letras minúsculas. Também minúscula().
 ///
 /// Exemplo: minuscula("Olá")
 minuscula = funcao(texto) { 0 }
@@ -244,7 +259,7 @@ remova = funcao(mapa, chave) { 0 }
 /// Exemplo: substitua("aa", "a", "b")
 substitua = funcao(texto, antigo, novo) { 0 }
 
-/// Índice (0…n−1) da primeira ocorrência; -1 se não achar.
+/// Índice (0…n−1) da primeira ocorrência; nada se não achar.
 ///
 /// No texto, trecho é um pedaço. Na lista, compara o item com ==.
 /// Trecho vazio ("") é erro.
@@ -252,6 +267,12 @@ substitua = funcao(texto, antigo, novo) { 0 }
 /// Exemplo: procure("onde", "n")
 procure = funcao(texto, trecho) { 0 }
 procure = funcao(lista, item) { 0 }
+
+/// O texto que escreva mostraria para o valor. Números seguem formato()
+/// (2,5 em pt) fora de coleções; um mapa com :_como_texto usa essa função.
+///
+/// Exemplo: como_texto(2.5)
+como_texto = funcao(valor) { 0 }
 
 /// Parte o texto. Separador "" gera um item por caractere.
 ///

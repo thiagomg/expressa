@@ -14,32 +14,36 @@
 ;;; Code:
 
 (defconst expressa-keywords
-  '("se_falhar" "se" "senao" "senão" "ou" "e" "nao" "não"
-    "retorne" "pare" "continue" "continua"
-    "inicio" "início" "fim" "funcao" "função"
-    "para" "em" "repita" "enquanto" "vezes"
-    "importe" "contem" "contém"))
+  '("se" "senao" "senão" "ou" "e" "nao" "não" "inicio" "início" "fim"
+    "funcao" "função" "para" "em" "repita" "enquanto" "vezes" "importe"
+    "contem" "contém" "se_falhar" "retorne" "pare" "continue"))
 
 (defconst expressa-builtins
-  '("escreva" "escreva_erro" "saia" "falhe" "garanta" "cls" "limpe_tela" "quadro" "bloco" "escreva_em" "colunas" "linhas" "nova_linha" "durma" "pinte" "fundo" "negrito" "leia" "leia_linhas"
-    "eh_terminal" "é_terminal" "argumentos"
-    "numero" "número" "formato" "formate" "avalie" "modulos" "módulos" "funcoes" "funções" "ajuda" "tipo" "tipos" "raiz" "aleatorio" "aleatório" "semente"
-    "nova" "linha" "circulo" "círculo" "ponto" "retangulo" "retângulo" "texto" "imagem" "apague" "pixel" "como_imagem" "salve" "evento"
-    "carregue" "rotacione" "redimensione" "largura" "altura"
-    "pi" "seno" "sen" "cosseno" "cos" "tangente" "tan" "arcoseno" "arcocosseno" "arcotangente" "arcotangente2"
-    "radianos" "graus" "exp" "log" "log10" "potencia" "piso" "teto" "arredonde"
-    "mapa" "conjunto" "matriz"
-    "transposta" "det" "identidade" "zeros" "uns" "cheia" "nlinhas" "ncolunas"
-    "tamanho" "primeiro" "ultimo" "último" "infinito"
-    "maiuscula" "minuscula" "sem_acento" "remova" "substitua" "procure" "separe" "junte" "limpe"
-    "leia_arquivo" "salve_arquivo" "adicione_arquivo"
-    "leia_csv" "salve_csv"
-    "execute" "linhas_de"
-    "existe" "eh_pasta" "é_pasta" "liste" "crie_pasta" "apague_arquivo" "apague_pasta" "mova" "copie"
-    "junte_caminho" "nome_do_arquivo" "pasta_de" "extensao" "extensão" "pasta_atual"
-    "ambiente" "ordene" "comeca_com" "começa_com" "termina_com"
-    "agora" "hoje" "data" "dias_entre" "eh_bissexto" "é_bissexto" "formate_data"
-    "documento" "grafico" "eixos" "plote" "adicione" "mostre"))
+  '("adicione" "adicione_arquivo" "agora" "ajuda" "aleatorio" "aleatório"
+    "altura" "ambiente" "apague" "apague_arquivo" "apague_linha"
+    "apague_pasta" "arcocosseno" "arcosseno" "arcotangente" "arcotangente2"
+    "argumentos" "arredonde" "avalie" "bloco" "carregue" "chaves_de" "cheia"
+    "circulo" "clone" "colunas" "comeca_com" "começa_com" "como_imagem"
+    "como_texto" "conjunto" "copie" "cor" "cos" "cosseno" "crie_pasta"
+    "círculo" "data" "det" "dias_entre" "documento" "durma" "eh_bissexto"
+    "eh_infinito" "eh_pasta" "eh_terminal" "eixos" "escreva" "escreva_em"
+    "escreva_erro" "evento" "execute" "existe" "exp" "extensao" "extensão"
+    "falhe" "formate" "formate_data" "formato" "funcoes" "fundo" "funções"
+    "garanta" "grafico" "graus" "gráfico" "hoje" "identidade" "imagem"
+    "junte" "junte_caminho" "laco_grafico" "largura" "laço_gráfico" "leia"
+    "leia_arquivo" "leia_bytes" "leia_csv" "leia_linhas" "limpe" "limpe_tela"
+    "linha" "linhas" "linhas_de" "liste" "log" "log10" "maiuscula"
+    "maiúscula" "mapa" "matriz" "minuscula" "minúscula" "modulos" "mostre"
+    "mova" "módulos" "negrito" "nome_do_arquivo" "nova" "nova_linha" "numero"
+    "número" "ordene" "pare_laco" "pare_laço" "pasta_atual" "pasta_de" "pi"
+    "pinte" "piso" "pixel" "plote" "ponto" "posicao_cursor" "posição_cursor"
+    "potencia" "potência" "primeiro" "procure" "quadro" "radianos" "raiz"
+    "redimensione" "remova" "retangulo" "retângulo" "rotacione" "saia"
+    "salve" "salve_arquivo" "salve_csv" "sem_acento" "semente" "sen" "seno"
+    "separe" "substitua" "tamanho" "tamanho_tela" "tangente" "termina_com"
+    "teto" "texto" "texto_utf8" "tipo" "tipos" "transposta" "ultimo" "uns"
+    "valores_de" "xy" "zeros" "é_bissexto" "é_infinito" "é_pasta"
+    "é_terminal" "último"))
 
 (defconst expressa-constants
   '("verdadeiro" "falso" "nada"))

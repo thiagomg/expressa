@@ -130,15 +130,27 @@ pub const NATIVAS: &[Nativa] = &[
         module: None,
     },
     Nativa {
-        names: &["infinito"],
+        names: &["eh_infinito", "é_infinito"],
         module: None,
     },
     Nativa {
-        names: &["maiuscula"],
+        names: &["como_texto"],
         module: None,
     },
     Nativa {
-        names: &["minuscula"],
+        names: &["chaves_de"],
+        module: None,
+    },
+    Nativa {
+        names: &["valores_de"],
+        module: None,
+    },
+    Nativa {
+        names: &["maiuscula", "maiúscula"],
+        module: None,
+    },
+    Nativa {
+        names: &["minuscula", "minúscula"],
         module: None,
     },
     Nativa {
@@ -195,7 +207,7 @@ pub const NATIVAS: &[Nativa] = &[
     },
     #[cfg(feature = "terminal")]
     Nativa {
-        names: &["cls", "limpe_tela"],
+        names: &["limpe_tela"],
         module: Some("tela"),
     },
     #[cfg(feature = "terminal")]
@@ -230,12 +242,7 @@ pub const NATIVAS: &[Nativa] = &[
     },
     #[cfg(feature = "terminal")]
     Nativa {
-        names: &["colunas"],
-        module: Some("tela"),
-    },
-    #[cfg(feature = "terminal")]
-    Nativa {
-        names: &["linhas"],
+        names: &["tamanho_tela"],
         module: Some("tela"),
     },
     #[cfg(feature = "terminal")]
@@ -274,11 +281,11 @@ pub const NATIVAS: &[Nativa] = &[
         module: Some("mat"),
     },
     Nativa {
-        names: &["tangente", "tan"],
+        names: &["tangente"],
         module: Some("mat"),
     },
     Nativa {
-        names: &["arcoseno"],
+        names: &["arcosseno"],
         module: Some("mat"),
     },
     Nativa {
@@ -314,7 +321,7 @@ pub const NATIVAS: &[Nativa] = &[
         module: Some("mat"),
     },
     Nativa {
-        names: &["potencia"],
+        names: &["potencia", "potência"],
         module: Some("mat"),
     },
     Nativa {
@@ -358,11 +365,11 @@ pub const NATIVAS: &[Nativa] = &[
         module: Some("matriz"),
     },
     Nativa {
-        names: &["nlinhas"],
+        names: &["linhas"],
         module: Some("matriz"),
     },
     Nativa {
-        names: &["ncolunas"],
+        names: &["colunas"],
         module: Some("matriz"),
     },
     Nativa {
@@ -466,7 +473,7 @@ pub const NATIVAS: &[Nativa] = &[
     },
     #[cfg(feature = "graphics")]
     Nativa {
-        names: &["grafico"],
+        names: &["grafico", "gráfico"],
         module: Some("cartesiano"),
     },
     #[cfg(feature = "graphics")]
@@ -589,7 +596,7 @@ pub const NATIVAS: &[Nativa] = &[
     },
     #[cfg(feature = "graphics")]
     Nativa {
-        names: &["laco_grafico", "laço_grafico"],
+        names: &["laco_grafico", "laço_gráfico"],
         module: Some("tela_grafica"),
     },
     #[cfg(feature = "graphics")]
@@ -638,6 +645,15 @@ pub const NATIVAS: &[Nativa] = &[
         module: Some("imagem"),
     },
 ];
+
+/// Native module name for a bare `importe` spec: accented spellings of a
+/// module name (`tela_gráfica`) name the same module.
+pub(crate) fn nome_modulo_nativo(spec: &str) -> &str {
+    match spec {
+        "tela_gráfica" => "tela_grafica",
+        other => other,
+    }
+}
 
 /// Recognize omitted native modules without silently treating them as files.
 pub(crate) fn unavailable_module(name: &str) -> Option<&'static str> {
@@ -707,7 +723,7 @@ impl Vm<'_, '_> {
             "falhe" => self.bi_falhe(args, span, env),
             "garanta" => self.bi_garanta(args, span, ""),
             #[cfg(feature = "terminal")]
-            "cls" | "limpe_tela" => self.bi_cls(args, span),
+            "limpe_tela" => self.bi_cls(args, span),
             #[cfg(feature = "terminal")]
             "posicao_cursor" | "posição_cursor" => self.bi_posicao_cursor(args, span),
             #[cfg(feature = "terminal")]
@@ -730,9 +746,7 @@ impl Vm<'_, '_> {
             #[cfg(feature = "terminal")]
             "negrito" => self.bi_negrito(args, span),
             #[cfg(feature = "terminal")]
-            "colunas" => self.bi_colunas(args, span),
-            #[cfg(feature = "terminal")]
-            "linhas" => self.bi_linhas(args, span),
+            "tamanho_tela" => self.bi_tamanho_tela(args, span),
             #[cfg(feature = "terminal")]
             "quadro" => self.bi_quadro(args, span),
             #[cfg(feature = "terminal")]
@@ -744,8 +758,8 @@ impl Vm<'_, '_> {
             "semente" => self.bi_semente(args, span),
             "seno" | "sen" => self.bi_seno(args, span),
             "cosseno" | "cos" => self.bi_cosseno(args, span),
-            "tangente" | "tan" => self.bi_tangente(args, span),
-            "arcoseno" => self.bi_arcoseno(args, span),
+            "tangente" => self.bi_tangente(args, span),
+            "arcosseno" => self.bi_arcoseno(args, span),
             "arcocosseno" => self.bi_arcocosseno(args, span),
             "arcotangente" => self.bi_arcotangente(args, span),
             "arcotangente2" => self.bi_arcotangente2(args, span),
@@ -765,8 +779,8 @@ impl Vm<'_, '_> {
             "zeros" => self.bi_zeros(args, span),
             "uns" => self.bi_uns(args, span),
             "cheia" => self.bi_cheia(args, span),
-            "nlinhas" => self.bi_nlinhas(args, span),
-            "ncolunas" => self.bi_ncolunas(args, span),
+            "linhas" => self.bi_nlinhas(args, span),
+            "colunas" => self.bi_ncolunas(args, span),
             "xy" => self.bi_xy(args, span),
             "numero" | "número" => self.bi_numero(args, span),
             "formato" => self.bi_formato(args, span),
@@ -780,7 +794,10 @@ impl Vm<'_, '_> {
             "tamanho" => self.bi_tamanho(args, span),
             "primeiro" => self.bi_primeiro(args, span),
             "ultimo" | "último" => self.bi_ultimo(args, span),
-            "infinito" => self.bi_infinito(args, span),
+            "eh_infinito" => self.bi_infinito(args, span),
+            "como_texto" => self.bi_como_texto(args, span, env),
+            "chaves_de" => self.bi_chaves_de(args, span),
+            "valores_de" => self.bi_valores_de(args, span),
             "maiuscula" => self.bi_maiuscula(args, span),
             "minuscula" => self.bi_minuscula(args, span),
             "sem_acento" => self.bi_sem_acento(args, span),
@@ -1089,7 +1106,7 @@ mod tests {
         );
         assert_eq!(
             lookup_builtin_doc("limpe_tela").map(|d| d.name.as_str()),
-            Some("cls")
+            Some("limpe_tela")
         );
         assert_eq!(
             lookup_builtin_doc("aleatório").map(|d| d.name.as_str()),
@@ -1296,8 +1313,8 @@ fim
         assert_eq!(run("escreva(cosseno(0))"), "1\n");
         assert_eq!(run("escreva(cos(0))"), "1\n");
         assert_eq!(run("escreva(tangente(0))"), "0\n");
-        assert_eq!(run("escreva(tan(0))"), "0\n");
-        assert_eq!(run("escreva(arcoseno(0))"), "0\n");
+        assert_eq!(run("escreva(tangente(0))"), "0\n");
+        assert_eq!(run("escreva(arcosseno(0))"), "0\n");
         assert_eq!(run("escreva(arcocosseno(1))"), "0\n");
         assert_eq!(run("escreva(arcotangente(0))"), "0\n");
         assert_eq!(run("escreva(arcotangente2(0, 1))"), "0\n");
@@ -1329,8 +1346,8 @@ fim
 escreva(m::cosseno(0))"#),
             "1\n"
         );
-        assert_eq!(run("escreva(arcoseno(2) se_falhar { 0 })"), "0\n");
-        assert!(run_err("arcoseno(2)").contains("entre -1 e 1"));
+        assert_eq!(run("escreva(arcosseno(2) se_falhar { 0 })"), "0\n");
+        assert!(run_err("arcosseno(2)").contains("entre -1 e 1"));
         assert!(run_err("log(0)").contains("positivo"));
         assert!(run_err("log10(-1)").contains("positivo"));
         assert!(run_err("potencia(-1, 0.5)").contains("indefinida"));
@@ -1453,17 +1470,17 @@ escreva(formate("{:>99999999999999999999999}", 1) se_falhar { "e" })
     #[cfg(feature = "terminal")]
     fn cls_writes_ansi_clear() {
         use crate::runtime::CLEAR_SCREEN;
-        assert_eq!(run("cls()"), CLEAR_SCREEN);
         assert_eq!(run("limpe_tela()"), CLEAR_SCREEN);
+        assert!(run_err("cls()").contains("não definida"));
         assert_eq!(
             run(r#"
 escreva("a")
-cls()
+limpe_tela()
 escreva("b")
 "#),
             format!("a\n{CLEAR_SCREEN}b\n")
         );
-        assert!(run_err("cls(1)").contains("não espera argumentos"));
+        assert!(run_err("limpe_tela(1)").contains("não espera argumentos"));
         assert!(run_err("limpe_tela(\"x\")").contains("não espera argumentos"));
     }
 
@@ -1542,8 +1559,9 @@ escreva("b")
     #[test]
     #[cfg(feature = "terminal")]
     fn tela_quadro_bloco_escreva_em() {
-        assert_eq!(run("escreva(colunas() >= 1)"), "verdadeiro\n");
-        assert_eq!(run("escreva(linhas() >= 1)"), "verdadeiro\n");
+        assert_eq!(run("escreva(tamanho_tela():colunas >= 1)"), "verdadeiro\n");
+        assert_eq!(run("escreva(tamanho_tela():linhas >= 1)"), "verdadeiro\n");
+        assert!(run_err("tamanho_tela(1)").contains("não espera argumentos"));
         let nl = super::tela::NOVA_LINHA;
         assert_eq!(run(r#"quadro("oi")"#), "\x1b[Hoi\x1b[K\x1b[J");
         assert_eq!(
@@ -1635,12 +1653,12 @@ escreva_erro("falhou")"#,
         assert_eq!(
             run(r#"
 Z = zeros(2, 3)
-escreva(nlinhas(Z))
-escreva(ncolunas(Z))
+escreva(linhas(Z))
+escreva(colunas(Z))
 escreva(Z[0, 0])
 escreva(Z[1, 2])
 Q = zeros(2)
-escreva(ncolunas(Q))
+escreva(colunas(Q))
 U = uns(1, 4)
 escreva(U[0, 3])
 C = cheia(2, 3, 7)
@@ -1656,31 +1674,111 @@ escreva(C[0, 1])
         assert!(run_err(r#"cheia(2, 3, "x")"#).contains("numero"));
     }
 
+    /// Every native whose name has a Portuguese word written with an accent
+    /// also accepts the fully accented spelling (`maiuscula` / `maiúscula`).
     #[test]
-    fn nlinhas_e_ncolunas() {
+    fn nomes_com_acento_tem_as_duas_grafias() {
+        let acentos = [
+            ("aleatorio", "aleatório"),
+            ("circulo", "círculo"),
+            ("comeca", "começa"),
+            ("eh", "é"),
+            ("extensao", "extensão"),
+            ("funcoes", "funções"),
+            ("grafico", "gráfico"),
+            ("laco", "laço"),
+            ("maiuscula", "maiúscula"),
+            ("minuscula", "minúscula"),
+            ("modulos", "módulos"),
+            ("numero", "número"),
+            ("posicao", "posição"),
+            ("potencia", "potência"),
+            ("retangulo", "retângulo"),
+            ("ultimo", "último"),
+        ];
+        for n in super::NATIVAS {
+            let canon = n.names[0];
+            let acentuado: Vec<&str> = canon
+                .split('_')
+                .map(|w| {
+                    acentos
+                        .iter()
+                        .find(|(sem, _)| *sem == w)
+                        .map(|(_, com)| *com)
+                        .unwrap_or(w)
+                })
+                .collect();
+            let acentuado = acentuado.join("_");
+            if acentuado != canon {
+                assert!(
+                    n.names.contains(&acentuado.as_str()),
+                    "{canon}: falta a grafia {acentuado}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn nomes_importados_nao_podem_ser_reatribuidos() {
+        let err = crate::runtime::run_to_string("importe \"mat\"\nraiz = 1", "t.lep").unwrap_err();
+        assert!(err.message.contains("importe \"mat\""), "{err}");
+        let err = crate::runtime::run_to_string("raiz = 1\nimporte \"mat\"", "t.lep").unwrap_err();
+        assert!(err.message.contains("já existe"), "{err}");
+        // Parameters may shadow an imported name, like a native name.
+        assert_eq!(
+            crate::runtime::run_to_string(
+                "importe \"mat\"\nf = funcao(raiz) { raiz + 1 }\nescreva(f(1))",
+                "t.lep"
+            )
+            .unwrap(),
+            "2\n"
+        );
+        // With an alias nothing is spread, so nothing clashes.
+        assert_eq!(
+            crate::runtime::run_to_string("m = importe \"mat\"\nraiz = 1\nescreva(raiz)", "t.lep")
+                .unwrap(),
+            "1\n"
+        );
+    }
+
+    #[test]
+    #[cfg(feature = "graphics")]
+    fn modulo_com_acento_e_o_mesmo_modulo() {
+        assert_eq!(
+            crate::runtime::run_to_string(
+                "g = importe \"tela_gráfica\"\nescreva(tipo(g::nova))",
+                "t.lep"
+            )
+            .unwrap(),
+            "funcao\n"
+        );
+    }
+
+    #[test]
+    fn linhas_e_colunas_da_matriz() {
         assert_eq!(
             run(r#"
 A = matriz([
     [1, 2, 3],
     [4, 5, 6],
 ])
-escreva(nlinhas(A))
-escreva(ncolunas(A))
-escreva(A.nlinhas())
-escreva(A.ncolunas())
+escreva(linhas(A))
+escreva(colunas(A))
+escreva(A.linhas())
+escreva(A.colunas())
 "#),
             "2\n3\n2\n3\n"
         );
-        assert_eq!(run("escreva(nlinhas(identidade(1)))"), "1\n");
-        assert_eq!(run("escreva(ncolunas(identidade(1)))"), "1\n");
+        assert_eq!(run("escreva(linhas(identidade(1)))"), "1\n");
+        assert_eq!(run("escreva(colunas(identidade(1)))"), "1\n");
         assert_eq!(
-            run("escreva(ncolunas(transposta(matriz([[1, 2, 3]]))))"),
+            run("escreva(colunas(transposta(matriz([[1, 2, 3]]))))"),
             "1\n"
         );
-        assert!(run_err("nlinhas([1, 2])").contains("esperado matriz"));
-        assert!(run_err("ncolunas(10)").contains("esperado matriz"));
-        assert!(run_err("nlinhas()").contains("esperado 1 argumento"));
-        assert!(run_err("ncolunas(identidade(2), 1)").contains("esperado 1 argumento"));
+        assert!(run_err("linhas([1, 2])").contains("esperado matriz"));
+        assert!(run_err("colunas(10)").contains("esperado matriz"));
+        assert!(run_err("linhas()").contains("esperado 1 argumento"));
+        assert!(run_err("colunas(identidade(2), 1)").contains("esperado 1 argumento"));
     }
 
     #[test]
@@ -1749,7 +1847,8 @@ escreva(A == cheia(2, 3, 7))
             "2\n"
         );
         assert!(
-            run_err("tamanho(10)").contains("espera texto, lista, mapa, conjunto, matriz ou intervalo")
+            run_err("tamanho(10)")
+                .contains("espera texto, lista, mapa, conjunto, matriz ou intervalo")
         );
     }
 
@@ -1774,23 +1873,23 @@ escreva(A == cheia(2, 3, 7))
     }
 
     #[test]
-    fn procurar_first_index_or_minus_one() {
+    fn procurar_first_index_or_nada() {
         assert_eq!(
             run(r#"escreva(procure([10, 20], 10), procure([], 10))"#),
-            "0 -1\n"
+            "0 nada\n"
         );
         assert_eq!(
             run(r#"escreva(procure("á😀z", "😀"), procure("", "z"))"#),
-            "1 -1\n"
+            "1 nada\n"
         );
         assert_eq!(run(r#"escreva(procure("onde", "n"))"#), "1\n");
         assert_eq!(run(r#"escreva("onde".procure("n"))"#), "1\n");
-        assert_eq!(run(r#"escreva(procure("onde", "a"))"#), "-1\n");
+        assert_eq!(run(r#"escreva(procure("onde", "a"))"#), "nada\n");
         assert_eq!(run(r#"escreva(procure("banana", "na"))"#), "2\n");
         assert_eq!(run(r#"escreva(procure("ação", "ç"))"#), "1\n");
         assert_eq!(run(r#"escreva(procure("abc", "abc"))"#), "0\n");
         assert_eq!(run(r#"escreva(procure([10, 20, 30], 20))"#), "1\n");
-        assert_eq!(run(r#"escreva(procure([10, 20], 99))"#), "-1\n");
+        assert_eq!(run(r#"escreva(procure([10, 20], 99))"#), "nada\n");
         assert!(run_err(r#"procure("onde", "")"#).contains("não vazio"));
         assert!(run_err("procure(10, 1)").contains("texto ou lista"));
         assert!(run_err(r#"procure("onde", 1)"#).contains("esperado texto"));
@@ -1841,8 +1940,8 @@ escreva(ajuda(dobro))
             r#"
 salve_arquivo("notas.txt", ["7.5", "8"])
 adicione_arquivo("notas.txt", ["9"])
-linhas = leia_arquivo("notas.txt")
-escreva(junte(linhas, "|"))
+notas = leia_arquivo("notas.txt")
+escreva(junte(notas, "|"))
 "#,
         );
         assert_eq!(out, "7.5|8|9\n");

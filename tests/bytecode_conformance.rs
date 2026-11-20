@@ -57,28 +57,31 @@ fn equivalent(source: &str) {
 fn indexed_parameters_share_storage_with_eval_and_closures() {
     for (source, expected) in [
         (
-            "f = funcao(a) { a += 1 avalie(\"a = a + 2\") a }\nescreva(f(3))",
+            "f = funcao(a) {\n    a += 1\n    avalie(\"a = a + 2\")\n    a\n}\nescreva(f(3))",
             "6\n",
         ),
-        ("f = funcao(a) { { a = 8 } a }\nescreva(f(1))", "8\n"),
         (
-            "f = funcao(a) { para a em 1..=3 { escreva(a) } a }\nescreva(f(9))",
+            "f = funcao(a) {\n    { a = 8 }\n    a\n}\nescreva(f(1))",
+            "8\n",
+        ),
+        (
+            "f = funcao(a) {\n    para a em 1..=3 { escreva(a) }\n    a\n}\nescreva(f(9))",
             "1\n2\n3\n9\n",
         ),
         (
-            "f = funcao(a) { g = funcao() { a } avalie(\"a = 7\") g }\ng = f(1)\nescreva(g())",
+            "f = funcao(a) {\n    g = funcao() { a }\n    avalie(\"a = 7\")\n    g\n}\ng = f(1)\nescreva(g())",
             "7\n",
         ),
         (
-            "f = funcao(a) { g = funcao() { a = 7 } g() se_falhar { 0 } a }\nescreva(f(1))",
+            "f = funcao(a) {\n    g = funcao() { a = 7 }\n    g() se_falhar { 0 }\n    a\n}\nescreva(f(1))",
             "1\n",
         ),
         (
-            "f = funcao(a) { g = funcao(a) { a += 1 a } a + g(2) }\nescreva(f(10))",
+            "f = funcao(a) {\n    g = funcao(a) {\n        a += 1\n        a\n    }\n    a + g(2)\n}\nescreva(f(10))",
             "13\n",
         ),
         (
-            "importe \"arquivo\"\nf = funcao(a) { avalie(\"late = 5\") a + late }\nescreva(f(2))",
+            "importe \"arquivo\"\nf = funcao(a) {\n    avalie(\"late = 5\")\n    a + late\n}\nescreva(f(2))",
             "7\n",
         ),
         (
@@ -86,7 +89,7 @@ fn indexed_parameters_share_storage_with_eval_and_closures() {
             "[3, 2, 1]\n",
         ),
         (
-            "f = funcao(a) { a[0] += 1 a }\nxs = [1]\nescreva(f(xs))\nescreva(xs)",
+            "f = funcao(a) {\n    a[0] += 1\n    a\n}\nxs = [1]\nescreva(f(xs))\nescreva(xs)",
             "[2]\n[2]\n",
         ),
     ] {
@@ -372,7 +375,12 @@ escreva(f())"#,
         ),
         (
             r#"n = 0
-para i em 1..=3 { falhe("x") se_falhar erro { n += 1 continue } }
+para i em 1..=3 {
+    falhe("x") se_falhar erro {
+        n += 1
+        continue
+    }
+}
 escreva(n)"#,
             "3\n",
         ),

@@ -1,8 +1,8 @@
+mod exemplos_interativos;
 #[cfg(feature = "graphics")]
 mod jogos_2d;
 #[cfg(feature = "graphics")]
 mod laco_grafico;
-mod exemplos_interativos;
 
 use super::*;
 use crate::runtime::debug::DebugAction;
@@ -94,7 +94,8 @@ fn diagnosticos_de_tipo_faixa_e_nao() {
 
         let sub = erro("total = 1\nnome = \"a\"\ntotal * 2 + total - nome\n");
         assert!(
-            sub.message.contains("operador '-' não se aplica a numero e texto"),
+            sub.message
+                .contains("operador '-' não se aplica a numero e texto"),
             "{backend:?} {}",
             sub.message
         );
@@ -455,7 +456,10 @@ escreva(x)
 fim
 "#,
     );
-    assert!(msg.contains("lista, texto, conjunto ou intervalo"), "{msg}");
+    assert!(
+        msg.contains("lista, texto, conjunto, mapa ou intervalo"),
+        "{msg}"
+    );
 }
 
 #[test]
@@ -756,8 +760,8 @@ A = matriz([
 escreva(A[0, 1])
 escreva(tamanho(A))
 escreva(tamanho(A[0]))
-escreva(nlinhas(A))
-escreva(ncolunas(A))
+escreva(linhas(A))
+escreva(colunas(A))
 escreva(det(A))
 B = transposta(A)
 escreva(B[0, 1])
@@ -920,7 +924,7 @@ fn faixa_gera_inteiros_sem_prealocar() {
         run(r#"
 escreva(tipo(0..3), 0..3, 0..=2, ..3, 1..3 == 1..=2, 3..3 == 5..5)
 escreva(tamanho(0..3), tamanho(3..5), tamanho(0..=2), tamanho(3..3), tamanho(5..=5))
-escreva(primeiro(3..5), ultimo(3..5), primeiro(0..), infinito(0..), infinito(..3))
+escreva(primeiro(3..5), ultimo(3..5), primeiro(0..), eh_infinito(0..), eh_infinito(..3))
 s = ""
 para i em 0..3 { s = s + i }
 escreva(s)
@@ -929,7 +933,7 @@ escreva(s)
     );
     assert_eq!(run("escreva(0..)"), "0..\n");
     assert_eq!(
-        run("r = 5..\nescreva(r, primeiro(r), infinito(r))"),
+        run("r = 5..\nescreva(r, primeiro(r), eh_infinito(r))"),
         "5.. 5 verdadeiro\n"
     );
     assert_eq!(
@@ -941,13 +945,17 @@ escreva(s)
     assert!(run_err("primeiro(3..3)").contains("vazio"));
     assert!(run_err("ultimo(3..3)").contains("vazio"));
     assert!(run_err("(0..5)[2]").contains("indexar intervalo"));
-    assert!(run_err("0..3 contem 1").contains("contem"));
+    assert_eq!(
+        run("escreva(0..3 contem 1, 0..3 contem 3, 0..3 contem 1.5)"),
+        "verdadeiro falso falso\n"
+    );
+    assert!(run_err("0..3 contem \"a\"").contains("contem"));
     assert!(run_err("(0..3) + (3..5)").contains("'+'"));
     assert!(run_err("0..3 < 1..2").contains("comparação"));
-    assert!(run_err("para i em 5 { 0 }").contains("0..n"));
+    assert!(run_err("para i em 5 { escreva(i) }").contains("0..n"));
     assert_eq!(run("r = 0..\nxs = [1]\nescreva(xs[r])"), "[1]\n");
     assert!(run_err("xs = [1]\nxs.remova(1..)").contains("teto"));
-    assert!(run_err("infinito(1)").contains("intervalo"));
+    assert!(run_err("eh_infinito(1)").contains("intervalo"));
     assert_eq!(
         run_err("0..=9223372036854775807"),
         "o teto de ..= passa do maior inteiro"
@@ -1004,15 +1012,16 @@ escreva(tamanho(figura(0)) > 0, tamanho(figura(6)) > 0)
 #[test]
 fn como_texto_uses_map_hook() {
     let src = r#"
-como_texto = funcao(fr) { formate("{}/{}", fr:numerador, fr:denominador) }
+fracao_texto = funcao(fr) { formate("{}/{}", fr:numerador, fr:denominador) }
 fr = mapa([:numerador -> 1, :denominador -> 4])
-fr:_como_texto = como_texto
+fr:_como_texto = fracao_texto
 escreva(formate("{}", fr))
 escreva(fr)
 escreva("x" + fr)
-escreva(fr.como_texto())
+escreva(fr.fracao_texto())
+escreva(como_texto(fr) == "1/4")
 "#;
-    assert_eq!(run(src), "1/4\n1/4\nx1/4\n1/4\n");
+    assert_eq!(run(src), "1/4\n1/4\nx1/4\n1/4\nverdadeiro\n");
 }
 
 #[test]
@@ -1360,7 +1369,7 @@ A = matriz([[1, 2], [3, 4]])
 escreva(A.transposta()[0, 1])
 m = importe "matriz"
 escreva(A.m::transposta()[0, 1])
-escreva(m::nlinhas(A))
+escreva(m::linhas(A))
 "#),
         "3\n3\n2\n"
     );
@@ -1436,7 +1445,8 @@ fn recursao_profunda_mas_finita_funciona() {
 #[test]
 fn se_falhar_pega_recursao_sem_fim() {
     let out =
-        run_fundo("f = funcao(n) {\n    f(n + 1)\n}\nescreva(f(1) se_falhar { \"parou\" })\n").unwrap();
+        run_fundo("f = funcao(n) {\n    f(n + 1)\n}\nescreva(f(1) se_falhar { \"parou\" })\n")
+            .unwrap();
     assert_eq!(out, "parou\n");
 }
 
@@ -1831,13 +1841,8 @@ escreva(garanta(falso) se_falhar { "ok" })
         );
         assert!(!err.to_string().contains("0: garanta"), "{err}");
 
-        let err = run_with_options(
-            "garanta(\n    1 >\n    2\n)\n",
-            "app.lep",
-            "",
-            opts.clone(),
-        )
-        .unwrap_err();
+        let err = run_with_options("garanta(\n    1 >\n    2\n)\n", "app.lep", "", opts.clone())
+            .unwrap_err();
         assert_eq!(err.message, "condição incorreta 1 > 2", "{backend:?} {err}");
         assert!(!err.shows_stack(), "{err}");
 
@@ -1847,13 +1852,8 @@ escreva(garanta(falso) se_falhar { "ok" })
         let err = run_with_options("falhe()\n", "app.lep", "", opts.clone()).unwrap_err();
         assert!(err.message.contains("1 argumento"), "{backend:?} {err}");
 
-        let err = run_with_options(
-            "g = garanta\ng(1 > 2)\n",
-            "app.lep",
-            "",
-            opts.clone(),
-        )
-        .unwrap_err();
+        let err =
+            run_with_options("g = garanta\ng(1 > 2)\n", "app.lep", "", opts.clone()).unwrap_err();
         assert_eq!(err.message, "condição incorreta", "{backend:?} {err}");
 
         let out = run_with_options(

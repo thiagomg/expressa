@@ -18,8 +18,13 @@ fn check(source: &str, expected: &str) {
         assert_eq!(out.exit_code, 0);
     }
     let bytes = compile_exb(source, "clone.lep").unwrap();
-    let out =
-        run_exb_with_options(&bytes, "clone.lepc", "", options(ExecutionBackend::Bytecode)).unwrap();
+    let out = run_exb_with_options(
+        &bytes,
+        "clone.lepc",
+        "",
+        options(ExecutionBackend::Bytecode),
+    )
+    .unwrap();
     assert_eq!(out.stdout, expected, "EXB");
 }
 fn error(source: &str, part: &str) {
@@ -32,8 +37,13 @@ fn error(source: &str, part: &str) {
         assert_eq!(err.file, "clone.lep");
     }
     let bytes = compile_exb(source, "clone.lep").unwrap();
-    let err = run_exb_with_options(&bytes, "clone.lepc", "", options(ExecutionBackend::Bytecode))
-        .unwrap_err();
+    let err = run_exb_with_options(
+        &bytes,
+        "clone.lepc",
+        "",
+        options(ExecutionBackend::Bytecode),
+    )
+    .unwrap_err();
     assert!(err.message.contains(part), "EXB: {err}");
 }
 #[test]
@@ -104,11 +114,17 @@ escreva(tipo(clone(a)))
 fn functions_without_captures_are_detached_and_keep_code_behavior() {
     check(
         r#"
-f = funcao(x) { y = x + 1 y * 2 }
+f = funcao(x) {
+    y = x + 1
+    y * 2
+}
 g = clone(f)
 f = 0
 escreva(g(3))
-h = clone(funcao(x) { escreva(tipo(x)) x })
+h = clone(funcao(x) {
+    escreva(tipo(x))
+    x
+})
 h(2)
 factory = clone(funcao(x) { funcao(y) { x + y } })
 escreva(factory(4)(5))
@@ -126,12 +142,26 @@ fn capture_analysis_handles_control_flow_and_loop_locals() {
         r#"
 f = funcao(n) {
     soma = 0
-    para i em 0..=n { se i == 3 { continue } soma += i se i == 4 { pare } }
-    se n > 0 { local = 7 soma += local } senao { local = 2 soma += local }
+    para i em 0..=n {
+        se i == 3 { continue }
+        soma += i
+        se i == 4 { pare }
+    }
+    se n > 0 {
+        local = 7
+        soma += local
+    } senao {
+        local = 2
+        soma += local
+    }
     soma
 }
 escreva(clone(f)(8))
-g = funcao(n) { x = 0 enquanto x < n { x += 1 } (1 / 0) se_falhar { x } }
+g = funcao(n) {
+    x = 0
+    enquanto x < n { x += 1 }
+    (1 / 0) se_falhar { x }
+}
 escreva(clone(g)(3))
 "#,
         "14\n3\n",

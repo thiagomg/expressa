@@ -8,7 +8,7 @@
 
 Neste tutorial, você vai criar programas que mostram mensagens, fazem perguntas, calculam e tomam decisões. Os arquivos da linguagem têm a extensão `.lep`. As funções e as palavras-chave da Expressa são em português.
 
-Cada capítulo tem um programa de exemplo em `tutorial/exemplos/`, no repositório. Os caminhos indicados como `exemplos/01_ola.lep`, por exemplo, partem da pasta `tutorial/`. Execute o programa, mude uma linha e execute de novo para observar o resultado. No fim de cada capítulo, há um desafio para você praticar.
+Cada capítulo tem um programa de exemplo na pasta `tutorial/exemplos/`. Caminhos como `exemplos/01_ola.lep` partem da pasta `tutorial/`; caminhos como `../exemplos/jogos/forca.lep` apontam para a pasta de exemplos, ao lado de `tutorial/`. Execute o programa, mude uma linha e execute de novo para observar o resultado. Se a pasta for somente leitura, como na pasta de instalação, salve uma cópia em outra pasta antes de mudar. No fim de cada capítulo, há um desafio para você praticar.
 
 ## Como executar
 
@@ -32,13 +32,11 @@ Quando aparecer o símbolo de entrada, digite `2 + 3` e pressione Enter. Depois,
 expressa ola.lep
 ```
 
-Neste repositório, os arquivos das aulas estão em `tutorial/exemplos/`:
+Na pasta que contém `tutorial/`, execute um capítulo assim:
 
 ```text
 expressa tutorial/exemplos/01_ola.lep
 ```
-
-Índices começam em **0**: `"Ana"[0] == "A"`.
 
 ---
 
@@ -65,7 +63,7 @@ No expressa-aula, **F1** ou o botão **Ajuda** abre o catálogo de funções. Pa
 
 `funcoes(nada, :dados)` retorna uma lista de mapas com nome, argumentos e documentação. `modulos(:dados)` retorna os módulos com suas listas de funções. Essas consultas não imprimem e podem ser usadas no próprio programa.
 
-As setas ↑ e ↓ permitem consultar e reutilizar comandos anteriores. `cls` limpa a tela do REPL. `sair` (sem parênteses) encerra; Ctrl+D também.
+As setas ↑ e ↓ permitem consultar e reutilizar comandos anteriores. `limpe_tela` (ou `cls`) limpa a tela do REPL. `sair` (sem parênteses) encerra; Ctrl+D também.
 
 ---
 
@@ -187,7 +185,7 @@ escreva("primeira: " + notas[0])
 escreva("quantidade: " + tamanho(notas))
 ```
 
-`notas[0]` retorna o primeiro item. `tamanho` retorna a quantidade.
+`notas[0]` retorna o primeiro item: os índices começam em **0**. Com 4 notas, o último índice é 3. `tamanho` retorna a quantidade.
 
 Para calcular a média, percorra a lista e some todas as notas:
 
@@ -224,7 +222,7 @@ tabuada(7)
 tabuada(3)
 ```
 
-`n` é o número que você passa entre parênteses. `para i em 1..=10` conta 1, 2, … 10.
+`n` é o número que você passa entre parênteses. `para i em 1..=10` conta 1, 2, … 10. Com `..=`, o último número entra; com `..`, ele fica de fora: `1..10` conta de 1 a 9.
 
 O mesmo programa está em `../exemplos/linguagem/tabuada.lep` (lá usa `funcao` e `inicio`/`fim` — mesma coisa).
 
@@ -273,11 +271,11 @@ Mais desenhos (triângulo centrado, histograma): `../exemplos/texto/ascii.lep`.
 
 Escolha um dos programas abaixo para praticar o que aprendeu. Abra o arquivo, execute e experimente mudar um valor ou uma mensagem.
 
-**Caixa da padaria** — `../exemplos/programas/caixa.lep`
+**Palíndromo** — `../exemplos/texto/palindromo.lep`
 
-O programa calcula o preço de uma lista de compras, aplica um desconto quando o valor passa de R$ 20 e mostra o recibo na tela. As funções `preco_de`, `subtotal` e `recibo` são chamadas da mesma forma que `tabuada`, com o nome seguido de parênteses.
+O programa verifica se uma frase pode ser lida da mesma forma nos dois sentidos, como "arara". As funções `inverta`, `so_letras` e `eh_palindromo` são chamadas da mesma forma que `tabuada`, com o nome seguido de parênteses, e usam `para`, `se` e textos.
 
-Mude o `pedido` no fim do arquivo e execute.
+Troque as frases das chamadas de `mostra` no fim do arquivo e execute.
 
 **Adivinhe o número** — `../exemplos/jogos/adivinhe_o_numero.lep`
 
@@ -293,6 +291,8 @@ Uma letra por vez, teclado colorido, boneco em ASCII. No fim do arquivo tem a li
 expressa exemplos/jogos/forca.lep ESCOLA
 ```
 
+Esse comando parte da pasta que contém `exemplos/`.
+
 No expressa-aula, use o campo **Argumentos** para passar a palavra ao programa.
 
 ---
@@ -307,6 +307,8 @@ Erros comuns no começo:
 - `escreva(Olá)` sem aspas — a linguagem acha que `Olá` é um nome
 - `se nota > 7` sem `{` ou `inicio` no bloco
 - `notas[-1]` — não existe; o primeiro é `notas[0]`
+- uma conta dividida em duas linhas, como `total = 10 +` e `5` na linha de baixo — a linha termina o comando; para quebrar uma conta, coloque-a entre parênteses
+- dois comandos na mesma linha — escreva um comando por linha
 
 ---
 
@@ -314,13 +316,13 @@ Erros comuns no começo:
 
 | O que | Onde |
 |--------|------|
-| texto (fatia, maiúscula) | `../exemplos/texto/poema.lep` |
-| boletim | `../exemplos/programas/turma.lep` |
+| texto (separe, maiúscula) | `../exemplos/texto/saudacao.lep` |
+| média, mediana e moda | `../exemplos/escola/estatistica.lep` |
 | gravar arquivo | `../exemplos/programas/diario.lep` |
 | conta de caderno (Bhaskara, juros) | `../exemplos/escola/` |
-| Termo, Conway, desenhos de bicho | `../exemplos/jogos/` |
+| Termo, Forca, Conway, tartaruga | `../exemplos/jogos/` |
 | lista de funções | REPL: `modulos()` / `funcoes()` / `ajuda("escreva")` · expressa-aula: **F1** · [manual](../docs/manual.md) |
 
-A [folha de consulta](../folha-de-consulta.md) reúne a sintaxe e os nomes mais usados. Consulte quando precisar lembrar como usar `tamanho`, `contem` ou `para`, por exemplo.
+A [folha de consulta](../docs/folha-de-consulta.md) reúne a sintaxe e os nomes mais usados. Consulte quando precisar lembrar como usar `tamanho`, `contem` ou `para`, por exemplo.
 
 Depois de concluir os capítulos 1 a 8 e experimentar um dos projetos, siga para o [tutorial avançado](avancado.md).

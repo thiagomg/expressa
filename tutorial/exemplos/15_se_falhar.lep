@@ -1,6 +1,6 @@
-// se_falhar: se der erro, usa o valor da direita em vez de encerrar.
+// se_falhar: se der erro, usa o resultado do bloco em vez de encerrar.
 
 escreva(10 / 0 se_falhar { "não dá para dividir" })
-escreva([1, 2][9] se_falhar { "índice longe" })
+escreva([1, 2][9] se_falhar { "índice fora dos limites" })
 escreva(numero("xyz") se_falhar { 0 })
-escreva(falhe("negativo") se_falhar { "pego" })
+escreva(falhe("negativo") se_falhar { "erro tratado" })

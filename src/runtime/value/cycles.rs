@@ -274,7 +274,7 @@ mod tests {
         let mut input = std::io::Cursor::new("");
         let (mut out, mut err) = (Vec::new(), Vec::new());
         run_with(
-            "repita 5000 vezes { x = [0] x[0] = x }",
+            "repita 5000 vezes {\n    x = [0]\n    x[0] = x\n}",
             "cycles.lep",
             Box::new(Count(max.clone())),
             &mut input,

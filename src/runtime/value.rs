@@ -379,7 +379,7 @@ const PILHA_SEGMENTO: usize = 1024 * 1024;
 
 /// Writes `v` into `out`. `loc: None` is the plain form of `Display`
 /// (numbers as in source); `Some` follows the locale (`escreva`). Text is
-/// quoted when `aninhado` (inside a list, map or pair). `abertos` holds the
+/// quoted and numbers in code form when `aninhado` (inside a list, map or pair). `abertos` holds the
 /// lists and maps being written right now: meeting one again is a cycle
 /// (`xs[1] = xs`), written `[…]` / `mapa{…}` instead of forever.
 fn escrever(
@@ -400,9 +400,11 @@ fn escrever(
                 let _ = write!(out, "{start}..");
             }
         },
+        // Inside a list, map or pair a number is written as in code (`1.5`):
+        // `[1,5, 2]` would read as three numbers.
         Value::Numero(n) => match loc {
-            Some(loc) => out.push_str(&loc.format(*n)),
-            None => out.push_str(&format_numero(*n)),
+            Some(loc) if !aninhado => out.push_str(&loc.format(*n)),
+            _ => out.push_str(&format_numero(*n)),
         },
         Value::Texto(s) if aninhado => {
             let _ = write!(out, "\"{}\"", escape_texto(s));
@@ -538,9 +540,26 @@ impl NumeroLocale {
         }
         let s: String = s.chars().filter(|c| *c != '_' && *c != ' ').collect();
         match self {
-            Self::PtBr => parse_pt_br(&s),
-            Self::EnUs => parse_en_us(&s),
+            Self::PtBr => parse_local(&s, '.', ','),
+            Self::EnUs => parse_local(&s, ',', '.'),
         }
+    }
+
+    /// Why `raw` failed, when it is a number in the other format.
+    pub fn dica(self, raw: &str) -> Option<&'static str> {
+        let outro = match self {
+            Self::PtBr => Self::EnUs,
+            Self::EnUs => Self::PtBr,
+        };
+        outro.parse_texto(raw)?;
+        Some(match self {
+            Self::PtBr => {
+                "no formato pt, a vírgula separa os decimais (2,5) e o ponto separa os milhares (1.000); para ler 2.5, use formato(\"en\")"
+            }
+            Self::EnUs => {
+                "no formato en, o ponto separa os decimais (2.5) e a vírgula separa os milhares (1,000); para ler 2,5, use formato(\"pt\")"
+            }
+        })
     }
 
     pub fn format(self, n: Numero) -> String {
@@ -597,9 +616,9 @@ fn format_matriz(rows: &[Vec<f64>], loc: NumeroLocale) -> String {
         .map(|r| {
             r.iter()
                 .map(|n| {
-                    Numero::try_from(*n)
+                    Numero::from_f64_15(*n)
                         .map(|n| loc.format(n))
-                        .unwrap_or_else(|_| "<número fora do intervalo>".into())
+                        .unwrap_or_else(|| "<número fora do intervalo>".into())
                 })
                 .collect()
         })
@@ -636,52 +655,39 @@ fn group_thousands(digits: &str, sep: char) -> String {
     out.chars().rev().collect()
 }
 
-fn parse_pt_br(s: &str) -> Option<Numero> {
-    let comma = s.chars().filter(|c| *c == ',').count();
-    if comma > 1 {
+/// Strict reading of a number written with `mil` between groups of three
+/// digits and `dec` before the fraction: `1.234,5` (pt) or `1,234.5` (en).
+/// Anything else — the other locale's decimal, a misplaced separator — is `None`.
+fn parse_local(s: &str, mil: char, dec: char) -> Option<Numero> {
+    let (sinal, resto) = match s.strip_prefix('-') {
+        Some(r) => ("-", r),
+        None => ("", s.strip_prefix('+').unwrap_or(s)),
+    };
+    let (inteiro, fracao) = match resto.split_once(dec) {
+        Some((i, f)) => (i, Some(f)),
+        None => (resto, None),
+    };
+    if let Some(f) = fracao
+        && (f.is_empty() || !f.chars().all(|c| c.is_ascii_digit()))
+    {
         return None;
     }
-    if comma == 1 {
-        let (left, right) = s.split_once(',')?;
-        if right.is_empty() || !right.chars().all(|c| c.is_ascii_digit()) {
-            return None;
-        }
-        let left = strip_thousands(left, '.')?;
-        format!("{left}.{right}").parse().ok()
-    } else if looks_like_thousands(s, '.') {
-        strip_thousands(s, '.')?.parse().ok()
-    } else {
-        // single `.` as decimal (paste from code) or plain integer
-        let dots = s.chars().filter(|c| *c == '.').count();
-        if dots > 1 {
-            return None;
-        }
-        s.parse().ok()
-    }
-}
-
-fn parse_en_us(s: &str) -> Option<Numero> {
-    let dots = s.chars().filter(|c| *c == '.').count();
-    if dots > 1 {
+    if inteiro.is_empty() {
         return None;
     }
-    if s.contains(',') {
-        let last_comma = s.rfind(',')?;
-        if !s[last_comma + 1..].contains('.') && looks_like_thousands(s, ',') {
-            return strip_thousands(s, ',')?.parse().ok();
+    let inteiro = if inteiro.contains(mil) {
+        if !looks_like_thousands(inteiro, mil) {
+            return None;
         }
-        let (left, right) = if let Some((l, r)) = s.split_once('.') {
-            (l, Some(r))
-        } else {
-            (s, None)
-        };
-        let left = strip_thousands(left, ',')?;
-        match right {
-            Some(r) => format!("{left}.{r}").parse().ok(),
-            None => left.parse().ok(),
-        }
+        inteiro.replace(mil, "")
+    } else if inteiro.chars().all(|c| c.is_ascii_digit()) {
+        inteiro.to_string()
     } else {
-        s.parse().ok()
+        return None;
+    };
+    match fracao {
+        Some(f) => format!("{sinal}{inteiro}.{f}").parse().ok(),
+        None => format!("{sinal}{inteiro}").parse().ok(),
     }
 }
 
@@ -702,19 +708,12 @@ fn looks_like_thousands(s: &str, sep: char) -> bool {
     parts.all(|p| p.len() == 3 && p.chars().all(|c| c.is_ascii_digit()))
 }
 
-fn strip_thousands(s: &str, sep: char) -> Option<String> {
-    if s.contains(sep) && !looks_like_thousands(s, sep) {
-        return None;
-    }
-    let sign = if s.starts_with('-') { "-" } else { "" };
-    let rest = s
-        .strip_prefix('-')
-        .or_else(|| s.strip_prefix('+'))
-        .unwrap_or(s);
-    Some(format!(
-        "{sign}{}",
-        rest.chars().filter(|c| *c != sep).collect::<String>()
-    ))
+/// A map's entries in the order it prints them (keys by type, then
+/// ascending): also the order of `para p em m`, `chaves_de` and `valores_de`.
+pub fn pares_em_ordem(m: &HashMap<MapKey, Value>) -> Vec<(MapKey, Value)> {
+    let mut pares: Vec<(MapKey, Value)> = m.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
+    pares.sort_unstable_by(|a, b| a.0.cmp(&b.0));
+    pares
 }
 
 fn escape_texto(s: &str) -> String {
@@ -839,7 +838,17 @@ mod tests {
         assert_eq!(pt.parse_texto("3,14"), n("3.14"));
         assert_eq!(pt.parse_texto("1.000"), n("1000"));
         assert_eq!(pt.parse_texto("1.000,5"), n("1000.5"));
-        assert_eq!(pt.parse_texto("3.14"), n("3.14"));
+        assert_eq!(pt.parse_texto("3.14"), None);
+        assert_eq!(pt.parse_texto("1.50"), None);
+        assert_eq!(pt.parse_texto("12.345.678"), n("12345678"));
+        assert_eq!(pt.parse_texto("-1.000,25"), n("-1000.25"));
+        assert_eq!(pt.parse_texto("1,"), None);
+        assert_eq!(pt.parse_texto(",5"), None);
+        assert_eq!(pt.parse_texto("1,2,3"), None);
+        assert_eq!(en.parse_texto("1,5"), None);
+        assert_eq!(en.parse_texto("1.000"), n("1"));
+        assert!(pt.dica("3.14").is_some());
+        assert!(pt.dica("abc").is_none());
         assert_eq!(en.parse_texto("1,000.5"), n("1000.5"));
         assert_eq!(en.parse_texto("1,000"), n("1000"));
         assert_eq!(en.parse_texto("3.14"), n("3.14"));

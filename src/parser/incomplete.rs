@@ -20,7 +20,9 @@ mod tests {
 
     #[test]
     fn incomplete_snippets() {
-        assert!(needs_more_input("2 +"));
+        assert!(needs_more_input("(2 +"));
+        // Outside brackets nothing can continue a trailing operator.
+        assert!(!needs_more_input("2 +"));
         assert!(needs_more_input("inicio"));
         assert!(needs_more_input("se verdadeiro"));
         assert!(needs_more_input("soma = funcao(a, b)"));

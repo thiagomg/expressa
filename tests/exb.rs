@@ -39,7 +39,7 @@ fn cli() -> std::process::Command {
 fn compiled_execution_matches_source_values_input_exit_codes_and_reuses_fresh_state() {
     for source in [
         "escreva(leia(\"nome? \"))\nescreva_erro(\"erro\")\nsaia(7)",
-        "f = funcao(a) { avalie(\"a = a + 1\") a }\nescreva(f(2))",
+        "f = funcao(a) {\n    avalie(\"a = a + 1\")\n    a\n}\nescreva(f(2))",
         "make = funcao(a) { funcao() { a } }\nescreva(make(9)())",
         "escreva(0.1234567890123456789012345678 + 0.0000000000000000000000000001)",
         "xs = [0]\nxs[0] += 1\nescreva(xs)",

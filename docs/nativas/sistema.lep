@@ -12,5 +12,5 @@ durma = funcao(segundos) { 0 }
 ///
 /// Variável que não existe é erro; use se_falhar para ter um padrão.
 ///
-/// Exemplo: editor = ambiente("EDITOR") se_falhar "vim"
+/// Exemplo: editor = ambiente("EDITOR") se_falhar { "vim" }
 ambiente = funcao(nome) { 0 }

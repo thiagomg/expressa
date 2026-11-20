@@ -840,7 +840,10 @@ impl<'a, 'c> Vm<'a, 'c> {
 
     fn eval_import(&mut self, import: &Import, env: &Rc<RefCell<Env>>) -> Result<(), EvalError> {
         if is_bare_module_spec(&import.path)
-            && let Some(native) = self.native_modules.get(&import.path).cloned()
+            && let Some(native) = self
+                .native_modules
+                .get(nativas::nome_modulo_nativo(&import.path))
+                .cloned()
         {
             if self.native_conflicts_with_file(&import.path, import.span)? {
                 return Err(self.err(
@@ -854,7 +857,8 @@ impl<'a, 'c> Vm<'a, 'c> {
             return self.bind_imported(import, env, native);
         }
         if is_bare_module_spec(&import.path)
-            && let Some(feature) = nativas::unavailable_module(&import.path)
+            && let Some(feature) =
+                nativas::unavailable_module(nativas::nome_modulo_nativo(&import.path))
         {
             return Err(self.err(format!("módulo nativo '{}' indisponível neste build (requer feature '{feature}'); para um arquivo local, use './{}'", import.path, import.path), import.span));
         }
@@ -1017,6 +1021,7 @@ impl<'a, 'c> Vm<'a, 'c> {
             }
             for (name, value) in bindings {
                 self.assign_name(env, &name, value, import.span)?;
+                env.borrow_mut().marcar_importado(&name, &import.path);
             }
         }
         Ok(())
@@ -1267,6 +1272,11 @@ impl<'a, 'c> Vm<'a, 'c> {
             Value::Lista(xs) => Ok(xs.borrow().clone()),
             Value::Texto(s) => Ok(s.chars().map(|c| Value::Texto(c.to_string())).collect()),
             Value::Conjunto(xs) => Ok(xs.borrow().iter().map(|k| k.to_value()).collect()),
+            // Pairs `chave -> valor`, in the order the map prints.
+            Value::Mapa(m) => Ok(super::value::pares_em_ordem(&m.borrow())
+                .into_iter()
+                .map(|(k, v)| Value::Par(k, Box::new(v)))
+                .collect()),
             other => {
                 let extra = if matches!(other, Value::Numero(_)) {
                     " — use 'para i em 0..n' ou 'para i em 1..=n'"
@@ -1275,7 +1285,7 @@ impl<'a, 'c> Vm<'a, 'c> {
                 };
                 Err(self.err(
                     format!(
-                        "'para … em' espera lista, texto, conjunto ou intervalo, encontrado {}{extra}",
+                        "'para … em' espera lista, texto, conjunto, mapa ou intervalo, encontrado {}{extra}",
                         other.type_name()
                     ),
                     span,
@@ -1640,6 +1650,12 @@ impl<'a, 'c> Vm<'a, 'c> {
                     }
                     Ok(Value::conjunto_de_hash(out))
                 }
+                // A new map with that key set: `m + (:k -> v)`.
+                (Value::Mapa(a), Value::Par(k, v)) => {
+                    let mut out = a.borrow().clone();
+                    out.insert(k.clone(), (**v).clone());
+                    Ok(Value::mapa_com_politica(out, false))
+                }
                 (Value::Conjunto(a), other) => {
                     let k = MapKey::from_value(other).ok_or_else(|| {
                         self.err(
@@ -1766,6 +1782,23 @@ impl<'a, 'c> Vm<'a, 'c> {
                     )
                 })?;
                 Ok(Value::Bool(xs.borrow().contains(&key)))
+            }
+            // Whether the interval generates `r`: a number that is not an
+            // integer never is.
+            Value::Intervalo { start, end } => {
+                let Value::Numero(n) = r else {
+                    return Err(self.err(
+                        format!(
+                            "'contem' em intervalo espera número, encontrado {}",
+                            r.type_name()
+                        ),
+                        span,
+                    ));
+                };
+                let Some(i) = n.to_i64() else {
+                    return Ok(Value::Bool(false));
+                };
+                Ok(Value::Bool(i >= *start && end.is_none_or(|e| i < e)))
             }
             other => Err(self.err(
                 format!("'contem' não se aplica a {}", other.type_name()),
@@ -2091,6 +2124,13 @@ impl<'a, 'c> Vm<'a, 'c> {
                 format!("não é possível alterar `{name}` (nome nativo)"),
                 span,
             ),
+            AssignError::Imported { name, module } => self.err(
+                format!(
+                    "não é possível alterar `{name}`: o nome veio de importe \"{module}\". \
+                     Use outro nome ou importe com apelido: m = importe \"{module}\""
+                ),
+                span,
+            ),
         }
     }
 
@@ -2253,8 +2293,16 @@ impl<'a, 'c> Vm<'a, 'c> {
         }
     }
 
+    /// A result of `mat`, `matriz` or the graphics modules (computed in
+    /// binary floating point). In decimal mode it is rounded to 15
+    /// significant digits; `formato("float")` keeps the exact value.
     pub(crate) fn number_from_f64(&self, n: f64, span: Span) -> Result<Value, EvalError> {
-        Numero::try_from(n)
+        let numero = if self.numero_aritmetica == NumeroAritmetica::Decimal {
+            Numero::from_f64_15(n).ok_or("número fora do intervalo")
+        } else {
+            Numero::try_from(n)
+        };
+        numero
             .map(Value::Numero)
             .map_err(|message| self.err(message, span))
     }

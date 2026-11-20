@@ -150,10 +150,10 @@ mostre = funcao(g) { 0 }
 evento = funcao(g) { mapa() }
 
 /// Cria um laço associado à tela, sem abrir janela nem iniciar a execução.
-/// Também laço_grafico(). O recurso não pode ser clonado; pode ser executado
+/// Também laço_gráfico(). O recurso não pode ser clonado; pode ser executado
 /// novamente depois de terminar. Cada tela admite somente um laço ativo.
 ///
-/// Exemplo: l = g.tela_grafica::laço_grafico()
+/// Exemplo: l = g.tela_grafica::laço_gráfico()
 laco_grafico = funcao(g) { mapa() }
 
 /// Inicia o laço e espera seu encerramento. config é um mapa com as três

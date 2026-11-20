@@ -43,7 +43,7 @@ fn evaluate(
 
 const SETUP: &str = r#"
 g = tela_grafica::nova(8, 8)
-l = g.tela_grafica::laço_grafico()
+l = g.tela_grafica::laço_gráfico()
 "#;
 
 #[test]
@@ -222,7 +222,7 @@ fn refuses_nested_execution_on_the_same_window() {
     for backend in backends() {
         let source = format!(
             r#"{SETUP}
-outro = g.tela_grafica::laço_grafico()
+outro = g.tela_grafica::laço_gráfico()
 config = mapa([:fps -> 30, :eventos -> função(ev, dt) {{ 0 }}, :desenho -> função(tela) {{ 0 }}])
 eventos = função(ev, dt) {{ outro.tela_grafica::execute(config) }}
 l.tela_grafica::execute(mapa([:fps -> 30, :eventos -> eventos, :desenho -> config:desenho]))

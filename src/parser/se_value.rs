@@ -1,4 +1,9 @@
-//! `se` used as a value needs `senao` (statement-`se` may omit it).
+//! Checks on how each expression's value is used:
+//! - `se` used directly as a value (`x = se …`, an argument, `retorne se …`)
+//!   needs `senao`. A `se` on the last line of a block is a command: without
+//!   `senao` and without a branch taken, the block's value is `nada`.
+//! - A value computed and thrown away with no effect (`5`, `-3`, `x + 1` on a
+//!   line of its own, not the last of a block) is an error.
 
 use crate::lexer::Span;
 use crate::parser::block_types::Block;
@@ -8,20 +13,74 @@ use crate::parser::expression_types::Expr;
 use crate::parser::statement_types::{AssignTarget, Stmt};
 use crate::runtime::parse_numero;
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 enum Use {
+    /// Direct value position: `se` needs `senao`.
     Value,
+    /// Last line of a block whose value is used: `se` may omit `senao`.
+    Tail,
+    /// Value thrown away: the expression must have an effect.
     Effect,
 }
 
 pub fn check_se_value(program: &Program) -> Result<(), ParseError> {
-    for item in &program.items {
+    let n = program.items.len();
+    for (i, item) in program.items.iter().enumerate() {
         match item {
             Item::Import(_) => {}
-            Item::Stmt(stmt) => check_stmt(stmt, Use::Effect)?,
+            Item::Stmt(stmt) => {
+                let u = if i + 1 == n { Use::Tail } else { Use::Effect };
+                check_stmt(stmt, u)?
+            }
         }
     }
     Ok(())
+}
+
+fn valor_descartado(expr: &Expr) -> ParseError {
+    let message = if matches!(
+        expr,
+        Expr::Unary {
+            op: crate::parser::operator_types::UnaryOp::Neg,
+            ..
+        }
+    ) {
+        "este valor é calculado e não é usado; um '-' no começo da linha não continua \
+         a linha anterior (use parênteses para quebrar uma conta em várias linhas)"
+    } else {
+        "este valor é calculado e não é usado; guarde-o em uma variável ou remova a linha"
+    };
+    ParseError {
+        kind: ParseErrorKind::Syntax,
+        message: message.into(),
+        span: expr.span(),
+    }
+}
+
+/// No call, no block, no `se`: evaluating it can only produce a value
+/// (or an error), so discarding it is a mistake.
+fn sem_efeito(expr: &Expr) -> bool {
+    match expr {
+        Expr::Number { .. }
+        | Expr::String { .. }
+        | Expr::Nada { .. }
+        | Expr::Bool { .. }
+        | Expr::Ident { .. }
+        | Expr::Function { .. } => true,
+        Expr::List { elements, .. } => elements.iter().all(sem_efeito),
+        Expr::Par { key, value, .. } => sem_efeito(key) && sem_efeito(value),
+        Expr::Field { object, .. } | Expr::MapField { object, .. } => sem_efeito(object),
+        Expr::Index { object, index, .. } => sem_efeito(object) && sem_efeito(index),
+        Expr::Index2 {
+            object, row, col, ..
+        } => sem_efeito(object) && sem_efeito(row) && sem_efeito(col),
+        Expr::Intervalo { start, end, .. } => {
+            sem_efeito(start) && end.as_deref().is_none_or(sem_efeito)
+        }
+        Expr::Unary { expr, .. } => sem_efeito(expr),
+        Expr::Binary { left, right, .. } => sem_efeito(left) && sem_efeito(right),
+        Expr::Call { .. } | Expr::Block(_) | Expr::If { .. } | Expr::SeFalhar { .. } => false,
+    }
 }
 
 fn falta_senao(span: Span) -> ParseError {
@@ -34,7 +93,12 @@ fn falta_senao(span: Span) -> ParseError {
 
 fn check_stmt(stmt: &Stmt, use_: Use) -> Result<(), ParseError> {
     match stmt {
-        Stmt::Expr { expr, .. } => check_expr(expr, use_),
+        Stmt::Expr { expr, .. } => {
+            if use_ == Use::Effect && sem_efeito(expr) {
+                return Err(valor_descartado(expr));
+            }
+            check_expr(expr, use_)
+        }
         Stmt::Assign { target, value, .. } => {
             check_target(target)?;
             check_expr(value, Use::Value)
@@ -62,8 +126,8 @@ fn check_stmt(stmt: &Stmt, use_: Use) -> Result<(), ParseError> {
 fn check_block(block: &Block, use_: Use) -> Result<(), ParseError> {
     let n = block.stmts.len();
     for (i, stmt) in block.stmts.iter().enumerate() {
-        let u = if matches!(use_, Use::Value) && i + 1 == n {
-            Use::Value
+        let u = if use_ != Use::Effect && i + 1 == n {
+            Use::Tail
         } else {
             Use::Effect
         };
@@ -115,9 +179,8 @@ fn check_expr_inner(expr: &Expr, use_: Use) -> Result<(), ParseError> {
             }
             Ok(())
         }
-        // Function body is a statement list (last value is a convenience).
-        // A trailing `se` without `senao` is a command, not `x = se …`.
-        Expr::Function { body, .. } => check_block(body, Use::Effect),
+        // The last line of the body is the result; a `se` there may omit `senao`.
+        Expr::Function { body, .. } => check_block(body, Use::Tail),
         Expr::Block(block) => check_block(block, use_),
         Expr::Call { callee, args, .. } => {
             check_expr(callee, Use::Value)?;
@@ -195,7 +258,7 @@ para x em [1]
 inicio
     se x == 1
     inicio
-        verdadeiro
+        escreva(verdadeiro)
     fim
 fim
 "#,
@@ -210,9 +273,43 @@ fim
         let err = parse(r#"escreva(se verdadeiro { 1 })"#).unwrap_err();
         assert!(err.message.contains("senao"), "{err}");
         parse("f = funcao() { se verdadeiro { 1 } }").unwrap();
-        let err = parse("x = { se verdadeiro { 1 } }").unwrap_err();
+        // Last line of any block: a command, value `nada` without a branch.
+        parse("x = { se verdadeiro { 1 } }").unwrap();
+        parse("x = 1 se_falhar { se verdadeiro { 2 } }").unwrap();
+        let err = parse("retorne_x = funcao() { retorne se verdadeiro { 1 } }").unwrap_err();
         assert!(err.message.contains("senao"), "{err}");
         parse(r#"x = se verdadeiro { 1 } senao { 2 }"#).unwrap();
         parse("f = funcao() { se verdadeiro { 1 } senao { 2 } }").unwrap();
+    }
+}
+
+#[cfg(test)]
+mod descarte_tests {
+    use crate::parser::parse;
+
+    fn descartado(src: &str) {
+        let err = parse(src).unwrap_err();
+        assert!(err.message.contains("não é usado"), "{src}: {err}");
+    }
+
+    #[test]
+    fn valor_sem_efeito_descartado_e_erro() {
+        descartado("total = 10\n- 3\nescreva(total)");
+        descartado("5\nescreva(1)");
+        descartado("x = 1\nx + 1\nescreva(x)");
+        descartado(":a\nescreva(1)");
+        descartado("para i em 0..3 { i * 2 }");
+        descartado("f = funcao() {\n    1\n    2\n}");
+        descartado("se verdadeiro { 1 }\nescreva(2)");
+    }
+
+    #[test]
+    fn valor_usado_ou_com_efeito_e_aceito() {
+        parse("x = 1\nx + 1").unwrap(); // última linha do programa
+        parse("f = funcao(x) { -x }").unwrap();
+        parse("escreva(1)\nescreva(2)").unwrap();
+        parse("[escreva(1)]\nescreva(2)").unwrap();
+        parse("f = funcao(n) { se n > 0 { \"pos\" } }").unwrap();
+        parse("r = { escreva(1)\n se falso { 2 } }").unwrap();
     }
 }

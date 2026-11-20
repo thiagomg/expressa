@@ -11,7 +11,7 @@ Para animações e jogos 2D, o laço controla entrada, atualização, desenho e 
 ```expressa
 tela_grafica = importe "tela_grafica"
 g = tela_grafica::nova(160, 144, 4)
-l = g.tela_grafica::laço_grafico()
+l = g.tela_grafica::laço_gráfico()
 personagem = mapa([:x -> 20])
 
 eventos = função(ev, dt) {
@@ -31,7 +31,7 @@ config = mapa([
 l.tela_grafica::execute(config)
 ```
 
-`laço_grafico()` (também `laco_grafico()`) cria o recurso sem abrir janela.
+`laço_gráfico()` (também `laco_grafico()`) cria o recurso sem abrir janela.
 `execute(config)` valida as três opções obrigatórias e inicia a execução,
 bloqueando até o encerramento. Opções desconhecidas dão erro. O `execute` deste
 módulo é independente de `processo::execute`.

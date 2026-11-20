@@ -7,12 +7,12 @@
 # Expressa: Especificação da Linguagem
 Expressa - linguagem de programaçao em português
 
-Quem **usa** a linguagem: [tutorial](tutorial/basico.md), [avançado](tutorial/avancado.md), [manual](docs/manual.md). Este arquivo é a regra fina.
+Quem **usa** a linguagem: [tutorial](../tutorial/basico.md), [avançado](../tutorial/avancado.md), [manual](manual.md). Este arquivo é a regra fina.
 Extensao de arquivos: .lep
 ---
 
 Linguagem orientada a iniciantes, com palavras em **português brasileiro**, sintaxe simples e consistente.  
-Todo bloco (`inicio`/`fim` ou `{`/`}`) é uma expressão; seu resultado é o valor da última expressão executada na sequência de comandos do bloco. Atribuições e laços não substituem esse resultado; sem expressão, o resultado é `nada`. Blocos vazios não são aceitos. Atribuições, laços e importações não são expressões gerais. As duas formas são equivalentes; o par de abertura deve combinar com o de fechamento (`inicio` com `fim`, `{` com `}`).
+Todo bloco (`inicio`/`fim` ou `{`/`}`) é uma expressão; seu resultado é o valor da última expressão executada na sequência de comandos do bloco. Atribuições e laços não substituem esse resultado; sem expressão, o resultado é `nada`. Blocos vazios não são aceitos. Um valor calculado e não usado, sem efeito (sem chamada, bloco ou `se`), numa linha que não é a última do bloco é erro (`este valor é calculado e não é usado`); o corpo de um laço descarta todos os valores, inclusive o da última linha. A última linha do arquivo (ou da entrada do REPL) pode ser um valor solto. Atribuições, laços e importações não são expressões gerais. As duas formas são equivalentes; o par de abertura deve combinar com o de fechamento (`inicio` com `fim`, `{` com `}`).
 
 ---
 
@@ -34,6 +34,8 @@ Os contextos que exigem inteiro (chaves numéricas, elementos numéricos de conj
 
 `tipo(valor)` devolve o nome do tipo como texto (`"numero"`, `"intervalo"`, `"texto"`, `"bool"`, `"lista"`, `"par"`, `"mapa"`, `"conjunto"`, `"matriz"`, `"imagem"`, `"funcao"`, `"modulo"`, `"processo"`, `"nada"`). Os nomes são os mesmos das mensagens de erro (sem acento). `escreva` e funções do aluno são `"funcao"`. `tipos()` lista esses nomes.
 
+Toda função nativa cujo nome tem uma palavra acentuada em português aceita as duas grafias: `maiuscula`/`maiúscula`, `eh_pasta`/`é_pasta`, `laco_grafico`/`laço_gráfico`.
+
 ---
 
 ## 2. Variáveis e Escopo
@@ -41,7 +43,7 @@ Os contextos que exigem inteiro (chaves numéricas, elementos numéricos de conj
 - Declaração: apenas `nome = valor`
 - Reatribuição permitida
 - Escopo de bloco: variáveis criadas dentro de `inicio...fim` (ou `{...}`) só existem dentro dele
-- Funções podem **ler** nomes de fora, mas **não podem reatribuir esses nomes**. Listas, mapas e matrizes são objetos compartilhados: alterar um elemento desses objetos é permitido, inclusive quando o nome está em um escopo externo.
+- Funções podem **ler** nomes de fora, mas **não podem reatribuir esses nomes**. Listas, mapas e matrizes são objetos compartilhados (§9.1): alterar um elemento desses objetos é permitido, inclusive quando o nome está em um escopo externo.
 
 ```text
 x = 10
@@ -91,10 +93,11 @@ As funções nativas estão documentadas em `docs/nativas/*.lep` (mesmo formato 
 **Par:** `chave -> valor` produz um valor do tipo `par`. Não encadeia: `a -> b -> c` é erro.  
 **Raiz quadrada:** `importe "mat"` e então `raiz(n)` — erro se `n < 0` (tratável com `se_falhar`)  
 **Ao acaso:** no mesmo módulo, `aleatorio(min, max)` (também `aleatório`) inteiro inclusive; `semente(n)` fixa a sequência.  
-**Trigonometria e análise:** no mesmo módulo, ângulos em **radianos**. `seno`/`sen`, `cosseno`/`cos`, `tangente`/`tan`; inversas `arcoseno`, `arcocosseno`, `arcotangente`, `arcotangente2(y, x)`. `radianos(g)` e `graus(r)` convertem. `pi` é um valor (não `pi()`). Também `exp`, `log` (natural), `log10`, `potencia`, `piso`, `teto`, `arredonde`. As três funções de arredondamento operam diretamente sobre o valor decimal; `arredonde` escolhe o inteiro mais próximo e, no meio exato, afasta de zero (`2.5` → `3`, `-2.5` → `-3`). Domínio inválido (por exemplo `log(0)`, `arcoseno(2)`) é erro capturável com `se_falhar`. `e` é palavra-chave; use `exp(1)`.
-**Texto ↔ número:** `numero(t)` (também `número`) lê o padrão atual; `formato("pt")` / `formato("en")` escolhe pt-BR (`1.000,5`) ou en-US (`1,000.5`). Padrão pt-BR. Literais no código usam `.`.  
+**Trigonometria e análise:** no mesmo módulo, ângulos em **radianos**. `seno`/`sen`, `cosseno`/`cos`, `tangente`; inversas `arcosseno`, `arcocosseno`, `arcotangente`, `arcotangente2(y, x)`. `radianos(g)` e `graus(r)` convertem. `pi` é um valor (não `pi()`). Também `exp`, `log` (natural), `log10`, `potencia` (também `potência`), `piso`, `teto`, `arredonde`. As três funções de arredondamento operam diretamente sobre o valor decimal; `arredonde` escolhe o inteiro mais próximo e, no meio exato, afasta de zero (`2.5` → `3`, `-2.5` → `-3`). Domínio inválido (por exemplo `log(0)`, `arcosseno(2)`) é erro capturável com `se_falhar`. `e` é palavra-chave; use `exp(1)`.
+**Texto ↔ número:** `numero(t)` (também `número`) lê só o padrão atual; `formato("pt")` / `formato("en")` escolhe pt-BR (`1.000,5`) ou en-US (`1,000.5`). Padrão pt-BR. Em pt, a vírgula separa os decimais e o ponto só separa milhares em grupos de três: `numero("1.500")` é 1500 e `numero("2.5")` é erro, com a dica de escrever `2,5` ou usar `formato("en")`; en é o espelho. Literais no código usam `.`. `escreva` mostra um número sozinho no padrão ativo (`2,5`), mas dentro de lista, mapa ou par usa a forma do código: `escreva([1.5, 2])` é `[1.5, 2]`. `como_texto(valor)` devolve o texto que `escreva` mostraria.  
 **Aritmética:** padrão decimal (`formato("decimal")`). `formato("float")` liga IEEE-754 só nas operações; o padrão de texto (`pt`/`en`) continua independente. Variável de ambiente `EXPRESSA_ARITMETICA`; CLI `--aritmetica decimal|float`.  
 **Acesso:** `mat::soma` (módulo), `pessoa:nome` (chave de mapa), `p:chave` / `p:valor` (par), `xs.tamanho()` (= `tamanho(xs)`).
+**Quebra de linha:** dentro de `( )` e `[ ]`, a quebra de linha é livre. Fora deles, a quebra de linha termina a expressão. Um operador no **fim** da linha (`a +` ↵ `2`) é erro: coloque a expressão entre parênteses. No **começo** da linha, `+`, `*`, `/`, `%`, comparações, `e`, `ou`, `->`, `se_falhar`, `.` e `::` são erro. `-`, `(`, `[` e `:` no começo da linha iniciam um novo comando (`total = 10` ↵ `- 3` é erro de valor não usado). Um bloco `{ }` / `inicio`…`fim` dentro de parênteses volta a separar comandos por linha. Continuam valendo as quebras entre palavras-chave: `se cond` ↵ `inicio`/`{`, `fim`/`}` ↵ `senao`/`ou se`, `funcao(x)` ↵ `inicio`, `x se_falhar` ↵ `{`. Dois comandos na mesma linha são erro.
 
 ```text
 10 + 5
@@ -119,7 +122,7 @@ resultado = { 10 + 5 }    // igual
 
 ## 5.1. Matrizes
 
-Retangulares, só números. Vêm do módulo `matriz`. A implementação AST atual armazena células como `f64`; a possível diferença de precisão em relação a escalares decimais é uma decisão pendente da tarefa 003. Resultados que não podem voltar ao tipo `numero` são erros, inclusive em operações de matriz. O host limita cada matriz a 1.048.576 células por padrão, com configuração pela API Rust `ExecutionOptions::max_matrix_cells`; esse limite não representa um orçamento total da memória do programa. Índices começam em 0: `A[linha, coluna]`. `A[i]` devolve a linha como lista.
+Retangulares, só números. Vêm do módulo `matriz`. As células são armazenadas em ponto flutuante binário (`f64`). No modo decimal, um valor que é só ruído binário em torno de um número com até 15 algarismos significativos volta como esse número: `3 * matriz([[0.1]])` mostra `0,3`. O mesmo vale para resultados de `mat`, `cartesiano` e `tela_grafica` (`seno(radianos(30))` é `0,5`); outros valores mantêm todos os dígitos (`raiz(2)` é `1,4142135623730951`). `formato("float")` mantém o valor binário exato. Resultados que não podem voltar ao tipo `numero` são erros, inclusive em operações de matriz. O host limita cada matriz a 1.048.576 células por padrão, com configuração pela API Rust `ExecutionOptions::max_matrix_cells`; esse limite não representa um orçamento total da memória do programa. Índices começam em 0: `A[linha, coluna]`. `A[i]` devolve a linha como lista.
 
 `xy(A, x, y)` (UFCS `A.xy(x, y)`) equivale a `A[y, x]`. `xy(A, x, y, valor)` altera essa mesma célula e devolve a própria matriz, permitindo encadear chamadas. São funções do módulo `matriz`: x é coluna, y é linha, ambos inteiros em base zero, com os mesmos limites e erros da indexação. O valor escrito deve ser numérico; outras referências à matriz observam a alteração.
 
@@ -141,8 +144,8 @@ transposta(A)    // ou A.transposta()
 det(A)           // 1×1, 2×2 ou 3×3
 identidade(3)
 zeros(2, 5)      // só zeros; uns(2, 5); cheia(2, 5, 7)
-nlinhas(A)       // 2
-ncolunas(A)      // 3
+linhas(A)        // 2
+colunas(A)       // 3
 tamanho(A)       // também linhas
 ```
 
@@ -154,7 +157,7 @@ O construtor é a função `matriz(linhas)`: uma lista de listas de números, re
 
 Cada ramo tem seu próprio bloco (`inicio`/`fim` ou `{`/`}`).
 
-Como **comando**, `senao` é opcional. Como **valor** (`x = se …`, argumento, `r = { se … }`), `senao` é obrigatório. No corpo da função, um `se` no fim continua sendo comando.
+Como **comando**, `senao` é opcional. Como **valor direto** (`x = se …`, argumento, `retorne se …`, operando, item de lista), `senao` é obrigatório. Um `se` na última linha de qualquer bloco (corpo de função, `r = { … }`, bloco do `se_falhar`) é comando: sem `senao` e sem ramo executado, o bloco vale `nada`.
 
 ```text
 se nota >= 7
@@ -205,7 +208,7 @@ fim
 
 A condição de `enquanto` tem que ser `verdadeiro` ou `falso`. O corpo usa `inicio`/`fim` ou `{`/`}`.
 
-`para x em` percorre **lista**, **texto** (um caractere por vez), **conjunto** ou **intervalo**. `para i em 5` é erro (use `0..5` ou `1..=5`). `para i em 0..` é um laço sem teto (saia com `pare` ou o tempo-limite da VM).
+`para x em` percorre **lista**, **texto** (um caractere por vez), **conjunto**, **mapa** (pares `p:chave`/`p:valor`, na ordem da impressão) ou **intervalo**. `para i em 5` é erro (use `0..5` ou `1..=5`). `para i em 0..` é um laço sem teto (saia com `pare` ou o tempo-limite da VM).
 
 O antigo `para i de … até …` saiu da linguagem.
 
@@ -216,7 +219,7 @@ inicio
 fim
 ```
 
-`pare` sai do laço mais interno (`para`, `enquanto`, `repita`). `continue` (ou `continua`) pula para a próxima volta. Fora de um laço é erro. Não são capturados por `se_falhar`.
+`pare` sai do laço mais interno (`para`, `enquanto`, `repita`). `continue` pula para a próxima volta. Fora de um laço é erro. Não são capturados por `se_falhar`.
 
 ---
 
@@ -245,7 +248,7 @@ fim
 
 `retorne` só vale **dentro de uma função**. `retorne` sozinho devolve `nada`; `retorne nada` é equivalente. O valor, se houver, fica **na mesma linha**. Não é capturado por `se_falhar`.
 
-`se` usado **como valor** (`x = se …`, argumento ou valor de `retorne`) precisa de `senao`. Um `se` no fim do corpo da função continua sendo comando: pode omitir `senao` e devolve `nada` se nenhum ramo for executado. Como comando, o `senao` é opcional:
+`se` usado **como valor direto** (`x = se …`, argumento ou valor de `retorne`) precisa de `senao`. Um `se` na última linha de um bloco, como o corpo da função, é comando: pode omitir `senao` e devolve `nada` se nenhum ramo for executado. Como comando, o `senao` é opcional:
 
 ```text
 se n < 0 { escreva("negativo") }           // ok
@@ -260,7 +263,7 @@ x = se n >= 7 { "ok" } senao { "não" }     // ok
 - Indexação começa em **0**
 - Criação: `[1, 2, 3]`
 
-O `[` de indexação ou fatia deve começar na mesma linha em que termina o receptor: `numeros[0]` ou `obtenha_lista()[0]`. Um `[` em outra linha inicia uma nova lista, não uma indexação da expressão anterior. O conteúdo entre colchetes pode ocupar várias linhas, como `numeros[` seguido pelo índice e pelo fechamento nas linhas seguintes. A regra também vale para textos e indexação de matrizes.
+Pela regra de quebra de linha (§4), o `[` de indexação ou fatia fica na mesma linha do receptor (`numeros[0]`, `obtenha_lista()[0]`), a não ser dentro de parênteses. Um `[` no começo da linha inicia uma nova lista. O conteúdo entre colchetes pode ocupar várias linhas. A regra também vale para textos e indexação de matrizes.
 
 ```text
 numeros = [10, 20, 30, 40]
@@ -273,7 +276,7 @@ numeros.remova(1)              // sem o 2º item (cópia)
 numeros.remova(2..4)           // sem os índices 2 e 3 (fim exclusivo)
 numeros.remova(2..=3)          // igual a remova(2..4)
 numeros contem 20              // verdadeiro
-primeiro(numeros)              // 10
+primeiro(numeros)              // 10 (primeiro("olá") é "o")
 ultimo(numeros)                // 40
 numeros[1..3]                  // [20, 30]
 numeros[1..]                   // do índice 1 até o fim: [20, 30, 40]
@@ -296,7 +299,7 @@ linhas[0][1] = "x"             // se linhas[0] é texto, reescreve o caractere
 
 ### 9.1. Cópias e referências
 
-`a = b` e a passagem de argumentos compartilham listas, mapas, conjuntos, matrizes e imagens; alterar um elemento por uma referência aparece nas demais. Texto é um valor: trocar um caractere reatribui o texto e preserva as cópias anteriores. Operações que devolvem uma cópia de coleção (`+`, `remova`, `ordene`) copiam seus elementos superficialmente; objetos mutáveis aninhados continuam compartilhados. Ler uma linha com `A[i]` devolve uma lista independente da matriz. Não confunda uma cópia superficial com uma cópia profunda. `clone(valor)` faz a cópia profunda dos dados clonáveis, preservando ciclos e aliases internos. Funções precisam ser classificadas sem capturas; módulos, processos e recursos não são clonáveis. Textos mantêm comportamento de valor. Consulte o [contrato completo de clone](docs/clone.md), incluindo limites e classificação conservadora de funções.
+`a = b` e a passagem de argumentos compartilham listas, mapas, conjuntos, matrizes e imagens; alterar um elemento por uma referência aparece nas demais. Texto é um valor: trocar um caractere reatribui o texto e preserva as cópias anteriores. Operações que devolvem uma cópia de coleção (`+`, `remova`, `ordene`) copiam seus elementos superficialmente; objetos mutáveis aninhados continuam compartilhados. Ler uma linha com `A[i]` devolve uma lista independente da matriz. Não confunda uma cópia superficial com uma cópia profunda. `clone(valor)` faz a cópia profunda dos dados clonáveis, preservando ciclos e aliases internos. Funções precisam ser classificadas sem capturas; módulos, processos e recursos não são clonáveis. Textos mantêm comportamento de valor. Consulte o [contrato completo de clone](clone.md), incluindo limites e classificação conservadora de funções.
 
 ```text
 xs = [[1]]
@@ -309,11 +312,11 @@ escreva(xs[0][0])    // 2: o elemento aninhado é compartilhado
 
 `0..3` é um gerador de inteiros, não uma lista. O fim de `..` é **exclusivo**: `0..3` gera 0, 1, 2. `..=` e o começo omitido são açúcar: `0..=2` e `..3` viram `0..3`; `0..` e `..` são infinitos a partir de 0; `5..` a partir de 5. `1..3 == 1..=2`. `escreva` imprime a forma exclusiva (`escreva(0..=2)` é `0..3`).
 
-Limites são inteiros de 64 bits, avaliados uma vez. `n..=m` é `n..(m+1)`; se `m+1` não cabe em i64, é erro. Não há passo. Intervalos vazios (`3..3`, `3..1`) não geram nada. O teto, se houver, fica na mesma linha do `..` (`r = 5..` na linha seguinte começa outro comando).
+Limites são inteiros de 64 bits, avaliados uma vez. `n..=m` é `n..(m+1)`; se `m+1` não cabe em i64, é erro. Não há passo. Intervalos vazios (`3..3`, `3..1`) não geram nada. Fora de parênteses, o teto, se houver, fica na mesma linha do `..` (§4).
 
-Núcleo: `tamanho(3..5)` é 2; `tamanho(0..)` é erro (`se_falhar`). `primeiro(3..5)` é 3; `ultimo(3..5)` é 4 (último gerado). `primeiro(0..)` é 0; `ultimo(0..)` é erro. `infinito(r)` é verdadeiro só sem teto; em outro tipo é erro. Reconstrua um intervalo finito não vazio com `primeiro(r)..(ultimo(r)+1)`.
+Núcleo: `tamanho(3..5)` é 2; `tamanho(0..)` é erro (`se_falhar`). `primeiro(3..5)` é 3; `ultimo(3..5)` é 4 (último gerado). `primeiro(0..)` é 0; `ultimo(0..)` é erro. `eh_infinito(r)` (também `é_infinito`) é verdadeiro só sem teto; em outro tipo é erro. Reconstrua um intervalo finito não vazio com `primeiro(r)..(ultimo(r)+1)`.
 
-Igualdade é canônica (começo + teto exclusivo): `3..3 != 5..5`. Só `==` e `!=`. Indexar um intervalo, `contem` e `+` entre intervalos são erro.
+Igualdade é canônica (começo + teto exclusivo): `3..3 != 5..5`. Só `==` e `!=`. Indexar um intervalo e `+` entre intervalos são erro. `r contem n` diz se o intervalo gera `n`: `(0..10) contem 3` é verdadeiro, `(0..3) contem 1.5` é falso (não é inteiro) e um valor que não é número é erro.
 
 Fatia e `remova` usam o mesmo intervalo. `xs[0..2]` são os índices 0 e 1. Teto além do tamanho corta: `xs[0..1000]` numa lista de 5 devolve os 5. Sem teto, a fatia vai até o fim da lista ou do texto: `"thiago"[0..]` é `"thiago"`, `"thiago"[2..]` é `"iago"`, `xs[..]` é a coleção inteira. Vale também com o intervalo guardado (`r = 2..; xs[r]`). Começo negativo é erro; começo além do tamanho devolve vazio. `xs.remova(1..)` continua erro: `remova` exige teto. `tamanho(0..)` também: o intervalo sem teto não tem tamanho; quem limita a fatia é a coleção.
 
@@ -327,9 +330,9 @@ xs[0..=2]                      // [10, 20, 30]
 
 `chave -> valor` é um **par**. Campos: `p:chave` e `p:valor`. Chaves de par são texto, número inteiro ou bool (`:nome` é o texto `"nome"`). Palavras-chave e textos com espaço continuam com aspas. Um par **não** serve de chave de mapa nem de elemento de conjunto. Cada leitura copia a cadeia de pares. `x = 1 -> x` repetido fica quadrático: o par novo carrega uma cópia do anterior.
 
-`mapa` e `conjunto` são funções do núcleo. `mapa()` (ou `mapa([])`) é o mapa vazio. `mapa(xs)` recebe **uma** lista de pares; chaves duplicadas são erro.
+`mapa` e `conjunto` são funções do núcleo. `mapa()` (ou `mapa([])`) é o mapa vazio. `mapa(xs)` recebe **uma** lista de pares; chaves duplicadas são erro. `m + (chave -> valor)` é um mapa novo com essa chave (`m += :c -> 3`).
 
-Mapas usam tabelas hash, sem preservar a ordem de inserção. A igualdade compara as chaves e seus valores, independentemente da ordem. A impressão organiza as chaves por tipo (texto, inteiro, bool), em ordem crescente dentro de cada tipo. Essa ordenação da impressão não altera a ordem interna da tabela.
+Mapas usam tabelas hash, sem preservar a ordem de inserção. A igualdade compara as chaves e seus valores, independentemente da ordem. A impressão organiza as chaves por tipo (texto, inteiro, bool), em ordem crescente dentro de cada tipo. Essa ordenação da impressão não altera a ordem interna da tabela. `para p em m` percorre os pares (`p:chave`, `p:valor`) nessa mesma ordem; `chaves_de(m)` e `valores_de(m)` devolvem listas na mesma ordem.
 
 ```text
 devs = [:developer -> "Thiago", "co-developer" -> "Grok"]
@@ -346,7 +349,7 @@ pessoa contem :idade           // verdadeiro
 pessoa = pessoa.remova(:idade)
 ```
 
-`pessoa:nome` exige os tokens **na mesma linha**. Com quebra de linha, `:nome` é o texto `"nome"` (chave), não um campo:
+Fora de parênteses, `pessoa:nome` exige os tokens **na mesma linha** (§4). Com quebra de linha, `:nome` começa outro comando: é o texto `"nome"`, não um campo:
 
 ```text
 pessoa:nome          // campo
@@ -385,12 +388,12 @@ nome[1..3]                 // teto exclusivo; se passar do tamanho, corta
 nome[1..]                  // do índice 1 até o fim
 
 tamanho(nome)
-maiuscula(nome)
+maiuscula(nome)            // também maiúscula
 sem_acento("olá")          // "ola"
 minuscula(nome)
 nome contem "Silva"
 "ábaco" > "zebra"         // verdadeiro: ordem de ponto de código
-procure(nome, "Silva")    // índice 0…n−1; -1 se não achar
+procure(nome, "Silva")    // índice 0…n−1; nada se não achar
 substitua(nome, "Maria", "Ana")
 separe("a,b,c", ",")
 junte(["a", "b"], " - ")
@@ -443,8 +446,8 @@ cat nomes.txt | expressa grep.lep Thiago
 `modulos()` (também `módulos()`) imprime o núcleo, os módulos nativos disponíveis e os arquivos já importados, sem duplicar um arquivo importado com vários apelidos. `modulos(:dados)` devolve uma lista de mapas com `:nome` (texto) e `:funcoes` (lista estruturada de funções). Arquivos usam o primeiro caminho importado como nome; nomes em conflito usam caminhos absolutos. `funcoes()` (também `funções()`) imprime as funções públicas visíveis; `funcoes(alvo)` consulta o nome ou objeto de um módulo. `nada` indica o escopo atual; `"nucleo"` indica o núcleo. `funcoes(alvo, :dados)` devolve uma lista de mapas com `:nome` (texto), `:args` (lista de textos) e `:doc` (documentação completa, ou `""`). As listas seguem ordem alfabética; funções com nome iniciado por `_` ficam de fora. As versões de impressão devolvem `nada`. `funcoes(:dados)` é inválido: use `funcoes(nada, :dados)`. Não há comandos especiais `ls`, `ajuda` ou `catalogo` no REPL; `ajuda(alvo)` continua sendo uma função.
 
 `escreva` vai para a saída padrão (stdout). `escreva_erro` vai para a saída de erro (stderr).  
-Com `importe "tela"`: `cls()` (também `limpe_tela()`) limpa a tela; `posicao_cursor(0, 0, falso)` manda o cursor ao canto sem apagar — use no lugar de `cls()` em animações para não piscar.
-`colunas()` e `linhas()` são o tamanho da tela em caracteres (80×24 se não houver TTY). `nova_linha` é o texto `"\n"` no Unix e `"\r\n"` no Windows (valor, não função). `quadro(texto)` volta ao canto, escreve o texto, apaga o resto de cada linha e o que sobrar embaixo; as quebras viram `nova_linha` na saída. `bloco(linha, coluna)` devolve o mapa `{:linha, :coluna}` (base zero); `escreva_em(bloco, texto)` (UFCS `b.escreva_em("…")`) escreve uma linha nessa coluna, anda `:linha` e devolve o mesmo mapa. Sem `"\n"` no texto.
+Com `importe "tela"`: `limpe_tela()` limpa a tela; `posicao_cursor(0, 0, falso)` manda o cursor ao canto sem apagar — use no lugar de `limpe_tela()` em animações para não piscar.
+`tamanho_tela()` devolve o tamanho da tela em caracteres, um mapa com `:linhas` e `:colunas` (24×80 se não houver TTY). `nova_linha` é o texto `"\n"` no Unix e `"\r\n"` no Windows (valor, não função). `quadro(texto)` volta ao canto, escreve o texto, apaga o resto de cada linha e o que sobrar embaixo; as quebras viram `nova_linha` na saída. `bloco(linha, coluna)` devolve um mapa com `:linha` e `:coluna` (base zero); `escreva_em(bloco, texto)` (UFCS `b.escreva_em("…")`) escreve uma linha nessa coluna, anda `:linha` e devolve o mesmo mapa. Sem `"\n"` no texto.
 `posicao_cursor()` (também `posição_cursor()`) consulta a posição de saída e devolve um mapa `:linha`, `:coluna`, base zero. `posicao_cursor(pos)` move para a posição do mapa sem apagá-la ou alterar o mapa. `posicao_cursor(linha, coluna, mostre)` move para coordenadas inteiras >= 0, base zero; `mostre` é bool e controla o flush após mover. É opcional, com padrão `verdadeiro`: `posicao_cursor(linha, coluna)` faz flush. Com `falso`, o movimento fica disponível para ser enviado junto da próxima escrita. A consulta sem argumentos e o movimento com mapa continuam fazendo flush. `casa()` foi removida. `apague_linha()` apaga a linha atual inteira e deixa o cursor na coluna zero, sem deslocar outras linhas. Na Aula, `leia()` começa na posição de saída e substitui o restante da linha, preservando as linhas abaixo; quebras visuais por ajuste de largura não contam como novas linhas. No terminal, a posição é relativa à tela visível, e a consulta pode falhar se não houver terminal ou suporte à consulta (tempo limite de 500 ms no Unix). Posições guardadas podem mudar com a rolagem.
 `pinte(texto, frente)` e `pinte(texto, frente, fundo)` devolvem o texto com cor ANSI e reset no fim. `fundo(texto, cor)` pinta só o papel; `negrito(texto)` deixa em negrito. Cores: `normal`, `preto`, `vermelho`, `verde`, `amarelo`, `azul`, `magenta`, `ciano`, `branco`.  
 Com `importe "sistema"`: `durma(segundos)` espera; `durma(0.5)` é meio segundo.
@@ -457,9 +460,9 @@ Com `importe "crono"`: `agora()` é a data e a hora locais: mapa `:ano`, `:mes`,
 
 `falhe(descricao)` gera um erro de execução com essa descrição (texto, ou `:_como_texto`). A pilha aponta para a chamada; a nativa não entra como quadro. `garanta(condicao)` exige `verdadeiro` ou `falso`; se for falso, a mensagem é `condição incorreta` seguida do fonte da condição (espaços compactados). Os dois são capturáveis com `se_falhar`.
 
-Com `importe "cartesiano"`: `documento()` é a identidade da janela (um mapa `:graficos`). `grafico()` é um plano xy (`:xmin`… e `:curvas`). `eixos(g, xmin, xmax, ymin, ymax)` grava os limites (y para cima). `plote(g, função, cor)` amostra ~400 pontos de xmin a xmax; y não finito vira um furo na linha. Cores: as da `tela`. `adicione(c, g)` copia o gráfico para a folha (congela). `mostre(c)` abre ou atualiza a janela daquele documento e traz o foco; não espera fechar. Folha vazia é erro. Dois `documento()` são duas janelas. `tipo(g)` continua `"mapa"`. Sem display, `mostre` falha (`se_falhar`). O CLI abre `expressa-grafico` (ou `expressa --grafico`). Na Aula o painel Gráficos (Destacar vira janela irmã).
+Com `importe "cartesiano"`: `documento()` é a identidade da janela (um mapa `:graficos`). `grafico()` (também `gráfico()`) é um plano xy (`:xmin`… e `:curvas`). `eixos(g, xmin, xmax, ymin, ymax)` grava os limites (y para cima). `plote(g, função, cor)` amostra ~400 pontos de xmin a xmax; y não finito vira um furo na linha. Cores: as da `tela`. `adicione(c, g)` copia o gráfico para a folha (congela). `mostre(c)` abre ou atualiza a janela daquele documento e traz o foco; não espera fechar. Folha vazia é erro. Dois `documento()` são duas janelas. `tipo(g)` continua `"mapa"`. Sem display, `mostre` falha (`se_falhar`). O CLI abre `expressa-grafico` (ou `expressa --grafico`). Na Aula o painel Gráficos (Destacar vira janela irmã).
 
-Com `importe "tela_grafica"`: `nova(largura, altura)` ou `nova(largura, altura, tamanho_pixel)` é uma tela de pixels (mapa `:largura`, `:altura`, `:tamanho_pixel`, `:cor`, `:fundo`, `:ops`). Origem no canto superior esquerdo, y para baixo, (0,0) no primeiro pixel. Inteiros 1…2048. `tamanho_pixel` (1…16, padrão 1) é o lado do quadrado na janela para cada pixel lógico (`2` = 2×2); `evento`, `pixel` e `salve` usam o canvas. `cor`, `fundo`, `linha`, `circulo`, `ponto`, `retangulo`, `texto`, `apague` acumulam ou limpam comandos. Cores: as da `tela` e `transparente` (furo no sprite). `fundo(g, cor)` é o papel (padrão branco). `retangulo(g, x1, y1, x2, y2)` preenche o retângulo (cantos inclusivos, recorta). `como_imagem(g)` devolve uma `imagem` (cópia; transparente vira alpha 0). `texto(g, x, y, t)` / `texto(g, x, y, t, tamanho)` desenha t na caneta; (x, y) é o canto superior esquerdo, tamanho é a altura da célula (padrão 8), `\\n` desce uma linha. `imagem(g, caminho|img|tela, x, y, angulo)` carimba pixels (PNG lido uma vez, ou outra tela via `como_imagem`). `pixel(g, x, y)` devolve o nome da cor (fora da tela é erro). `salve(g, "a.png")` grava PNG com transparência, sem janela. `mostre(g)` abre ou atualiza a janela daquela instância (não acopla na Aula). `evento(g)` / `evento(g, segundos)` espera clique, tecla ou fechar naquela janela (mapa `:tipo`, `:x`, `:y`, `:botao`, `:tecla`). Cada `nova()` é uma janela. `tipo(g)` continua `"mapa"`. Cores: as da `tela`. Protocolo da janela: `docs/tela_grafica.md`.
+Com `importe "tela_grafica"`: `nova(largura, altura)` ou `nova(largura, altura, tamanho_pixel)` é uma tela de pixels (mapa `:largura`, `:altura`, `:tamanho_pixel`, `:cor`, `:fundo`, `:ops`). Origem no canto superior esquerdo, y para baixo, (0,0) no primeiro pixel. Inteiros 1…2048. `tamanho_pixel` (1…16, padrão 1) é o lado do quadrado na janela para cada pixel lógico (`2` = 2×2); `evento`, `pixel` e `salve` usam o canvas. `cor`, `fundo`, `linha`, `circulo`, `ponto`, `retangulo`, `texto`, `apague` acumulam ou limpam comandos. Cores: as da `tela` e `transparente` (furo no sprite). `fundo(g, cor)` é o papel (padrão branco). `retangulo(g, x1, y1, x2, y2)` preenche o retângulo (cantos inclusivos, recorta). `como_imagem(g)` devolve uma `imagem` (cópia; transparente vira alpha 0). `texto(g, x, y, t)` / `texto(g, x, y, t, tamanho)` desenha t na caneta; (x, y) é o canto superior esquerdo, tamanho é a altura da célula (padrão 8), `\\n` desce uma linha. `imagem(g, caminho|img|tela, x, y, angulo)` carimba pixels (PNG lido uma vez, ou outra tela via `como_imagem`). `pixel(g, x, y)` devolve o nome da cor (fora da tela é erro). `salve(g, "a.png")` grava PNG com transparência, sem janela. `mostre(g)` abre ou atualiza a janela daquela instância (não acopla na Aula). `evento(g)` não espera: captura o teclado e consome os acontecimentos pendentes daquela janela, devolvendo um mapa com `:teclas` (conjunto das teclas apertadas agora), `:apertadas` e `:soltas` (desde a captura anterior), `:eventos` (lista em ordem; cada item tem `:tipo`, `:tecla`, `:x`, `:y`, `:botao`, `:modificadores`, `:repeticao`) e `:sair`. Chame `mostre(g)` antes e `evento(g)` uma vez por quadro; o ritmo fica com `durma()` ou com o laço gráfico. `laco_grafico(g)` (também `laço_gráfico`) cria o laço; `l.tela_grafica::execute(config)` o executa com o mapa obrigatório `:fps`, `:eventos` (função `(ev, dt)`) e `:desenho` (função `(g)`), e `l.tela_grafica::pare()` (também `pare_laco`) o encerra depois do callback atual. Cada `nova()` é uma janela. `tipo(g)` continua `"mapa"`. Cores: as da `tela`. Protocolo da janela: `docs/tela_grafica.md`.
 
 Com `importe "imagem"`: `carregue("a.png")` lê um PNG e devolve um valor `tipo` `"imagem"` (pixels em memória, até 2048×2048). `salve(img, "b.png")` grava PNG com transparência. `rotacione(img, graus)` gira no sentido horário e devolve uma imagem nova (90/180/270 são exatos). `redimensione(img, fator)` ou `redimensione(img, fx, fy)` redimensiona (vizinho mais próximo). `largura(img)` e `altura(img)` são o tamanho em pixels.
 
@@ -551,7 +554,7 @@ se n < 0 { falhe("negativo") }
 
 ## 16. Módulos / Importação
 
-A mesma forma vale para arquivos `.lep` e para os módulos nativos `sistema`, `matriz`, `arquivo`, `tela`, `mat`, `crono`, `cartesiano` e `processo`.
+A mesma forma vale para arquivos `.lep` e para os módulos nativos `sistema`, `matriz`, `arquivo`, `tela`, `mat`, `crono`, `cartesiano`, `tela_grafica`, `imagem` e `processo`.
 
 ```text
 mat = importe "matematica"     // alias: nomes em mat::
@@ -561,7 +564,7 @@ importe "matematica"           // espalha os nomes no escopo atual
 soma(10, 5)
 ```
 
-Espalhar um nome que **já existe** no escopo é erro (`já existe \`fundo\` neste escopo`). O segundo módulo não substitui o primeiro. Use apelido: `g = importe "tela_grafica"`. Importar o mesmo módulo duas vezes, achatado, também é erro. Apelidos diferentes não conflitam (`t::fundo` e `g::fundo`).
+Nomes não podem colidir. Espalhar um nome que **já existe** no escopo (do programa, do núcleo ou de outro módulo) é erro (`já existe \`fundo\` neste escopo`). O segundo módulo não substitui o primeiro. Use apelido: `g = importe "tela_grafica"`. Depois de espalhados, os nomes também não podem ser reatribuídos: `importe "mat"` e depois `raiz = 1` é erro, que sugere o apelido. Parâmetros, variáveis de laço e o nome de captura do `se_falhar` podem sombrear esses nomes, como os do núcleo. Importar o mesmo módulo duas vezes, achatado, também é erro. Com apelido nada é espalhado, e apelidos diferentes não conflitam (`t::fundo` e `g::fundo`). `importe "tela_gráfica"` é o mesmo módulo que `importe "tela_grafica"`.
 
 Nome **sem** `/`, `./` nem `.lep` procura primeiro um módulo nativo. Caminho com `./`, `/` ou sufixo `.lep` é arquivo. Se o nome nativo também existir como arquivo no mesmo diretório (`matriz.lep` ao lado do programa), `importe "matriz"` é **erro**: use `importe "./matriz"` para o arquivo. Enquanto o arquivo estiver no caminho do nome nu, o nativo fica inacessível por esse nome.
 
@@ -602,7 +605,7 @@ filtro = funcao(linha, oque) {
 }
 
 r = execute("ls", [filtro, ".txt"], ["wc", "-l"])
-r:saida          // ["2"]
+escreva(r:saida)   // ["2"]
 
 para linha em linhas_de("tail -f app.log") {
     se linha contem "xxx" { escreva(linha) }

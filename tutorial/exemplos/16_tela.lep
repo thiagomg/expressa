@@ -3,4 +3,4 @@ importe "tela"
 escreva("ok".pinte(:verde))
 escreva("alerta".pinte(:preto, :amarelo))
 escreva("fim".negrito().pinte(:vermelho))
-escreva("colunas: " + colunas() + "  linhas: " + linhas())
+escreva("colunas: " + tamanho_tela():colunas + "  linhas: " + tamanho_tela():linhas)

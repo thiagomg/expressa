@@ -8,9 +8,9 @@
 
 Este tutorial continua os capítulos do [tutorial básico](basico.md). Antes de começar, conclua os capítulos 1 a 8 e experimente um dos projetos. Aqui você vai trabalhar com mapas, textos, laços, funções com retorno, tratamento de erros, módulos, arquivos e gráficos.
 
-Execute cada programa de exemplo, mude uma linha e faça o desafio no fim do capítulo. Consulte a [folha de consulta](../folha-de-consulta.md) e o [manual](../docs/manual.md) quando precisar lembrar uma operação ou entender uma função.
+Execute cada programa de exemplo, mude uma linha e faça o desafio no fim do capítulo. Consulte a [folha de consulta](../docs/folha-de-consulta.md) e o [manual](../docs/manual.md) quando precisar lembrar uma operação ou entender uma função.
 
-Os caminhos dos arquivos partem da pasta `tutorial/`, salvo quando o comando mostra o caminho completo a partir da raiz do repositório. Os números nos nomes dos arquivos identificam os exemplos e podem ser diferentes dos números dos capítulos.
+Os caminhos dos arquivos partem da pasta `tutorial/`; caminhos que começam com `../exemplos/` apontam para a pasta de exemplos, ao lado de `tutorial/`. Comandos como `expressa exemplos/...` partem da pasta que contém `exemplos/`. Os números nos nomes dos arquivos identificam os exemplos e podem ser diferentes dos números dos capítulos.
 
 ## 9. Mapa
 
@@ -48,7 +48,17 @@ expressa> pessoa contem "serie"
 falso
 ```
 
-Receita de bolo com mapa de quantidades: `../exemplos/programas/receita.lep`.
+Para percorrer um mapa, use `para`: cada volta recebe um par, com `p:chave` e `p:valor`, na mesma ordem em que o mapa é impresso. `m + (chave -> valor)` cria um mapa novo com mais uma chave.
+
+```text
+pessoa = mapa([:nome -> "Ana", :idade -> 16])
+para p em pessoa {
+    escreva(p:chave + ": " + p:valor)
+}
+escreva(chaves_de(pessoa))     // ["idade", "nome"]
+```
+
+O Termo usa um mapa para guardar a cor de cada tecla: `../exemplos/jogos/termo.lep`.
 
 **Desafio:** acrescente `:serie -> 2` e escreva a série.
 
@@ -61,10 +71,10 @@ Arquivo: `exemplos/10_texto.lep`
 ```text
 s = "Expressa"
 escreva(s[0])          // E
-escreva(s[0..4])       // Expr
-escreva(s[4..])        // essa
+escreva(s[0..4])       // Expr (índices 0 a 3; o 4 fica de fora)
+escreva(s[4..])        // essa (do índice 4 até o fim)
 escreva(s contem "press")
-escreva(procure(s, "s"))   // 5;  -1 se não achar
+escreva(procure(s, "s"))   // 5;  nada se não achar
 ```
 
 `separe` divide um texto em uma lista de partes, usando o separador indicado. `junte` faz o caminho inverso: une os itens de uma lista em um texto, colocando o separador entre eles.
@@ -80,7 +90,7 @@ expressa> ["A", "B", "C"].junte("-")
 
 `sem_acento("Ação")` retorna `"Acao"`. A Forca usa essa função para tratar letras como C e Ç da mesma forma.
 
-Para mais exemplos: `../exemplos/texto/poema.lep`. Verificação de palíndromos passo a passo: `../exemplos/texto/palindromo.lep`.
+Na fatia `s[0..4]`, o índice final não entra; use `s[0..=4]` para incluí-lo. Verificação de palíndromos passo a passo: `../exemplos/texto/palindromo.lep`.
 
 **Desafio:** use `separe` para dividir seu nome completo nos espaços e `primeiro` para mostrar apenas o primeiro nome.
 
@@ -90,7 +100,7 @@ Para mais exemplos: `../exemplos/texto/poema.lep`. Verificação de palíndromos
 
 Arquivo: `exemplos/11_enquanto.lep`
 
-`para` percorre os itens de uma coleção ou intervalo. Já `enquanto` testa uma condição antes de cada repetição e continua enquanto ela for verdadeira.
+`para` percorre os itens de uma coleção (lista, texto, conjunto ou mapa) ou de um intervalo. Já `enquanto` testa uma condição antes de cada repetição e continua enquanto ela for verdadeira.
 
 O laço mais simples conta até 5:
 
@@ -172,7 +182,7 @@ mostra(10)
 mostra("oi")
 ```
 
-Os nomes são os mesmos das mensagens de erro (sem acento: `funcao`, não `função`). `tipos()` lista todos. No REPL: `tipo(10)`, `10.tipo()`, `tipos()`, `ajuda tipo`.
+Os nomes são os mesmos das mensagens de erro (sem acento: `funcao`, não `função`). `tipos()` lista todos. No REPL: `tipo(10)`, `10.tipo()`, `tipos()`, `ajuda("tipo")`.
 
 **Desafio:** se `x` for lista, escreva o `tamanho(x)`.
 
@@ -256,7 +266,7 @@ Mais casos (arquivo, índice): `../exemplos/linguagem/erros.lep`.
 
 O programa `../exemplos/linguagem/usa_matematica.lep` importa a biblioteca `../exemplos/lib/matematica.lep`. O caminho da importação é relativo à pasta do arquivo que faz o `importe`.
 
-Na raiz do repositório, execute:
+Na pasta que contém `exemplos/`, execute:
 
 ```text
 expressa exemplos/linguagem/usa_matematica.lep
@@ -325,10 +335,10 @@ importe "tela"
 escreva("ok".pinte(:verde))
 escreva("alerta".pinte(:preto, :amarelo))
 escreva("fim".negrito().pinte(:vermelho))
-escreva("colunas: " + colunas() + "  linhas: " + linhas())
+escreva("colunas: " + tamanho_tela():colunas + "  linhas: " + tamanho_tela():linhas)
 ```
 
-Cores: `preto vermelho verde amarelo azul magenta ciano branco`.  
+Cores: `normal preto vermelho verde amarelo azul magenta ciano branco`.  
 `pinte(texto, frente)` ou `pinte(texto, frente, fundo)`.
 
 No REPL:
@@ -336,10 +346,10 @@ No REPL:
 ```text
 expressa> importe "tela"
 expressa> "HP".pinte(:verde)
-expressa> colunas()
+expressa> tamanho_tela()
 ```
 
-As funções `quadro`, `bloco` e `escreva_em` ajudam a organizar a tela de jogos como Termo e Forca. Experimente `../exemplos/jogos/bicho_desenhos.lep` no terminal para ver desenhos maiores. No painel do expressa-aula, `colunas()` e `linhas()` informam valores fixos de 80 colunas e 24 linhas.
+As funções `quadro`, `bloco` e `escreva_em` ajudam a organizar a tela de jogos como Termo e Forca. Experimente `../exemplos/jogos/termo.lep` e `../exemplos/jogos/forca.lep` no terminal para vê-las em uso. `tamanho_tela()` devolve um mapa com `:linhas` e `:colunas`; no painel do expressa-aula, os valores são fixos: 24 linhas e 80 colunas.
 
 **Desafio:** escreva uma linha com texto verde sobre fundo branco.
 
@@ -355,11 +365,11 @@ importe "mat"
 escreva(raiz(9))
 escreva(aleatorio(1, 6))
 escreva("pi ≈ " + pi)
-escreva("seno de 30°: " + seno(radianos(30)))
+escreva("seno de 90°: " + seno(radianos(90)))
 escreva(potencia(2, 10))
 ```
 
-`pi` é valor, não função: escreva `pi`, não `pi()`. Seno e cosseno recebem ângulos em **radianos**; `radianos(30)` converte graus.
+`pi` é valor, não função: escreva `pi`, não `pi()`. Seno e cosseno recebem ângulos em **radianos**; `radianos(90)` converte graus. Essas funções calculam em ponto flutuante binário, mas a Expressa remove o resíduo dos resultados: `cosseno(radianos(60))` mostra `0,5`. `potencia` também se escreve `potência`.
 
 ```text
 expressa> importe "mat"
@@ -391,7 +401,7 @@ c.cart::adicione(g)
 c.cart::mostre()
 ```
 
-No expressa-aula, o gráfico aparece no painel **Gráficos**. Use **Destacar** para abrir uma janela separada. No terminal, execute o exemplo com `expressa-grafico` ou `expressa --grafico`.
+No expressa-aula, o gráfico aparece no painel **Gráficos**. Use **Destacar** para abrir uma janela separada. No terminal, `expressa exemplos/escola/seno_cosseno.lep` abre o gráfico em uma janela (o programa `expressa-grafico`).
 
 **Desafio:** antes de adicionar o gráfico ao documento, acrescente a curva `função(x) { x * x }` em verde usando `plote`.
 
@@ -411,7 +421,7 @@ A saída mostra `olá, Ana` e `idade: 16`. Sem argumentos, o programa mostra uma
 
 No expressa-aula, preencha o campo **Argumentos** antes de executar. Os valores informados ficam disponíveis na mesma lista `argumentos`.
 
-Outro exemplo que usa argumentos para filtrar linhas: `../exemplos/unix/grep.lep`.
+Outro exemplo que usa argumentos: `../exemplos/unix/wc.lep` conta palavras dos arquivos passados, ou linhas com `-l`.
 
 **Desafio:** adapte `18_argumentos.lep` para receber dois nomes e mostrar uma saudação para cada um. Execute o programa passando os dois nomes como argumentos.
 
@@ -428,8 +438,8 @@ A = matriz([[1, 2, 3], [4, 5, 6]])
 escreva(A[0, 1])        // 2
 escreva(A.xy(1, 0))     // 2: x é coluna, y é linha
 A.xy(1, 0, 9)    // altera A[0, 1]
-escreva(nlinhas(A))     // 2
-escreva(ncolunas(A))    // 3
+escreva(linhas(A))      // 2
+escreva(colunas(A))     // 3
 escreva(identidade(3))
 ```
 
@@ -440,7 +450,7 @@ expressa> importe "matriz"
 expressa> identidade(2)
 ```
 
-Tabela de frutas: `../exemplos/programas/frutas.lep`. Geometria escolar: `../exemplos/escola/geometria.lep`.
+O Jogo da Vida guarda o mundo em uma matriz: `../exemplos/jogos/conway_jogo_da_vida.lep`.
 
 **Desafio:** crie uma matriz com `identidade(3)` e mostre o resultado com `escreva`.
 
@@ -482,7 +492,7 @@ Para ver uma função que retorna outra função e preserva valores do contexto 
 | O que | Onde |
 |---|---|
 | jogos | `../exemplos/jogos/` (Termo, Forca, Conway, adivinhe) |
-| padaria, boletim, calculadora | `../exemplos/programas/` |
+| diário, agenda CSV, calculadora | `../exemplos/programas/` |
 | referência de cada função | [manual](../docs/manual.md) · expressa-aula **F1** · `ajuda("escreva")` |
-| resumo da sintaxe e das funções | [folha-de-consulta.md](../folha-de-consulta.md) |
-| regras detalhadas da linguagem | [especificacao-linguagem.md](../especificacao-linguagem.md) |
+| resumo da sintaxe e das funções | [folha-de-consulta.md](../docs/folha-de-consulta.md) |
+| regras detalhadas da linguagem | [especificacao-linguagem.md](../docs/especificacao-linguagem.md) |

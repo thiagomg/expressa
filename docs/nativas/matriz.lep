@@ -44,13 +44,13 @@ cheia = funcao(linhas, colunas, valor) { 0 }
 
 /// Quantidade de linhas da matriz.
 ///
-/// Exemplo: nlinhas(A)
-nlinhas = funcao(matriz) { 0 }
+/// Exemplo: linhas(A)
+linhas = funcao(matriz) { 0 }
 
 /// Quantidade de colunas da matriz.
 ///
-/// Exemplo: ncolunas(A)
-ncolunas = funcao(matriz) { 0 }
+/// Exemplo: colunas(A)
+colunas = funcao(matriz) { 0 }
 
 /// Lê ou altera a célula em (x, y): x é a coluna e y é a linha.
 ///

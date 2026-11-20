@@ -7,8 +7,8 @@ Este manual reúne a sintaxe, as operações e as funções da Expressa para con
 | **Manual** | referência da linguagem e das funções |
 | [Tutorial básico](../tutorial/basico.md) | primeiros passos, capítulos 1 a 8 e projetos |
 | [Tutorial avançado](../tutorial/avancado.md) | coleções, funções, módulos, arquivos e gráficos |
-| [Folha de consulta](../folha-de-consulta.md) | resumo da sintaxe e das funções |
-| [Especificação](../especificacao-linguagem.md) | regras detalhadas para quem implementa a linguagem |
+| [Folha de consulta](folha-de-consulta.md) | resumo da sintaxe e das funções |
+| [Especificação](especificacao-linguagem.md) | regras detalhadas para quem implementa a linguagem |
 
 No expressa-aula, pressione **F1** para consultar a ajuda das funções. Você também pode chamar `ajuda("escreva")` em um programa ou no REPL, o modo interativo. As fichas usadas pela ajuda estão em `docs/nativas/` no repositório.
 
@@ -68,6 +68,15 @@ resultado = { 10 + 5 }    // bloco como valor → 15
 
 `inicio` fecha com `fim`; `{` fecha com `}`. Não misture no mesmo bloco.
 
+Cada comando fica em uma linha; dois comandos na mesma linha são erro. Dentro de `( )` e `[ ]` a quebra de linha é livre. Fora deles, a quebra de linha termina a expressão: para quebrar uma conta longa, coloque-a entre parênteses. Um operador no fim ou no começo da linha (`+`, `e`, `->`, `.` …) é erro. As palavras-chave podem ir para a linha seguinte: `se cond` e depois `inicio`, `fim` e depois `senao` ou `ou se`.
+
+```text
+total = (preco * quantidade
+         + frete)
+```
+
+Um valor calculado e não usado, sem efeito, numa linha que não é a última do bloco é erro: `x + 1` sozinho na linha não faz nada. Chamadas de função, blocos e `se` podem ficar sozinhos na linha.
+
 ```text
 // uma linha
 /* várias linhas */
@@ -92,7 +101,7 @@ Uma função pode ler variáveis de um escopo externo, mas não pode reatribuir 
 | `%` | resto da divisão | `7 % 3` → `1`; `-7 % 3` → `-1` |
 | `-valor` | troca o sinal | `-(-3)` → `3` |
 
-`+` também junta textos (`"Idade: " + 10`) e listas (`[1, 2] + [3]`). Em conjuntos, faz a união de dois conjuntos ou acrescenta um elemento: `s + :ana`. As operações `+`, `-` e `*` com matrizes estão descritas na seção [matriz](#importe-matriz).
+`+` também junta textos (`"Idade: " + 10`) e listas (`[1, 2] + [3]`). Em conjuntos, faz a união de dois conjuntos ou acrescenta um elemento: `s + :ana`. Em mapas, `m + (chave -> valor)` é um mapa novo com essa chave. As operações `+`, `-` e `*` com matrizes estão descritas na seção [matriz](#importe-matriz).
 
 ### Comparações
 
@@ -127,8 +136,9 @@ Os operandos devem ser valores lógicos. Em `a e b`, `b` só é avaliado se `a` 
 | texto | um trecho de texto | `"Maria Silva" contem "Silva"` |
 | mapa | uma chave | `pessoa contem :idade` |
 | conjunto | um elemento | `nomes contem :ana` |
+| intervalo | um número que ele gera | `(0..10) contem 3` |
 
-O resultado é `verdadeiro` ou `falso`.
+O resultado é `verdadeiro` ou `falso`. Em um intervalo, um número que não é inteiro dá `falso`, e um valor que não é número gera erro.
 
 ### Atribuição e atualização
 
@@ -138,7 +148,7 @@ O resultado é `verdadeiro` ou `falso`.
 | `alvo += valor` | soma ou junta ao valor atual | `nomes += ["Ana"]` |
 | `alvo -= valor` | subtrai do valor atual | `saldo -= 10` |
 
-`+=` aceita os mesmos tipos de `+`; `-=` aceita os mesmos tipos de `-`. Por exemplo, `nome += " Silva"` acrescenta texto e `s += :ana` acrescenta um elemento ao conjunto. O alvo também pode ser um elemento, como em `xs[0] += 1`; o receptor e seus índices são avaliados uma única vez.
+`+=` aceita os mesmos tipos de `+`; `-=` aceita os mesmos tipos de `-`. Por exemplo, `nome += " Silva"` acrescenta texto, `s += :ana` acrescenta um elemento ao conjunto e `m += :cidade -> "Natal"` acrescenta uma chave ao mapa. O alvo também pode ser um elemento, como em `xs[0] += 1`; o receptor e seus índices são avaliados uma única vez.
 
 ### Intervalos, pares e acesso
 
@@ -185,7 +195,7 @@ nao (idade == 18)         // inverte o resultado da comparação
 ## Controle de fluxo
 
 ```expressa
-se nota >= 7 { "aprovado" } senão { "reprovado" }
+situacao = se nota >= 7 { "aprovado" } senão { "reprovado" }
 se n < 0 { escreva("negativo") }     // senão é opcional como comando
 
 se nota == 10 {
@@ -200,6 +210,7 @@ repita 3 vezes { escreva("olá") }
 para i em 1..=5 { escreva(i) }
 para nome em ["Ana", "Bruno"] { escreva(nome) }
 para ch em "olá" { escreva(ch) }
+para p em mapa([:a -> 1]) { escreva(p:chave, p:valor) }
 
 i = 1
 enquanto i <= 3 {
@@ -210,7 +221,7 @@ pare          // sai do laço
 continue      // próxima volta
 ```
 
-Quando o resultado de `se` é usado como **valor**, o `senão` é obrigatório. Como **comando**, `senão` é opcional. Em uma sequência com `ou se`, apenas o primeiro bloco cuja condição for verdadeira é executado. `pare` e `continue` só podem ser usados dentro de laços.
+Quando o resultado de `se` é usado diretamente como **valor** (`x = se …`, argumento, `retorne se …`), o `senão` é obrigatório. Como **comando**, `senão` é opcional. Um `se` na última linha de um bloco, como o corpo de uma função, é comando: sem `senão` e sem ramo executado, o bloco vale `nada`. `para … em` percorre listas, textos, conjuntos, intervalos e mapas; em um mapa, cada volta recebe um par (`p:chave`, `p:valor`) na ordem da impressão. Em uma sequência com `ou se`, apenas o primeiro bloco cuja condição for verdadeira é executado. `pare` e `continue` só podem ser usados dentro de laços.
 
 `retorne x` encerra a função imediatamente e retorna o valor de `x`. Só pode ser usado dentro de uma função. Sem valor, `retorne` retorna `nada`. Também é possível escrever `retorne nada`.
 
@@ -232,11 +243,11 @@ busca = função(xs, alvo) {
 }
 ```
 
-`função` e `funcao` são formas equivalentes. Você pode escrever usar de duas formas:
+`função` e `funcao` são formas equivalentes. Você pode chamar uma função de duas formas:
 1. `tamanho(xs)`
 2. `xs.tamanho()`
 
-O primeiro argumento pode preceder a funcão. O segundo se torna o primeiro e assim por diante.
+Na segunda forma, o primeiro argumento vem antes do nome da função, seguido de um ponto; os demais argumentos ficam entre os parênteses.
 
 ```expressa
 expressa> comeca_com("Hoje eu acordei", "Hoje")
@@ -262,7 +273,7 @@ Os módulos nativos incluem `tela`, `mat`, `matriz`, `arquivo`, `sistema`, `cron
 
 Em uma importação sem `/` nem `.lep`, a Expressa procura um módulo nativo. Se houver um arquivo local com o mesmo nome, a importação é ambígua e gera erro. Use `importe "./matriz"` para escolher explicitamente o arquivo local. Os caminhos de importação são relativos à pasta do arquivo que faz o `importe`.
 
-Sem apelido, os nomes do módulo ficam disponíveis diretamente no escopo da importação. Se algum desses nomes já estiver em uso, ocorre um erro. Use um apelido para evitar o conflito, como em `g = importe "tela_grafica"`.
+Sem apelido, os nomes do módulo ficam disponíveis diretamente no escopo da importação. Se algum desses nomes já estiver em uso (no programa, no núcleo ou em outro módulo), ocorre um erro. Depois da importação, esses nomes também não podem ser reatribuídos: `importe "mat"` seguido de `raiz = 1` é erro. Use um apelido para evitar o conflito, como em `g = importe "tela_grafica"`; com apelido, nada é espalhado no escopo. Parâmetros e variáveis de laço podem usar esses nomes. `importe "tela_gráfica"` também funciona.
 
 ---
 
@@ -302,7 +313,7 @@ As funções e os valores do núcleo são importadas automaticamente e estão se
 
 ### `escreva(valor, …)` / `escreva()`
 
-Mostra os argumentos separados por espaços e termina com uma quebra de linha. Sem argumentos, escreve uma linha vazia. Retorna `nada`.
+Mostra os argumentos separados por espaços e termina com uma quebra de linha. Sem argumentos, escreve uma linha vazia. Retorna `nada`. Um número sozinho segue o formato ativo (`2,5`); dentro de uma lista, mapa ou par, aparece como no código (`[1.5, 2]`).
 
 ```text
 escreva("Olá", 10)
@@ -387,6 +398,8 @@ tipos() contem "mapa"
 
 Converte um texto em número, seguindo a configuração de `formato`: `"3.14"` no formato `"en"`, por exemplo, ou `"3,14"` no formato `"pt"`. Aceita espaços no início e no fim e `_` como separador entre dígitos. Se o argumento já for um número, retorna o próprio valor.
 
+A leitura é estrita. No formato `"pt"`, a vírgula separa os decimais e o ponto só separa milhares em grupos de três: `numero("1.500")` é 1500, e `numero("2.5")` gera um erro que sugere escrever `2,5` ou usar `formato("en")`. O formato `"en"` é o espelho: `numero("1,500")` é 1500 e `numero("2,5")` gera erro.
+
 ```text
 idade = numero(leia("Idade: ")) se_falhar { 0 }
 ```
@@ -413,19 +426,28 @@ Substitui os marcadores do modelo pelos valores informados. `{}` usa o próximo 
 formate("{:<8} {:>5}", "Ana", 10)
 ```
 
-Um mapa pode definir `:_como_texto` (função de um argumento que devolve texto). `formate`, `escreva` e o `+` com texto chamam essa função. Sem o campo, o mapa continua `mapa{…}`. Você define essa função no programa, por exemplo com `como_texto = função(fr) { … }`, e a associa ao mapa com `fr:_como_texto = como_texto`.
+Um mapa pode definir `:_como_texto` (função de um argumento que devolve texto). `formate`, `escreva` e o `+` com texto chamam essa função. Sem o campo, o mapa continua `mapa{…}`. Você define essa função no programa, por exemplo com `fracao_texto = função(fr) { … }`, e a associa ao mapa com `fr:_como_texto = fracao_texto`.
 
 Ex:
 
 ```expressa
-como_texto = função(t) { formate("{}/{}", t:num, t:div) }
+fracao_texto = função(t) { formate("{}/{}", t:num, t:div) }
 fracao = mapa([
     :num -> 1,
     :div -> 2,
-    :_como_texto -> como_texto,
+    :_como_texto -> fracao_texto,
 ])
 escreva(fracao)
 // Retorna 1/2
+```
+
+### `como_texto(valor)`
+
+Retorna o texto que `escreva` mostraria para o valor: números sozinhos seguem o formato ativo, e um mapa com `:_como_texto` usa essa função.
+
+```text
+como_texto(2.5)      // "2,5"
+como_texto([2.5])    // "[2.5]"
 ```
 
 ### `avalie(texto)`
@@ -474,6 +496,17 @@ pessoa = mapa([:nome -> "Ana", :idade -> 25])
 pessoa:nome = "Bia"
 pessoa["cidade"] = "Fortaleza"
 pessoa = pessoa.remova("idade")
+pessoa += :idade -> 26
+para p em pessoa { escreva(p:chave, p:valor) }
+```
+
+### `chaves_de(mapa)` / `valores_de(mapa)`
+
+Retornam a lista das chaves e a lista dos valores do mapa, na ordem da impressão.
+
+```text
+chaves_de(mapa([:b -> 2, :a -> 1]))     // ["a", "b"]
+valores_de(mapa([:b -> 2, :a -> 1]))    // [1, 2]
 ```
 
 ### `conjunto()` / `conjunto(xs)`
@@ -488,7 +521,7 @@ s = s.remova(:bia)
 
 ### `tamanho(valor)`
 
-Retorna a quantidade de caracteres de um texto, de itens de uma lista ou conjunto, de pares de um mapa ou de linhas de uma matriz. Em textos, conta caracteres Unicode, não bytes.
+Retorna a quantidade de caracteres de um texto, de itens de uma lista ou conjunto, de pares de um mapa, de linhas de uma matriz ou de inteiros gerados por um intervalo (`tamanho(0..3)` é 3). Em textos, conta caracteres Unicode, não bytes. Um intervalo sem teto, como `0..`, gera erro.
 
 ```text
 tamanho("olá")    // 3
@@ -496,15 +529,24 @@ tamanho("olá")    // 3
 
 ### `primeiro(lista)` / `ultimo(lista)`
 
-Retornam, respectivamente, o primeiro e o último item da lista. Geram erro se a lista estiver vazia.
+Retornam, respectivamente, o primeiro e o último item da lista. Em um texto, retornam o primeiro e o último caractere (`primeiro("olá")` é `"o"`). Também aceitam um intervalo: `primeiro(3..5)` é 3 e `ultimo(3..5)` é 4, o último número gerado. Geram erro se não houver elementos; `ultimo` também gera erro em um intervalo sem teto. `ultimo` também se escreve `último`.
 
 ```text
 primeiro([10, 20])
 ```
 
+### `eh_infinito(intervalo)` / `é_infinito(intervalo)`
+
+Retorna `verdadeiro` se o intervalo não tem teto, como `0..`, e `falso` caso contrário. Outro tipo de valor gera erro.
+
+```text
+eh_infinito(0..)     // verdadeiro
+eh_infinito(0..3)    // falso
+```
+
 ### `maiuscula(texto)` / `minuscula(texto)`
 
-Retornam uma cópia do texto em letras maiúsculas ou minúsculas, respectivamente.
+Retornam uma cópia do texto em letras maiúsculas ou minúsculas, respectivamente. Também se escrevem `maiúscula` e `minúscula`.
 
 ```text
 maiuscula("olá")
@@ -522,13 +564,15 @@ sem_acento("São Paulo")
 
 `remova(lista, indice)` /
 `remova(lista, intervalo)` /
-`remova(mapa, chave)`
+`remova(mapa, chave)` /
+`remova(conjunto, valor)`
 
-Retorna uma cópia sem o item do índice indicado, sem os itens do intervalo ou sem a chave do mapa. O índice final do intervalo não é incluído. Em um conjunto, remove o valor informado.
+Retorna uma cópia sem o item do índice indicado, sem os itens do intervalo, sem a chave do mapa ou sem o valor do conjunto. O índice final do intervalo não é incluído; use `..=` para incluí-lo. O intervalo precisa ter teto: `remova(xs, 1..)` gera erro.
 
 ```text
 xs = xs.remova(2)
 xs = xs.remova(2..4)    // tira os índices 2 e 3
+xs = xs.remova(2..=3)   // o mesmo
 ```
 
 ### `substitua(texto, antigo, novo)`
@@ -541,10 +585,11 @@ substitua("aa", "a", "b")    // "bb"
 
 ### `procure(texto, trecho)` / `procure(lista, item)`
 
-Retorna o índice da primeira ocorrência, contando a partir de zero, ou `-1` se não encontrar. Na busca em texto, um trecho vazio (`""`) gera erro.
+Retorna o índice da primeira ocorrência, contando a partir de zero, ou `nada` se não encontrar. Na busca em texto, um trecho vazio (`""`) gera erro.
 
 ```text
 procure("onde", "n")    // 1
+procure("onde", "x")    // nada
 ```
 
 ### `separe(texto, separador)`
@@ -586,8 +631,8 @@ xs = [10, 20, 30, 40]
 xs[0]           // 10
 xs[1..3]        // [20, 30]
 xs[1..]         // até o fim
-xs + [50]       // retorna [10, 20, 30, 40]
-xs += [50]      // Insere 50 no final da lista
+xs + [50]       // nova lista [10, 20, 30, 40, 50]; xs não muda
+xs += [50]      // xs passa a ser [10, 20, 30, 40, 50]
 "abc"[0..2]     // "ab"
 "abc"[1..]      // "bc"
 0..3            // intervalo 0, 1, 2; 0..=2 é o mesmo
@@ -597,15 +642,24 @@ t[1] = "x"      // substitui um caractere; t passa a ser "axc"
 
 Nativas do núcleo não podem ser reatribuídas (`escreva = 1` é erro).
 
+### `clone(valor)`
+
+Retorna uma cópia profunda de listas, mapas, conjuntos, pares, matrizes e imagens, preservando ciclos e referências compartilhadas internas. `a = b` e `xs + []` não fazem isso: a primeira compartilha o mesmo objeto, e a segunda copia apenas o primeiro nível. Funções que usam nomes de fora, módulos e processos não podem ser clonados. Veja o [contrato completo](clone.md).
+
+```text
+b = clone([[1, 2]])
+b[0][0] = 9           // a lista original não muda
+```
+
 ---
 
 ## `importe "tela"`
 
 Oferece funções para controlar o terminal e o painel de saída do expressa-aula.
 
-### `cls()` / `limpe_tela()`
+### `limpe_tela()`
 
-Limpa a tela e coloca o cursor no canto superior esquerdo. No REPL, o comando `cls` também limpa a tela. Limpar a cada quadro de uma animação pode causar piscadas; use `posicao_cursor(0, 0, falso)` para voltar ao início sem apagar o conteúdo.
+Limpa a tela e coloca o cursor no canto superior esquerdo. No REPL, a palavra `limpe_tela` ou `cls`, sem parênteses, também limpa a tela. Limpar a cada quadro de uma animação pode causar piscadas; use `posicao_cursor(0, 0, falso)` para voltar ao início sem apagar o conteúdo.
 
 ### `posicao_cursor(linha, coluna, mostre)`
 
@@ -665,9 +719,13 @@ Aplica uma cor de fundo ao texto, mantendo a cor padrão das letras.
 
 Retorna o texto com códigos ANSI de negrito e restaura a formatação padrão ao final.
 
-### `colunas()` / `linhas()`
+### `tamanho_tela()`
 
-Retornam a largura em colunas e a altura em linhas de caracteres, respectivamente. Sem um terminal interativo, usam 80 colunas e 24 linhas. O painel do expressa-aula também informa esses valores fixos.
+Retorna o tamanho da tela em caracteres: um mapa com `:linhas` e `:colunas`. Sem um terminal interativo, usa 24 linhas e 80 colunas. O painel do expressa-aula também informa esses valores fixos.
+
+```text
+tamanho_tela():colunas    // 80 sem terminal
+```
 
 ### `quadro(texto)`
 
@@ -715,13 +773,13 @@ c.cart::mostre()
 
 `adicione` guarda uma cópia do gráfico no documento. Alterações posteriores no gráfico original não mudam essa cópia. Outra chamada de `mostre` para o mesmo documento atualiza a janela existente. Documentos diferentes usam janelas diferentes.
 
-As cores são as mesmas do módulo `tela`. `tipo(g)` retorna `"mapa"`. No expressa-aula, o resultado aparece no painel **Gráficos**; use **Destacar** para abrir uma janela separada. No terminal, execute com `expressa-grafico` ou `expressa --grafico`.
+As cores são as mesmas do módulo `tela`. `tipo(g)` retorna `"mapa"`. No expressa-aula, o resultado aparece no painel **Gráficos**; use **Destacar** para abrir uma janela separada. No terminal, `expressa programa.lep` abre a janela automaticamente.
 
 ### `documento()`
 
 Cria um documento vazio, representado por um mapa. A janela só é aberta quando você chama `mostre`.
 
-### `grafico()`
+### `grafico()` / `gráfico()`
 
 Cria um gráfico vazio. Configure os limites com `eixos` e acrescente curvas com `plote`.
 
@@ -767,6 +825,28 @@ g.tela_grafica::salve("casa.png")
 
 `evento(g)` consulta o teclado e os acontecimentos pendentes da janela **sem esperar uma interação**. A função recebe apenas a tela gráfica como argumento. Chame `mostre()` antes e consulte `evento()` uma vez por quadro. O resultado é um mapa com campos como `:teclas`, `:apertadas`, `:soltas`, `:eventos` e `:sair`.
 
+### Laço gráfico
+
+Para jogos e animações, prefira o laço gráfico em vez de um `enquanto` com `evento()` e `durma()`. `laco_grafico(g)` (também `laço_gráfico`) cria o laço; `execute(l, config)` o inicia e espera que ele termine. `config` é um mapa com exatamente três opções: `:fps` (quadros por segundo), `:eventos` (função que recebe `ev` e `dt`) e `:desenho` (função que recebe a tela). A cada quadro, o laço lê a entrada, chama `eventos(ev, dt)`, apaga o desenho, chama `desenho(g)` e mostra o resultado. `ev` é o mesmo mapa devolvido por `evento()`; `dt` é o tempo, em segundos (ou fração de segundos), desde a chamada anterior. `pare_laco(l)` (também `pare_laço`, ou `l.tela_grafica::pare()`) encerra o laço depois do quadro atual. Fechar a janela também encerra. Dentro das funções do laço, não chame `evento()`, `mostre()` nem `durma()`.
+
+```text
+tela_grafica = importe "tela_grafica"
+g = tela_grafica::nova(160, 144, 4)
+l = g.tela_grafica::laco_grafico()
+x = mapa([:valor -> 0])
+
+eventos = função(ev, dt) {
+    se ev:apertadas contem :escape { l.tela_grafica::pare() }
+    se ev:teclas contem :direita { x:valor += 60 * dt }
+}
+desenhe = função(tela) {
+    tela.tela_grafica::retangulo(x:valor, 60, x:valor + 8, 68)
+}
+l.tela_grafica::execute(mapa([:fps -> 30, :eventos -> eventos, :desenho -> desenhe]))
+```
+
+Como as funções do laço não podem reatribuir nomes de fora, guarde o estado que muda entre quadros em um mapa, como `x` acima.
+
 No expressa-aula, a tela gráfica aparece em uma janela separada do painel **Gráficos**. Para detalhes técnicos da comunicação com o visualizador, consulte [Tela gráfica](tela_grafica.md).
 
 ## `importe "imagem"`
@@ -806,13 +886,13 @@ Valor, não função: `pi`, não `pi()`.
 area = pi * r * r
 ```
 
-### `seno` / `sen` · `cosseno` / `cos` · `tangente` / `tan`
+### `seno` / `sen` · `cosseno` / `cos` · `tangente`
 
 Calculam as funções trigonométricas com o ângulo em **radianos**. Para usar graus, converta o valor antes: `seno(radianos(30))`.
 
-### `arcoseno` `arcocosseno` `arcotangente` `arcotangente2(y, x)`
+### `arcosseno` `arcocosseno` `arcotangente` `arcotangente2(y, x)`
 
-Calculam as funções trigonométricas inversas e retornam ângulos em radianos. Em `arcoseno` e `arcocosseno`, o argumento deve estar entre -1 e 1.
+Calculam as funções trigonométricas inversas e retornam ângulos em radianos. Em `arcosseno` e `arcocosseno`, o argumento deve estar entre -1 e 1.
 
 ### `radianos(graus)` / `graus(radianos)`
 
@@ -822,7 +902,7 @@ Convertem ângulos entre graus e radianos. Por exemplo, `graus(pi)` retorna 180.
 
 `exp(x)` calcula e elevado a x. `log(x)` calcula o logaritmo natural e `log10(x)`, o logaritmo na base 10. Por exemplo, `log10(1000)` retorna 3. Para `log` e `log10`, x deve ser maior que zero.
 
-### `potencia(base, exp)`
+### `potencia(base, exp)` / `potência(base, exp)`
 
 Eleva a base ao expoente informado, que pode ser fracionário. Zero elevado a zero vale 1.
 
@@ -882,8 +962,8 @@ identidade(3)
 zeros(2, 5)
 uns(3)
 cheia(2, 3, 7)
-nlinhas(A)       // 2
-ncolunas(A)      // 3
+linhas(A)        // 2
+colunas(A)       // 3
 tamanho(A)       // também as linhas
 A + B
 3 * A
@@ -936,6 +1016,14 @@ Movem ou copiam a origem para o destino. Se o destino for uma pasta, o arquivo �
 entrada = junte_caminho(pasta_atual(), argumentos[0])
 ```
 
+### `leia_bytes()` / `leia_bytes(caminho)` · `texto_utf8(bytes)` / `texto_utf8(bytes, modo)`
+
+`leia_bytes` lê o arquivo sem alterar as quebras de linha e retorna uma lista de números de 0 a 255. Sem caminho, lê a entrada padrão até o fim; no expressa-aula, informe um caminho. `texto_utf8` converte essa lista em texto. O modo padrão, `:estrito`, gera erro com bytes que não formam UTF-8; `:substitua` troca esses bytes por `�`, e `:ignore` os descarta.
+
+```text
+texto = texto_utf8(leia_bytes("dados.txt"), :substitua)
+```
+
 ### `leia_csv(caminho)` / `salve_csv(caminho, dados)`
 
 Leem e gravam um CSV simples, separado por vírgulas e sem tratamento de campos entre aspas. `leia_csv` retorna uma lista de listas de **texto**. `salve_csv` substitui o conteúdo do arquivo.
@@ -962,7 +1050,7 @@ O último argumento pode ser um mapa de opções:
 | Opção | Efeito |
 |---|---|
 | `:pasta` | define a pasta de execução do comando |
-| `:entrada` | fornece uma lista de linhas como entrada |
+| `:entrada` | fornece um texto ou uma lista de linhas como entrada do primeiro comando |
 | `:ambiente` | fornece um mapa de variáveis de ambiente |
 | `:tempo` | define o tempo-limite em segundos |
 | `:exija -> verdadeiro` | gera um erro se o código de saída for diferente de zero |
@@ -1014,7 +1102,7 @@ funcoes()
 funcoes("matriz")
 ajuda("escreva")
 ajuda("matriz::zeros")
-cls             // limpa a tela do REPL
+limpe_tela      // limpa a tela do REPL (também cls)
 sair
 ```
 
@@ -1044,4 +1132,6 @@ Literais no código: sempre ponto (`3.14`).
 
 `formato("decimal")`, o padrão, faz a aritmética em base 10. `formato("float")` usa números de ponto flutuante IEEE-754 nas operações `+`, `-`, `*`, `/` e `%`. Essa escolha é independente do formato textual `pt` ou `en`.
 
-Os módulos `mat` e `matriz` usam internamente números de ponto flutuante binários em cálculos como seno e determinante.
+Os módulos `mat`, `matriz`, `cartesiano` e `tela_grafica` calculam internamente com números de ponto flutuante binários (as células de matriz são sempre binárias). No modo decimal, um resultado que é só ruído binário em torno de um número com até 15 algarismos significativos volta como esse número: `seno(radianos(30))` é `0,5`, `cosseno(radianos(60))` é `0,5` e `3 * matriz([[0.1]])` mostra `0,3`. Outros resultados mantêm todos os dígitos: `raiz(2)` é `1,4142135623730951`. Com `formato("float")`, o valor binário exato é mantido: `seno(radianos(30))` mostra `0,49999999999999994`.
+
+Toda função nativa cujo nome tem uma palavra acentuada aceita as duas grafias, como `maiuscula`/`maiúscula` e `laco_grafico`/`laço_gráfico`.

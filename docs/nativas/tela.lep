@@ -1,12 +1,12 @@
 /// Limpa a tela do terminal. Também limpe_tela().
 ///
 /// Coloca o cursor no canto superior esquerdo. Sem argumentos.
-/// No REPL, a linha cls (sem parênteses) também limpa a tela.
+/// No REPL, a linha limpe_tela (sem parênteses) também limpa a tela.
 /// Na Aula, limpa o painel de saída.
-/// Em uma animação, cls() a cada quadro pisca: use posicao_cursor(0, 0, falso) no laço.
+/// Em uma animação, limpe_tela() a cada quadro pisca: use posicao_cursor(0, 0, falso) no laço.
 ///
-/// Exemplo: cls()
-cls = funcao() { 0 }
+/// Exemplo: limpe_tela()
+limpe_tela = funcao() { 0 }
 
 /// Verdadeiro se a entrada é o teclado (não um pipe). Também é_terminal().
 ///
@@ -36,19 +36,13 @@ fundo = funcao(texto, cor) { 0 }
 /// Exemplo: "GAME OVER".negrito()
 negrito = funcao(texto) { 0 }
 
-/// Largura da tela em caracteres.
+/// Tamanho da tela em caracteres: mapa com :linhas e :colunas.
 ///
-/// No terminal, o tamanho atual. Sem TTY (pipe, testes, Aula sem painel), 80.
+/// No terminal, o tamanho atual. Sem TTY (pipe, testes, Aula sem painel),
+/// 24 linhas e 80 colunas.
 ///
-/// Exemplo: se colunas() >= 48 { ... }
-colunas = funcao() { 0 }
-
-/// Altura da tela em caracteres.
-///
-/// No terminal, o tamanho atual. Sem TTY, 24.
-///
-/// Exemplo: linhas()
-linhas = funcao() { 0 }
+/// Exemplo: se tamanho_tela():colunas >= 48 { ... }
+tamanho_tela = funcao() { mapa() }
 
 /// Redesenha a tela: cursor no canto, escreve o texto, apaga o que sobrar.
 ///

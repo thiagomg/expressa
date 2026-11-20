@@ -66,7 +66,7 @@ impl Vm<'_, '_> {
     pub(crate) fn bi_cls(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
         if !args.is_empty() {
             return Err(self.err(
-                format!("cls() não espera argumentos, recebeu {}", args.len()),
+                format!("limpe_tela() não espera argumentos, recebeu {}", args.len()),
                 span,
             ));
         }
@@ -197,24 +197,32 @@ impl Vm<'_, '_> {
         Ok(Value::Texto(wrap_sgr(&texto, &[1])))
     }
 
-    pub(crate) fn bi_colunas(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
+    /// `tamanho_tela()` → mapa `:linhas`, `:colunas` (80×24 sem terminal).
+    pub(crate) fn bi_tamanho_tela(
+        &mut self,
+        args: &[Value],
+        span: Span,
+    ) -> Result<Value, EvalError> {
         if !args.is_empty() {
             return Err(self.err(
-                format!("colunas() não espera argumentos, recebeu {}", args.len()),
+                format!(
+                    "tamanho_tela() não espera argumentos, recebeu {}",
+                    args.len()
+                ),
                 span,
             ));
         }
-        Ok(Value::Numero((tamanho_tela().0 as i64).into()))
-    }
-
-    pub(crate) fn bi_linhas(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
-        if !args.is_empty() {
-            return Err(self.err(
-                format!("linhas() não espera argumentos, recebeu {}", args.len()),
-                span,
-            ));
-        }
-        Ok(Value::Numero((tamanho_tela().1 as i64).into()))
+        let (colunas, linhas) = tamanho_tela();
+        Ok(Value::mapa(vec![
+            (
+                MapKey::Texto("linhas".into()),
+                Value::Numero((linhas as i64).into()),
+            ),
+            (
+                MapKey::Texto("colunas".into()),
+                Value::Numero((colunas as i64).into()),
+            ),
+        ]))
     }
 
     pub(crate) fn bi_quadro(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {

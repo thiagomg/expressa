@@ -126,12 +126,16 @@ pub struct Env {
     /// A function was defined here or in a block inside (see
     /// [`Env::marcar_funcao`]).
     pub(crate) criou_funcao: bool,
+    /// Names a flat `importe` published here, with the module path. They
+    /// cannot be reassigned, like native names (only a module frame has any).
+    importados: HashMap<String, String>,
 }
 
 #[derive(Debug)]
 pub enum AssignError {
     FunctionBoundary { name: String },
     Builtin { name: String },
+    Imported { name: String, module: String },
 }
 
 // Live frames on this thread. Tests use it to see frames that are never
@@ -157,6 +161,7 @@ impl Env {
             parent,
             kind,
             criou_funcao: false,
+            importados: HashMap::new(),
         }))
     }
 
@@ -217,6 +222,11 @@ impl Env {
         Ok(())
     }
 
+    /// `name` was published here by a flat `importe` of `module`.
+    pub(crate) fn marcar_importado(&mut self, name: &str, module: &str) {
+        self.importados.insert(name.to_string(), module.to_string());
+    }
+
     /// Validate without publishing a binding (used to preflight imports).
     pub fn check_assign(env: &Rc<RefCell<Self>>, name: &str) -> Result<(), AssignError> {
         Self::assignment_frame(env, name).map(|_| ())
@@ -239,6 +249,12 @@ impl Env {
                 if e.kind == FrameKind::Builtins {
                     return Err(AssignError::Builtin {
                         name: name.to_string(),
+                    });
+                }
+                if let Some(module) = e.importados.get(name) {
+                    return Err(AssignError::Imported {
+                        name: name.to_string(),
+                        module: module.clone(),
                     });
                 }
                 drop(e);

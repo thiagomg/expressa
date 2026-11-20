@@ -9,7 +9,7 @@ Arquivos `.lep`. Índices começam em **0**. Inspirada em SML, Rust, Lua, C, Pas
 - **Baterias inclusas** — texto, listas, mapas, arquivo, tela, matemática, matriz, data (`crono`) e gráfico cartesiano, sem baixar biblioteca para o primeiro programa.
 - **REPL com introspecção** — `ajuda`, `ajuda escreva`, `ls`, `ls mat`, `tipo`, `tipos`.
 - **Editor com executar e depurar** — [expressa-aula](aula/README.md).
-- **Manual e exemplos** — [tutorial](tutorial/basico.md), [avançado](tutorial/avancado.md), [manual](docs/manual.md), [folha](folha-de-consulta.md), [exemplos/](exemplos/).
+- **Manual e exemplos** — [tutorial](tutorial/basico.md), [avançado](tutorial/avancado.md), [manual](docs/manual.md), [folha](docs/folha-de-consulta.md), [exemplos/](exemplos/).
 
 Implementada em Rust.
 
@@ -38,7 +38,7 @@ expressa prog.lepc        bytecode previamente compilado
 lep-exec prog.lepc [args…]    runner dedicado de programas compilados
 ```
 
-No REPL: `2 + 3`, `escreva("oi")`, `ajuda escreva`. `sair` ou Ctrl+D encerra.
+No REPL: `2 + 3`, `escreva("oi")`, `ajuda("escreva")`. `sair` ou Ctrl+D encerra.
 
 Compilar: `cargo build --release` (Rust, edition 2024; CMake e compilador C/C++ para o SDL2 incluído no build gráfico). Binários em `target/release/`, incluindo o runner `lep-exec`, compilado por padrão e incluído nos pacotes `.deb` e no instalador `.exe`. A pipeline empacota com `--profile release-lto` (`target/release-lto/`).
 
@@ -85,4 +85,4 @@ Os arquivos são produzidos em `dist/` nos runners e enviados diretamente, sem
 um ZIP adicional, como artefatos da execução. Esse workflow não publica uma GitHub Release. O workflow separado
 **Project storage** mantém seus próprios gatilhos de testes.
 
-Especificação: [especificacao-linguagem.md](especificacao-linguagem.md).
+Especificação: [especificacao-linguagem.md](docs/especificacao-linguagem.md).

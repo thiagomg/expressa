@@ -9,7 +9,7 @@ mostre = funcao(ts, tudo) {
     escreva("----------------")
     para i em 0..ts.tamanho() {
         se ts[i]:completo == verdadeiro e tudo == falso {
-            continua
+            continue
         }
         escreva(i+1, ts[i])
     }
@@ -41,7 +41,7 @@ todos_itens = falso
 
 enquanto op != "S" {
     // Limpa a tela
-    cls()
+    limpe_tela()
     
     opções = [
         "Novo", "Concluir", "Editar", "Remover",

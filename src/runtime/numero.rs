@@ -86,6 +86,29 @@ impl Numero {
         Some(Self(d))
     }
 
+    /// A result of binary floating point (`mat`, `matriz`) as a decimal.
+    /// When the value is only binary noise around a number with at most 15
+    /// significant digits (a few units in the last place away), that short
+    /// number is used: `seno(radianos(30))` is 0.5, not 0.49999999999999994.
+    /// Any other value keeps every digit (`raiz(2)`), so feeding it back into
+    /// another function does not lose precision.
+    pub fn from_f64_15(n: f64) -> Option<Self> {
+        if !n.is_finite() {
+            return None;
+        }
+        if n == 0.0 {
+            return Some(Self(Decimal::ZERO));
+        }
+        if let Ok(d) = Decimal::from_scientific(&format!("{n:.14e}"))
+            && !d.is_zero()
+            && let Some(volta) = d.to_f64()
+            && (volta - n).abs() <= 4.0 * f64::EPSILON * n.abs()
+        {
+            return Some(Self(d.normalize()));
+        }
+        Self::from_f64(n)
+    }
+
     pub fn to_f64(self) -> f64 {
         self.0.to_f64().unwrap_or(f64::NAN)
     }
@@ -296,6 +319,18 @@ mod tests {
         assert_eq!(n.to_plain_string(), "0.30000000000000004");
         assert_eq!(n.to_f64().to_bits(), (0.1_f64 * 3.0).to_bits());
         assert!(Numero::from_f64(1e-32).is_none());
+    }
+
+    #[test]
+    fn from_f64_15_hides_binary_noise() {
+        let s = |n: f64| Numero::from_f64_15(n).unwrap().to_plain_string();
+        assert_eq!(s(0.1 * 3.0), "0.3");
+        assert_eq!(s((30.0_f64).to_radians().sin()), "0.5");
+        assert_eq!(s(2.0_f64.sqrt()), "1.4142135623730951");
+        assert_eq!(s((60.0_f64).to_radians().cos()), "0.5");
+        assert_eq!(s(-1234.5), "-1234.5");
+        assert_eq!(s(1e20), "100000000000000000000");
+        assert!(Numero::from_f64_15(f64::NAN).is_none());
     }
 
     #[test]

@@ -3,7 +3,7 @@
 Arquivos `.lep`. Palavras em português. Índices começam em **0**.
 
 Tutorial: `tutorial/basico.md`. Avançado: `tutorial/avancado.md`.  
-Manual: `docs/manual.md`. Spec: `especificacao-linguagem.md`. Fichas: `docs/nativas/*.lep`.
+Manual: `docs/manual.md`. Spec: `docs/especificacao-linguagem.md`. Fichas: `docs/nativas/*.lep`.
 
 ```text
 expressa                      REPL
@@ -33,6 +33,11 @@ chmod +x prog.lep && ./prog.lep
 | mapa | `mapa([:nome -> "Ana"])` |
 | matriz | `matriz([[1, 2], [3, 4]])` só números; `importe "matriz"` |
 | conjunto | `conjunto([:ana, 1])` valores únicos |
+| intervalo | `0..3` `1..=3` `5..` inteiros gerados sob demanda |
+| `funcao` | `funcao(x) { x + 1 }` (também `função`) |
+| `nada` | `nada` |
+
+Também existem `imagem` (`importe "imagem"`), `modulo` e `processo` (`importe "processo"`). `tipo(x)` devolve esses nomes, sem acento.
 
 `nada` representa ausência de valor. Pode ser atribuído, comparado e retornado explicitamente. `escreva` e gravar arquivo também devolvem `nada`.
 
@@ -50,7 +55,7 @@ fim
 resultado = { 10 + 5 }         // bloco é expressão → 15
 ```
 
-Funções **leem** nomes de fora, mas **não alteram**.
+Funções **leem** nomes de fora, mas **não os reatribuem**. Elementos de listas, mapas e matrizes compartilhados podem ser alterados.
 
 ```text
 // uma linha
@@ -59,6 +64,8 @@ Funções **leem** nomes de fora, mas **não alteram**.
 ```
 
 `inicio` fecha com `fim`; `{` fecha com `}`. Não misture.
+
+Um comando por linha. A quebra de linha só é livre dentro de `( )` e `[ ]`: para quebrar uma conta, use parênteses. Operador no fim ou no começo da linha é erro. Valor calculado e não usado (`x + 1` sozinho, fora da última linha do bloco) é erro.
 
 ---
 
@@ -72,11 +79,12 @@ e  ou  nao
 lista contem 20
 "Maria Silva" contem "Silva"
 mapa contem "idade"
+(0..10) contem 3               // intervalo: o número é gerado?
 ```
 
 ```text
 mat::soma(1, 2)                // nome no módulo
-pessoa:nome                    // chave de mapa (= pessoa["nome"]); mesma linha
+pessoa:nome                    // chave de mapa (= pessoa["nome"])
 xs.tamanho()                   // igual a tamanho(xs)  — o () é obrigatório
 ```
 
@@ -85,7 +93,7 @@ xs.tamanho()                   // igual a tamanho(xs)  — o () é obrigatório
 ## Controle
 
 ```text
-se nota >= 7 { "aprovado" } senao { "reprovado" }   // como valor, senao obrigatório
+r = se nota >= 7 { "aprovado" } senao { "reprovado" }   // como valor, senao obrigatório
 se n < 0 { escreva("negativo") }                    // comando: senao opcional
 
 retorne verdadeiro                 // só numa função; sai na hora
@@ -97,8 +105,9 @@ para i em 1..=5 { escreva(i) }          // 1, 2, 3, 4, 5
 para i em 0..tamanho(xs) { escreva(xs[i]) }
 para nome em ["Ana", "Bruno"] { escreva(nome) }
 para ch em "olá" { escreva(ch) }    // texto: um caractere por vez
+para p em pessoa { escreva(p:chave, p:valor) }   // mapa: pares na ordem da impressão
 pare                               // sai do laço
-continue                           // próxima volta (também continua)
+continue                           // próxima volta
 
 i += 1                         // números: += e -=
 nome += " Silva"               // texto: só +=
@@ -170,16 +179,16 @@ xs + [50]
 xs += [50]                     // xs = xs + [50]
 xs = xs.remova(2)               // sem o índice 2
 xs = xs.remova(2..4)            // sem 2 e 3
-tamanho(xs)  primeiro(xs)  ultimo(xs)
+tamanho(xs)  primeiro(xs)  ultimo(xs)   // também texto: primeiro("olá") é "o"
 0..3  1..=2  ..3               // intervalo: gera 0, 1, 2
-infinito(0..)                  // verdadeiro; tamanho(0..) é erro
+eh_infinito(0..)               // verdadeiro; tamanho(0..) é erro
 
 t = "  Maria Silva  "
 t[0]  t[0..4]
 t[1] = "x"                     // um caractere; reatribui t
-tamanho(t)  maiuscula(t)  minuscula(t)  limpe(t)  sem_acento(t)
+tamanho(t)  maiuscula(t)  minuscula(t)  limpe(t)  sem_acento(t)   // também maiúscula, minúscula
 substitua(t, "Maria", "Ana")
-procure("onde", "n")          // 1;  -1 se não achar
+procure("onde", "n")          // 1;  nada se não achar
 procure([10, 20, 30], 20)     // 1
 separe("a,b,c", ",")           // ["a", "b", "c"]
 junte(["a", "b"], " - ")
@@ -194,6 +203,9 @@ pessoa:nome  pessoa[:nome]  pessoa["nome"]
 pessoa:nome = "Bia"
 pessoa["cidade"] = "Fortaleza"
 pessoa = pessoa.remova("idade")
+pessoa += :idade -> 26          // mapa novo com a chave
+chaves_de(pessoa)  valores_de(pessoa)   // listas na ordem da impressão
+como_texto(2.5)                // "2,5": o texto que escreva mostraria
 
 s = conjunto([:ana, :bia])
 s contem :ana
@@ -209,7 +221,7 @@ A.xy(x, y, valor)        // altera A[y, x]; devolve A
 A + B    3 * A    A * B
 transposta(A)  det(A)  identidade(3)
 zeros(2, 5)  uns(3)  cheia(2, 3, 7)
-nlinhas(A)  ncolunas(A)        // 2 e 3
+linhas(A)  colunas(A)          // 2 e 3
 tamanho(A)                     // também linhas
 ```
 
@@ -218,8 +230,9 @@ tamanho(A)                     // também linhas
 ## Entrada e saída
 
 ```text
-escreva("Média:", 7.5)         // stdout
+escreva("Média:", 7.5)         // stdout; [7.5] dentro de lista
 escreva_erro("falhou")         // stderr (não entra em > arquivo)
+importe "sistema"
 durma(1)                       // espera 1 segundo  (aceita 0.5)
 saia()                         // encerra, código 0
 saia(1)                        // encerra com falha (não pega se_falhar)
@@ -233,13 +246,13 @@ tipo(10)                       // "numero"  (texto, bool, lista, mapa, …)
 tipos()                        // lista desses nomes
 
 importe "tela"
-cls()                          // limpa a tela  (também limpe_tela())
+limpe_tela()                   // limpa a tela
 posicao_cursor(0, 0, falso)     // cursor no canto sem apagar nem fazer flush
 posicao_cursor(linha, coluna)   // move e faz flush (mostre = verdadeiro)
 quadro(tela)                   // cursor no canto + texto; apaga resto da linha e embaixo
 nova_linha                     // "\n" no Unix, "\r\n" no Windows
-colunas()  linhas()            // tamanho em caracteres (80×24 sem TTY)
-b = bloco(0, 27)               // mapa {:linha, :coluna}
+tamanho_tela()                 // mapa :linhas, :colunas (24×80 sem TTY)
+b = bloco(0, 27)               // mapa com :linha e :coluna
 b.escreva_em("Q W E R T")      // uma linha na coluna; devolve b
 eh_terminal()                  // teclado?  também é_terminal()
 "HP".pinte(:verde)             // letra; :branco, :vermelho = letra e fundo
@@ -253,17 +266,17 @@ formato("pt")                  // 1.000,5   (padrão de texto)
 formato("en")                  // 1,000.5
 formato("decimal")             // 0.1+0.2 = 0.3 (padrão)
 formato("float")               // IEEE-754, como Python
-numero("3,14")                 // segue o formato de texto; também número()
+numero("3,14")                 // só o formato ativo: em pt, "3.14" é erro; também número()
 
 importe "mat"
 aleatorio(1, 6)                // inteiro inclusive; também aleatório()
 semente(1)                     // mesma sequência de aleatorio
 raiz(9)                        // 3
 pi                             // valor (não pi())
-seno(radianos(30))             // também sen, cosseno/cos, tangente/tan
+seno(radianos(30))             // 0,5; também sen, cosseno/cos, tangente
 graus(pi)                      // 180
 log10(1000)                    // 3; log é o natural
-potencia(2, 3)                 // 8
+potencia(2, 3)                 // 8; também potência
 piso(3.7)  teto(3.1)  arredonde(1.5)
 ```
 
@@ -312,7 +325,7 @@ escreva(g.tela_grafica::pixel(10, 10))
 ```
 
 ```text
-l = g.tela_grafica::laço_grafico()
+l = g.tela_grafica::laço_gráfico()
 config = mapa([
     :fps -> 30,
     :eventos -> eventos, // função(ev, dt): entrada e movimento; dt em segundos
@@ -350,7 +363,7 @@ matriz = importe "matriz"      // alias: matriz::zeros, A.matriz::transposta()
 importe "./matriz"             // arquivo local se o nativo colidir
 ```
 
-Nativos: `sistema`, `matriz`, `arquivo`, `tela`, `mat`, `crono`, `cartesiano`, `tela_grafica`, `imagem`, `processo`. Nome nu sem `/` nem `.lep` procura o nativo; se existir também `matriz.lep` no mesmo diretório, `importe "matriz"` é erro. Dois `importe` achatados com o mesmo nome (`fundo`, `adicione`, …) é erro; use apelido.
+Nativos: `sistema`, `matriz`, `arquivo`, `tela`, `mat`, `crono`, `cartesiano`, `tela_grafica`, `imagem`, `processo`. Nome nu sem `/` nem `.lep` procura o nativo; se existir também `matriz.lep` no mesmo diretório, `importe "matriz"` é erro. Nomes não colidem: um `importe` achatado com nome que já existe (do programa, do núcleo ou de outro módulo, como `fundo` ou `adicione`) é erro, e reatribuir um nome importado também (`importe "mat"` e depois `raiz = 1`); use apelido. `importe "tela_gráfica"` também vale. Nativas com palavra acentuada aceitam as duas grafias (`maiuscula`/`maiúscula`).
 
 ---
 
@@ -360,28 +373,28 @@ Núcleo (sempre no escopo):
 
 | | |
 |---|---|
-| `escreva` `escreva_erro` `saia` `falhe` `garanta` `durma` | imprimir / encerrar / erro / esperar |
+| `escreva` `escreva_erro` `saia` `falhe` `garanta` | imprimir / encerrar / erro |
 | `leia` `leia_linhas` | teclado / pipe |
 | `argumentos` | lista (não é função) |
 | `numero` `número` `formato` `avalie` `modulos` `funcoes` `ajuda` | número / executar texto / listar / ficha |
-| `mapa` `conjunto` | construtores |
-| `tamanho` `primeiro` `ultimo` | coleção |
-| `maiuscula` `minuscula` `sem_acento` `remova` `substitua` `procure` `separe` `junte` `limpe` `formate` | texto / lista / mapa / conjunto |
+| `tipo` `tipos` | nome do tipo |
+| `mapa` `conjunto` `clone` | construtores / cópia profunda |
+| `tamanho` `primeiro` `ultimo` `eh_infinito` `chaves_de` `valores_de` | coleção / intervalo / mapa |
+| `maiuscula` `minuscula` `sem_acento` `remova` `substitua` `procure` `separe` `junte` `limpe` `formate` `como_texto` | texto / lista / mapa / conjunto |
 | `ordene` `comeca_com` `termina_com` | ordem; começo e fim de texto |
-| `ambiente` | variável de ambiente |
 
 Módulos (`importe "…"`):
 
 | | |
 |---|---|
-| `tela` | `cls` `posicao_cursor` `eh_terminal` `pinte` `fundo` `negrito` `colunas` `linhas` `quadro` `bloco` `escreva_em` `nova_linha` |
-| `mat` | `pi` `raiz` `aleatorio` `semente` `seno` `cosseno` `tangente` `arcoseno` `arcocosseno` `arcotangente` `arcotangente2` `radianos` `graus` `exp` `log` `log10` `potencia` `piso` `teto` `arredonde` |
-| `matriz` | `matriz` `transposta` `det` `identidade` `zeros` `uns` `cheia` `nlinhas` `ncolunas` `xy` |
-| `arquivo` | `leia_arquivo` `salve_arquivo` `adicione_arquivo` `leia_csv` `salve_csv` `existe` `eh_pasta` `liste` `crie_pasta` `apague_arquivo` `apague_pasta` `mova` `copie` `junte_caminho` `nome_do_arquivo` `pasta_de` `extensao` `pasta_atual` |
+| `tela` | `limpe_tela` `posicao_cursor` `apague_linha` `eh_terminal` `pinte` `fundo` `negrito` `tamanho_tela` `quadro` `bloco` `escreva_em` `nova_linha` |
+| `mat` | `pi` `raiz` `aleatorio` `semente` `seno` `cosseno` `tangente` `arcosseno` `arcocosseno` `arcotangente` `arcotangente2` `radianos` `graus` `exp` `log` `log10` `potencia` `piso` `teto` `arredonde` |
+| `matriz` | `matriz` `transposta` `det` `identidade` `zeros` `uns` `cheia` `linhas` `colunas` `xy` |
+| `arquivo` | `leia_arquivo` `salve_arquivo` `adicione_arquivo` `leia_csv` `salve_csv` `existe` `eh_pasta` `liste` `crie_pasta` `apague_arquivo` `apague_pasta` `mova` `copie` `junte_caminho` `nome_do_arquivo` `pasta_de` `extensao` `pasta_atual` `leia_bytes` `texto_utf8` |
 | `sistema` | `durma` `ambiente` |
 | `crono` | `agora` `hoje` `data` `adicione` `dias_entre` `eh_bissexto` `formate_data` |
 | `cartesiano` | `documento` `grafico` `eixos` `plote` `adicione` `mostre` |
-| `tela_grafica` | `nova` `cor` `fundo` `linha` `circulo` `ponto` `retangulo` `texto` `imagem` `apague` `pixel` `como_imagem` `salve` `mostre` `evento` |
+| `tela_grafica` | `nova` `cor` `fundo` `linha` `circulo` `ponto` `retangulo` `texto` `imagem` `apague` `pixel` `como_imagem` `salve` `mostre` `evento` `laco_grafico` `execute` `pare_laco` |
 | `imagem` | `carregue` `salve` `rotacione` `redimensione` `largura` `altura` |
 | `processo` | `execute` `linhas_de` (só na linha de comando) |
 
@@ -405,7 +418,7 @@ Abre `.lep` em `expressa-mode` (palavras-chave, nativas, comentários, strings).
 ```text
 expressa                  // ↑ ↓ histórico
 modulos()    funcoes()    funcoes("matriz")    ajuda("escreva")
-cls                       // comando do REPL: limpa a tela
+limpe_tela                // comando do REPL: limpa a tela (também cls)
 sair
 ```
 

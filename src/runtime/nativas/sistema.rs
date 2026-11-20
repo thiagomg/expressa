@@ -171,7 +171,7 @@ mod tests {
 
     #[test]
     fn ordene_numeros_textos_e_chave() {
-        assert_eq!(run("escreva(ordene([3, 1.5, 2]))"), "[1,5, 2, 3]\n");
+        assert_eq!(run("escreva(ordene([3, 1.5, 2]))"), "[1.5, 2, 3]\n");
         assert_eq!(
             run("escreva(ordene([\"b\", \"a\", \"c\"]))"),
             "[\"a\", \"b\", \"c\"]\n"

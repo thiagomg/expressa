@@ -51,8 +51,14 @@ arquivos = []
 fim_opcoes = falso
 selecionou = falso
 para arg em argumentos {
-    se nao fim_opcoes e arg == "--" { fim_opcoes = verdadeiro continue }
-    se nao fim_opcoes e (arg == "--help" ou arg == "--ajuda") { mostrar_ajuda() saia(0) }
+    se nao fim_opcoes e arg == "--" {
+        fim_opcoes = verdadeiro
+        continue
+    }
+    se nao fim_opcoes e (arg == "--help" ou arg == "--ajuda") {
+        mostrar_ajuda()
+        saia(0)
+    }
     se nao fim_opcoes e arg != "-" e arg.comeca_com("-") {
         letras = se arg.comeca_com("--") {
             opcao = longas[arg[2..]] se_falhar { falso }
@@ -72,7 +78,11 @@ para arg em argumentos {
         }
     } senao { arquivos += [arg] }
 }
-se nao selecionou { opcoes:l = verdadeiro opcoes:w = verdadeiro opcoes:c = verdadeiro }
+se nao selecionou {
+    opcoes:l = verdadeiro
+    opcoes:w = verdadeiro
+    opcoes:c = verdadeiro
+}
 nomes = tamanho(arquivos) > 0
 se nao nomes { arquivos = ["-"] }
 
@@ -88,7 +98,10 @@ para nome em arquivos {
         escreva_erro("wc: " + erro)
         falso
     } }
-    se bytes == falso { codigo = 1 continue }
+    se bytes == falso {
+        codigo = 1
+        continue
+    }
     contagem = conta(bytes)
     resultados += [mapa([:nome -> se nomes { nome } senao { "" }, :contagem -> contagem])]
     para chave em [:l, :w, :m, :c] { total[chave] += contagem[chave] }

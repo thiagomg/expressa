@@ -60,8 +60,8 @@ colide = função(estado, x, y) {
     direita = mat::piso((x + 9.999) / 16)
     cima = mat::piso(y / 16)
     baixo = mat::piso((y + 9.999) / 16)
-    solido(estado, esquerda, cima) ou solido(estado, direita, cima) ou
-        solido(estado, esquerda, baixo) ou solido(estado, direita, baixo)
+    (solido(estado, esquerda, cima) ou solido(estado, direita, cima) ou
+        solido(estado, esquerda, baixo) ou solido(estado, direita, baixo))
 }
 
 avance = função(estado, teclas, dt) {

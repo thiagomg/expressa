@@ -1075,8 +1075,8 @@ mod tests {
             "mat is only imported with an alias: m::raiz"
         );
         assert!(l.contains(&"se_falhar") && l.contains(&"m"));
-        let cls = it.iter().find(|i| i.label == "cls").unwrap();
-        assert_eq!(cls.cursor, 5, "no parameters: cursor after ()");
+        let limpe = it.iter().find(|i| i.label == "limpe_tela").unwrap();
+        assert_eq!(limpe.cursor, 12, "no parameters: cursor after ()");
 
         let (_, it) = items(&h, "main.lep", text, "x = m::");
         let l = labels(&it);
@@ -1092,7 +1092,7 @@ mod tests {
         assert!(
             l.contains(&"tamanho")
                 && l.contains(&"soma")
-                && !l.contains(&"cls")
+                && !l.contains(&"limpe_tela")
                 && !l.contains(&"se")
         );
         let t = it.iter().find(|i| i.label == "tamanho").unwrap();

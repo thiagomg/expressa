@@ -4,7 +4,8 @@
 entrada = importe "../lib/entrada"
 importe "mat"
 
-potencia = funcao(base, exp) {
+// Multiplica em decimal
+potencia_exata = funcao(base, exp) {
     r = 1
     repita exp vezes { r = r * base }
     r
@@ -28,7 +29,7 @@ se periodos == falso { saia(0) }
 
 taxa = porcentagem / 100
 simples = capital * (1 + taxa * periodos)
-compostos = capital * potencia(1 + taxa, periodos)
+compostos = capital * potencia_exata(1 + taxa, periodos)
 
 escreva("capital inicial: R$ " + em_reais(capital))
 escreva("taxa: " + porcentagem + "% ao período")

@@ -974,7 +974,7 @@ pare continue";
     #[test]
     fn reserved_words_with_accents() {
         // Accented spellings accepted by keyword().
-        let src = "senão não início função contém continua";
+        let src = "senão não início função contém continue";
 
         assert_eq!(
             kinds(src),

@@ -58,11 +58,6 @@
     <context id="keyword" style-ref="keyword">
       <prefix>(?&lt;![A-Za-zÀ-ÿ0-9_])</prefix>
       <suffix>(?![A-Za-zÀ-ÿ0-9_])</suffix>
-      <keyword>se_falhar</keyword>
-      <keyword>retorne</keyword>
-      <keyword>pare</keyword>
-      <keyword>continue</keyword>
-      <keyword>continua</keyword>
       <keyword>se</keyword>
       <keyword>senao</keyword>
       <keyword>senão</keyword>
@@ -83,154 +78,173 @@
       <keyword>importe</keyword>
       <keyword>contem</keyword>
       <keyword>contém</keyword>
+      <keyword>se_falhar</keyword>
+      <keyword>retorne</keyword>
+      <keyword>pare</keyword>
+      <keyword>continue</keyword>
     </context>
     <context id="builtin" style-ref="builtin">
       <prefix>(?&lt;![A-Za-zÀ-ÿ0-9_])</prefix>
       <suffix>(?![A-Za-zÀ-ÿ0-9_])</suffix>
-      <keyword>escreva</keyword>
-      <keyword>escreva_erro</keyword>
-      <keyword>saia</keyword>
-      <keyword>falhe</keyword>
-      <keyword>garanta</keyword>
-      <keyword>cls</keyword>
-      <keyword>limpe_tela</keyword>
-      <keyword>casa</keyword>
-      <keyword>quadro</keyword>
-      <keyword>bloco</keyword>
-      <keyword>escreva_em</keyword>
-      <keyword>colunas</keyword>
-      <keyword>linhas</keyword>
-      <keyword>nova_linha</keyword>
-      <keyword>pinte</keyword>
-      <keyword>fundo</keyword>
-      <keyword>negrito</keyword>
-      <keyword>durma</keyword>
-      <keyword>leia</keyword>
-      <keyword>leia_linhas</keyword>
-      <keyword>eh_terminal</keyword>
-      <keyword>é_terminal</keyword>
-      <keyword>argumentos</keyword>
-      <keyword>numero</keyword>
-      <keyword>número</keyword>
-      <keyword>formato</keyword>
-      <keyword>formate</keyword>
-      <keyword>nova</keyword>
-      <keyword>cor</keyword>
-      <keyword>linha</keyword>
-      <keyword>circulo</keyword>
-      <keyword>círculo</keyword>
-      <keyword>ponto</keyword>
-      <keyword>retangulo</keyword>
-      <keyword>retângulo</keyword>
-      <keyword>texto</keyword>
-      <keyword>apague</keyword>
-      <keyword>evento</keyword>
-      <keyword>pixel</keyword>
-      <keyword>como_imagem</keyword>
-      <keyword>salve</keyword>
-      <keyword>avalie</keyword>
-      <keyword>modulos</keyword>
-      <keyword>funcoes</keyword>
+      <keyword>adicione</keyword>
+      <keyword>adicione_arquivo</keyword>
+      <keyword>agora</keyword>
       <keyword>ajuda</keyword>
-      <keyword>módulos</keyword>
-      <keyword>funções</keyword>
-      <keyword>mapa</keyword>
-      <keyword>conjunto</keyword>
-      <keyword>matriz</keyword>
-      <keyword>raiz</keyword>
       <keyword>aleatorio</keyword>
       <keyword>aleatório</keyword>
-      <keyword>semente</keyword>
-      <keyword>pi</keyword>
-      <keyword>seno</keyword>
-      <keyword>sen</keyword>
-      <keyword>cosseno</keyword>
-      <keyword>cos</keyword>
-      <keyword>tangente</keyword>
-      <keyword>tan</keyword>
-      <keyword>arcoseno</keyword>
+      <keyword>altura</keyword>
+      <keyword>ambiente</keyword>
+      <keyword>apague</keyword>
+      <keyword>apague_arquivo</keyword>
+      <keyword>apague_linha</keyword>
+      <keyword>apague_pasta</keyword>
       <keyword>arcocosseno</keyword>
+      <keyword>arcosseno</keyword>
       <keyword>arcotangente</keyword>
       <keyword>arcotangente2</keyword>
-      <keyword>radianos</keyword>
-      <keyword>graus</keyword>
-      <keyword>exp</keyword>
-      <keyword>log</keyword>
-      <keyword>log10</keyword>
-      <keyword>potencia</keyword>
-      <keyword>piso</keyword>
-      <keyword>teto</keyword>
+      <keyword>argumentos</keyword>
       <keyword>arredonde</keyword>
-      <keyword>transposta</keyword>
-      <keyword>det</keyword>
-      <keyword>identidade</keyword>
-      <keyword>zeros</keyword>
-      <keyword>uns</keyword>
+      <keyword>avalie</keyword>
+      <keyword>bloco</keyword>
+      <keyword>carregue</keyword>
+      <keyword>chaves_de</keyword>
       <keyword>cheia</keyword>
-      <keyword>nlinhas</keyword>
-      <keyword>ncolunas</keyword>
-      <keyword>tipo</keyword>
-      <keyword>tipos</keyword>
-      <keyword>tamanho</keyword>
-      <keyword>primeiro</keyword>
-      <keyword>ultimo</keyword>
-      <keyword>último</keyword>
-      <keyword>infinito</keyword>
-      <keyword>maiuscula</keyword>
-      <keyword>minuscula</keyword>
-      <keyword>sem_acento</keyword>
-      <keyword>remova</keyword>
-      <keyword>substitua</keyword>
-      <keyword>procure</keyword>
-      <keyword>separe</keyword>
-      <keyword>junte</keyword>
-      <keyword>limpe</keyword>
-      <keyword>leia_arquivo</keyword>
-      <keyword>salve_arquivo</keyword>
-      <keyword>adicione_arquivo</keyword>
-      <keyword>leia_csv</keyword>
-      <keyword>salve_csv</keyword>
-      <keyword>execute</keyword>
-      <keyword>linhas_de</keyword>
-      <keyword>existe</keyword>
-      <keyword>eh_pasta</keyword>
-      <keyword>é_pasta</keyword>
-      <keyword>liste</keyword>
-      <keyword>crie_pasta</keyword>
-      <keyword>apague_arquivo</keyword>
-      <keyword>apague_pasta</keyword>
-      <keyword>mova</keyword>
-      <keyword>copie</keyword>
-      <keyword>junte_caminho</keyword>
-      <keyword>nome_do_arquivo</keyword>
-      <keyword>pasta_de</keyword>
-      <keyword>extensao</keyword>
-      <keyword>extensão</keyword>
-      <keyword>pasta_atual</keyword>
-      <keyword>ambiente</keyword>
-      <keyword>ordene</keyword>
+      <keyword>circulo</keyword>
+      <keyword>clone</keyword>
+      <keyword>colunas</keyword>
       <keyword>comeca_com</keyword>
       <keyword>começa_com</keyword>
-      <keyword>termina_com</keyword>
-      <keyword>agora</keyword>
-      <keyword>hoje</keyword>
+      <keyword>como_imagem</keyword>
+      <keyword>como_texto</keyword>
+      <keyword>conjunto</keyword>
+      <keyword>copie</keyword>
+      <keyword>cor</keyword>
+      <keyword>cos</keyword>
+      <keyword>cosseno</keyword>
+      <keyword>crie_pasta</keyword>
+      <keyword>círculo</keyword>
       <keyword>data</keyword>
+      <keyword>det</keyword>
       <keyword>dias_entre</keyword>
-      <keyword>eh_bissexto</keyword>
-      <keyword>é_bissexto</keyword>
-      <keyword>formate_data</keyword>
-      <keyword>imagem</keyword>
-      <keyword>carregue</keyword>
-      <keyword>rotacione</keyword>
-      <keyword>redimensione</keyword>
-      <keyword>largura</keyword>
-      <keyword>altura</keyword>
       <keyword>documento</keyword>
-      <keyword>grafico</keyword>
+      <keyword>durma</keyword>
+      <keyword>eh_bissexto</keyword>
+      <keyword>eh_infinito</keyword>
+      <keyword>eh_pasta</keyword>
+      <keyword>eh_terminal</keyword>
       <keyword>eixos</keyword>
-      <keyword>plote</keyword>
-      <keyword>adicione</keyword>
+      <keyword>escreva</keyword>
+      <keyword>escreva_em</keyword>
+      <keyword>escreva_erro</keyword>
+      <keyword>evento</keyword>
+      <keyword>execute</keyword>
+      <keyword>existe</keyword>
+      <keyword>exp</keyword>
+      <keyword>extensao</keyword>
+      <keyword>extensão</keyword>
+      <keyword>falhe</keyword>
+      <keyword>formate</keyword>
+      <keyword>formate_data</keyword>
+      <keyword>formato</keyword>
+      <keyword>funcoes</keyword>
+      <keyword>fundo</keyword>
+      <keyword>funções</keyword>
+      <keyword>garanta</keyword>
+      <keyword>grafico</keyword>
+      <keyword>graus</keyword>
+      <keyword>gráfico</keyword>
+      <keyword>hoje</keyword>
+      <keyword>identidade</keyword>
+      <keyword>imagem</keyword>
+      <keyword>junte</keyword>
+      <keyword>junte_caminho</keyword>
+      <keyword>laco_grafico</keyword>
+      <keyword>largura</keyword>
+      <keyword>laço_gráfico</keyword>
+      <keyword>leia</keyword>
+      <keyword>leia_arquivo</keyword>
+      <keyword>leia_bytes</keyword>
+      <keyword>leia_csv</keyword>
+      <keyword>leia_linhas</keyword>
+      <keyword>limpe</keyword>
+      <keyword>limpe_tela</keyword>
+      <keyword>linha</keyword>
+      <keyword>linhas</keyword>
+      <keyword>linhas_de</keyword>
+      <keyword>liste</keyword>
+      <keyword>log</keyword>
+      <keyword>log10</keyword>
+      <keyword>maiuscula</keyword>
+      <keyword>maiúscula</keyword>
+      <keyword>mapa</keyword>
+      <keyword>matriz</keyword>
+      <keyword>minuscula</keyword>
+      <keyword>minúscula</keyword>
+      <keyword>modulos</keyword>
       <keyword>mostre</keyword>
+      <keyword>mova</keyword>
+      <keyword>módulos</keyword>
+      <keyword>negrito</keyword>
+      <keyword>nome_do_arquivo</keyword>
+      <keyword>nova</keyword>
+      <keyword>nova_linha</keyword>
+      <keyword>numero</keyword>
+      <keyword>número</keyword>
+      <keyword>ordene</keyword>
+      <keyword>pare_laco</keyword>
+      <keyword>pare_laço</keyword>
+      <keyword>pasta_atual</keyword>
+      <keyword>pasta_de</keyword>
+      <keyword>pi</keyword>
+      <keyword>pinte</keyword>
+      <keyword>piso</keyword>
+      <keyword>pixel</keyword>
+      <keyword>plote</keyword>
+      <keyword>ponto</keyword>
+      <keyword>posicao_cursor</keyword>
+      <keyword>posição_cursor</keyword>
+      <keyword>potencia</keyword>
+      <keyword>potência</keyword>
+      <keyword>primeiro</keyword>
+      <keyword>procure</keyword>
+      <keyword>quadro</keyword>
+      <keyword>radianos</keyword>
+      <keyword>raiz</keyword>
+      <keyword>redimensione</keyword>
+      <keyword>remova</keyword>
+      <keyword>retangulo</keyword>
+      <keyword>retângulo</keyword>
+      <keyword>rotacione</keyword>
+      <keyword>saia</keyword>
+      <keyword>salve</keyword>
+      <keyword>salve_arquivo</keyword>
+      <keyword>salve_csv</keyword>
+      <keyword>sem_acento</keyword>
+      <keyword>semente</keyword>
+      <keyword>sen</keyword>
+      <keyword>seno</keyword>
+      <keyword>separe</keyword>
+      <keyword>substitua</keyword>
+      <keyword>tamanho</keyword>
+      <keyword>tamanho_tela</keyword>
+      <keyword>tangente</keyword>
+      <keyword>termina_com</keyword>
+      <keyword>teto</keyword>
+      <keyword>texto</keyword>
+      <keyword>texto_utf8</keyword>
+      <keyword>tipo</keyword>
+      <keyword>tipos</keyword>
+      <keyword>transposta</keyword>
+      <keyword>ultimo</keyword>
+      <keyword>uns</keyword>
+      <keyword>valores_de</keyword>
+      <keyword>xy</keyword>
+      <keyword>zeros</keyword>
+      <keyword>é_bissexto</keyword>
+      <keyword>é_infinito</keyword>
+      <keyword>é_pasta</keyword>
+      <keyword>é_terminal</keyword>
+      <keyword>último</keyword>
     </context>
     <context id="expressa" class="no-spell-check">
       <include>

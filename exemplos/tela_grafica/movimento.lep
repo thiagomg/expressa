@@ -1,7 +1,7 @@
 /// Segure as setas para mover. Shift acelera; espaço troca a cor. Esc sai.
 tela_grafica = importe "tela_grafica"
 g = tela_grafica::nova(160, 144, 4)
-l = g.tela_grafica::laço_grafico()
+l = g.tela_grafica::laço_gráfico()
 personagem = mapa([:x -> 76, :y -> 68, :azul -> verdadeiro])
 
 eventos = função(ev, dt) {

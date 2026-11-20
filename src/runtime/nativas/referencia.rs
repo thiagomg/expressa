@@ -117,12 +117,12 @@ pub fn tema_de(module: Option<&str>, name: &str) -> &'static str {
         (
             None,
             "formate" | "maiuscula" | "minuscula" | "sem_acento" | "substitua" | "procure"
-            | "separe" | "junte" | "limpe" | "comeca_com" | "termina_com",
+            | "separe" | "junte" | "limpe" | "comeca_com" | "termina_com" | "como_texto",
         ) => "Texto",
         (
             None,
-            "mapa" | "conjunto" | "tamanho" | "primeiro" | "ultimo" | "infinito" | "remova"
-            | "ordene",
+            "mapa" | "chaves_de" | "valores_de" | "conjunto" | "tamanho" | "primeiro" | "ultimo"
+            | "eh_infinito" | "remova" | "ordene",
         ) => "Coleção",
         (
             None,
@@ -131,14 +131,14 @@ pub fn tema_de(module: Option<&str>, name: &str) -> &'static str {
         ) => "Linguagem",
         (
             Some("tela"),
-            "cls" | "eh_terminal" | "colunas" | "linhas" | "posicao_cursor" | "apague_linha",
+            "limpe_tela" | "eh_terminal" | "tamanho_tela" | "posicao_cursor" | "apague_linha",
         ) => "Tela",
         (Some("tela"), "pinte" | "fundo" | "negrito") => "Cor",
         (Some("tela"), "quadro" | "nova_linha" | "bloco" | "escreva_em") => "Quadro",
         (Some("mat"), "aleatorio" | "semente") => "Aleatório",
         (
             Some("mat"),
-            "seno" | "cosseno" | "tangente" | "arcoseno" | "arcocosseno" | "arcotangente"
+            "seno" | "cosseno" | "tangente" | "arcosseno" | "arcocosseno" | "arcotangente"
             | "arcotangente2" | "radianos" | "graus",
         ) => "Trig",
         (Some("mat"), "raiz" | "pi" | "exp" | "log" | "log10" | "potencia") => "Análise",

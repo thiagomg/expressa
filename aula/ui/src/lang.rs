@@ -38,7 +38,6 @@ pub const KEYWORDS: &[&str] = &[
     "retorne",
     "pare",
     "continue",
-    "continua",
 ];
 
 pub struct Native {

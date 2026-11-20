@@ -38,7 +38,7 @@ seno = funcao(x) { 0 }
 /// Exemplo: cosseno(0)
 cosseno = funcao(x) { 0 }
 
-/// Tangente de x em radianos. Também tan().
+/// Tangente de x em radianos.
 ///
 /// Erro se o resultado não for um número finito (use se_falhar).
 ///
@@ -47,8 +47,8 @@ tangente = funcao(x) { 0 }
 
 /// Ângulo em radianos cujo seno é x. x entre -1 e 1.
 ///
-/// Exemplo: arcoseno(0)
-arcoseno = funcao(x) { 0 }
+/// Exemplo: arcosseno(0)
+arcosseno = funcao(x) { 0 }
 
 /// Ângulo em radianos cujo cosseno é x. x entre -1 e 1.
 ///
@@ -94,7 +94,7 @@ log = funcao(x) { 0 }
 /// Exemplo: log10(1000)
 log10 = funcao(x) { 0 }
 
-/// base elevado a exp (expoente pode ser fração).
+/// base elevado a exp (expoente pode ser fração). Também potência().
 ///
 /// 0^0 vale 1. Erro se o resultado não for um número finito (base negativa
 /// com expoente não inteiro, divisão por zero, …).

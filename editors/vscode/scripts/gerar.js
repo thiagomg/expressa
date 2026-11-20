@@ -61,7 +61,7 @@ function readKeywords() {
   return groups;
 }
 
-// `Nativa { names: &["cls", "limpe_tela"], module: Some("tela") },`
+// `Nativa { names: &["posicao_cursor", "posição_cursor"], module: Some("tela") },`
 function readNativas() {
   const src = fs.readFileSync(NATIVAS_RS, 'utf8');
   const out = [];

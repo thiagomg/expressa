@@ -8,17 +8,16 @@ cargo run -- exemplos/linguagem/media.lep
 ```
 
 Programas que leem o teclado (`texto/saudacao.lep`, `programas/calculadora.lep`,
-`programas/receita.lep`, `escola/bhaskara.lep`, `escola/juros.lep`):
+`escola/bhaskara.lep`, `escola/juros.lep`):
 
 ```bash
 cargo run -- exemplos/texto/saudacao.lep
 ```
 
-Receita, caixa e as calculadoras de `escola/` pedem os dados, avisam sobre
+As calculadoras de `escola/` pedem os dados, avisam sobre
 entradas inválidas e terminam após apresentar o resultado. Quando essa opção
 é indicada, pressione Enter sem digitar nada para cancelar; o fim da entrada
-também encerra. No caixa, escolha `0` para finalizar o pedido
-e emitir o recibo. Na configuração padrão, use vírgula para decimais (`2,5`).
+também encerra. Na configuração padrão, use vírgula para decimais (`2,5`).
 Em juros, digite `2` para uma taxa de 2% por período; os valores em reais são
 exibidos com duas casas decimais.
 
@@ -59,7 +58,6 @@ As pastas indicam o assunto de cada exemplo. Depois do tutorial, uma sugestão d
 | Arquivo | O que mostra |
 |---------|----------------|
 | `saudacao.lep` | `leia`, `limpe`, `separe`, `maiuscula` |
-| `poema.lep` | `tamanho`, fatia, `contem`, `substitua`, `junte` |
 | `palindromo.lep` | inverte um texto e verifica se ele é igual nos dois sentidos |
 | `ascii.lep` | triângulo e gráfico de barras com `repita` |
 
@@ -67,14 +65,10 @@ As pastas indicam o assunto de cada exemplo. Depois do tutorial, uma sugestão d
 
 | Arquivo | O que mostra |
 |---------|----------------|
-| `caixa.lep` | escolhe produtos e quantidades, emite recibo com desconto |
 | `menu_cursor.lep` | guarda o cursor e repete `leia` na mesma linha, com aviso abaixo |
-| `receita.lep` | pede a quantidade de fatias e escala uma receita |
-| `turma.lep` | boletim com `media`, `maximo`, `situacao` |
 | `diario.lep` | `salve_arquivo`, `adicione_arquivo`, `leia_arquivo` |
 | `contatos.lep` | agenda em CSV |
-| `calculadora.lep` | `avalie` + `leia` |
-| `frutas.lep` | matriz + tabela |
+| `calculadora.lep` | lê uma conta e calcula com `avalie` |
 
 `diario.lep` e `contatos.lep` gravam em `programas/saida/` (ignorada pelo git).
 
@@ -91,6 +85,7 @@ chamam `salve` também gravam uma imagem PNG ao lado do programa.
 | `clique.lep` | `evento`: clique desenha círculo |
 | `gira.lep` | figura andando e girando (`evento()`) |
 | `movimento.lep` | laço gráfico a 30 quadros por segundo (FPS), movimento por tempo, setas simultâneas, Shift e espaço |
+| `conway_graf.lep` | Jogo da Vida na tela de pixels, com uma figura por célula |
 | `sprite.lep` | imagem reutilizável (sprite) com fundo transparente |
 
 ### `jogos/`
@@ -155,12 +150,12 @@ instalada no sistema.
 
 ### `escola/`
 
-Contas de caderno com entrada de dados: equações, juros, médias, estatística,
-frações, geometria, cinemática, progressões e MDC/MMC. `regra_de_tres.lep` e
-`seno_cosseno.lep` usam dados fixos que podem ser alterados no código.
+Contas de caderno com entrada de dados: equação do 2º grau, juros, estatística,
+frações, cinemática e MDC/MMC. `seno_cosseno.lep` usa dados fixos que podem
+ser alterados no código.
 Detalhe em `escola/README.md`.
 
-A raiz quadrada é `raiz(n)` no módulo `mat` (`importe "mat"`). `pi` é um valor do mesmo módulo (`escola/geometria.lep`).
+A raiz quadrada é `raiz(n)` no módulo `mat` (`importe "mat"`). `pi` é um valor do mesmo módulo (`escola/seno_cosseno.lep`).
 
 ### `tarefas/`
 
