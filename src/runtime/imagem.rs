@@ -272,86 +272,127 @@ fn angulo_zero(angulo: f64) -> bool {
     a < 1e-9 || (a - 360.0).abs() < 1e-9
 }
 
-/// Dest pixels of a stamp: `(dx, dy, byte index in sprite.px)`.
-fn cada_pixel_do_carimbo(
-    cx: i32,
-    cy: i32,
-    angulo: f64,
-    sprite: &Imagem,
-    mut f: impl FnMut(i32, i32, usize),
-) {
-    let sw = sprite.largura as i32;
-    let sh = sprite.altura as i32;
-    if angulo_zero(angulo) {
-        // Integer blit: even sizes keep both edges (round of (w-1)/2
-        // would drop one column and look like one-sided corners).
-        let x0 = cx - sw / 2;
-        let y0 = cy - sh / 2;
-        for iy in 0..sh {
-            for ix in 0..sw {
-                let i = ((iy as u32 * sprite.largura) + ix as u32) as usize * 4;
-                f(x0 + ix, y0 + iy, i);
-            }
-        }
-        return;
-    }
-    let rad = angulo.to_radians();
-    let (cos, sin) = (rad.cos(), rad.sin());
-    let ox = (sprite.largura as f64 - 1.0) / 2.0;
-    let oy = (sprite.altura as f64 - 1.0) / 2.0;
-    let reach = ((sw * sw + sh * sh) as f64).sqrt() / 2.0 + 1.0;
-    let r = reach.ceil() as i32;
-    for sy in -r..=r {
-        for sx in -r..=r {
-            let ix = (sx as f64 * cos + sy as f64 * sin + ox).round() as i32;
-            let iy = (-sx as f64 * sin + sy as f64 * cos + oy).round() as i32;
-            if ix < 0 || iy < 0 || ix >= sw || iy >= sh {
-                continue;
-            }
-            let i = ((iy as u32 * sprite.largura) + ix as u32) as usize * 4;
-            f(cx + sx, cy + sy, i);
-        }
-    }
-}
-
 /// Stamp `sprite` centered on `(cx, cy)`. `angulo` is degrees clockwise;
 /// 0 keeps the top of the image pointing up.
 #[cfg(all(test, feature = "graphics"))]
 pub fn carimbar(buf: &mut [u32], w: u32, h: u32, cx: i32, cy: i32, angulo: f64, sprite: &Imagem) {
-    cada_pixel_do_carimbo(cx, cy, angulo, sprite, |dx, dy, i| {
-        if dx < 0 || dy < 0 || dx as u32 >= w || dy as u32 >= h {
+    pixels_com_eixo(
+        w,
+        h,
+        cx,
+        cy,
+        angulo,
+        [f64::from(sprite.largura / 2), f64::from(sprite.altura / 2)],
+        sprite,
+        |dx, dy, i| {
+            if dx < 0 || dy < 0 || dx as u32 >= w || dy as u32 >= h {
+                return;
+            }
+            let a = sprite.px[i + 3] as u32;
+            if a < 16 {
+                return;
+            }
+            let dest_i = (dy as u32 * w + dx as u32) as usize;
+            let dest = buf[dest_i];
+            let sr = sprite.px[i] as u32;
+            let sg = sprite.px[i + 1] as u32;
+            let sb = sprite.px[i + 2] as u32;
+            let dr = (dest >> 16) & 255;
+            let dg = (dest >> 8) & 255;
+            let db = dest & 255;
+            let rch = (sr * a + dr * (255 - a)) / 255;
+            let gch = (sg * a + dg * (255 - a)) / 255;
+            let bch = (sb * a + db * (255 - a)) / 255;
+            buf[dest_i] = (rch << 16) | (gch << 8) | bch;
+        },
+    );
+}
+
+// Pixel centers are sampled with nearest-neighbor filtering. Bounding the
+// destination scan to the canvas also keeps external pivots inexpensive.
+fn pixels_com_eixo(
+    w: u32,
+    h: u32,
+    x: i32,
+    y: i32,
+    angulo: f64,
+    eixo: [f64; 2],
+    sprite: &Imagem,
+    mut f: impl FnMut(i32, i32, usize),
+) {
+    if !angulo.is_finite() || !eixo.iter().all(|v| v.is_finite()) {
+        return;
+    }
+    let sw = f64::from(sprite.largura);
+    let sh = f64::from(sprite.altura);
+    if angulo_zero(angulo) {
+        let x0 = (f64::from(x) - eixo[0] + 0.5).floor();
+        let y0 = (f64::from(y) - eixo[1] + 0.5).floor();
+        if x0 >= f64::from(w) || y0 >= f64::from(h) || x0 + sw <= 0.0 || y0 + sh <= 0.0 {
             return;
         }
-        let a = sprite.px[i + 3] as u32;
-        if a < 16 {
-            return;
+        let x0 = x0 as i64;
+        let y0 = y0 as i64;
+        for iy in (-y0).max(0)..(i64::from(h) - y0).min(i64::from(sprite.altura)) {
+            for ix in (-x0).max(0)..(i64::from(w) - x0).min(i64::from(sprite.largura)) {
+                let i = (iy as usize * sprite.largura as usize + ix as usize) * 4;
+                f((x0 + ix) as i32, (y0 + iy) as i32, i);
+            }
         }
-        let dest_i = (dy as u32 * w + dx as u32) as usize;
-        let dest = buf[dest_i];
-        let sr = sprite.px[i] as u32;
-        let sg = sprite.px[i + 1] as u32;
-        let sb = sprite.px[i + 2] as u32;
-        let dr = (dest >> 16) & 255;
-        let dg = (dest >> 8) & 255;
-        let db = dest & 255;
-        let rch = (sr * a + dr * (255 - a)) / 255;
-        let gch = (sg * a + dg * (255 - a)) / 255;
-        let bch = (sb * a + db * (255 - a)) / 255;
-        buf[dest_i] = (rch << 16) | (gch << 8) | bch;
-    });
+        return;
+    }
+    let (sin, cos) = angulo.rem_euclid(360.0).to_radians().sin_cos();
+    let mut min = [f64::INFINITY; 2];
+    let mut max = [f64::NEG_INFINITY; 2];
+    for (sx, sy) in [
+        (-0.5, -0.5),
+        (sw - 0.5, -0.5),
+        (-0.5, sh - 0.5),
+        (sw - 0.5, sh - 0.5),
+    ] {
+        let dx = sx - eixo[0];
+        let dy = sy - eixo[1];
+        let dest = [
+            f64::from(x) + dx * cos - dy * sin,
+            f64::from(y) + dx * sin + dy * cos,
+        ];
+        for a in 0..2 {
+            min[a] = min[a].min(dest[a]);
+            max[a] = max[a].max(dest[a]);
+        }
+    }
+    let x0 = min[0].floor().clamp(0.0, f64::from(w)) as i32;
+    let y0 = min[1].floor().clamp(0.0, f64::from(h)) as i32;
+    let x1 = max[0].ceil().clamp(0.0, f64::from(w)) as i32;
+    let y1 = max[1].ceil().clamp(0.0, f64::from(h)) as i32;
+    for dy in y0..y1 {
+        for dx in x0..x1 {
+            let rx = f64::from(dx) - f64::from(x);
+            let ry = f64::from(dy) - f64::from(y);
+            // Resolve exact half-pixel ties consistently with the zero-angle blit.
+            let sx = (rx * cos + ry * sin + eixo[0] + 0.5 - 1e-9).floor();
+            let sy = (-rx * sin + ry * cos + eixo[1] + 0.5 - 1e-9).floor();
+            if sx >= 0.0 && sy >= 0.0 && sx < sw && sy < sh {
+                let i = (sy as usize * sprite.largura as usize + sx as usize) * 4;
+                f(dx, dy, i);
+            }
+        }
+    }
 }
 
 /// Stamp onto packed RGBA (`4` bytes per pixel), preserving command order.
+/// The local image point `eixo` is anchored at `(x, y)` in the destination.
 pub fn carimbar_rgba(
     buf: &mut [u8],
     w: u32,
     h: u32,
-    cx: i32,
-    cy: i32,
+    x: i32,
+    y: i32,
     angulo: f64,
+    eixo: [f64; 2],
     sprite: &Imagem,
 ) {
-    cada_pixel_do_carimbo(cx, cy, angulo, sprite, |dx, dy, i| {
+    pixels_com_eixo(w, h, x, y, angulo, eixo, sprite, |dx, dy, i| {
         if dx < 0 || dy < 0 || dx as u32 >= w || dy as u32 >= h {
             return;
         }

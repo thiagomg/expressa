@@ -57,4 +57,6 @@ Rust code reaching `DebugCtx.env` indirectly sees a changed implementation type 
 
 ## Clone and image object identity
 
+Image drawing commands (`OpGraf::Imagem`) carry an `eixo: [f64; 2]` in local image pixels. That point is placed at the command's `(x, y)` and is the rotation pivot. Use `[0.0, 0.0]` for the top-left origin or an explicit pivot for centered drawing. The CLI transport and Aula renderer preserve this pivot.
+
 The núcleo now provides `clone`, with graph copying and conservative capture analysis shared by AST, bytecode and loaded EXB. See the [contract and limitations](clone.md). There is no new EXB encoding or opcode. Image values now use `Value::Imagem(Rc<RefCell<Imagem>>)`; construct them with `Value::imagem(data)`. Plain `Value::clone` shares the image object, while language-level `clone` creates another object that can initially share immutable pixel storage. Existing image transformation functions still return new images. Rust consumers matching/constructing the variant must adapt; this is not a stable Rust ABI.

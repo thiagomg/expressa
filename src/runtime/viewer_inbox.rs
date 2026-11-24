@@ -91,6 +91,7 @@ mod tests {
             inbox.envie(Msg::Mostre {
                 id: 1,
                 ops: vec![OpMsg::Imagem {
+                    eixo: [0.0, 0.0],
                     handle: 7,
                     x: n,
                     y: 0,
@@ -111,6 +112,7 @@ mod tests {
         assert!(matches!(
             ops[0],
             OpMsg::Imagem {
+                eixo: [0.0, 0.0],
                 handle: 7,
                 x: 99_999,
                 ..
@@ -154,6 +156,7 @@ mod tests {
                 assert!(writer.envie(Msg::Mostre {
                     id: 1,
                     ops: vec![OpMsg::Imagem {
+                        eixo: [0.0, 0.0],
                         handle,
                         x: 0,
                         y: 0,

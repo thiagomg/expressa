@@ -78,7 +78,7 @@ _desenha = função(t)
 inicio
     _esconde(t)
     g = t:tela
-    g._tela::imagem(t:figura, t:x, t:y, t:angulo)
+    g._tela::imagem(t:figura, t:x, t:y, mapa([:eixo -> mapa([:x -> 16, :y -> 16]), :angulo -> t:angulo]))
     t:marca = 1
     t
 fim

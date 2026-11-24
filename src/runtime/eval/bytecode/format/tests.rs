@@ -1,19 +1,18 @@
 use super::*;
+mod workloads {
+    include!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/support/workloads.rs"
+    ));
+}
+
 #[test]
 fn simple_roundtrip_and_all_workloads_validate() {
-    let mut paths: Vec<_> =
-        std::fs::read_dir(concat!(env!("CARGO_MANIFEST_DIR"), "/benchmarks/programs"))
-            .unwrap()
-            .map(|e| e.unwrap().path())
-            .filter(|p| p.extension().is_some_and(|e| e == "lep"))
-            .collect();
-    paths.sort();
-    for path in paths {
-        let source = std::fs::read_to_string(path).unwrap();
-        let bytes = compile_exb(&source, "test.lep").unwrap();
+    for &(name, source) in workloads::WORKLOADS {
+        let bytes = compile_exb(source, name).unwrap_or_else(|e| panic!("{name}: {e}"));
         let program = load_exb(&bytes).unwrap();
         assert_eq!(program.source(), source);
-        assert_eq!(bytes, compile_exb(&source, "test.lep").unwrap());
+        assert_eq!(bytes, compile_exb(source, name).unwrap(), "{name}");
     }
 }
 

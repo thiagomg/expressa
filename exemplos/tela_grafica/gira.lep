@@ -45,7 +45,7 @@ enquanto verdadeiro
 inicio
     g.tela_grafica::apague()
     g.espaco(estrelas)
-    g.tela_grafica::imagem(nave, x, y, angulo)
+    g.tela_grafica::imagem(nave, x, y, mapa([:eixo -> mapa([:x -> imagem::largura(nave) / 2, :y -> imagem::altura(nave) / 2]), :angulo -> angulo]))
     g.tela_grafica::mostre()
     ev = g.tela_grafica::evento()
     se ev:sair { pare }

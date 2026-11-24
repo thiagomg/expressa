@@ -536,6 +536,16 @@ pub const NATIVAS: &[Nativa] = &[
     },
     #[cfg(feature = "graphics")]
     Nativa {
+        names: &["cores"],
+        module: Some("tela_grafica"),
+    },
+    #[cfg(feature = "graphics")]
+    Nativa {
+        names: &["rgb"],
+        module: Some("tela_grafica"),
+    },
+    #[cfg(feature = "graphics")]
+    Nativa {
         names: &["fundo"],
         module: Some("tela_grafica"),
     },
@@ -889,6 +899,10 @@ impl Vm<'_, '_> {
             "nova" => self.bi_graf_nova(args, span),
             #[cfg(feature = "graphics")]
             "cor" => self.bi_graf_cor(args, span),
+            #[cfg(feature = "graphics")]
+            "cores" => self.bi_graf_cores(args, span),
+            #[cfg(feature = "graphics")]
+            "rgb" => self.bi_graf_rgb(args, span),
             #[cfg(feature = "graphics")]
             "linha" => self.bi_graf_linha(args, span),
             #[cfg(feature = "graphics")]

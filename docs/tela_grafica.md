@@ -4,6 +4,53 @@ A VM Expressa monta uma `TelaGrafica` e conversa com um host. O CLI usa
 `expressa-grafico --ao-vivo`; a Aula usa janelas GTK. `mostre()` apresenta
 sem esperar interação. `salve`, `pixel` e `como_imagem` rasterizam na VM.
 
+## Cores
+
+`cor(g, cor)` define a caneta; `fundo(g, cor)` define o papel. Os nomes aceitos
+são `normal`, `preto`, `vermelho`, `verde`, `amarelo`, `azul`, `magenta`,
+`ciano`, `branco` e `transparente`. `:azul` equivale ao texto `"azul"`.
+A caneta começa preta e o papel, branco.
+
+```expressa
+tg = importe "tela_grafica"
+g = tg::nova(160, 144)
+escreva(tg::cores())
+laranja = tg::rgb(255, 128, 0)
+g.tg::cor(laranja)
+g.tg::fundo(:branco)
+```
+
+`cores()` retorna uma lista nova com os nomes predefinidos. `rgb(vermelho,
+verde, azul)` retorna um texto hexadecimal `"#RRGGBB"` em maiúsculas; cada
+componente deve ser um inteiro de 0 a 255. Valores fracionários ou fora da
+faixa produzem erro, sem ajuste automático. `cor` e `fundo` também aceitam
+textos `#RRGGBB` escritos diretamente, com letras maiúsculas ou minúsculas.
+`pixel()` mantém o nome das cores predefinidas e devolve `#RRGGBB` em
+maiúsculas para cores RGB. RGB é opaco; não há componente alfa nessa função.
+`transparente` preserva áreas transparentes em `como_imagem()`
+e PNG; na janela, o fundo transparente aparece branco.
+
+## Imagens e eixo de rotação
+
+`imagem(g, figura, x, y)` usa o canto superior esquerdo da imagem. Para
+escolher outro ponto de apoio e girar, passe um mapa de opções:
+
+```expressa
+g.tg::imagem(figura, x, y, mapa([
+    :eixo -> mapa([:x -> 16, :y -> 16]),
+    :angulo -> 90
+]))
+```
+
+O ponto local `(16, 16)` da imagem fica em `(x, y)` na tela e é o ponto de
+rotação. Os padrões são eixo `(0, 0)` e ângulo `0`. O eixo é medido em pixels,
+aceita valores fracionários e pode ficar fora da imagem. Os números devem
+ser finitos; o ângulo é em graus no sentido horário. Chaves desconhecidas
+produzem erro, e um eixo informado precisa ter `:x` e `:y`. As opções são
+copiadas ao registrar o desenho. Para centralizar, use metade da largura
+e da altura no eixo. O antigo argumento numérico de ângulo foi substituído
+pelo mapa de opções.
+
 ## Laço gráfico
 
 Para animações e jogos 2D, o laço controla entrada, atualização, desenho e espera:
@@ -278,6 +325,9 @@ de teclas. O antigo pedido `ESPERE` (byte 4) foi removido.
 A primeira aparição de cada imagem envia seus pixels; os quadros seguintes
 reutilizam o handle.
 Operações: ponto, linha, círculo, imagem, texto e retângulo.
+O comando de imagem transporta o handle, a posição `(x, y)`, o ângulo e
+as duas coordenadas locais do eixo. O visualizador usa esse mesmo eixo
+na composição; não aplica centralização implícita.
 
 Fim do programa: EOF no stdin do filho. A janela mantém o último quadro até
 fechar. Parar na Aula interrompe a execução; fechar uma janela limpa seu

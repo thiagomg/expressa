@@ -44,10 +44,11 @@ pub enum OpGraf {
         r: i32,
         cor: String,
     },
-    /// PNG carimbado no centro `(x, y)`. `angulo` é em graus, no sentido
+    /// O ponto local `eixo` da imagem fica em `(x, y)`. `angulo` é em graus, no sentido
     /// horário, com 0 apontando para cima (a imagem já nasce assim).
     /// Pixels ficam na `figura`; o arquivo não é lido de novo.
     Imagem {
+        eixo: [f64; 2],
         x: i32,
         y: i32,
         angulo: f64,
@@ -84,14 +85,15 @@ pub struct TelaGrafica {
     pub ops: Vec<OpGraf>,
 }
 
-/// Palette index per pixel, then RGB for PNG / minifb.
+/// Named palette entries and packed RGB colors, shared by drawing primitives.
 pub struct Raster {
     pub largura: u32,
     pub altura: u32,
-    idx: Vec<u8>,
+    idx: Vec<u32>,
+    cores_rgb: std::collections::HashMap<u32, String>,
 }
 
-const PALETA: &[&str] = &[
+pub(crate) const PALETA: &[&str] = &[
     "preto",
     "vermelho",
     "verde",
@@ -104,8 +106,31 @@ const PALETA: &[&str] = &[
     "transparente",
 ];
 
-fn idx_cor(nome: &str) -> u8 {
-    PALETA.iter().position(|n| *n == nome).unwrap_or(8) as u8
+// Values below this offset retain the identity of named colors, even when
+// their RGB channels match a hexadecimal color. u32::MAX means untouched.
+const RGB_BASE: u32 = 16;
+
+fn parse_rgb(nome: &str) -> Option<u32> {
+    let hex = nome.strip_prefix('#')?;
+    if hex.len() != 6 || !hex.bytes().all(|b| b.is_ascii_hexdigit()) {
+        return None;
+    }
+    u32::from_str_radix(hex, 16).ok()
+}
+
+fn idx_cor(nome: &str) -> u32 {
+    parse_rgb(nome)
+        .map(|rgb| rgb + RGB_BASE)
+        .unwrap_or_else(|| PALETA.iter().position(|n| *n == nome).unwrap_or(8) as u32)
+}
+
+fn rgba_de_idx(cor: u32) -> [u8; 4] {
+    if cor >= RGB_BASE {
+        let rgb = cor - RGB_BASE;
+        [(rgb >> 16) as u8, (rgb >> 8) as u8, rgb as u8, 255]
+    } else {
+        rgba_de_nome(nome_cor(cor as u8))
+    }
 }
 
 pub fn nome_cor(idx: u8) -> &'static str {
@@ -113,7 +138,7 @@ pub fn nome_cor(idx: u8) -> &'static str {
 }
 
 impl OpGraf {
-    fn rasterize(&self, idx: &mut [u8], w: u32, h: u32) -> bool {
+    fn rasterize(&self, idx: &mut [u32], w: u32, h: u32) -> bool {
         match self {
             OpGraf::Ponto { x, y, cor } => {
                 plot_idx(idx, w, h, *x, *y, idx_cor(cor));
@@ -175,7 +200,16 @@ impl TelaGrafica {
         for op in &self.ops {
             op.rasterize(&mut idx, w, h);
         }
+        let cores_rgb = idx
+            .iter()
+            .copied()
+            .filter(|&cor| cor >= RGB_BASE)
+            .collect::<std::collections::HashSet<_>>()
+            .into_iter()
+            .map(|cor| (cor, format!("#{:06X}", cor - RGB_BASE)))
+            .collect();
         Raster {
+            cores_rgb,
             largura: w,
             altura: h,
             idx,
@@ -206,11 +240,12 @@ impl TelaGrafica {
         let h = self.altura.max(1);
         let fundo = rgba_de_nome(&self.fundo);
         let mut px = fundo.repeat((w * h) as usize);
-        // 255 means untouched, unlike the actual :transparente drawing color.
-        let mut camada = vec![u8::MAX; (w * h) as usize];
+        // u32::MAX means untouched, unlike the actual :transparente drawing color.
+        let mut camada = vec![u32::MAX; (w * h) as usize];
         let mut suja = false;
         for op in &self.ops {
             if let OpGraf::Imagem {
+                eixo,
                 x,
                 y,
                 angulo,
@@ -219,10 +254,10 @@ impl TelaGrafica {
             {
                 if suja {
                     aplique_camada(&mut px, &camada);
-                    camada.fill(u8::MAX);
+                    camada.fill(u32::MAX);
                     suja = false;
                 }
-                carimbar_rgba(&mut px, w, h, *x, *y, *angulo, figura);
+                carimbar_rgba(&mut px, w, h, *x, *y, *angulo, *eixo, figura);
             } else {
                 suja |= op.rasterize(&mut camada, w, h);
             }
@@ -248,16 +283,16 @@ impl TelaGrafica {
     }
 }
 
-fn aplique_camada(px: &mut [u8], camada: &[u8]) {
+fn aplique_camada(px: &mut [u8], camada: &[u32]) {
     for (pixel, &cor) in px.chunks_exact_mut(4).zip(camada) {
-        if cor != u8::MAX {
-            pixel.copy_from_slice(&rgba_de_nome(nome_cor(cor)));
+        if cor != u32::MAX {
+            pixel.copy_from_slice(&rgba_de_idx(cor));
         }
     }
 }
 
 impl Raster {
-    pub fn pixel(&self, x: i32, y: i32) -> Option<&'static str> {
+    pub fn pixel(&self, x: i32, y: i32) -> Option<&str> {
         if x < 0 || y < 0 {
             return None;
         }
@@ -267,13 +302,23 @@ impl Raster {
             return None;
         }
         let i = (y * self.largura + x) as usize;
-        Some(nome_cor(self.idx[i]))
+        if self.idx[i] >= RGB_BASE {
+            self.cores_rgb.get(&self.idx[i]).map(String::as_str)
+        } else {
+            Some(nome_cor(self.idx[i] as u8))
+        }
     }
 
     pub fn rgb32(&self) -> Vec<u32> {
         self.idx
             .iter()
-            .map(|&i| rgb32_de_nome(nome_cor(i)))
+            .map(|&i| {
+                if i >= RGB_BASE {
+                    i - RGB_BASE
+                } else {
+                    rgb32_de_nome(nome_cor(i as u8))
+                }
+            })
             .collect()
     }
 
@@ -341,19 +386,20 @@ pub fn png_to_rgb32(bytes: &[u8]) -> Result<(u32, u32, Vec<u32>), String> {
 
 #[cfg(feature = "graphics")]
 pub fn cor_graf_conhecida(nome: &str) -> bool {
-    matches!(
-        nome,
-        "normal"
-            | "preto"
-            | "vermelho"
-            | "verde"
-            | "amarelo"
-            | "azul"
-            | "magenta"
-            | "ciano"
-            | "branco"
-            | "transparente"
-    )
+    parse_rgb(nome).is_some()
+        || matches!(
+            nome,
+            "normal"
+                | "preto"
+                | "vermelho"
+                | "verde"
+                | "amarelo"
+                | "azul"
+                | "magenta"
+                | "ciano"
+                | "branco"
+                | "transparente"
+        )
 }
 
 pub fn cor_tela_rgb32(nome: &str) -> u32 {
@@ -361,6 +407,9 @@ pub fn cor_tela_rgb32(nome: &str) -> u32 {
 }
 
 fn rgb32_de_nome(nome: &str) -> u32 {
+    if let Some(rgb) = parse_rgb(nome) {
+        return rgb;
+    }
     match nome {
         "branco" | "transparente" => 0x00FFFFFF,
         "preto" => 0x00000000,
@@ -381,7 +430,7 @@ fn rgba_de_nome(nome: &str) -> [u8; 4] {
     ]
 }
 
-fn retangulo_idx(idx: &mut [u8], w: u32, h: u32, x1: i32, y1: i32, x2: i32, y2: i32, cor: u8) {
+fn retangulo_idx(idx: &mut [u32], w: u32, h: u32, x1: i32, y1: i32, x2: i32, y2: i32, cor: u32) {
     if w == 0 || h == 0 {
         return;
     }
@@ -402,11 +451,11 @@ fn retangulo_idx(idx: &mut [u8], w: u32, h: u32, x1: i32, y1: i32, x2: i32, y2: 
     }
 }
 
-fn plot_idx(idx: &mut [u8], w: u32, h: u32, x: i32, y: i32, cor: u8) {
+fn plot_idx(idx: &mut [u32], w: u32, h: u32, x: i32, y: i32, cor: u32) {
     plot_i64(idx, w, h, i64::from(x), i64::from(y), cor);
 }
 
-fn plot_i64(idx: &mut [u8], w: u32, h: u32, x: i64, y: i64, cor: u8) {
+fn plot_i64(idx: &mut [u32], w: u32, h: u32, x: i64, y: i64, cor: u32) {
     if x < 0 || y < 0 || x >= i64::from(w) || y >= i64::from(h) {
         return;
     }
@@ -417,7 +466,7 @@ fn plot_i64(idx: &mut [u8], w: u32, h: u32, x: i64, y: i64, cor: u8) {
 /// Each column (or row, when the line is steeper) is one step of
 /// `y = (2*k*dy + dx) / (2*dx)`. A truncating edge intersection drops a
 /// shallow stroke or paints a whole border the segment never touches.
-fn linha_idx(idx: &mut [u8], w: u32, h: u32, x0: i32, y0: i32, x1: i32, y1: i32, cor: u8) {
+fn linha_idx(idx: &mut [u32], w: u32, h: u32, x0: i32, y0: i32, x1: i32, y1: i32, cor: u32) {
     if w == 0 || h == 0 {
         return;
     }
@@ -464,7 +513,7 @@ fn linha_idx(idx: &mut [u8], w: u32, h: u32, x0: i32, y0: i32, x1: i32, y1: i32,
     }
 }
 
-fn circulo_idx(idx: &mut [u8], w: u32, h: u32, cx: i32, cy: i32, r: i32, cor: u8) {
+fn circulo_idx(idx: &mut [u32], w: u32, h: u32, cx: i32, cy: i32, r: i32, cor: u32) {
     if !(0..=LIMITE_COORD).contains(&r) {
         return;
     }
@@ -496,7 +545,7 @@ fn circulo_idx(idx: &mut [u8], w: u32, h: u32, cx: i32, cy: i32, r: i32, cor: u8
     }
 }
 
-fn texto_idx(idx: &mut [u8], w: u32, h: u32, x: i32, y: i32, tamanho: i32, texto: &str, cor: u8) {
+fn texto_idx(idx: &mut [u32], w: u32, h: u32, x: i32, y: i32, tamanho: i32, texto: &str, cor: u32) {
     let t = tamanho.max(1);
     let mut cx = i64::from(x);
     let mut cy = i64::from(y);
@@ -532,6 +581,133 @@ fn texto_idx(idx: &mut [u8], w: u32, h: u32, x: i32, y: i32, tamanho: i32, texto
 #[allow(clippy::identity_op)] // `1 * 4`: pixel 1, 4 bytes each
 mod tests {
     use super::*;
+
+    #[test]
+    fn rgb_supports_more_than_256_distinct_colors() {
+        let t = TelaGrafica {
+            id: 1,
+            largura: 300,
+            altura: 1,
+            tamanho_pixel: 1,
+            fundo: "branco".into(),
+            ops: (0..300)
+                .map(|x| OpGraf::Ponto {
+                    x,
+                    y: 0,
+                    cor: format!("#{x:06X}"),
+                })
+                .collect(),
+        };
+        let raster = t.raster();
+        let img = t.como_imagem();
+        for x in 0..300 {
+            assert_eq!(raster.pixel(x, 0), Some(format!("#{x:06X}").as_str()));
+            assert_eq!(
+                img.pixel(x as u32, 0),
+                Some([0, (x >> 8) as u8, x as u8, 255])
+            );
+        }
+    }
+
+    #[test]
+    fn rgb_primitives_images_png_and_transport_preserve_colors() {
+        let t = TelaGrafica {
+            id: 1,
+            largura: 16,
+            altura: 16,
+            tamanho_pixel: 1,
+            fundo: "#010203".into(),
+            ops: vec![
+                OpGraf::Retangulo {
+                    x1: 1,
+                    y1: 1,
+                    x2: 3,
+                    y2: 3,
+                    cor: "#ff8000".into(),
+                },
+                OpGraf::Linha {
+                    x1: 4,
+                    y1: 0,
+                    x2: 4,
+                    y2: 3,
+                    cor: "#102030".into(),
+                },
+                OpGraf::Circulo {
+                    x: 6,
+                    y: 1,
+                    r: 1,
+                    cor: "#405060".into(),
+                },
+                OpGraf::Texto {
+                    x: 8,
+                    y: 0,
+                    tamanho: 8,
+                    texto: "A".into(),
+                    cor: "#708090".into(),
+                },
+                OpGraf::Imagem {
+                    eixo: [0.0, 0.0],
+                    x: 2,
+                    y: 2,
+                    angulo: 0.0,
+                    figura: Imagem::nova(1, 1, vec![0, 0, 255, 255]).unwrap(),
+                },
+                OpGraf::Ponto {
+                    x: 2,
+                    y: 2,
+                    cor: "#ABCDEF".into(),
+                },
+                OpGraf::Ponto {
+                    x: 0,
+                    y: 0,
+                    cor: "transparente".into(),
+                },
+            ],
+        };
+        let raster = t.raster();
+        assert_eq!(raster.pixel(1, 1), Some("#FF8000"));
+        assert_eq!(raster.rgb32()[0], 0xFFFFFF);
+        assert_eq!(raster.pixel(2, 2), Some("#ABCDEF"));
+        assert_eq!(raster.pixel(15, 15), Some("#010203"));
+        let img = t.como_imagem();
+        assert_eq!(img.pixel(0, 0), Some([0, 0, 0, 0]));
+        assert_eq!(img.pixel(1, 1), Some([255, 128, 0, 255]));
+        assert_eq!(img.pixel(2, 2), Some([171, 205, 239, 255]));
+        assert_eq!(img.pixel(4, 1), Some([16, 32, 48, 255]));
+        assert_eq!(img.pixel(6, 0), Some([64, 80, 96, 255]));
+        assert!(img.px.chunks_exact(4).any(|p| p == [112, 128, 144, 255]));
+        assert_eq!(t.rgb32()[0], 0x010203);
+        assert_eq!(cor_tela_rgb32("#ff8000"), 0xFF8000);
+        let decoded = imagem::decode_png(&t.png_bytes().unwrap()).unwrap();
+        assert_eq!(decoded.px, img.px);
+
+        use crate::runtime::graf_proto::{self, Msg};
+        let mut figuras = std::collections::HashMap::new();
+        for msg in
+            graf_proto::mensagens_de(&t, &mut Default::default(), &mut Default::default(), true)
+        {
+            let mut bytes = Vec::new();
+            graf_proto::write_msg(&mut bytes, &msg).unwrap();
+            match graf_proto::read_msg(&mut bytes.as_slice()).unwrap() {
+                Msg::CarregueFigura {
+                    handle,
+                    largura,
+                    altura,
+                    rgba,
+                } => {
+                    figuras.insert(handle, Imagem::nova(largura, altura, rgba).unwrap());
+                }
+                Msg::Mostre { id, ops } => {
+                    // Primitive colors survive the same reconstruction used by the viewer.
+                    let rebuilt =
+                        graf_proto::tela_de_mostre(id, 16, 16, 1, &t.fundo, &ops, &figuras);
+                    assert_eq!(rebuilt.raster().rgb32(), raster.rgb32());
+                    assert_eq!(rebuilt.como_imagem().px, img.px);
+                }
+                _ => {}
+            }
+        }
+    }
 
     fn tela(ops: Vec<OpGraf>) -> TelaGrafica {
         TelaGrafica {
@@ -709,6 +885,7 @@ mod tests {
             tamanho_pixel: 1,
             fundo: "branco".into(),
             ops: vec![OpGraf::Imagem {
+                eixo: [1.0, 1.0],
                 x: 8,
                 y: 8,
                 angulo,
@@ -813,6 +990,7 @@ mod tests {
             fundo: "branco".into(),
             ops: vec![
                 OpGraf::Imagem {
+                    eixo: [8.0, 8.0],
                     x: 8,
                     y: 8,
                     angulo: 0.0,
@@ -833,6 +1011,7 @@ mod tests {
                     cor: "branco".into(),
                 },
                 OpGraf::Imagem {
+                    eixo: [0.0, 0.0],
                     x: 15,
                     y: 15,
                     angulo: 0.0,

@@ -12,14 +12,40 @@
 nova = funcao(largura, altura) { mapa() }
 nova = funcao(largura, altura, tamanho_pixel) { mapa() }
 
-/// Caneta atual. Cores: as da tela (azul, vermelho, …) e transparente.
-/// Padrão: preto.
+/// Lista os nomes das cores predefinidas, em uma lista nova a cada chamada.
+///
+/// Retorna preto, vermelho, verde, amarelo, azul, magenta, ciano, branco,
+/// normal e transparente. Outras cores podem ser criadas com rgb().
+///
+/// Exemplo: escreva(cores())
+cores = funcao() { [] }
+
+/// Cria uma cor RGB como texto hexadecimal #RRGGBB, com letras maiúsculas.
+///
+/// vermelho, verde e azul devem ser inteiros de 0 a 255; valores fora
+/// dessa faixa ou fracionários produzem erro. Não ajusta os componentes.
+/// Use o resultado em cor() ou fundo(). A cor é opaca.
+///
+/// Exemplo: laranja = rgb(255, 128, 0)
+/// Exemplo: g.cor(rgb(255, 128, 0))
+rgb = funcao(vermelho, verde, azul) { "#000000" }
+
+/// Define a cor da caneta. Padrão: preto.
+///
+/// Cores aceitas: normal, preto, vermelho, verde, amarelo, azul,
+/// magenta, ciano, branco e transparente. :azul equivale ao texto "azul".
+/// Use cores() para listar os nomes ou rgb(r, g, b) para criar outra cor.
+/// Também aceita texto hexadecimal #RRGGBB (maiúsculas ou minúsculas).
 ///
 /// Exemplo: g.cor(:azul)
 cor = funcao(g, cor) { 0 }
 
 /// Papel da tela. Padrão: branco. transparente deixa furos no
 /// como_imagem(); na janela o furo mostra branco.
+/// Cores aceitas: normal, preto, vermelho, verde, amarelo, azul,
+/// magenta, ciano, branco e transparente. :azul equivale ao texto "azul".
+/// Use cores() para listar os nomes ou rgb(r, g, b) para criar outra cor.
+/// Também aceita texto hexadecimal #RRGGBB (maiúsculas ou minúsculas).
 ///
 /// Exemplo: g.fundo(:transparente)
 fundo = funcao(g, cor) { 0 }
@@ -57,18 +83,26 @@ retangulo = funcao(g, x1, y1, x2, y2) { 0 }
 /// Exemplo: g.texto(8, 8, "olá")
 texto = funcao(g, x, y, t, tamanho) { 0 }
 
-/// imagem(g, caminho, x, y, angulo)
-/// imagem(g, img, x, y, angulo)
-/// imagem(g, img, x, y)
+/// imagem(g, figura, x, y)
+/// imagem(g, figura, x, y, opcoes)
 ///
-/// Carimba uma imagem centrada em (x, y), entre -4096 e 4096. O segundo argumento é um caminho
-/// PNG, um valor de `importe "imagem"` ou outra tela gráfica (vira imagem
-/// na hora). O arquivo é lido uma vez; os pixels ficam no comando. angulo
-/// é em graus, no sentido horário; 0 deixa o topo para cima. Pixels
-/// transparentes não cobrem o desenho.
+/// Desenha pelo canto superior esquerdo em (x, y), entre -4096 e 4096.
+/// figura pode ser um caminho PNG, um valor imagem ou outra tela gráfica.
+/// O arquivo é lido uma vez e telas são convertidas na hora; os pixels
+/// ficam no comando. Pixels transparentes não cobrem o desenho.
 ///
-/// Exemplo: g.imagem(img, 160, 100, 90)
-imagem = funcao(g, caminho, x, y, angulo) { 0 }
+/// opcoes é um mapa opcional com :eixo e/ou :angulo. :eixo é um mapa com
+/// :x e :y em pixels locais da imagem; esse ponto fica em (x, y) na tela
+/// e é o ponto de rotação. O padrão é mapa([:x -> 0, :y -> 0]).
+/// :angulo é em graus no sentido horário, padrão 0. Os números devem ser
+/// finitos; o eixo pode ser fracionário ou ficar fora da imagem.
+/// Chaves desconhecidas e eixos sem :x ou :y produzem erro.
+/// As opções são copiadas; alterá-las depois não muda o comando registrado.
+///
+/// Exemplo: g.imagem(img, 0, 0)
+/// Exemplo: g.imagem(img, 160, 100, mapa([:eixo -> mapa([:x -> 16, :y -> 16]), :angulo -> 90]))
+imagem = funcao(g, figura, x, y) { 0 }
+imagem = funcao(g, figura, x, y, opcoes) { 0 }
 
 /// Apaga o desenho. O papel continua a cor de fundo.
 ///
@@ -76,6 +110,7 @@ imagem = funcao(g, caminho, x, y, angulo) { 0 }
 apague = funcao(g) { 0 }
 
 /// Cor do pixel (texto). Fora da tela é erro. Rasteriza se precisar.
+/// Cores predefinidas mantêm o nome; cores RGB retornam #RRGGBB em maiúsculas.
 ///
 /// Exemplo: escreva(g.pixel(10, 10))
 pixel = funcao(g, x, y) { 0 }

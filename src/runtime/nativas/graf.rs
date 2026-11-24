@@ -13,6 +13,30 @@ use crate::runtime::imagem::{self, Imagem};
 use crate::runtime::value::{ListaRc, MapKey, MapaRc, Value};
 
 impl Vm<'_, '_> {
+    pub(crate) fn bi_graf_cores(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
+        self.expect_arity(args, 0, span)?;
+        Ok(Value::lista(
+            crate::runtime::graf::PALETA
+                .iter()
+                .map(|nome| Value::Texto((*nome).into()))
+                .collect(),
+        ))
+    }
+
+    pub(crate) fn bi_graf_rgb(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
+        self.expect_arity(args, 3, span)?;
+        let mut componentes = [0u8; 3];
+        for (i, arg) in args.iter().enumerate() {
+            let n = self.expect_int(arg, span)?;
+            componentes[i] = u8::try_from(n)
+                .map_err(|_| self.err("componente RGB deve ser um inteiro de 0 a 255", span))?;
+        }
+        Ok(Value::Texto(format!(
+            "#{:02X}{:02X}{:02X}",
+            componentes[0], componentes[1], componentes[2]
+        )))
+    }
+
     pub(crate) fn bi_graf_nova(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
         if args.len() != 2 && args.len() != 3 {
             return Err(self.err(
@@ -179,9 +203,9 @@ impl Vm<'_, '_> {
     }
 
     pub(crate) fn bi_graf_texto(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
-        if args.len() != 4 && args.len() != 5 {
+        if !(4..=6).contains(&args.len()) {
             return Err(self.err(
-                format!("esperado 4 ou 5 argumento(s), recebeu {}", args.len()),
+                format!("esperado 4, 5 ou 6 argumento(s), recebeu {}", args.len()),
                 span,
             ));
         }
@@ -237,19 +261,28 @@ impl Vm<'_, '_> {
         let figura = figura_de(&args[1], span, self)?;
         let x = self.expect_px(&args[2], span)?;
         let y = self.expect_px(&args[3], span)?;
-        let angulo = if args.len() == 5 {
-            self.expect_f64(&args[4], span)?
-        } else {
-            0.0
+        let (eixo, angulo) = match args.get(4) {
+            Some(opcoes) => opcoes_imagem(opcoes, span, self)?,
+            None => ([0.0, 0.0], 0.0),
         };
-        if !angulo.is_finite() {
-            return Err(self.err("ângulo da imagem deve ser um número finito", span));
-        }
         push_op(
             &mapa,
             Value::mapa(vec![
                 (MapKey::Texto("tipo".into()), Value::Texto("imagem".into())),
                 (MapKey::Texto("figura".into()), Value::imagem(figura)),
+                (
+                    MapKey::Texto("eixo".into()),
+                    Value::mapa(vec![
+                        (
+                            MapKey::Texto("x".into()),
+                            self.number_from_f64(eixo[0], span)?,
+                        ),
+                        (
+                            MapKey::Texto("y".into()),
+                            self.number_from_f64(eixo[1], span)?,
+                        ),
+                    ]),
+                ),
                 (MapKey::Texto("x".into()), Value::Numero((x as i64).into())),
                 (MapKey::Texto("y".into()), Value::Numero((y as i64).into())),
                 (
@@ -418,6 +451,60 @@ impl Vm<'_, '_> {
     }
 }
 
+fn numero_finito_imagem(
+    v: &Value,
+    campo: &str,
+    span: Span,
+    vm: &Vm<'_, '_>,
+) -> Result<f64, EvalError> {
+    let n = vm.expect_f64(v, span)?;
+    if !n.is_finite() {
+        return Err(vm.err(format!("{campo} da imagem deve ser um número finito"), span));
+    }
+    Ok(n)
+}
+
+fn eixo_imagem(v: &Value, span: Span, vm: &Vm<'_, '_>) -> Result<[f64; 2], EvalError> {
+    let Value::Mapa(m) = v else {
+        return Err(vm.err("eixo da imagem deve ser um mapa com :x e :y", span));
+    };
+    let m = m.borrow();
+    if m.keys()
+        .any(|k| !matches!(k, MapKey::Texto(s) if s == "x" || s == "y"))
+    {
+        return Err(vm.err("eixo da imagem aceita somente :x e :y", span));
+    }
+    let mut eixo = [0.0; 2];
+    for (i, campo) in ["x", "y"].into_iter().enumerate() {
+        let v = m
+            .get(&MapKey::Texto(campo.into()))
+            .ok_or_else(|| vm.err(format!("eixo da imagem exige :{campo}"), span))?;
+        eixo[i] = numero_finito_imagem(v, campo, span, vm)?;
+    }
+    Ok(eixo)
+}
+
+fn opcoes_imagem(v: &Value, span: Span, vm: &Vm<'_, '_>) -> Result<([f64; 2], f64), EvalError> {
+    let Value::Mapa(m) = v else {
+        return Err(vm.err(
+            "opções da imagem devem ser um mapa com :eixo e/ou :angulo",
+            span,
+        ));
+    };
+    let mut eixo = [0.0; 2];
+    let mut angulo = 0.0;
+    for (chave, valor) in m.borrow().iter() {
+        match chave {
+            MapKey::Texto(s) if s == "eixo" => eixo = eixo_imagem(valor, span, vm)?,
+            MapKey::Texto(s) if s == "angulo" => {
+                angulo = numero_finito_imagem(valor, "ângulo", span, vm)?
+            }
+            _ => return Err(vm.err("opção de imagem desconhecida; use :eixo e :angulo", span)),
+        }
+    }
+    Ok((eixo, angulo))
+}
+
 fn limitar_coord(n: f64) -> Option<i32> {
     let arred = n.round();
     if arred < f64::from(-LIMITE_COORD) || arred > f64::from(LIMITE_COORD) {
@@ -521,7 +608,12 @@ fn op_de(v: &Value, span: Span, vm: &Vm<'_, '_>) -> Result<OpGraf, EvalError> {
         "imagem" => {
             let figura = get_imagem(xs, "figura")
                 .ok_or_else(|| vm.err("comando de imagem sem :figura", span))?;
+            let eixo = match xs.borrow().get(&MapKey::Texto("eixo".into())) {
+                Some(v) => eixo_imagem(v, span, vm)?,
+                None => [0.0, 0.0],
+            };
             Ok(OpGraf::Imagem {
+                eixo,
                 x: exigir_coord(xs, "x", span, vm)?,
                 y: exigir_coord(xs, "y", span, vm)?,
                 angulo: get_f64(xs, "angulo").unwrap_or(0.0),
@@ -557,7 +649,7 @@ fn check_cor(cor: &str, span: Span, vm: &Vm<'_, '_>) -> Result<(), EvalError> {
     } else {
         Err(vm.err(
             format!(
-                "cor desconhecida (\"{cor}\"); use normal, preto, vermelho, verde, amarelo, azul, magenta, ciano, branco ou transparente"
+                "cor desconhecida (\"{cor}\"); use cores() para listar os nomes ou rgb(vermelho, verde, azul) para criar uma cor #RRGGBB"
             ),
             span,
         ))
@@ -955,7 +1047,7 @@ celula.retangulo(1, 1, 2, 2)
 w = nova(8, 8)
 w.cor(:vermelho)
 w.retangulo(0, 0, 7, 7)
-w.imagem(celula, 4, 4)
+w.imagem(celula, 2, 2)
 w.mostre()
 "#;
         let mut cap = CapturaGraf::default();
@@ -1150,7 +1242,7 @@ escreva(g.pixel(0, 0))
         let src = r#"
 importe "tela_grafica"
 g = nova(16, 16)
-g.imagem("sprite.png", 8, 8, 0)
+g.imagem("sprite.png", 7, 7)
 g.mostre()
 "#;
         let mut cap = CapturaGraf::default();

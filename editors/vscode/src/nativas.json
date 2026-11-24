@@ -1411,8 +1411,30 @@
       "signatures": [
         "cor(g, cor)"
       ],
-      "summary": "Caneta atual. Cores: as da tela (azul, vermelho, …) e transparente. Padrão: preto.",
-      "doc": "Caneta atual. Cores: as da tela (azul, vermelho, …) e transparente.\nPadrão: preto.\n\nExemplo: g.cor(:azul)"
+      "summary": "Define a cor da caneta. Padrão: preto.",
+      "doc": "Define a cor da caneta. Padrão: preto.\n\nCores aceitas: normal, preto, vermelho, verde, amarelo, azul,\nmagenta, ciano, branco e transparente. :azul equivale ao texto \"azul\".\nUse cores() para listar os nomes ou rgb(r, g, b) para criar outra cor.\nTambém aceita texto hexadecimal #RRGGBB (maiúsculas ou minúsculas).\n\nExemplo: g.cor(:azul)"
+    },
+    {
+      "name": "cores",
+      "aliases": [],
+      "module": "tela_grafica",
+      "kind": "funcao",
+      "signatures": [
+        "cores()"
+      ],
+      "summary": "Lista os nomes das cores predefinidas, em uma lista nova a cada chamada.",
+      "doc": "Lista os nomes das cores predefinidas, em uma lista nova a cada chamada.\n\nRetorna preto, vermelho, verde, amarelo, azul, magenta, ciano, branco,\nnormal e transparente. Outras cores podem ser criadas com rgb().\n\nExemplo: escreva(cores())"
+    },
+    {
+      "name": "rgb",
+      "aliases": [],
+      "module": "tela_grafica",
+      "kind": "funcao",
+      "signatures": [
+        "rgb(vermelho, verde, azul)"
+      ],
+      "summary": "Cria uma cor RGB como texto hexadecimal #RRGGBB, com letras maiúsculas.",
+      "doc": "Cria uma cor RGB como texto hexadecimal #RRGGBB, com letras maiúsculas.\n\nvermelho, verde e azul devem ser inteiros de 0 a 255; valores fora\ndessa faixa ou fracionários produzem erro. Não ajusta os componentes.\nUse o resultado em cor() ou fundo(). A cor é opaca.\n\nExemplo: laranja = rgb(255, 128, 0)\nExemplo: g.cor(rgb(255, 128, 0))"
     },
     {
       "name": "fundo",
@@ -1422,8 +1444,8 @@
       "signatures": [
         "fundo(g, cor)"
       ],
-      "summary": "Papel da tela. Padrão: branco. transparente deixa furos no como_imagem(); na janela o furo mostra branco.",
-      "doc": "Papel da tela. Padrão: branco. transparente deixa furos no\ncomo_imagem(); na janela o furo mostra branco.\n\nExemplo: g.fundo(:transparente)"
+      "summary": "Papel da tela. Padrão: branco. transparente deixa furos no como_imagem(); na janela o furo mostra branco. Cores aceitas: normal, preto, vermelho, verde, amarelo, azul, magenta, ciano, branco e transparente. :azul equivale ao texto \"azul\". Use cores() para listar os nomes ou rgb(r, g, b) para criar outra cor. Também aceita texto hexadecimal #RRGGBB (maiúsculas ou minúsculas).",
+      "doc": "Papel da tela. Padrão: branco. transparente deixa furos no\ncomo_imagem(); na janela o furo mostra branco.\nCores aceitas: normal, preto, vermelho, verde, amarelo, azul,\nmagenta, ciano, branco e transparente. :azul equivale ao texto \"azul\".\nUse cores() para listar os nomes ou rgb(r, g, b) para criar outra cor.\nTambém aceita texto hexadecimal #RRGGBB (maiúsculas ou minúsculas).\n\nExemplo: g.fundo(:transparente)"
     },
     {
       "name": "linha",
@@ -1491,12 +1513,11 @@
       "module": "tela_grafica",
       "kind": "funcao",
       "signatures": [
-        "imagem(g, caminho, x, y, angulo)",
-        "imagem(g, img, x, y, angulo)",
-        "imagem(g, img, x, y)"
+        "imagem(g, figura, x, y)",
+        "imagem(g, figura, x, y, opcoes)"
       ],
-      "summary": "Carimba uma imagem centrada em (x, y), entre -4096 e 4096. O segundo argumento é um caminho PNG, um valor de `importe \"imagem\"` ou outra tela gráfica (vira imagem na hora). O arquivo é lido uma vez; os pixels ficam no comando. angulo é em graus, no sentido horário; 0 deixa o topo para cima. Pixels transparentes não cobrem o desenho.",
-      "doc": "Carimba uma imagem centrada em (x, y), entre -4096 e 4096. O segundo argumento é um caminho\nPNG, um valor de `importe \"imagem\"` ou outra tela gráfica (vira imagem\nna hora). O arquivo é lido uma vez; os pixels ficam no comando. angulo\né em graus, no sentido horário; 0 deixa o topo para cima. Pixels\ntransparentes não cobrem o desenho.\n\nExemplo: g.imagem(img, 160, 100, 90)"
+      "summary": "Desenha pelo canto superior esquerdo em (x, y), entre -4096 e 4096. figura pode ser um caminho PNG, um valor imagem ou outra tela gráfica. O arquivo é lido uma vez e telas são convertidas na hora; os pixels ficam no comando. Pixels transparentes não cobrem o desenho.",
+      "doc": "Desenha pelo canto superior esquerdo em (x, y), entre -4096 e 4096.\nfigura pode ser um caminho PNG, um valor imagem ou outra tela gráfica.\nO arquivo é lido uma vez e telas são convertidas na hora; os pixels\nficam no comando. Pixels transparentes não cobrem o desenho.\n\nopcoes é um mapa opcional com :eixo e/ou :angulo. :eixo é um mapa com\n:x e :y em pixels locais da imagem; esse ponto fica em (x, y) na tela\ne é o ponto de rotação. O padrão é mapa([:x -> 0, :y -> 0]).\n:angulo é em graus no sentido horário, padrão 0. Os números devem ser\nfinitos; o eixo pode ser fracionário ou ficar fora da imagem.\nChaves desconhecidas e eixos sem :x ou :y produzem erro.\nAs opções são copiadas; alterá-las depois não muda o comando registrado.\n\nExemplo: g.imagem(img, 0, 0)\nExemplo: g.imagem(img, 160, 100, mapa([:eixo -> mapa([:x -> 16, :y -> 16]), :angulo -> 90]))"
     },
     {
       "name": "apague",
@@ -1517,8 +1538,8 @@
       "signatures": [
         "pixel(g, x, y)"
       ],
-      "summary": "Cor do pixel (texto). Fora da tela é erro. Rasteriza se precisar.",
-      "doc": "Cor do pixel (texto). Fora da tela é erro. Rasteriza se precisar.\n\nExemplo: escreva(g.pixel(10, 10))"
+      "summary": "Cor do pixel (texto). Fora da tela é erro. Rasteriza se precisar. Cores predefinidas mantêm o nome; cores RGB retornam #RRGGBB em maiúsculas.",
+      "doc": "Cor do pixel (texto). Fora da tela é erro. Rasteriza se precisar.\nCores predefinidas mantêm o nome; cores RGB retornam #RRGGBB em maiúsculas.\n\nExemplo: escreva(g.pixel(10, 10))"
     },
     {
       "name": "como_imagem",

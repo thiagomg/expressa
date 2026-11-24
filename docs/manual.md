@@ -813,7 +813,7 @@ Abre a janela do documento ou atualiza a janela existente. A execução continua
 
 Cria desenhos em uma tela de pixels. Cada tela gráfica é representada por um mapa e pode ser exibida em sua própria janela. Use funções como `linha`, `circulo`, `ponto`, `retangulo` e `imagem` para desenhar; depois, chame `mostre` para exibir ou `salve` para gravar em um arquivo.
 
-As cores são as mesmas do módulo `tela`, além de `transparente`. `fundo(g, cor)` define a cor de fundo. `como_imagem(g)` converte o desenho em um valor do tipo `imagem`, preservando as áreas transparentes.
+As cores aceitas por `cor(g, cor)` e `fundo(g, cor)` são `normal`, `preto`, `vermelho`, `verde`, `amarelo`, `azul`, `magenta`, `ciano`, `branco` e `transparente`. Use um texto (`"azul"`) ou a forma equivalente `:azul`. `cores()` devolve uma lista nova com esses nomes. `rgb(vermelho, verde, azul)` cria um texto `"#RRGGBB"`, aceito por `cor` e `fundo`; cada componente deve ser um inteiro de 0 a 255. Também é possível passar o texto hexadecimal diretamente, com letras maiúsculas ou minúsculas. Valores inválidos produzem erro, sem ajuste automático. `fundo(g, cor)` define a cor de fundo. `como_imagem(g)` converte o desenho em um valor do tipo `imagem`, preservando as áreas transparentes.
 
 ```
 tela_grafica = importe "tela_grafica"
@@ -865,10 +865,15 @@ Oferece funções para carregar, salvar e transformar imagens PNG em memória: `
 
 Para desenhar com `tela_grafica::imagem`, você pode passar um valor de imagem, o caminho de um arquivo (carregado uma vez) ou outra tela gráfica. O exemplo abaixo usa a tela `g` criada na seção anterior e um arquivo `tartaruga.png` disponível na pasta do programa.
 
+Sem opções, `(x, y)` indica o canto superior esquerdo. O quinto argumento opcional é um mapa com `:eixo` (outro mapa com `:x` e `:y`) e/ou `:angulo`. O ponto local indicado pelo eixo fica em `(x, y)` na tela, e a imagem gira ao redor dele. Os padrões são eixo `(0, 0)` e ângulo `0`; ângulos positivos giram no sentido horário. O eixo aceita números finitos, fracionários ou fora da imagem. Um eixo informado exige ambos os campos; chaves desconhecidas produzem erro. As opções são copiadas ao desenhar. O ângulo numérico isolado foi substituído pelo mapa de opções.
+
 ```
 img = importe "imagem"
 figura = img::carregue("tartaruga.png")
-g.tela_grafica::imagem(figura, 160, 100, 90)
+g.tela_grafica::imagem(figura, 160, 100, mapa([
+    :eixo -> mapa([:x -> img::largura(figura) / 2, :y -> img::altura(figura) / 2]),
+    :angulo -> 90
+]))
 figura.img::salve("copia.png")
 ```
 

@@ -197,7 +197,7 @@ desenhe = função(g, estado, imagens) {
     cy = estado:camera_y
     largura = tamanho(estado:mapa[0]) * 16
     altura = tamanho(estado:mapa) * 16
-    g.tela::imagem(imagens:mapa, largura / 2 - cx, altura / 2 - cy)
+    g.tela::imagem(imagens:mapa, largura / 2 - cx, altura / 2 - cy, mapa([:eixo -> mapa([:x -> largura / 2, :y -> altura / 2])]))
     para cristal em estado:cristais {
         se nao cristal:coletado {
             x = cristal:coluna * 16 + 8 - cx
@@ -208,7 +208,7 @@ desenhe = função(g, estado, imagens) {
         }
     }
     figura = imagens:sprites[estado:direcao][estado:quadro]
-    g.tela::imagem(figura, estado:x + 5 - cx, estado:y + 2 - cy)
+    g.tela::imagem(figura, estado:x + 5 - cx, estado:y + 2 - cy, mapa([:eixo -> mapa([:x -> 6, :y -> 8])]))
     g.retangulo(:preto, 0, 144, 239, 159)
     g.tela::cor(:branco)
     texto = se estado:coletados == 3 { "Todos coletados! R: reiniciar" } senao { formate("Cristais {}/3  R: reiniciar", estado:coletados) }

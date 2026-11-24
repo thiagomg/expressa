@@ -74,6 +74,7 @@ pub enum OpMsg {
         cor: String,
     },
     Imagem {
+        eixo: [f64; 2],
         handle: u32,
         x: i32,
         y: i32,
@@ -165,6 +166,7 @@ pub fn mensagens_de(
                 cor: cor.clone(),
             }),
             OpGraf::Imagem {
+                eixo,
                 x,
                 y,
                 angulo,
@@ -182,6 +184,7 @@ pub fn mensagens_de(
                     });
                 }
                 ops.push(OpMsg::Imagem {
+                    eixo: *eixo,
                     handle: h,
                     x: *x,
                     y: *y,
@@ -257,6 +260,7 @@ pub fn tela_de_mostre(
                 cor: cor_ok(cor),
             }),
             OpMsg::Imagem {
+                eixo,
                 handle,
                 x,
                 y,
@@ -264,6 +268,7 @@ pub fn tela_de_mostre(
             } => {
                 if let Some(figura) = figuras.get(handle) {
                     out.push(OpGraf::Imagem {
+                        eixo: *eixo,
                         x: *x,
                         y: *y,
                         angulo: *angulo,
@@ -441,6 +446,7 @@ fn encode_op(buf: &mut Vec<u8>, op: &OpMsg) {
             put_str(buf, cor);
         }
         OpMsg::Imagem {
+            eixo,
             handle,
             x,
             y,
@@ -451,6 +457,8 @@ fn encode_op(buf: &mut Vec<u8>, op: &OpMsg) {
             put_i32(buf, *x);
             put_i32(buf, *y);
             buf.extend_from_slice(&angulo.to_le_bytes());
+            buf.extend_from_slice(&eixo[0].to_le_bytes());
+            buf.extend_from_slice(&eixo[1].to_le_bytes());
         }
         OpMsg::Texto {
             x,
@@ -584,17 +592,25 @@ fn decode_op(p: &[u8], i: &mut usize) -> Option<OpMsg> {
             let handle = get_u32(p, i)?;
             let x = get_i32(p, i)?;
             let y = get_i32(p, i)?;
-            if *i + 8 > p.len() {
+            if *i + 24 > p.len() {
                 return None;
             }
             let mut b = [0u8; 8];
             b.copy_from_slice(&p[*i..*i + 8]);
             *i += 8;
+            let angulo = f64::from_le_bytes(b);
+            let mut eixo = [0.0; 2];
+            for coord in &mut eixo {
+                b.copy_from_slice(&p[*i..*i + 8]);
+                *i += 8;
+                *coord = f64::from_le_bytes(b);
+            }
             Some(OpMsg::Imagem {
+                eixo,
                 handle,
                 x,
                 y,
-                angulo: f64::from_le_bytes(b),
+                angulo,
             })
         }
         OP_TEXTO => Some(OpMsg::Texto {
@@ -737,6 +753,7 @@ mod tests {
                     cor: "azul".into(),
                 },
                 OpMsg::Imagem {
+                    eixo: [0.0, 0.0],
                     handle: 1,
                     x: 40,
                     y: 100,
@@ -775,6 +792,7 @@ mod tests {
             tamanho_pixel: 1,
             fundo: "branco".into(),
             ops: vec![OpGraf::Imagem {
+                eixo: [0.0, 0.0],
                 x: 4,
                 y: 4,
                 angulo: 0.0,
@@ -789,6 +807,7 @@ mod tests {
         assert!(matches!(a[2], Msg::Mostre { .. }));
         let tela2 = TelaGrafica {
             ops: vec![OpGraf::Imagem {
+                eixo: [1.25, -0.5],
                 x: 6,
                 y: 4,
                 angulo: 24.0,
@@ -801,8 +820,13 @@ mod tests {
         match &b[0] {
             Msg::Mostre { ops, .. } => match &ops[0] {
                 OpMsg::Imagem {
-                    handle, x, angulo, ..
+                    eixo,
+                    handle,
+                    x,
+                    angulo,
+                    ..
                 } => {
+                    assert_eq!(*eixo, [1.25, -0.5]);
                     assert_eq!(*handle, 1);
                     assert_eq!(*x, 6);
                     assert_eq!(*angulo, 24.0);
@@ -810,6 +834,32 @@ mod tests {
                 other => panic!("{other:?}"),
             },
             other => panic!("{other:?}"),
+        }
+    }
+
+    #[test]
+    fn image_axis_survives_transport_and_reconstruction() {
+        let figura = Imagem::nova(2, 1, vec![255, 0, 0, 255, 0, 0, 255, 255]).unwrap();
+        let msg = Msg::Mostre {
+            id: 1,
+            ops: vec![OpMsg::Imagem {
+                handle: 7,
+                x: 3,
+                y: 3,
+                angulo: 90.0,
+                eixo: [1.0, 0.0],
+            }],
+        };
+        let mut bytes = Vec::new();
+        write_msg(&mut bytes, &msg).unwrap();
+        let Msg::Mostre { id, ops } = read_msg(&mut bytes.as_slice()).unwrap() else {
+            panic!()
+        };
+        let tela = tela_de_mostre(id, 8, 8, 1, "branco", &ops, &HashMap::from([(7, figura)]));
+        assert_eq!(tela.como_imagem().pixel(3, 2), Some([255, 0, 0, 255]));
+        assert_eq!(tela.como_imagem().pixel(3, 3), Some([0, 0, 255, 255]));
+        for end in 0..bytes.len() {
+            assert!(read_msg(&mut &bytes[..end]).is_err());
         }
     }
 }

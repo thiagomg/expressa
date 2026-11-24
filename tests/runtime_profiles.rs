@@ -6,6 +6,9 @@ use expressa::runtime::{
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 
+#[path = "support/workloads.rs"]
+mod workloads;
+
 fn options() -> ExecutionOptions {
     ExecutionOptions {
         backend: ExecutionBackend::Bytecode,
@@ -40,17 +43,11 @@ impl Drop for Temp {
 
 #[test]
 fn all_common_workloads_run_from_source_and_exb_in_every_profile() {
-    let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("benchmarks/programs");
-    for entry in std::fs::read_dir(dir).unwrap() {
-        let path = entry.unwrap().path();
-        if path.extension().and_then(|x| x.to_str()) != Some("lep") {
-            continue;
-        }
-        let name = path.to_str().unwrap();
-        let source = std::fs::read_to_string(&path).unwrap();
-        let expected = run_with_options(&source, name, "", options()).unwrap();
+    for &(name, source) in workloads::WORKLOADS {
+        let expected =
+            run_with_options(source, name, "", options()).unwrap_or_else(|e| panic!("{name}: {e}"));
         assert_eq!(expected.stdout, "verdadeiro\n", "{name}");
-        let program = load_exb(&compile_exb(&source, name).unwrap()).unwrap();
+        let program = load_exb(&compile_exb(source, name).unwrap()).unwrap();
         assert_eq!(
             run_compiled_with_options(&program, name, "", options()).unwrap(),
             expected,

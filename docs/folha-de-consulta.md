@@ -308,12 +308,17 @@ c.cart::mostre()                 // mesma janela a cada mostre; não espera
 tela_grafica = importe "tela_grafica"
 g = tela_grafica::nova(320, 200) // pixels; (0,0) canto superior esquerdo
 g = tela_grafica::nova(160, 144, 4) // janela 640×576; canvas 160×144
+escreva(tela_grafica::cores()) // nomes das cores predefinidas
+laranja = tela_grafica::rgb(255, 128, 0) // "#FF8000"; inteiros de 0 a 255
+g.tela_grafica::cor(laranja) // cor e fundo também aceitam "#RRGGBB"
 g.tela_grafica::cor(:azul)
 g.tela_grafica::linha(10, 10, 310, 190)
 g.tela_grafica::circulo(160, 100, 40)
 g.tela_grafica::retangulo(10, 10, 40, 30) // preenchido, cantos inclusivos
 g.tela_grafica::fundo(:transparente)
 sprite = g.tela_grafica::como_imagem()
+g.tela_grafica::imagem(sprite, 0, 0) // canto superior esquerdo
+g.tela_grafica::imagem(sprite, 160, 100, mapa([:eixo -> mapa([:x -> 16, :y -> 16]), :angulo -> 90]))
 g.tela_grafica::texto(8, 8, "olá")  // canto superior esquerdo; tamanho 8
 g.tela_grafica::mostre()         // janela irmã; o próximo mostre atualiza
 ev = g.tela_grafica::evento() // captura sem esperar interação

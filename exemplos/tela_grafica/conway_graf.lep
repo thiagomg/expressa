@@ -1,6 +1,5 @@
 importe "sistema"
 tela = importe "tela_grafica"
-importe "cartesiano"
 importe "matriz"
 importe "mat"
 
@@ -47,10 +46,9 @@ cria_ser = funcao(cel, cor) {
 }
 
 ser_grande = funcao(w, estado, x, y) {
-    // A função imagem centraliza a figura; (px, py) é o centro da célula.
-    meio = ser_tamanho / 2
-    px = x * ser_tamanho + meio
-    py = começo_y + y * ser_tamanho + meio
+    // (px, py) é o canto superior esquerdo da célula.
+    px = x * ser_tamanho
+    py = começo_y + y * ser_tamanho
     figura = se estado == :vivo { ser_vivo } senão { ser_morto }
     w.tela::imagem(figura, px, py)
 }

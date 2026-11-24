@@ -12,7 +12,7 @@ g = tela_grafica::nova(200, 80)
 g.tela_grafica::cor(:azul)
 g.tela_grafica::retangulo(0, 0, 199, 79)
 para i em 0..=4 {
-    g.tela_grafica::imagem(celula, 24 + i * 40, 40)
+    g.tela_grafica::imagem(celula, 16 + i * 40, 32)
 }
 g.tela_grafica::mostre()
 g.tela_grafica::salve("sprite.png")
