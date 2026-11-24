@@ -1,0 +1,16 @@
+// Repete a entrada na mesma linha e mantém o aviso de erro logo abaixo.
+importe "tela"
+
+escreva("1 - Continuar | 2 - Sair")
+pos = posicao_cursor()
+enquanto verdadeiro {
+    posicao_cursor(pos)
+    apague_linha()
+    opcao = leia("Opção: ")
+    se opcao == "1" ou opcao == "2" {
+        apague_linha()
+        pare
+    }
+    apague_linha()
+    escreva("Opção inválida. Escolha 1 ou 2.")
+}

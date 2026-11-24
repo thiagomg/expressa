@@ -1,0 +1,82 @@
+use std::io::{self, BufRead, Write};
+
+/// Line written to stderr (CLI `--marcador-leia`) or sent to the IDE
+/// before `leia()` waits for a reply. The rest of the line is the prompt.
+pub const LEIA_MARKER: &str = "<<<EXPRESSA-LEIA>>>";
+
+/// ANSI: erase the screen, then move the cursor home. Written by `limpe_tela()`.
+pub const CLEAR_SCREEN: &str = "\x1b[2J\x1b[H";
+
+/// ANSI: cursor to the top-left without erasing. Used by `quadro()`.
+pub const CURSOR_HOME: &str = "\x1b[H";
+
+pub trait LeiaHost {
+    /// Zero-based output cursor, after all preceding output has been rendered.
+    fn cursor_position(&mut self) -> Result<(i64, i64), String> {
+        Err("consulta da posição do cursor indisponível neste ambiente".into())
+    }
+
+    fn ask(&mut self, prompt: &str) -> Result<String, String>;
+
+    /// Raw standard input, without normalizing line endings or decoding UTF-8.
+    fn read_all_bytes(&mut self) -> Result<Vec<u8>, String> {
+        Err("leia_bytes() lê a entrada padrão (pipe/arquivo); neste ambiente use leia_bytes(caminho)".into())
+    }
+
+    /// Drain remaining stdin as lines (no prompt). Default: not available
+    /// (the Aula dialog has no EOF).
+    fn read_all_lines(&mut self) -> Result<Vec<String>, String> {
+        Err(
+            "leia_linhas() lê a entrada padrão (pipe/arquivo); na Aula use leia() ou leia_arquivo"
+                .into(),
+        )
+    }
+}
+
+/// Prints [`LEIA_MARKER`] plus the prompt on stderr, then reads stdin.
+pub struct MarkerLeiaHost<R: BufRead> {
+    pub stdin: R,
+}
+
+impl<R: BufRead> LeiaHost for MarkerLeiaHost<R> {
+    fn read_all_bytes(&mut self) -> Result<Vec<u8>, String> {
+        let mut bytes = Vec::new();
+        io::Read::read_to_end(&mut self.stdin, &mut bytes).map_err(|e| e.to_string())?;
+        Ok(bytes)
+    }
+    fn ask(&mut self, prompt: &str) -> Result<String, String> {
+        let mut err = io::stderr();
+        writeln!(err, "{LEIA_MARKER}{prompt}").map_err(|e| e.to_string())?;
+        err.flush().map_err(|e| e.to_string())?;
+        let mut line = String::new();
+        let n = self.stdin.read_line(&mut line).map_err(|e| e.to_string())?;
+        if n == 0 {
+            return Err("fim da entrada".into());
+        }
+        strip_newline(&mut line);
+        Ok(line)
+    }
+
+    fn read_all_lines(&mut self) -> Result<Vec<String>, String> {
+        let mut lines = Vec::new();
+        loop {
+            let mut line = String::new();
+            let n = self.stdin.read_line(&mut line).map_err(|e| e.to_string())?;
+            if n == 0 {
+                break;
+            }
+            strip_newline(&mut line);
+            lines.push(line);
+        }
+        Ok(lines)
+    }
+}
+
+pub(crate) fn strip_newline(line: &mut String) {
+    if line.ends_with('\n') {
+        line.pop();
+        if line.ends_with('\r') {
+            line.pop();
+        }
+    }
+}

@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Tutoriais Expressa
+Comment=Tutoriais da linguagem Expressa
+Comment[pt_BR]=Tutoriais da linguagem Expressa
+Exec=expressa-tutorial
+Icon=expressa
+Terminal=false
+Categories=Development;Education;GTK;
+StartupNotify=true
+StartupWMClass=expressa-tutorial

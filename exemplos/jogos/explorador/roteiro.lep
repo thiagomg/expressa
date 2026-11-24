@@ -1,0 +1,45 @@
+/// Roteiro automático: usa a mesma simulação e o tempo real entre quadros (dt) do modo interativo.
+novo = função() {
+    mapa([:fase -> 0, :tempo -> 0, :quadros -> 0, :parado -> 0,
+        :bateu -> falso, :atravessou -> falso, :soltou -> verdadeiro,
+        :viu_1 -> falso, :viu_2 -> falso, :dt_max -> 0])
+}
+
+teclas = função(teste, estado, dt) {
+    teste:quadros += 1
+    teste:tempo += dt
+    se dt > teste:dt_max { teste:dt_max = dt }
+    se estado:quadro == 1 { teste:viu_1 = verdadeiro }
+    se estado:quadro == 2 { teste:viu_2 = verdadeiro }
+    se teste:fase == 0 e estado:colidiu {
+        teste:bateu = verdadeiro
+        teste:fase = 1
+        teste:parado = teste:tempo
+        teste:x = estado:x
+        teste:y = estado:y
+    }
+    se teste:fase == 1 ou teste:fase == 4 {
+        se estado:x != teste:x ou estado:y != teste:y { teste:soltou = falso }
+        se teste:tempo - teste:parado >= 0.15 {
+            teste:fase = se teste:fase == 1 { 2 } senao { 5 }
+        }
+    }
+    se teste:fase == 2 e estado:y >= 112 { teste:fase = 3 }
+    se teste:fase == 3 e estado:x >= 160 {
+        teste:atravessou = verdadeiro
+        teste:fase = 4
+        teste:parado = teste:tempo
+        teste:x = estado:x
+        teste:y = estado:y
+    }
+    se teste:fase == 0 { conjunto([:direita]) }
+    ou se teste:fase == 2 { conjunto([:baixo]) }
+    ou se teste:fase == 3 { conjunto([:direita]) }
+    senao { conjunto() }
+}
+
+concluido = função(teste) { teste:fase == 5 ou teste:tempo > 10 }
+
+resultado = função(teste) {
+    teste:fase == 5 e teste:bateu e teste:atravessou e teste:soltou e teste:viu_1 e teste:viu_2
+}

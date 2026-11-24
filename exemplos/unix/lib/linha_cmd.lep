@@ -1,0 +1,41 @@
+// args: lista de argumentos recebidos pela linha de comando.
+// ops: lista dos nomes das opções que recebem um valor, como --nome Thiago.
+separa_args = função(args, ops) {
+
+    // Opções
+    opções = mapa()
+    // Argumentos posicionais 
+    args_pos = []
+
+    i = 0
+    enquanto i < args.tamanho() {
+        a = args[i]
+        se a.tamanho() > 1 e a[0] == "-" {
+            // Se a opção estiver na lista ops, o próximo argumento é seu valor.
+            // As demais opções recebem um texto vazio.
+            nome_op = se a[0..2] == "--" {
+                a[2..]
+            } senao {
+                a[1..]
+            }
+            
+            valor = se ops contem nome_op {
+                i += 1
+                args[i] se_falhar { "" }
+            } senão {
+                ""
+            }
+
+            // Agora vamos adicionar no mapa de opções
+            opções[nome_op] = valor
+        } senão {
+            args_pos += [a]
+        }
+        i += 1
+    }
+
+    mapa([
+        :op -> opções,
+        :pos -> args_pos,
+    ])
+}

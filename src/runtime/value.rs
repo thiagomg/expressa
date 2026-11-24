@@ -1,0 +1,950 @@
+mod cycles;
+pub(crate) use cycles::{collect_cycles, collect_cycles_if_due};
+
+use std::cell::RefCell;
+use std::collections::{HashMap, HashSet};
+use std::fmt;
+use std::rc::Rc;
+
+use crate::lexer::Span;
+#[cfg(feature = "ast")]
+use crate::parser::Block;
+use crate::parser::Param;
+
+use super::env::Env;
+use super::imagem::Imagem;
+use super::numero::Numero;
+#[cfg(feature = "process")]
+use super::processo::Processo;
+
+pub enum Value {
+    Nada,
+    Numero(Numero),
+    /// Half-open integer generator `start..end` (`end` is `None` if unbounded).
+    Intervalo {
+        start: i64,
+        end: Option<i64>,
+    },
+    Texto(String),
+    Bool(bool),
+    Lista(ListaRc),
+    Par(MapKey, Box<Value>),
+    Mapa(MapaRc),
+    Conjunto(Rc<RefCell<HashSet<MapKey>>>),
+    Matriz(Rc<RefCell<Vec<Vec<f64>>>>),
+    Imagem(Rc<RefCell<Imagem>>),
+    Funcao(Rc<Closure>),
+    Builtin(&'static str),
+    Modulo(Rc<RefCell<Env>>),
+    /// `linhas_de`: a command still running, read with `para … em`.
+    #[cfg(feature = "process")]
+    Processo(Rc<RefCell<Processo>>),
+}
+
+// Pairs own their value rather than an Rc. Copy long pair chains iteratively;
+// sharing at collection/function/image boundaries stays unchanged.
+impl Clone for Value {
+    #[inline]
+    fn clone(&self) -> Self {
+        match self {
+            Self::Nada => Self::Nada,
+            Self::Numero(n) => Self::Numero(*n),
+            Self::Intervalo { start, end } => Self::Intervalo {
+                start: *start,
+                end: *end,
+            },
+            Self::Texto(s) => Self::Texto(s.clone()),
+            Self::Bool(b) => Self::Bool(*b),
+            Self::Lista(v) => Self::Lista(Rc::clone(v)),
+            Self::Mapa(v) => Self::Mapa(Rc::clone(v)),
+            Self::Conjunto(v) => Self::Conjunto(Rc::clone(v)),
+            Self::Matriz(v) => Self::Matriz(Rc::clone(v)),
+            Self::Imagem(v) => Self::Imagem(Rc::clone(v)),
+            Self::Funcao(v) => Self::Funcao(Rc::clone(v)),
+            Self::Builtin(n) => Self::Builtin(n),
+            Self::Modulo(v) => Self::Modulo(Rc::clone(v)),
+            #[cfg(feature = "process")]
+            Self::Processo(v) => Self::Processo(Rc::clone(v)),
+            Self::Par(key, value) => clone_pair(self, key, value),
+        }
+    }
+}
+
+// Keep pair traversal out of the inline Clone body so scalar/reference copies
+// can be inlined without pulling in the allocation and unwind paths below.
+#[inline(never)]
+fn clone_pair(original: &Value, key: &MapKey, value: &Value) -> Value {
+    if !matches!(value, Value::Par(_, _)) {
+        return Value::Par(key.clone(), Box::new(value.clone()));
+    }
+    let mut keys = Vec::new();
+    let mut tail = original;
+    while let Value::Par(key, value) = tail {
+        keys.push(key.clone());
+        tail = value;
+    }
+    let mut result = tail.clone();
+    for key in keys.into_iter().rev() {
+        result = Value::Par(key, Box::new(result));
+    }
+    result
+}
+
+/// A list's items, shared by every copy of the list value.
+pub type ListaRc = Rc<ItensLista>;
+/// A map's hash table, shared by every copy; iteration order is unspecified.
+pub type MapaRc = Rc<ItensMapa>;
+
+/// Storage of a list. Derefs to the `RefCell`, so `xs.borrow()` works; it
+/// exists for its `Drop` (see [`desmontar`]).
+pub struct ItensLista(RefCell<Vec<Value>>);
+
+/// Storage of a map; like [`ItensLista`].
+pub struct ItensMapa(RefCell<HashMap<MapKey, Value>>, bool);
+
+impl std::ops::Deref for ItensLista {
+    type Target = RefCell<Vec<Value>>;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl ItensMapa {
+    pub(crate) fn recurso_nao_clonavel(&self) -> bool {
+        self.1
+    }
+}
+
+impl std::ops::Deref for ItensMapa {
+    type Target = RefCell<HashMap<MapKey, Value>>;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl Drop for ItensLista {
+    fn drop(&mut self) {
+        desmontar(std::mem::take(self.0.get_mut()));
+    }
+}
+
+impl Drop for ItensMapa {
+    fn drop(&mut self) {
+        let valores = std::mem::take(self.0.get_mut()).into_iter().map(|(_, v)| v);
+        desmontar(valores.collect());
+    }
+}
+
+/// Drops `valores` without recursing: a list or map they alone hold is
+/// emptied onto the same work list before it goes. Rust's own drop would
+/// recurse once per level, and `repita 1000000 vezes { x = [x] }` would
+/// overflow the stack when `x` is dropped.
+pub(crate) fn desmontar(mut pilha: Vec<Value>) {
+    while let Some(v) = pilha.pop() {
+        match v {
+            Value::Lista(xs) => {
+                if let Ok(mut itens) = Rc::try_unwrap(xs) {
+                    pilha.append(itens.0.get_mut());
+                }
+            }
+            Value::Mapa(m) => {
+                if let Ok(mut itens) = Rc::try_unwrap(m) {
+                    pilha.extend(
+                        std::mem::take(itens.0.get_mut())
+                            .into_iter()
+                            .map(|(_, v)| v),
+                    );
+                }
+            }
+            Value::Par(_, v) => pilha.push(*v),
+            _ => {}
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum MapKey {
+    Texto(String),
+    Numero(i64),
+    Bool(bool),
+}
+
+#[derive(Clone)]
+pub enum FunctionBody {
+    #[cfg(feature = "ast")]
+    Ast(Rc<Block>),
+    Bytecode(Rc<super::eval::bytecode::Chunk>),
+}
+
+pub struct Closure {
+    pub params: Vec<Param>,
+    pub body: FunctionBody,
+    pub env: Rc<RefCell<Env>>,
+    pub span: Span,
+    /// File that defined the function and its text (errors, debugger).
+    pub file: String,
+    pub source: Rc<str>,
+    /// Extension used by extensionless imports in this function (lep or lepc).
+    pub import_extension: &'static str,
+    /// `///` attached to the definition, if any.
+    pub doc: Option<String>,
+}
+
+impl Closure {
+    pub fn args_text(&self) -> String {
+        self.params
+            .iter()
+            .map(|p| p.name.as_str())
+            .collect::<Vec<_>>()
+            .join(", ")
+    }
+}
+
+impl Value {
+    pub fn lista(items: Vec<Value>) -> Self {
+        let items = Rc::new(ItensLista(RefCell::new(items)));
+        cycles::track_list(&items);
+        Value::Lista(items)
+    }
+
+    pub fn mapa(entries: Vec<(MapKey, Value)>) -> Self {
+        Self::mapa_com_politica(entries.into_iter().collect(), false)
+    }
+
+    pub(crate) fn mapa_com_politica(entries: HashMap<MapKey, Value>, recurso: bool) -> Self {
+        let entries = Rc::new(ItensMapa(RefCell::new(entries), recurso));
+        cycles::track_map(&entries);
+        Value::Mapa(entries)
+    }
+
+    /// Native resource identity survives edits to its visible map entries.
+    #[cfg(feature = "graphics")]
+    pub(crate) fn mapa_recurso(mut entries: Vec<(MapKey, Value)>) -> Self {
+        entries.push((MapKey::Texto("_clonavel".into()), Value::Bool(false)));
+        let entries = Rc::new(ItensMapa(RefCell::new(entries.into_iter().collect()), true));
+        cycles::track_map(&entries);
+        Value::Mapa(entries)
+    }
+
+    pub fn imagem(image: Imagem) -> Self {
+        Value::Imagem(Rc::new(RefCell::new(image)))
+    }
+
+    pub fn conjunto(items: Vec<MapKey>) -> Self {
+        Self::conjunto_de_hash(items.into_iter().collect())
+    }
+
+    pub(crate) fn conjunto_de_hash(items: HashSet<MapKey>) -> Self {
+        Value::Conjunto(Rc::new(RefCell::new(items)))
+    }
+
+    pub fn matriz(rows: Vec<Vec<f64>>) -> Self {
+        Value::Matriz(Rc::new(RefCell::new(rows)))
+    }
+
+    /// How the REPL prints a value (`"texto"` quoted; numbers follow locale).
+    pub fn repl_format(&self, loc: NumeroLocale) -> String {
+        match self {
+            Value::Texto(s) => format!("\"{}\"", escape_texto(s)),
+            Value::Numero(n) => loc.format(*n),
+            other => other.to_string(),
+        }
+    }
+
+    /// User-facing print (`escreva`, `"a" + n`): numbers follow locale.
+    pub fn format_with(&self, loc: NumeroLocale) -> String {
+        let mut out = String::new();
+        escrever(&mut out, self, Some(loc), false, &mut HashSet::new());
+        out
+    }
+
+    /// Nomes que `tipo()` devolve e `tipos()` lista (iguais às mensagens de erro).
+    pub const NOMES_DE_TIPO: &'static [&'static str] = &[
+        "numero",
+        "intervalo",
+        "texto",
+        "bool",
+        "lista",
+        "par",
+        "mapa",
+        "conjunto",
+        "matriz",
+        "imagem",
+        "funcao",
+        "modulo",
+        #[cfg(feature = "process")]
+        "processo",
+        "nada",
+    ];
+
+    pub fn type_name(&self) -> &'static str {
+        match self {
+            Value::Nada => "nada",
+            Value::Numero(_) => "numero",
+            Value::Intervalo { .. } => "intervalo",
+            Value::Texto(_) => "texto",
+            Value::Bool(_) => "bool",
+            Value::Lista(_) => "lista",
+            Value::Par(_, _) => "par",
+            Value::Mapa(_) => "mapa",
+            Value::Conjunto(_) => "conjunto",
+            Value::Matriz(_) => "matriz",
+            Value::Imagem(_) => "imagem",
+            Value::Funcao(_) => "funcao",
+            Value::Builtin(_) => "funcao",
+            Value::Modulo(_) => "modulo",
+            #[cfg(feature = "process")]
+            Value::Processo(_) => "processo",
+        }
+    }
+}
+
+impl PartialEq for Value {
+    fn eq(&self, other: &Self) -> bool {
+        iguais(self, other, &mut HashSet::new())
+    }
+}
+
+/// Address of a list's or map's storage, its identity.
+fn id<T>(rc: &Rc<T>) -> usize {
+    Rc::as_ptr(rc) as *const () as usize
+}
+
+/// Equality by content. `comparando` holds the pairs of lists or maps
+/// being compared right now: meeting a pair again means both sides loop
+/// the same way (`xs[1] = xs`), which counts as equal so far.
+fn iguais(a: &Value, b: &Value, comparando: &mut HashSet<(usize, usize)>) -> bool {
+    stacker::maybe_grow(PILHA_RESERVA, PILHA_SEGMENTO, || match (a, b) {
+        (Value::Nada, Value::Nada) => true,
+        (Value::Numero(a), Value::Numero(b)) => a == b,
+        (Value::Intervalo { start: a, end: ae }, Value::Intervalo { start: b, end: be }) => {
+            a == b && ae == be
+        }
+        (Value::Texto(a), Value::Texto(b)) => a == b,
+        (Value::Bool(a), Value::Bool(b)) => a == b,
+        (Value::Lista(a), Value::Lista(b)) => {
+            if Rc::ptr_eq(a, b) {
+                return true;
+            }
+            let par = (id(a), id(b));
+            if !comparando.insert(par) {
+                return true;
+            }
+            let (xs, ys) = (a.borrow(), b.borrow());
+            let r = xs.len() == ys.len()
+                && xs
+                    .iter()
+                    .zip(ys.iter())
+                    .all(|(x, y)| iguais(x, y, comparando));
+            comparando.remove(&par);
+            r
+        }
+        (Value::Par(ak, av), Value::Par(bk, bv)) => ak == bk && iguais(av, bv, comparando),
+        (Value::Mapa(a), Value::Mapa(b)) => {
+            if Rc::ptr_eq(a, b) {
+                return true;
+            }
+            let par = (id(a), id(b));
+            if !comparando.insert(par) {
+                return true;
+            }
+            let (xs, ys) = (a.borrow(), b.borrow());
+            let r = xs.len() == ys.len()
+                && xs
+                    .iter()
+                    .all(|(k, v)| ys.get(k).is_some_and(|other| iguais(v, other, comparando)));
+            comparando.remove(&par);
+            r
+        }
+        (Value::Conjunto(a), Value::Conjunto(b)) => {
+            let a = a.borrow();
+            let b = b.borrow();
+            a.len() == b.len() && a.iter().all(|k| b.contains(k))
+        }
+        (Value::Matriz(a), Value::Matriz(b)) => a.borrow()[..] == b.borrow()[..],
+        (Value::Imagem(a), Value::Imagem(b)) => *a.borrow() == *b.borrow(),
+        (Value::Funcao(a), Value::Funcao(b)) => Rc::ptr_eq(a, b),
+        (Value::Builtin(a), Value::Builtin(b)) => a == b,
+        (Value::Modulo(a), Value::Modulo(b)) => Rc::ptr_eq(a, b),
+        #[cfg(feature = "process")]
+        (Value::Processo(a), Value::Processo(b)) => Rc::ptr_eq(a, b),
+        _ => false,
+    })
+}
+
+/// Stack left before printing or comparing moves to a new segment, and its
+/// size: values nest as deep as a program builds them.
+const PILHA_RESERVA: usize = 64 * 1024;
+const PILHA_SEGMENTO: usize = 1024 * 1024;
+
+/// Writes `v` into `out`. `loc: None` is the plain form of `Display`
+/// (numbers as in source); `Some` follows the locale (`escreva`). Text is
+/// quoted and numbers in code form when `aninhado` (inside a list, map or pair). `abertos` holds the
+/// lists and maps being written right now: meeting one again is a cycle
+/// (`xs[1] = xs`), written `[…]` / `mapa{…}` instead of forever.
+fn escrever(
+    out: &mut String,
+    v: &Value,
+    loc: Option<NumeroLocale>,
+    aninhado: bool,
+    abertos: &mut HashSet<usize>,
+) {
+    use std::fmt::Write as _;
+    stacker::maybe_grow(PILHA_RESERVA, PILHA_SEGMENTO, || match v {
+        Value::Nada => out.push_str("nada"),
+        Value::Intervalo { start, end } => match end {
+            Some(end) => {
+                let _ = write!(out, "{start}..{end}");
+            }
+            None => {
+                let _ = write!(out, "{start}..");
+            }
+        },
+        // Inside a list, map or pair a number is written as in code (`1.5`):
+        // `[1,5, 2]` would read as three numbers.
+        Value::Numero(n) => match loc {
+            Some(loc) if !aninhado => out.push_str(&loc.format(*n)),
+            _ => out.push_str(&format_numero(*n)),
+        },
+        Value::Texto(s) if aninhado => {
+            let _ = write!(out, "\"{}\"", escape_texto(s));
+        }
+        Value::Texto(s) => out.push_str(s),
+        Value::Bool(true) => out.push_str("verdadeiro"),
+        Value::Bool(false) => out.push_str("falso"),
+        Value::Lista(xs) => {
+            if !abertos.insert(id(xs)) {
+                out.push_str("[…]");
+                return;
+            }
+            out.push('[');
+            for (i, item) in xs.borrow().iter().enumerate() {
+                if i > 0 {
+                    out.push_str(", ");
+                }
+                escrever(out, item, loc, true, abertos);
+            }
+            out.push(']');
+            abertos.remove(&id(xs));
+        }
+        Value::Par(k, valor) => {
+            let _ = write!(out, "{k} -> ");
+            escrever(out, valor, loc, true, abertos);
+        }
+        Value::Mapa(m) => {
+            if !abertos.insert(id(m)) {
+                out.push_str("mapa{…}");
+                return;
+            }
+            out.push_str("mapa{");
+            let entries = m.borrow();
+            let mut ordered: Vec<_> = entries.iter().collect();
+            ordered.sort_unstable_by(|a, b| a.0.cmp(b.0));
+            for (i, (k, valor)) in ordered.into_iter().enumerate() {
+                if i > 0 {
+                    out.push_str(", ");
+                }
+                let _ = write!(out, "{k}: ");
+                escrever(out, valor, loc, true, abertos);
+            }
+            out.push('}');
+            abertos.remove(&id(m));
+        }
+        Value::Conjunto(xs) => {
+            out.push_str("conjunto{");
+            let items = xs.borrow();
+            let mut ordered: Vec<_> = items.iter().collect();
+            ordered.sort_unstable();
+            for (i, k) in ordered.into_iter().enumerate() {
+                if i > 0 {
+                    out.push_str(", ");
+                }
+                let _ = write!(out, "{k}");
+            }
+            out.push('}');
+        }
+        Value::Matriz(m) => out.push_str(&format_matriz(
+            &m.borrow(),
+            loc.unwrap_or(NumeroLocale::PtBr),
+        )),
+        Value::Imagem(img) => {
+            let img = img.borrow();
+            let _ = write!(out, "<imagem {}x{}>", img.largura, img.altura);
+        }
+        Value::Funcao(c) => {
+            let _ = write!(out, "<funcao({})>", c.args_text());
+        }
+        Value::Builtin(name) => {
+            let _ = write!(out, "<funcao {name}>");
+        }
+        Value::Modulo(_) => out.push_str("<modulo>"),
+        #[cfg(feature = "process")]
+        Value::Processo(p) => match p.try_borrow() {
+            Ok(p) => {
+                let _ = write!(out, "<processo {}>", p.descricao);
+            }
+            Err(_) => out.push_str("<processo>"),
+        },
+    })
+}
+
+impl fmt::Display for MapKey {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            MapKey::Texto(s) => write!(f, "\"{}\"", escape_texto(s)),
+            MapKey::Numero(n) => write!(f, "{n}"),
+            MapKey::Bool(true) => write!(f, "verdadeiro"),
+            MapKey::Bool(false) => write!(f, "falso"),
+        }
+    }
+}
+
+impl fmt::Display for Value {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut out = String::new();
+        escrever(&mut out, self, None, false, &mut HashSet::new());
+        f.write_str(&out)
+    }
+}
+
+impl fmt::Debug for Value {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{self}")
+    }
+}
+
+/// How `numero()` / `escreva` interpret and print numbers in text.
+/// Source literals always use `.` (`3.14`, `1_000`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum NumeroLocale {
+    /// `1.000,5` — default, matches Brazilian notebooks.
+    #[default]
+    PtBr,
+    /// `1,000.5`
+    EnUs,
+}
+
+impl NumeroLocale {
+    pub fn from_name(s: &str) -> Option<Self> {
+        match s.trim().to_ascii_lowercase().as_str() {
+            "pt" | "pt-br" | "pt_br" | "br" | "brasil" | "brasileiro" => Some(Self::PtBr),
+            "en" | "en-us" | "en_us" | "us" | "eua" | "americano" => Some(Self::EnUs),
+            _ => None,
+        }
+    }
+
+    pub fn parse_texto(self, raw: &str) -> Option<Numero> {
+        let s = raw.trim();
+        if s.is_empty() {
+            return None;
+        }
+        let s: String = s.chars().filter(|c| *c != '_' && *c != ' ').collect();
+        match self {
+            Self::PtBr => parse_local(&s, '.', ','),
+            Self::EnUs => parse_local(&s, ',', '.'),
+        }
+    }
+
+    /// Why `raw` failed, when it is a number in the other format.
+    pub fn dica(self, raw: &str) -> Option<&'static str> {
+        let outro = match self {
+            Self::PtBr => Self::EnUs,
+            Self::EnUs => Self::PtBr,
+        };
+        outro.parse_texto(raw)?;
+        Some(match self {
+            Self::PtBr => {
+                "no formato pt, a vírgula separa os decimais (2,5) e o ponto separa os milhares (1.000); para ler 2.5, use define_opcao(:formato_numero, :en)"
+            }
+            Self::EnUs => {
+                "no formato en, o ponto separa os decimais (2.5) e a vírgula separa os milhares (1,000); para ler 2,5, use define_opcao(:formato_numero, :pt)"
+            }
+        })
+    }
+
+    pub fn format(self, n: Numero) -> String {
+        format_numero_locale(n, self)
+    }
+}
+
+pub fn default_numero_locale() -> NumeroLocale {
+    std::env::var("EXPRESSA_NUMEROS")
+        .ok()
+        .and_then(|s| NumeroLocale::from_name(&s))
+        .unwrap_or(NumeroLocale::PtBr)
+}
+
+/// Programming-form (source-like): `3.14`, no thousands. Used in CSV and errors.
+pub fn format_numero(n: Numero) -> String {
+    format_numero_locale(n, None)
+}
+
+fn format_numero_locale(n: Numero, loc: impl Into<Option<NumeroLocale>>) -> String {
+    let loc = loc.into();
+    let raw = n.to_plain_string();
+    let neg = raw.starts_with('-');
+    let abs = raw.strip_prefix('-').unwrap_or(&raw);
+    let (int_part, frac) = match abs.split_once('.') {
+        Some((i, f)) => (i.to_string(), Some(f.to_string())),
+        None => (abs.to_string(), None),
+    };
+    let (thou, dec) = match loc {
+        Some(NumeroLocale::PtBr) => ('.', ','),
+        Some(NumeroLocale::EnUs) => (',', '.'),
+        None => {
+            let body = match &frac {
+                Some(f) => format!("{int_part}.{f}"),
+                None => int_part,
+            };
+            return if neg { format!("-{body}") } else { body };
+        }
+    };
+    let grouped = group_thousands(&int_part, thou);
+    let body = match &frac {
+        Some(f) => format!("{grouped}{dec}{f}"),
+        None => grouped,
+    };
+    if neg { format!("-{body}") } else { body }
+}
+
+fn format_matriz(rows: &[Vec<f64>], loc: NumeroLocale) -> String {
+    if rows.is_empty() {
+        return "[]".to_string();
+    }
+    let cells: Vec<Vec<String>> = rows
+        .iter()
+        .map(|r| {
+            r.iter()
+                .map(|n| {
+                    Numero::from_f64_15(*n)
+                        .map(|n| loc.format(n))
+                        .unwrap_or_else(|| "<número fora do intervalo>".into())
+                })
+                .collect()
+        })
+        .collect();
+    let cols = cells[0].len();
+    let mut widths = vec![0; cols];
+    for row in &cells {
+        for (j, c) in row.iter().enumerate() {
+            if j < widths.len() {
+                widths[j] = widths[j].max(c.len());
+            }
+        }
+    }
+    let mut lines = Vec::new();
+    for row in &cells {
+        let parts: Vec<String> = row
+            .iter()
+            .enumerate()
+            .map(|(j, c)| format!("{:>width$}", c, width = widths[j]))
+            .collect();
+        lines.push(format!("[ {} ]", parts.join("  ")));
+    }
+    lines.join("\n")
+}
+
+fn group_thousands(digits: &str, sep: char) -> String {
+    let mut out = String::new();
+    for (i, c) in digits.chars().rev().enumerate() {
+        if i > 0 && i % 3 == 0 {
+            out.push(sep);
+        }
+        out.push(c);
+    }
+    out.chars().rev().collect()
+}
+
+/// Strict reading of a number written with `mil` between groups of three
+/// digits and `dec` before the fraction: `1.234,5` (pt) or `1,234.5` (en).
+/// Anything else — the other locale's decimal, a misplaced separator — is `None`.
+fn parse_local(s: &str, mil: char, dec: char) -> Option<Numero> {
+    let (sinal, resto) = match s.strip_prefix('-') {
+        Some(r) => ("-", r),
+        None => ("", s.strip_prefix('+').unwrap_or(s)),
+    };
+    let (inteiro, fracao) = match resto.split_once(dec) {
+        Some((i, f)) => (i, Some(f)),
+        None => (resto, None),
+    };
+    if let Some(f) = fracao
+        && (f.is_empty() || !f.chars().all(|c| c.is_ascii_digit()))
+    {
+        return None;
+    }
+    if inteiro.is_empty() {
+        return None;
+    }
+    let inteiro = if inteiro.contains(mil) {
+        if !looks_like_thousands(inteiro, mil) {
+            return None;
+        }
+        inteiro.replace(mil, "")
+    } else if inteiro.chars().all(|c| c.is_ascii_digit()) {
+        inteiro.to_string()
+    } else {
+        return None;
+    };
+    match fracao {
+        Some(f) => format!("{sinal}{inteiro}.{f}").parse().ok(),
+        None => format!("{sinal}{inteiro}").parse().ok(),
+    }
+}
+
+fn looks_like_thousands(s: &str, sep: char) -> bool {
+    let t = s
+        .strip_prefix('-')
+        .unwrap_or(s)
+        .strip_prefix('+')
+        .unwrap_or(s);
+    if !t.contains(sep) {
+        return false;
+    }
+    let mut parts = t.split(sep);
+    let first = parts.next().unwrap_or("");
+    if first.is_empty() || !first.chars().all(|c| c.is_ascii_digit()) || first.len() > 3 {
+        return false;
+    }
+    parts.all(|p| p.len() == 3 && p.chars().all(|c| c.is_ascii_digit()))
+}
+
+/// A map's entries in the order it prints them (keys by type, then
+/// ascending): also the order of `para p em m`, `chaves_de` and `valores_de`.
+pub fn pares_em_ordem(m: &HashMap<MapKey, Value>) -> Vec<(MapKey, Value)> {
+    let mut pares: Vec<(MapKey, Value)> = m.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
+    pares.sort_unstable_by(|a, b| a.0.cmp(&b.0));
+    pares
+}
+
+fn escape_texto(s: &str) -> String {
+    s.replace('\\', "\\\\").replace('"', "\\\"")
+}
+
+impl MapKey {
+    pub fn from_value(v: &Value) -> Option<Self> {
+        match v {
+            Value::Texto(s) => Some(MapKey::Texto(s.clone())),
+            Value::Bool(b) => Some(MapKey::Bool(*b)),
+            Value::Numero(n) => n.to_i64().map(MapKey::Numero),
+            _ => None,
+        }
+    }
+
+    pub fn to_value(&self) -> Value {
+        match self {
+            MapKey::Texto(s) => Value::Texto(s.clone()),
+            MapKey::Numero(n) => Value::Numero(Numero::from_i64(*n)),
+            MapKey::Bool(b) => Value::Bool(*b),
+        }
+    }
+}
+
+pub fn conjunto_insert(xs: &mut HashSet<MapKey>, k: MapKey) {
+    xs.insert(k);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::runtime::numero::parse_numero;
+
+    #[test]
+    fn type_names_are_portuguese() {
+        assert_eq!(Value::Nada.type_name(), "nada");
+        assert_eq!(Value::Numero(1.0.try_into().unwrap()).type_name(), "numero");
+        assert_eq!(Value::Texto("x".into()).type_name(), "texto");
+        assert_eq!(Value::Bool(true).type_name(), "bool");
+        assert_eq!(Value::lista(vec![]).type_name(), "lista");
+        assert_eq!(
+            Value::Par(
+                MapKey::Texto("n".into()),
+                Box::new(Value::Numero(1.0.try_into().unwrap()))
+            )
+            .type_name(),
+            "par"
+        );
+        assert_eq!(Value::mapa(vec![]).type_name(), "mapa");
+        assert_eq!(Value::conjunto(vec![]).type_name(), "conjunto");
+        assert_eq!(
+            Value::imagem(Imagem::nova(1, 1, vec![0, 0, 0, 255]).unwrap()).type_name(),
+            "imagem"
+        );
+        assert_eq!(Value::Builtin("escreva").type_name(), "funcao");
+        for v in [
+            Value::Nada,
+            Value::Numero(1.0.try_into().unwrap()),
+            Value::Texto("x".into()),
+            Value::Bool(true),
+            Value::lista(vec![]),
+            Value::mapa(vec![]),
+            Value::conjunto(vec![]),
+            Value::Builtin("escreva"),
+        ] {
+            assert!(
+                Value::NOMES_DE_TIPO.contains(&v.type_name()),
+                "{}",
+                v.type_name()
+            );
+        }
+    }
+
+    #[test]
+    fn display_matches_what_escreva_prints() {
+        assert_eq!(Value::Nada.to_string(), "nada");
+        assert_eq!(Value::Numero(10.0.try_into().unwrap()).to_string(), "10");
+        assert_eq!(Value::Numero(7.5.try_into().unwrap()).to_string(), "7.5");
+        assert_eq!(Value::Bool(true).to_string(), "verdadeiro");
+        assert_eq!(Value::Bool(false).to_string(), "falso");
+        assert_eq!(Value::Texto("oi".into()).to_string(), "oi");
+        assert_eq!(
+            Value::lista(vec![
+                Value::Numero(1.0.try_into().unwrap()),
+                Value::Texto("a".into())
+            ])
+            .to_string(),
+            "[1, \"a\"]"
+        );
+        assert_eq!(
+            Value::Par(
+                MapKey::Texto("n".into()),
+                Box::new(Value::Numero(1.0.try_into().unwrap()))
+            )
+            .to_string(),
+            "\"n\" -> 1"
+        );
+        assert_eq!(
+            Value::mapa(vec![(
+                MapKey::Texto("n".into()),
+                Value::Numero(1.0.try_into().unwrap())
+            )])
+            .to_string(),
+            "mapa{\"n\": 1}"
+        );
+        assert_eq!(Value::Builtin("leia").to_string(), "<funcao leia>");
+    }
+
+    #[test]
+    fn format_numero_drops_trailing_point_on_integers() {
+        assert_eq!(format_numero(0.into()), "0");
+        assert_eq!(format_numero((-3).into()), "-3");
+        assert_eq!(format_numero(parse_numero("1.25").unwrap()), "1.25");
+    }
+
+    #[test]
+    fn pt_br_and_en_us_string_conversion() {
+        let pt = NumeroLocale::PtBr;
+        let en = NumeroLocale::EnUs;
+        let n = |s: &str| parse_numero(s);
+        assert_eq!(pt.parse_texto("3,14"), n("3.14"));
+        assert_eq!(pt.parse_texto("1.000"), n("1000"));
+        assert_eq!(pt.parse_texto("1.000,5"), n("1000.5"));
+        assert_eq!(pt.parse_texto("3.14"), None);
+        assert_eq!(pt.parse_texto("1.50"), None);
+        assert_eq!(pt.parse_texto("12.345.678"), n("12345678"));
+        assert_eq!(pt.parse_texto("-1.000,25"), n("-1000.25"));
+        assert_eq!(pt.parse_texto("1,"), None);
+        assert_eq!(pt.parse_texto(",5"), None);
+        assert_eq!(pt.parse_texto("1,2,3"), None);
+        assert_eq!(en.parse_texto("1,5"), None);
+        assert_eq!(en.parse_texto("1.000"), n("1"));
+        assert!(pt.dica("3.14").is_some());
+        assert!(pt.dica("abc").is_none());
+        assert_eq!(en.parse_texto("1,000.5"), n("1000.5"));
+        assert_eq!(en.parse_texto("1,000"), n("1000"));
+        assert_eq!(en.parse_texto("3.14"), n("3.14"));
+        assert_eq!(pt.format(n("1000").unwrap()), "1.000");
+        assert_eq!(pt.format(n("7.3").unwrap()), "7,3");
+        assert_eq!(en.format(n("1000").unwrap()), "1,000");
+        assert_eq!(en.format(n("7.3").unwrap()), "7.3");
+        assert_eq!(NumeroLocale::from_name("pt-br"), Some(pt));
+        assert_eq!(NumeroLocale::from_name("en"), Some(en));
+    }
+
+    #[test]
+    fn parse_numero_accepts_underscores() {
+        assert_eq!(parse_numero("10"), "10".parse().ok());
+        assert_eq!(parse_numero("1_000"), "1000".parse().ok());
+        assert_eq!(parse_numero("3.14"), "3.14".parse().ok());
+        assert_eq!(parse_numero("abc"), None);
+    }
+
+    #[test]
+    fn equality_is_by_content_for_lists_and_identity_for_functions() {
+        let a = Value::lista(vec![Value::Numero(1.0.try_into().unwrap())]);
+        let b = Value::lista(vec![Value::Numero(1.0.try_into().unwrap())]);
+        assert_eq!(a, b);
+
+        assert_eq!(
+            Value::Numero(1.0.try_into().unwrap()),
+            Value::Numero(1.0.try_into().unwrap())
+        );
+        assert_ne!(
+            Value::Numero(1.0.try_into().unwrap()),
+            Value::Texto("1".into())
+        );
+        assert_eq!(Value::Builtin("escreva"), Value::Builtin("escreva"));
+        assert_ne!(Value::Builtin("escreva"), Value::Builtin("leia"));
+    }
+
+    #[test]
+    fn list_clone_shares_storage() {
+        let a = Value::lista(vec![Value::Numero(1.0.try_into().unwrap())]);
+        let b = a.clone();
+        if let Value::Lista(xs) = &a {
+            xs.borrow_mut()[0] = Value::Numero(9.0.try_into().unwrap());
+        }
+        assert_eq!(a, b);
+        assert_eq!(b.to_string(), "[9]");
+    }
+
+    #[test]
+    fn deep_pair_clone_keeps_keys_and_shares_collection_tail() {
+        std::thread::Builder::new()
+            .stack_size(128 * 1024)
+            .spawn(|| {
+                let tail = Value::lista(vec![Value::Bool(true)]);
+                let mut original = tail.clone();
+                for key in 0..50_000 {
+                    original = Value::Par(MapKey::Numero(key), Box::new(original));
+                }
+                let copied = original.clone();
+                let mut cursor = &copied;
+                for expected in (0..50_000).rev() {
+                    let Value::Par(key, value) = cursor else {
+                        panic!("missing pair");
+                    };
+                    assert_eq!(*key, MapKey::Numero(expected));
+                    cursor = value;
+                }
+                let (Value::Lista(source), Value::Lista(copy)) = (&tail, cursor) else {
+                    panic!("missing list tail");
+                };
+                assert!(Rc::ptr_eq(source, copy));
+                desmontar(vec![original, copied]);
+            })
+            .unwrap()
+            .join()
+            .unwrap();
+    }
+
+    #[test]
+    fn map_keys_are_text_bool_or_whole_number() {
+        assert_eq!(
+            MapKey::from_value(&Value::Texto("n".into())),
+            Some(MapKey::Texto("n".into()))
+        );
+        assert_eq!(
+            MapKey::from_value(&Value::Numero(3.0.try_into().unwrap())),
+            Some(MapKey::Numero(3))
+        );
+        assert_eq!(
+            MapKey::from_value(&Value::Numero(1.5.try_into().unwrap())),
+            None
+        );
+        assert_eq!(MapKey::from_value(&Value::lista(vec![])), None);
+        assert_eq!(
+            MapKey::from_value(&Value::Bool(true)),
+            Some(MapKey::Bool(true))
+        );
+    }
+}

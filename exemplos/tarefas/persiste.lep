@@ -1,0 +1,183 @@
+importe "arquivo"
+importe "crono"
+comum = importe "comum"
+
+diretorio = "~/.local/share/tarefas"
+arquivo = junte_caminho(diretorio, "tarefas.txt")
+
+item = função(idx, txt) {
+    mapa([
+        :idx -> idx,
+        :txt -> txt,
+    ])
+}
+
+serialize_data = funcao(dt) {
+    formate_data(dt, "DT[%Y-%m-%d %H:%M:%S]")
+}
+
+serialize_campo = funcao(t) {
+    se tipo(t) == :numero {
+        retorne "" + t
+    } ou se tipo(t) == :bool {
+        c = se t == verdadeiro { "S" } senão { "N" }
+        retorne c
+    }
+    
+    t = t.substitua("\\", "\\\\")
+    t = t.substitua("\"", "\\\"")
+    "\"" + t + "\""
+}
+
+serialize = funcao(tarefa) {
+    [
+        serialize_campo(tarefa:completo), 
+        serialize_data(tarefa:data), 
+        serialize_campo(tarefa:desc)
+    ].junte(",")
+}
+
+campo_padrao = função(idx, t) {
+    res = ""
+    para i em idx..tamanho(t) {
+        c = t[i]
+        se c == "," {
+            pare
+        }
+        res += c
+    }
+    item(idx + res.tamanho() + 1, res.limpe())
+}
+
+campo_texto =  função(idx, t) {
+    // Campo texto começa com "
+    se t[idx] != "\"" {
+        falhe("Campo de texto não começa com aspas duplas (\") => " + t)
+        saia(1)
+    }
+    
+    res = ""
+    i = idx + 1 // pular aspas duplas
+    enquanto i < t.tamanho() {
+        se t[i] == "\"" {
+            pare
+        }
+        se t[i] == "\\" {
+            se i+1 >= t.tamanho() {
+                escreva_erro("Sequência de escape inválida em " + t)
+                sair(1)
+            }
+            
+            i += 1
+        }
+        
+        res += t[i]
+        i += 1
+    }
+    
+    item(i + 2, res) // segunda aspas e uma virgula
+}
+
+campo_data = função(t) {
+    // Ex1: DT[2026-11-12 22:42:06]
+    // Ex2: DT[2026-11-12]
+    dt = t[3..t.tamanho()-1]
+    
+    amd_hms = dt.separe(" ")
+    amd = amd_hms[0].separe("-")
+    
+    se amd_hms.tamanho() == 1 {
+        // Somente data
+        retorne data(numero(amd[0]), numero(amd[1]), numero(amd[2]))
+    }
+    
+    // Data e hora
+    hms = amd_hms[1].separe(":")
+    data(
+        numero(amd[0]), numero(amd[1]), numero(amd[2]), 
+        numero(hms[0]), numero(hms[1]), numero(hms[2])
+    )
+}
+
+é_data = função(t) {
+    se t.tamanho() < 4 {
+        retorne falso
+    }
+    
+    se t[0..3] == "DT[" e t[t.tamanho()-1] == "]" {
+        verdadeiro
+    } senão {
+        falso
+    }
+}
+
+é_numero = função(t) {
+    n = numero(t) se_falhar { falso }
+    se n == falso {
+        falso
+    } senão {
+        verdadeiro
+    }
+}
+
+separe_linha = função(linha) {
+    se linha.tamanho() == 0 {
+        retorne []
+    }
+    
+    idx = 0
+    valores = []
+    enquanto idx < linha.tamanho() {
+        é_txt = falso
+        res = se linha[idx] == "\"" {
+            é_txt = verdadeiro
+            campo_texto(idx, linha)
+        } senão {
+            campo_padrao(idx, linha)
+        }
+
+        valor = se é_txt {
+            res:txt
+        } senão {
+            // Não é texto, então é um valor especial
+            se res:txt == "S" { verdadeiro } 
+            ou se res:txt == "N" { falso }
+            ou se é_numero(res:txt) { número(res:txt) }
+            ou se é_data(res:txt) { campo_data(res:txt) }
+            senão {
+                escreva_erro("Valor especial desconhecido: " + res:txt)
+            }
+        }
+        
+        idx = res:idx
+        valores += [valor]
+    }
+    
+    valores
+}
+
+// Funções para serem usadas por outros arquivos
+salva = funcao(tarefas) {
+    // Cria o diretório, caso ainda não exista.
+    // TODO: Mudar de crie_pasta para crie_diretorio
+    crie_pasta(diretorio)
+
+    linhas = []
+    para tarefa em tarefas {
+        linha = serialize(tarefa)
+        linhas += [linha]
+    }
+    salve_arquivo(arquivo, linhas)
+}
+
+carrega = função() {
+    ts = []
+    
+    linhas = leia_arquivo(arquivo) se_falhar { [] }
+    para linha em linhas {
+        t = separe_linha(linha)
+        ts += [comum::nova(t[2], t[1], t[0])]
+    }
+    
+    ts
+}

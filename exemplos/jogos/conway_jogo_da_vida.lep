@@ -1,0 +1,185 @@
+importe "sistema"
+importe "matriz"
+importe "tela"
+importe "mat"
+
+// Cria um novo jogo aleatório
+inicia_jogo = funcao(m) {
+    para i em 0..m.linhas() {
+        para j em 0..m.colunas() {
+            m[i, j] = aleatorio(0, 1)
+        }
+    }
+}
+
+// Cria um novo jogo com um padrão predefinido
+predefinido = função(m) {
+    // planador
+    m[1, 2] = 1
+    m[2, 3] = 1
+    m[3, 1] = 1
+    m[3, 2] = 1
+    m[3, 3] = 1
+
+    // pisca-pisca
+    m[7, 19] = 1
+    m[7, 20] = 1
+    m[7, 21] = 1
+}
+
+// Desenha o mundo definido pela matriz m
+desenha = funcao(m) {
+    espaço = " "
+    ser = "*"
+    // ser = "█"
+    
+    // Bordas superior e inferior da tabela.
+    borda = "+"
+    para i em 0..m.colunas() {
+        borda += "-"
+    }    
+    borda += "+"
+    
+    escreva(borda.pinte(:verde))
+    para i em 0..m.linhas() {
+        l = "|".pinte(:verde)
+        para j em 0..m.colunas() {
+            l += se m[i, j] == 0 { espaço } senao { ser }
+        }
+        l += "|".pinte(:verde)
+        escreva(l)
+    }
+    escreva(borda.pinte(:verde))
+}
+
+pos_lin = função(m, l) {
+    se l < 0 { m.linhas() - 1 }
+    ou se l >= m.linhas() { 0 }
+    senão { l }
+}
+
+pos_col = função(m, c) {
+    se c < 0 { m.colunas() - 1 }
+    ou se c >= m.colunas() { 0 }
+    senão { c }
+}
+
+
+// Retorna uma matriz com a célula central e seus vizinhos.
+// As bordas opostas se conectam: sair pela direita leva à esquerda,
+// e sair por cima leva à parte de baixo.
+vizinhos = função(m, l, c) {
+
+    v = zeros(3)
+
+    // Noroeste
+    v[0,0] = m[ m.pos_lin(l-1), m.pos_col(c-1) ]
+    // Norte
+    v[0,1] = m[ m.pos_lin(l-1), m.pos_col(c) ]
+    // Nordeste
+    v[0,2] = m[ m.pos_lin(l-1), m.pos_col(c+1) ]
+
+    // Oeste
+    v[1,0] = m[ m.pos_lin(l), m.pos_col(c-1) ]
+    // Centro
+    v[1,1] = m[l, c]
+    // Leste
+    v[1,2] = m[ m.pos_lin(l), m.pos_col(c+1) ]
+
+    // Sudoeste
+    v[2,0] = m[ m.pos_lin(l+1), m.pos_col(c-1) ]
+    // Sul
+    v[2,1] = m[ m.pos_lin(l+1), m.pos_col(c) ]
+    // Sudeste
+    v[2,2] = m[ m.pos_lin(l+1), m.pos_col(c+1) ]
+
+    v
+}
+
+// Conta a quantidade de vizinhos em uma matriz 3×3
+// da célula na posição (1, 1)
+conta_vizinhos = função(m) {
+    se m.linhas() != 3 ou m.colunas() != 3 {
+        escreva_erro("A função conta_vizinhos só aceita matrizes com 3 linhas e 3 colunas.")
+        saia(1)
+    }
+
+    items = [
+        m[0,0], m[0,1], m[0,2],
+        m[1,0], m[1,2],
+        m[2,0], m[2,1], m[2,2],
+    ]
+
+    total_vizinhos = 0
+    para item em items {
+        total_vizinhos += se item == 0 { 0 } senão { 1 }
+    }
+    total_vizinhos
+}
+
+// Executa uma nova geração do mundo e retorna em uma nova matriz
+nova_geracao = função(m) {
+    // Regras do jogo
+    // Toda célula viva com menos de dois vizinhos vivos morre por isolamento.
+    // Toda célula viva com mais de três vizinhos vivos morre por superpopulação.
+    // Toda célula viva com dois ou três vizinhos vivos permanece viva.
+    // Toda célula morta com exatamente três vizinhos vivos torna-se viva (nascimento).
+
+    // Salvando o total de linhas e colunas pois eu não quero escrever nlinhas/ncolunas
+    // o tempo todo
+    tl = m.linhas()
+    tc = m.colunas()
+
+    // Criamos uma nova matriz porque todas as mudanças são simultâneas.
+    // Alterar a matriz de origem faria uma célula influenciar a outra antes da hora.
+    nm = zeros(tl, tc)
+
+    para i em 0..m.linhas() {
+        para j em 0..m.colunas() {
+            // Obtém os vizinhos de cada célula na matriz de origem.
+            v = m.vizinhos(i, j)
+            // Conta os vizinhos vivos para aplicar as regras.
+            num_v = v.conta_vizinhos()
+
+            // 0 = morta, qualquer outro valor, viva
+            cel_viva = m[i, j]
+
+            nova_celula = se cel_viva != 0 {
+                // A célula está viva.
+                se num_v < 2 {
+                    0 // Toda célula viva com menos de dois vizinhos vivos morre por isolamento.
+                } ou se num_v > 3 {
+                    0 // Toda célula viva com mais de três vizinhos vivos morre por superpopulação.
+                } senão { // Restam os casos com dois ou três vizinhos vivos.
+                    1 // Toda célula viva com dois ou três vizinhos vivos permanece viva.
+                }
+            } senão {
+                // A célula está morta.
+                se num_v == 3 {
+                    1 // Toda célula morta com exatamente três vizinhos vivos torna-se viva (nascimento).
+                } senão {
+                    0
+                }
+            }
+
+            // E agora vamos atualizar a nova matriz
+            nm[i, j] = nova_celula
+        }
+    }
+
+    nm
+}
+
+// Rotina principal do jogo
+m = zeros(15, 30)
+m.inicia_jogo()
+// m.predefinido()
+
+limpe_tela()
+desenha(m)
+enquanto 1 == 1 {
+    posicao_cursor(0, 0, falso)
+    m = m.nova_geracao()
+    desenha(m)
+    durma(0.2)
+}

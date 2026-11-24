@@ -1,0 +1,82 @@
+[workspace]
+resolver = "3"
+members = [".", "aula/proto", "aula/storage", "aula/server", "aula/ui", "aula/tutorial"]
+# Built by cargo-fuzz with nightly; see fuzz/README.md.
+exclude = ["fuzz"]
+
+[workspace.package]
+version = "0.5.1"
+edition = "2024"
+license = "MIT"
+authors = ["Thiago Massari Guedes"]
+rust-version = "1.89"
+
+[workspace.dependencies]
+expressa = { path = "." }
+expressa-aula-proto = { path = "aula/proto" }
+expressa-aula-storage = { path = "aula/storage" }
+tonic = "0.13"
+prost = "0.13"
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "net", "signal"] }
+tokio-stream = "0.1"
+tonic-build = "0.13"
+prost-types = "0.13"
+
+# Remaining embedding and error-layout debts are tracked in
+# lang-tasks/027-execution-configuration.md and lang-tasks/032-public-api-and-ast-layout.md.
+# Allowed so CI can deny the rest.
+[workspace.lints.clippy]
+too_many_arguments = "allow"
+result_large_err = "allow"
+large_enum_variant = "allow"
+type_complexity = "allow"
+
+# Default `cargo build --release` keeps Cargo's usual settings (faster to
+# compile). For lab PCs: `cargo build --profile release-lto`.
+[profile.release-lto]
+inherits = "release"
+lto = "thin"
+codegen-units = 1
+strip = "debuginfo"
+
+[package]
+name = "expressa"
+default-run = "expressa"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[lints]
+workspace = true
+
+[features]
+default = ["ast", "graphics", "process", "terminal"]
+# AST is a reference evaluator; parser/compiler remain in every profile.
+ast = []
+graphics = ["terminal", "dep:minifb", "dep:sdl2", "dep:png"]
+process = []
+terminal = ["dep:rustyline"]
+
+[dependencies]
+rustyline = { version = "15", optional = true }
+rust_decimal = "1"
+unicode-normalization = "0.1.24"
+# The file viewer needs window-manager decorations. minifb's native Wayland
+# backend has no client-side frame when the compositor does not provide one
+# (notably GNOME). Use X11/XWayland for this viewer on Linux.
+minifb = { version = "0.28", optional = true, default-features = false, features = ["x11"] }
+sdl2 = { version = "0.38", optional = true, features = ["bundled", "static-link"] }
+png = { version = "0.17", optional = true }
+stacker = "0.1"
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+[[bin]]
+name = "expressa-grafico"
+path = "src/bin/expressa-grafico.rs"
+required-features = ["graphics"]
+
+[[bin]]
+name = "lep-exec"
+path = "src/bin/lep-exec.rs"

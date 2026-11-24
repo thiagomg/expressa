@@ -1,0 +1,66 @@
+// Converte o estado do teclado em ações; as regras não conhecem teclas.
+regras = importe "regras"
+
+horizontal = funcao(estado, ev, segundos) {
+    direcao = 0
+    se ev:teclas contem :esquerda { direcao -= 1 }
+    se ev:teclas contem :direita { direcao += 1 }
+    se direcao == 0 {
+        estado:direcao = 0
+        // Um toque que começou e terminou entre quadros também deve mover.
+        se nao (ev:teclas contem :esquerda) e nao (ev:teclas contem :direita) {
+            toque = 0
+            se ev:apertadas contem :esquerda { toque -= 1 }
+            se ev:apertadas contem :direita { toque += 1 }
+            se toque != 0 { regras::mova(estado, toque) }
+        }
+        retorne nada
+    }
+    se direcao != estado:direcao {
+        regras::mova(estado, direcao)
+        estado:direcao = direcao
+        estado:espera_lateral = 0.17
+    } senao {
+        estado:espera_lateral -= segundos
+        enquanto estado:espera_lateral <= 0 {
+            regras::mova(estado, direcao)
+            estado:espera_lateral += 0.055
+        }
+    }
+}
+
+atualize = funcao(estado, ev, dt) {
+    // Limitamos atrasos para que voltar a uma janela travada não derrube várias peças.
+    segundos = se dt < 0 { 0 } ou se dt > 0.1 { 0.1 } senao { dt }
+    se ev:apertadas contem :r {
+        regras::reinicie(estado)
+        retorne nada
+    }
+    para acontecimento em ev:eventos {
+        se acontecimento:tipo == :desfoco {
+            estado:pausado = verdadeiro
+            estado:direcao = 0
+            retorne nada
+        }
+    }
+    se estado:terminou { retorne nada }
+    se ev:apertadas contem :p {
+        estado:pausado = nao estado:pausado
+        estado:direcao = 0
+        retorne nada
+    }
+    se estado:pausado { retorne nada }
+    horizontal(estado, ev, segundos)
+    se ev:apertadas contem :z { regras::gire(estado, -1) }
+    se (ev:apertadas contem :cima) ou (ev:apertadas contem :x) {
+        regras::gire(estado, 1)
+    }
+    se ev:apertadas contem :espaco {
+        regras::derrube(estado)
+        // O restante deste quadro não deve agir sobre a peça que acabou de nascer.
+        retorne nada
+    }
+    // Baixo também responde imediatamente a um toque curto.
+    se ev:apertadas contem :baixo { regras::desca(estado, verdadeiro) }
+    regras::avance_tempo(estado, segundos, ev:teclas contem :baixo)
+}

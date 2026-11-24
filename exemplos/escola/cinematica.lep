@@ -1,0 +1,26 @@
+// MRU e MRUV: posição e velocidade ao fim do intervalo informado.
+entrada = importe "../lib/entrada"
+
+leia_valor = funcao(pergunta) {
+    valor = entrada::leia_numero(pergunta, funcao(n) { verdadeiro }, "Digite um número válido.")
+    se valor == falso { saia(0) }
+    valor
+}
+escreva("Cinemática. Para sair, pressione Enter sem digitar nada.")
+escreva("1 - Movimento retilíneo uniforme (MRU): velocidade constante")
+escreva("2 - Movimento retilíneo uniformemente variado (MRUV): aceleração constante")
+opcao = entrada::leia_numero("Movimento (1 ou 2): ", funcao(n) { n == 1 ou n == 2 }, "Escolha 1 ou 2.")
+se opcao == falso { saia(0) }
+escreva("Fórmulas: s = s0 + v0·t + a·t²/2; v = v0 + a·t. No MRU, a = 0.")
+escreva("s0: posição inicial; v0: velocidade inicial; a: aceleração; t: tempo.")
+s0 = leia_valor("Posição inicial (m): ")
+v0 = leia_valor("Velocidade inicial (m/s): ")
+a = 0
+se opcao == 2 { a = leia_valor("Aceleração (m/s²): ") }
+t = entrada::leia_numero("Tempo (s): ", funcao(n) { n >= 0 }, "Digite um tempo maior ou igual a zero.")
+se t == falso { saia(0) }
+v = v0 + a * t
+s = s0 + v0 * t + a * t * t / 2
+escreva("velocidade final: " + v + " m/s")
+escreva("posição final: " + s + " m")
+escreva("deslocamento (posição final menos posição inicial): " + (s - s0) + " m")

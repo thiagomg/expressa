@@ -1,0 +1,12 @@
+// Uma função recebe um número e escreve sua tabuada de 1 a 10.
+
+tabuada = funcao(n)
+inicio
+    para i em 1..=10
+    inicio
+        escreva(n + " x " + i + " = " + (n * i))
+    fim
+fim
+
+escreva("Tabuada do 7")
+tabuada(7)

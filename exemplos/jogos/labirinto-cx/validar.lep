@@ -1,0 +1,157 @@
+// Execute: expressa exemplos/jogos/labirinto-cx/validar.lep
+gerador = importe "./mapa"
+regras = importe "regras"
+controles = importe "controles"
+desenho = importe "desenho"
+grafica = importe "tela_grafica"
+mat = importe "mat"
+relatorio = mapa([:verificacoes -> 0])
+
+confira = funcao(condicao, descricao) {
+    se nao condicao { falhe(descricao) }
+    relatorio:verificacoes += 1
+}
+
+entrada = funcao(mantidas, apertadas, acontecimentos) {
+    mapa([:teclas -> conjunto(mantidas), :apertadas -> conjunto(apertadas),
+        :soltas -> conjunto(), :eventos -> acontecimentos, :sair -> falso])
+}
+
+// Percorrer uma rota pela mesma camada de controles usada na janela.
+siga = funcao(estado, rota) {
+    confira(tamanho(rota) > 0, "O destino deve ser alcançável")
+    para i em 1..tamanho(rota) {
+        dx = rota[i][0] - estado:coluna
+        dy = rota[i][1] - estado:linha
+        tecla = se dx == 1 { :direita } ou se dx == -1 { :esquerda }
+            ou se dy == 1 { :baixo } senao { :cima }
+        controles::atualize(estado, entrada([], [tecla], []), 0.01)
+        confira([estado:coluna, estado:linha] == rota[i], "Cada passo da rota deve ser executável")
+    }
+}
+
+// Diferentes sementes: todas as salas devem existir, estar conectadas e não formar ciclos.
+para semente em [7, 19, 2026] {
+    mat::semente(semente)
+    estado = regras::novo()
+    confira(tamanho(estado:mundo) == 15 e tamanho(estado:mundo[0]) == 21, "Dimensões do labirinto")
+    abertas = 0
+    ligacoes = 0
+    para y em 0..15 {
+        para x em 0..21 {
+            se x == 0 ou x == 20 ou y == 0 ou y == 14 {
+                confira(estado:mundo[y][x] == 0, "A borda externa deve ser fechada")
+            }
+            se x % 2 == 1 e y % 2 == 1 {
+                confira(estado:mundo[y][x] == 1, "Toda sala deve ser visitada pelo gerador")
+            }
+            se estado:mundo[y][x] == 1 {
+                abertas += 1
+                se gerador::passagem(estado:mundo, x + 1, y) { ligacoes += 1 }
+                se gerador::passagem(estado:mundo, x, y + 1) { ligacoes += 1 }
+            }
+        }
+    }
+    confira(ligacoes == abertas - 1, "As passagens devem formar uma árvore")
+    // Uma travessia independente marca o alcance de cada célula aberta.
+    pendentes = [[1, 1]]
+    vistos = conjunto([22])
+    enquanto tamanho(pendentes) > 0 {
+        posicao = ultimo(pendentes)
+        pendentes = remova(pendentes, tamanho(pendentes) - 1)
+        para direcao em [[1, 0], [-1, 0], [0, 1], [0, -1]] {
+            x = posicao[0] + direcao[0]
+            y = posicao[1] + direcao[1]
+            identificador = y * 21 + x
+            se gerador::passagem(estado:mundo, x, y) e nao (vistos contem identificador) {
+                vistos += identificador
+                pendentes += [[x, y]]
+            }
+        }
+    }
+    confira(tamanho(vistos) == abertas, "Todas as passagens devem ser alcançáveis")
+    // A saída pode ser alcançada antes das chaves, mas ainda não permite vencer.
+    rota = gerador::caminho(estado:mundo, [1, 1], [estado:saida])
+    // Ignoramos a coleta durante esta verificação isolada da saída fechada.
+    x = estado:saida[0]
+    y = estado:saida[1]
+    anterior = rota[tamanho(rota) - 2]
+    estado:coluna = anterior[0]
+    estado:linha = anterior[1]
+    regras::mova(estado, x - anterior[0], y - anterior[1])
+    confira(nao estado:venceu, "Não deve vencer sem as três chaves")
+    estado:coluna = 1
+    estado:linha = 1
+    estado:passos = 0
+    estado:mostrar_caminho = verdadeiro
+    enquanto estado:coletadas < 3 {
+        regras::atualize_caminho(estado)
+        siga(estado, clone(estado:caminho))
+    }
+    confira(estado:coletadas == 3, "As três chaves devem ser coletáveis")
+    regras::atualize_caminho(estado)
+    siga(estado, clone(estado:caminho))
+    confira(estado:venceu, "A rota deve terminar na saída com as três chaves")
+    antes = clone(estado)
+    controles::atualize(estado, entrada([:esquerda], [], []), 0.1)
+    confira(estado == antes, "A vitória deve congelar os movimentos e o relógio")
+}
+
+mat::semente(42)
+partida_a = regras::crie(7, 7)
+mat::semente(42)
+partida_b = regras::crie(7, 7)
+confira(partida_a == partida_b, "A mesma semente deve reproduzir o labirinto e as chaves")
+partida_a:mundo[0][0] = 1
+confira(partida_a:mundo[1][0] == 0, "As linhas da grade não podem ser compartilhadas")
+
+// Uma sala aberta permite conferir o tamanho mínimo da rota e a repetição das teclas.
+estado = regras::crie(7, 7)
+estado:mundo = gerador::grade(7, 7, 0)
+para y em 1..6 {
+    para x em 1..6 { estado:mundo[y][x] = 1 }
+}
+rota = gerador::caminho(estado:mundo, [1, 1], [[5, 5]])
+confira(tamanho(rota) == 9, "A busca em largura deve produzir uma rota mínima")
+rota = gerador::caminho(estado:mundo, [1, 1], [[5, 5], [2, 1]])
+confira(rota == [[1, 1], [2, 1]], "A dica deve escolher o alvo mais próximo")
+confira(gerador::caminho(estado:mundo, [1, 1], [[0, 0]]) == [], "Destino inacessível deve produzir rota vazia")
+confira(nao regras::mova(estado, -1, 0), "Não pode atravessar a borda")
+confira(nao regras::mova(estado, 1, 1), "Não pode andar na diagonal")
+confira(nao regras::mova(estado, 2, 0), "Não pode saltar células")
+controles::atualize(estado, entrada([], [:d], []), 0)
+confira(estado:coluna == 2, "WASD deve aceitar um toque entre quadros")
+controles::atualize(estado, entrada([:direita], [:direita], []), 0)
+controles::atualize(estado, entrada([:direita], [], []), 0.1)
+confira(estado:coluna == 3, "A repetição deve aguardar o atraso inicial")
+controles::atualize(estado, entrada([:direita], [], []), 0.1)
+confira(estado:coluna == 4, "Segurar a tecla deve repetir o movimento")
+controles::atualize(estado, entrada([:direita, :esquerda], [], []), 0)
+confira(estado:coluna == 4, "Direções opostas devem se cancelar")
+controles::atualize(estado, entrada([], [:h], []), 0)
+confira(estado:mostrar_caminho e tamanho(estado:caminho) > 0, "H deve mostrar uma rota")
+controles::atualize(estado, entrada([], [:h], []), 0)
+confira(nao estado:mostrar_caminho e estado:caminho == [], "H deve esconder a rota")
+controles::atualize(estado, entrada([], [:p], []), 0)
+antes = clone(estado)
+controles::atualize(estado, entrada([:baixo], [], []), 1)
+confira(estado == antes, "A pausa deve congelar o relógio e o jogador")
+controles::atualize(estado, entrada([], [:p], []), 0)
+controles::atualize(estado, entrada([], [], [mapa([:tipo -> :desfoco])]), 0)
+confira(estado:pausado, "Perder foco deve pausar")
+controles::atualize(estado, entrada([], [:r], []), 0)
+confira(nao estado:pausado e estado:passos == 0 e estado:coletadas == 0, "R deve reiniciar")
+confira(estado:largura == 7 e estado:altura == 7, "O reinício deve preservar as dimensões")
+antes = estado:tempo
+controles::atualize(estado, entrada([], [], []), 100)
+confira(estado:tempo == antes + 0.1, "Atrasos grandes devem ser limitados")
+
+estado = regras::novo()
+estado:mostrar_caminho = verdadeiro
+regras::atualize_caminho(estado)
+tela = desenho::nova_tela(estado)
+antes = clone(estado)
+desenho::quadro(tela, estado)
+confira(estado == antes, "Desenhar não deve alterar a partida")
+confira(tela.grafica::pixel(0, 0) == :preto, "O desenho deve poder ser rasterizado sem janela")
+escreva("Labirinto: ", relatorio:verificacoes, " verificações passaram, sem abrir janela.")

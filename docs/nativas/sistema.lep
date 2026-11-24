@@ -1,0 +1,16 @@
+/// Espera o número de segundos (aceita fração: durma(0.5)).
+///
+/// durma(0) não espera. Na Aula, o tempo-limite do programa continua valendo.
+/// Devolve nada.
+///
+/// Erros: falta o argumento, valor que não é número, ou número negativo.
+///
+/// Exemplo: durma(1)
+durma = funcao(segundos) { 0 }
+
+/// Valor da variável de ambiente (HOME, PATH, …) como texto.
+///
+/// Variável que não existe é erro; use se_falhar para ter um padrão.
+///
+/// Exemplo: editor = ambiente("EDITOR") se_falhar { "vim" }
+ambiente = funcao(nome) { 0 }

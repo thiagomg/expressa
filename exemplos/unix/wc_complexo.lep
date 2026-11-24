@@ -1,0 +1,131 @@
+#!/usr/bin/env expressa
+importe "sistema"
+importe "arquivo"
+
+mostrar_ajuda = funcao() {
+    escreva("Uso: wc_complexo.lep [opções] [arquivo ...]")
+    escreva("Sem opções, mostra linhas, palavras e bytes, nessa ordem.")
+    escreva("-l, --lines: conta quebras de linha (\\n).")
+    escreva("-w, --words: conta palavras separadas por espaços em branco.")
+    escreva("-c, --bytes: conta bytes; -m, --chars: conta caracteres.")
+    escreva("As opções podem ser combinadas: -lw ou -l -w.")
+    escreva("Sem arquivos, ou com -, lê a entrada padrão. -- encerra as opções.")
+    escreva("--help ou --ajuda: mostra esta ajuda.")
+}
+
+// A contagem de palavras segue a separação por espaços do wc, não pontuação.
+localidade = ambiente("LC_ALL") se_falhar { "" }
+se localidade == "" { localidade = ambiente("LC_CTYPE") se_falhar { "" } }
+se localidade == "" { localidade = ambiente("LANG") se_falhar { "C" } }
+unicode = localidade != "C" e localidade != "POSIX"
+posix = (ambiente("POSIXLY_CORRECT") se_falhar { falso }) != falso
+
+espaco_unicode = funcao(c) {
+    // Espaços não separáveis são uma extensão do GNU wc fora do modo POSIX.
+    extras = ["\u{00a0}", "\u{2007}", "\u{202f}", "\u{2060}"]
+    se extras contem c { retorne nao posix }
+    // U+0085 não é um separador na classificação de espaços de C.UTF-8.
+    c != "\u{0085}" e limpe(c) == ""
+}
+
+conta = funcao(bytes) {
+    linhas = 0
+    para byte em bytes { se byte == 10 { linhas += 1 } }
+    texto = se unicode { texto_utf8(bytes, :substitua) } senao { bytes }
+    palavras = 0
+    dentro = falso
+    para c em texto {
+        espaco = se unicode { espaco_unicode(c) } senao { c == 32 ou (c >= 9 e c <= 13) }
+        se espaco { dentro = falso } ou se nao dentro {
+            palavras += 1
+            dentro = verdadeiro
+        }
+    }
+    caracteres = se unicode { tamanho(texto_utf8(bytes, :ignore)) } senao { tamanho(bytes) }
+    mapa([:l -> linhas, :w -> palavras, :m -> caracteres, :c -> tamanho(bytes)])
+}
+
+opcoes = mapa([:l -> falso, :w -> falso, :m -> falso, :c -> falso])
+longas = mapa([:lines -> :l, :words -> :w, :chars -> :m, :bytes -> :c])
+arquivos = []
+fim_opcoes = falso
+selecionou = falso
+para arg em argumentos {
+    se nao fim_opcoes e arg == "--" {
+        fim_opcoes = verdadeiro
+        continue
+    }
+    se nao fim_opcoes e (arg == "--help" ou arg == "--ajuda") {
+        mostrar_ajuda()
+        saia(0)
+    }
+    se nao fim_opcoes e arg != "-" e arg.comeca_com("-") {
+        letras = se arg.comeca_com("--") {
+            opcao = longas[arg[2..]] se_falhar { falso }
+            se opcao == falso {
+                escreva_erro("wc: opção desconhecida: " + arg)
+                saia(1)
+            }
+            opcao
+        } senao { arg[1..] }
+        para letra em letras {
+            se nao (opcoes contem letra) {
+                escreva_erro("wc: opção desconhecida: -" + letra)
+                saia(1)
+            }
+            opcoes[letra] = verdadeiro
+            selecionou = verdadeiro
+        }
+    } senao { arquivos += [arg] }
+}
+se nao selecionou {
+    opcoes:l = verdadeiro
+    opcoes:w = verdadeiro
+    opcoes:c = verdadeiro
+}
+nomes = tamanho(arquivos) > 0
+se nao nomes { arquivos = ["-"] }
+
+// Os caminhos recebidos no terminal partem da pasta atual, não da pasta do .lep.
+resultados = []
+total = mapa([:l -> 0, :w -> 0, :m -> 0, :c -> 0])
+codigo = 0
+para nome em arquivos {
+    bytes = se nome == "-" { leia_bytes() se_falhar erro {
+        escreva_erro("wc: " + erro)
+        falso
+    } } senao { leia_bytes(junte_caminho(pasta_atual(), nome)) se_falhar erro {
+        escreva_erro("wc: " + erro)
+        falso
+    } }
+    se bytes == falso {
+        codigo = 1
+        continue
+    }
+    contagem = conta(bytes)
+    resultados += [mapa([:nome -> se nomes { nome } senao { "" }, :contagem -> contagem])]
+    para chave em [:l, :w, :m, :c] { total[chave] += contagem[chave] }
+}
+se tamanho(arquivos) > 1 { resultados += [mapa([:nome -> "total", :contagem -> total])] }
+
+// Contagens inteiras não usam separadores de milhar, independentemente do locale.
+numero_texto = funcao(n) { formate("{}", n).substitua(".", "").substitua(",", "") }
+largura = 1
+para resultado em resultados {
+    para chave em [:l, :w, :m, :c] {
+        se opcoes[chave] {
+            n = tamanho(numero_texto(resultado:contagem[chave]))
+            se n > largura { largura = n }
+        }
+    }
+}
+para resultado em resultados {
+    campos = []
+    para chave em [:l, :w, :m, :c] {
+        se opcoes[chave] { campos += [formate("{:>" + largura + "}", numero_texto(resultado:contagem[chave]))] }
+    }
+    linha = junte(campos, " ")
+    se resultado:nome != "" { linha += " " + resultado:nome }
+    escreva(linha)
+}
+saia(codigo)

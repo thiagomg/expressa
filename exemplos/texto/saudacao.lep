@@ -1,0 +1,14 @@
+// Padaria da esquina: lê o nome no teclado e monta uma saudação.
+
+hora = "manhã"
+escreva("Bom dia! Qual o seu nome?")
+nome = limpe(leia())
+
+se tamanho(nome) == 0
+inicio
+    nome = "visitante"
+fim
+
+titulo = maiuscula(primeiro(separe(nome, " ")))
+escreva("Olá, " + titulo + "! Bem-vindo à padaria Expressa.")
+escreva("Hoje de " + hora + " temos pão recém-saído do forno.")

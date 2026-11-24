@@ -1,0 +1,71 @@
+gerador = importe "./mapa"
+mat = importe "mat"
+
+crie = funcao(largura, altura) {
+    mundo = gerador::crie(largura, altura)
+    candidatas = []
+    para y em 1..(altura - 1) {
+        para x em 1..(largura - 1) {
+            se x % 2 == 1 e y % 2 == 1 {
+                se nao (x == 1 e y == 1) e nao (x == largura - 2 e y == altura - 2) {
+                    candidatas += [[x, y]]
+                }
+            }
+        }
+    }
+    chaves = []
+    para i em 0..3 {
+        indice = mat::aleatorio(0, tamanho(candidatas) - 1)
+        posicao = candidatas[indice]
+        candidatas = remova(candidatas, indice)
+        chaves += [mapa([:coluna -> posicao[0], :linha -> posicao[1], :coletada -> falso])]
+    }
+    mapa([
+        :mundo -> mundo, :largura -> largura, :altura -> altura,
+        :coluna -> 1, :linha -> 1, :saida -> [largura - 2, altura - 2],
+        :chaves -> chaves, :coletadas -> 0, :passos -> 0, :tempo -> 0,
+        :pausado -> falso, :venceu -> falso, :mostrar_caminho -> falso, :caminho -> [],
+        :direcao -> [0, 0], :espera -> 0,
+    ])
+}
+
+novo = funcao() { crie(21, 15) }
+
+reinicie = funcao(estado) {
+    outro = crie(estado:largura, estado:altura)
+    para campo em outro { estado[campo:chave] = campo:valor }
+}
+
+atualize_caminho = funcao(estado) {
+    estado:caminho = []
+    se nao estado:mostrar_caminho { retorne nada }
+    alvos = []
+    para chave em estado:chaves {
+        se nao chave:coletada { alvos += [[chave:coluna, chave:linha]] }
+    }
+    se tamanho(alvos) == 0 { alvos = [estado:saida] }
+    estado:caminho = gerador::caminho(estado:mundo, [estado:coluna, estado:linha], alvos)
+}
+
+mova = funcao(estado, dx, dy) {
+    se estado:pausado ou estado:venceu { retorne falso }
+    // Só aceitamos um passo ortogonal, mesmo em chamadas feitas pelos testes.
+    se nao ((dx == 0 e (dy == 1 ou dy == -1)) ou (dy == 0 e (dx == 1 ou dx == -1))) {
+        retorne falso
+    }
+    x = estado:coluna + dx
+    y = estado:linha + dy
+    se nao gerador::passagem(estado:mundo, x, y) { retorne falso }
+    estado:coluna = x
+    estado:linha = y
+    estado:passos += 1
+    para chave em estado:chaves {
+        se nao chave:coletada e chave:coluna == x e chave:linha == y {
+            chave:coletada = verdadeiro
+            estado:coletadas += 1
+        }
+    }
+    se [x, y] == estado:saida e estado:coletadas == 3 { estado:venceu = verdadeiro }
+    atualize_caminho(estado)
+    verdadeiro
+}

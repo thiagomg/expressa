@@ -1,0 +1,16 @@
+// Mapa: um nome (chave) aponta para um valor.
+// pessoa:nome é o mesmo que pessoa["nome"].
+
+pessoa = mapa([
+    :nome -> "Ana",
+    :idade -> 16,
+])
+escreva(pessoa:nome)
+escreva(pessoa:idade)
+
+pessoa:cidade = "Fortaleza"
+escreva(pessoa:cidade)
+
+se pessoa contem "idade" {
+    escreva("tem idade")
+}

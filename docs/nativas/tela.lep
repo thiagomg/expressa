@@ -1,0 +1,105 @@
+/// Limpa a tela do terminal. Também limpe_tela().
+///
+/// Coloca o cursor no canto superior esquerdo. Sem argumentos.
+/// No REPL, a linha limpe_tela (sem parênteses) também limpa a tela.
+/// Na Aula, limpa o painel de saída.
+/// Em uma animação, limpe_tela() a cada quadro pisca: use posicao_cursor(0, 0, falso) no laço.
+///
+/// Exemplo: limpe_tela()
+limpe_tela = funcao() { 0 }
+
+/// Verdadeiro se a entrada é o teclado (não um pipe). Também é_terminal().
+///
+/// Falso se veio de um pipe, de um arquivo ou da Aula. Sem argumentos.
+///
+/// Exemplo: se eh_terminal() { nome = leia("Nome: ") }
+eh_terminal = funcao() { 0 }
+
+/// Devolve o texto com cor ANSI (letra e fundo opcional) e reset no fim.
+///
+/// Cores: normal, preto, vermelho, verde, amarelo, azul, magenta, ciano, branco.
+/// :verde é o texto "verde". normal é a cor padrão do terminal naquele slot.
+///
+/// Exemplo: "HP".pinte(:verde)
+pinte = funcao(texto, frente) { 0 }
+pinte = funcao(texto, frente, fundo) { 0 }
+
+/// Devolve o texto com cor de fundo ANSI e reset no fim.
+///
+/// Letra no padrão do terminal.
+///
+/// Exemplo: "    ".fundo(:vermelho)
+fundo = funcao(texto, cor) { 0 }
+
+/// Devolve o texto em negrito (ANSI) e reset no fim.
+///
+/// Exemplo: "GAME OVER".negrito()
+negrito = funcao(texto) { 0 }
+
+/// Tamanho da tela em caracteres: mapa com :linhas e :colunas.
+///
+/// No terminal, o tamanho atual. Sem TTY (pipe, testes, Aula sem painel),
+/// 24 linhas e 80 colunas.
+///
+/// Exemplo: se tamanho_tela():colunas >= 48 { ... }
+tamanho_tela = funcao() { mapa() }
+
+/// Redesenha a tela: cursor no canto, escreve o texto, apaga o que sobrar.
+///
+/// Em cada linha apaga o resto à direita; no fim apaga o que estava embaixo.
+/// Use no lugar de cls()/posicao_cursor() + vários escreva em um jogo. O texto já vem
+/// com nova_linha (ou "\\n"). Devolve nada.
+///
+/// Exemplo: quadro(tela)
+quadro = funcao(texto) { 0 }
+
+/// Quebra de linha do sistema. Valor, não função: use nova_linha, não nova_linha().
+///
+/// "\\n" no Unix e na Aula; "\\r\\n" no Windows. Monte o texto de quadro com ela.
+///
+/// Exemplo: tela += linha + nova_linha
+nova_linha = "\n"
+
+/// Cursor de um bloco: mapa {:linha, :coluna}, base zero.
+///
+/// Não desenha. Passe o mapa a escreva_em. A coluna fica fixa; cada
+/// escreva_em anda uma linha.
+///
+/// Exemplo: b = bloco(0, 27)
+bloco = funcao(linha, coluna) { 0 }
+
+/// Escreve uma linha no bloco, na coluna dele, e devolve o mesmo mapa.
+///
+/// UFCS: b.escreva_em("Q W E").escreva_em(" A S D"). Sem "\\n" no texto.
+/// O que estava à esquerda na mesma linha permanece.
+///
+/// Exemplo: b.escreva_em("Q W E R T")
+escreva_em = funcao(bloco, texto) { 0 }
+
+/// Consulta ou altera a posição do cursor de saída. Também posição_cursor().
+///
+/// Sem argumentos, devolve um mapa {:linha, :coluna}, com posições a partir de zero.
+/// Com um mapa, move o cursor sem apagar nem alterar o mapa recebido.
+/// Com linha e coluna, move para essas coordenadas (inteiros >= 0).
+/// mostre é bool e vale verdadeiro por padrão: faz flush da saída após mover.
+/// Com falso, não faz flush: o próximo escreva pode desenhar junto com o movimento.
+/// Use posicao_cursor(0, 0, falso) para voltar ao canto em animações, sem apagar.
+/// Funciona na Aula e em terminais compatíveis. A consulta falha em pipes/arquivos
+/// ou quando o terminal não responde. Na Aula, as linhas são as quebras explícitas:
+/// o ajuste visual de uma linha longa não muda a numeração. Rolagem pode invalidar
+/// posições guardadas. Na Aula, leia() começa na posição escolhida e substitui
+/// o restante daquela linha, preservando as linhas de baixo.
+///
+/// Exemplo: pos = posicao_cursor()
+posicao_cursor = funcao() { 0 }
+posicao_cursor = funcao(pos) { 0 }
+posicao_cursor = funcao(linha, coluna) { 0 }
+posicao_cursor = funcao(linha, coluna, mostre) { 0 }
+
+/// Apaga a linha atual inteira e deixa o cursor no início dela.
+///
+/// Não remove a linha nem desloca as linhas de baixo. Sem argumentos.
+/// Funciona no terminal e no painel de saída da Aula.
+///
+/// Exemplo: apague_linha()
+apague_linha = funcao() { 0 }

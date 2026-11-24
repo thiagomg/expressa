@@ -1,0 +1,61 @@
+// Estatística descritiva dos números informados.
+entrada = importe "../lib/entrada"
+
+escreva("Resumo estatístico dos números. Para sair, pressione Enter sem digitar nada.")
+quantidade = entrada::leia_numero("Quantos números? ", funcao(n) { n > 0 e n % 1 == 0 }, "Digite uma quantidade inteira maior que zero.")
+se quantidade == falso { saia(0) }
+dados = []
+soma = 0
+para i em 1..=quantidade {
+    valor = entrada::leia_numero("Número " + i + ": ", funcao(n) { verdadeiro }, "Digite um número válido.")
+    se valor == falso { saia(0) }
+    dados += [valor]
+    soma += valor
+}
+escreva()
+
+// Se houver dois valores centrais, a mediana é a média entre eles.
+ord = ordene(dados)
+mediana = se quantidade % 2 == 1 {
+    ord[(quantidade - 1) / 2]
+} senao {
+    (ord[quantidade / 2 - 1] + ord[quantidade / 2]) / 2
+}
+
+// Percorrer os dados ordenados agrupa valores iguais e preserva todos os empates.
+frequencias = []
+para valor em ord {
+    n = tamanho(frequencias)
+    se n > 0 e frequencias[n - 1]:valor == valor {
+        frequencias[n - 1]:quantidade += 1
+    } senao {
+        frequencias += [mapa([:valor -> valor, :quantidade -> 1])]
+    }
+}
+maior_frequencia = 0
+para item em frequencias {
+    se item:quantidade > maior_frequencia { maior_frequencia = item:quantidade }
+}
+modas = []
+para item em frequencias {
+    se item:quantidade == maior_frequencia { modas += [item:valor] }
+}
+
+escreva("números informados: " + dados)
+escreva("números em ordem crescente: " + ord)
+escreva("média (soma dividida pela quantidade): " + (soma / quantidade))
+escreva("mediana (valor central ou média dos dois centrais): " + mediana)
+se maior_frequencia == 1 {
+    escreva("nenhum valor se repete; não há moda")
+} senao {
+    escreva("valores que mais se repetem (moda): " + modas + " (" + maior_frequencia + " vezes cada)")
+}
+escreva("menor valor: " + primeiro(ord))
+escreva("maior valor: " + ultimo(ord))
+escreva("diferença entre o maior e o menor valor (amplitude): " + (ultimo(ord) - primeiro(ord)))
+escreva("quantas vezes cada valor aparece (cada # representa uma vez):")
+para item em frequencias {
+    barra = ""
+    repita item:quantidade vezes { barra += "#" }
+    escreva(item:valor + " | " + barra)
+}

@@ -1,0 +1,9 @@
+tela_grafica = importe "tela_grafica"
+
+g = tela_grafica::nova(320, 200)
+g.tela_grafica::cor(:azul)
+g.tela_grafica::linha(10, 10, 310, 190)
+g.tela_grafica::cor(:vermelho)
+g.tela_grafica::circulo(160, 100, 50)
+g.tela_grafica::mostre()
+g.tela_grafica::salve("linha.png")

@@ -1,0 +1,163 @@
+use std::rc::Rc;
+
+use crate::lexer::Span;
+use crate::parser::block_types::Block;
+use crate::parser::operator_types::{BinaryOp, UnaryOp};
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum Expr {
+    // ── Literals ───────────────────────────────────────────────
+    Number {
+        /// Raw lexeme, e.g. "1_000", "3.14" (Decimal later).
+        raw: String,
+        span: Span,
+    },
+    String {
+        value: String, // already unescaped
+        span: Span,
+    },
+    Nada {
+        span: Span,
+    },
+    Bool {
+        value: bool,
+        span: Span,
+    },
+    List {
+        elements: Vec<Expr>,
+        span: Span,
+    },
+    /// `chave -> valor` — a pair (map entry as a value).
+    Par {
+        key: Box<Expr>,
+        value: Box<Expr>,
+        span: Span,
+    },
+    /// `funcao (a, b) inicio ... fim` or `{ ... }`
+    Function {
+        params: Vec<Param>,
+        /// Shared with every closure made from it: creating a function
+        /// value does not copy its body.
+        body: Rc<Block>,
+        span: Span,
+        /// `///` lines immediately above `nome = funcao(...)`.
+        doc: Option<String>,
+    },
+
+    // ── Names & access ─────────────────────────────────────────
+    Ident {
+        name: String,
+        span: Span,
+    },
+    /// `mat::soma` — name inside a module.
+    Field {
+        object: Box<Expr>,
+        field: String,
+        span: Span,
+    },
+    /// `pessoa:nome` — identifier key of a mapa (`pessoa["nome"]`).
+    MapField {
+        object: Box<Expr>,
+        field: String,
+        span: Span,
+    },
+    /// `f(a, b)`
+    Call {
+        callee: Box<Expr>,
+        args: Vec<Expr>,
+        span: Span,
+    },
+    /// `a[i]`
+    Index {
+        object: Box<Expr>,
+        index: Box<Expr>,
+        span: Span,
+    },
+    /// `m[i, j]`
+    Index2 {
+        object: Box<Expr>,
+        row: Box<Expr>,
+        col: Box<Expr>,
+        span: Span,
+    },
+    /// `a..b`, `a..`, `..b` or `..`. `..=` is desugared to exclusive `..`.
+    /// `start` is always present (`..3` becomes `0..3`). `end` is `None` when
+    /// the range has no upper bound (`0..`).
+    Intervalo {
+        start: Box<Expr>,
+        end: Option<Box<Expr>>,
+        span: Span,
+    },
+
+    // ── Operators ──────────────────────────────────────────────
+    Unary {
+        op: UnaryOp,
+        expr: Box<Expr>,
+        span: Span,
+    },
+    Binary {
+        left: Box<Expr>,
+        op: BinaryOp,
+        right: Box<Expr>,
+        span: Span,
+    },
+
+    // ── Control as expression ──────────────────────────────────
+    /// Block used as expression.
+    Block(Block),
+
+    /// `se cond inicio ... fim (ou se ...)* (senao inicio ... fim)?`
+    If {
+        branches: Vec<IfBranch>, // at least one (`se`)
+        /// Required when this `If` is in value position (semantic check).
+        else_block: Option<Block>,
+        span: Span,
+    },
+
+    /// `A se_falhar [erro] { ... }`
+    SeFalhar {
+        attempt: Box<Expr>,
+        fallback: Block,
+        error_name: Option<String>,
+        span: Span,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Param {
+    pub name: String,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct IfBranch {
+    pub cond: Expr,
+    pub body: Block,
+    pub span: Span,
+}
+
+impl Expr {
+    pub fn span(&self) -> Span {
+        match self {
+            Expr::Number { span, .. }
+            | Expr::String { span, .. }
+            | Expr::Nada { span }
+            | Expr::Bool { span, .. }
+            | Expr::List { span, .. }
+            | Expr::Par { span, .. }
+            | Expr::Function { span, .. }
+            | Expr::Ident { span, .. }
+            | Expr::Field { span, .. }
+            | Expr::MapField { span, .. }
+            | Expr::Call { span, .. }
+            | Expr::Index { span, .. }
+            | Expr::Index2 { span, .. }
+            | Expr::Intervalo { span, .. }
+            | Expr::Unary { span, .. }
+            | Expr::Binary { span, .. }
+            | Expr::If { span, .. }
+            | Expr::SeFalhar { span, .. } => *span,
+            Expr::Block(b) => b.span,
+        }
+    }
+}

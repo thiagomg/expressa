@@ -1,0 +1,106 @@
+// Apresentação: consulta a partida, mas não altera nenhuma regra.
+grafica = importe "tela_grafica"
+pecas = importe "pecas"
+regras = importe "regras"
+
+// A área lógica tem 360 por 416 pixels; a janela amplia cada pixel duas vezes.
+nova_tela = funcao() { grafica::nova(360, 416, 2) }
+
+bloco = funcao(tela, x, y, lado, cor) {
+    tela.grafica::cor(cor)
+    tela.grafica::retangulo(x + 1, y + 1, x + lado - 2, y + lado - 2)
+    tela.grafica::cor(:branco)
+    tela.grafica::linha(x + 2, y + 2, x + lado - 3, y + 2)
+    tela.grafica::cor(:normal)
+    tela.grafica::linha(x + lado - 2, y + 3, x + lado - 2, y + lado - 2)
+}
+
+// Uma peça acima do topo ainda existe na simulação, mas não é desenhada fora da área.
+peca_no_tabuleiro = funcao(tela, peca, linha, fantasma) {
+    para celula em peca:celulas {
+        coluna = peca:coluna + celula[0]
+        y = linha + celula[1]
+        se y >= 0 e y < 20 {
+            px = 16 + coluna * 16
+            py = 40 + y * 16
+            se fantasma {
+                tela.grafica::cor(:normal)
+                tela.grafica::linha(px + 2, py + 2, px + 13, py + 2)
+                tela.grafica::linha(px + 2, py + 13, px + 13, py + 13)
+                tela.grafica::linha(px + 2, py + 2, px + 2, py + 13)
+                tela.grafica::linha(px + 13, py + 2, px + 13, py + 13)
+            } senao { bloco(tela, px, py, 16, peca:cor) }
+        }
+    }
+}
+
+proximas = funcao(tela, estado) {
+    tela.grafica::cor(:branco)
+    tela.grafica::texto(200, 178, "PRÓXIMAS", 8)
+    para indice em 0..tamanho(estado:proximas) {
+        peca = pecas::crie(estado:proximas[indice])
+        y = 200 + indice * 52
+        tela.grafica::cor(:normal)
+        tela.grafica::retangulo(197, y - 4, 330, y + 35)
+        tela.grafica::cor(:branco)
+        tela.grafica::texto(258, y + 8, peca:nome, 12)
+        para celula em peca:celulas {
+            bloco(tela, 206 + celula[0] * 8, y + celula[1] * 8, 8, peca:cor)
+        }
+    }
+}
+
+aviso = funcao(tela, titulo, ajuda) {
+    tela.grafica::cor(:branco)
+    tela.grafica::retangulo(21, 168, 170, 222)
+    tela.grafica::cor(:preto)
+    tela.grafica::retangulo(23, 170, 168, 220)
+    tela.grafica::cor(:branco)
+    tela.grafica::texto(35, 181, titulo, 12)
+    tela.grafica::texto(35, 205, ajuda, 8)
+}
+
+quadro = funcao(tela, estado) {
+    // apague também permite chamar esta função fora do laço, para salvar um PNG.
+    tela.grafica::fundo(:preto)
+    tela.grafica::apague()
+    tela.grafica::cor(:ciano)
+    tela.grafica::texto(16, 10, "TETRIS", 20)
+    tela.grafica::cor(:normal)
+    para coluna em 0..=10 {
+        x = 16 + coluna * 16
+        tela.grafica::linha(x, 40, x, 360)
+    }
+    para linha em 0..=20 {
+        y = 40 + linha * 16
+        tela.grafica::linha(16, y, 176, y)
+    }
+    para linha em 0..20 {
+        para coluna em 0..10 {
+            valor = estado:tabuleiro[linha][coluna]
+            se valor != 0 {
+                bloco(tela, 16 + coluna * 16, 40 + linha * 16, 16, pecas::cor(valor))
+            }
+        }
+    }
+    se nao estado:terminou {
+        peca_no_tabuleiro(tela, estado:atual, regras::linha_fantasma(estado), verdadeiro)
+        peca_no_tabuleiro(tela, estado:atual, estado:atual:linha, falso)
+    }
+    tela.grafica::cor(:branco)
+    tela.grafica::texto(200, 42, "PONTOS", 8)
+    tela.grafica::texto(200, 58, como_texto(estado:pontos), 16)
+    tela.grafica::texto(200, 98, "LINHAS", 8)
+    tela.grafica::texto(200, 114, como_texto(estado:linhas), 16)
+    tela.grafica::texto(282, 98, "NÍVEL", 8)
+    tela.grafica::texto(282, 114, como_texto(estado:nivel), 16)
+    tela.grafica::cor(:normal)
+    tela.grafica::texto(200, 151, "Complete as linhas!", 8)
+    proximas(tela, estado)
+    tela.grafica::cor(:branco)
+    tela.grafica::texto(16, 378, "Setas: mover  Cima/X: girar  Z: inverso", 8)
+    tela.grafica::texto(16, 391, "Baixo: acelerar   Espaço: soltar   P: pausa", 8)
+    tela.grafica::texto(16, 404, "R: reiniciar   Esc: sair", 8)
+    se estado:terminou { aviso(tela, "FIM DE JOGO", "R para reiniciar") }
+    ou se estado:pausado { aviso(tela, "PAUSADO", "P para continuar") }
+}

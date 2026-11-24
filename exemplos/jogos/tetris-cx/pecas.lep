@@ -1,0 +1,41 @@
+// As posições de uma peça são pares [coluna, linha], relativos à sua origem.
+// O catálogo nunca é alterado: cada peça em jogo recebe uma cópia das células.
+catalogo = [
+    mapa([:nome -> "I", :cor -> :ciano, :lado -> 4,
+        :celulas -> [[0, 1], [1, 1], [2, 1], [3, 1]]]),
+    mapa([:nome -> "O", :cor -> :amarelo, :lado -> 2,
+        :celulas -> [[0, 0], [1, 0], [0, 1], [1, 1]]]),
+    mapa([:nome -> "T", :cor -> :magenta, :lado -> 3,
+        :celulas -> [[1, 0], [0, 1], [1, 1], [2, 1]]]),
+    mapa([:nome -> "S", :cor -> :verde, :lado -> 3,
+        :celulas -> [[1, 0], [2, 0], [0, 1], [1, 1]]]),
+    mapa([:nome -> "Z", :cor -> :vermelho, :lado -> 3,
+        :celulas -> [[0, 0], [1, 0], [1, 1], [2, 1]]]),
+    mapa([:nome -> "J", :cor -> :azul, :lado -> 3,
+        :celulas -> [[0, 0], [0, 1], [1, 1], [2, 1]]]),
+    mapa([:nome -> "L", :cor -> :branco, :lado -> 3,
+        :celulas -> [[2, 0], [0, 1], [1, 1], [2, 1]]]),
+]
+
+crie = funcao(tipo) {
+    modelo = catalogo[tipo]
+    mapa([:tipo -> tipo, :nome -> modelo:nome, :cor -> modelo:cor,
+        :lado -> modelo:lado, :celulas -> clone(modelo:celulas),
+        :coluna -> 3, :linha -> -1])
+}
+
+// Giramos dentro de um quadrado de lado 3 ou 4. A peça O não muda.
+// sentido = 1: horário; sentido = -1: anti-horário.
+gire_celulas = funcao(peca, sentido) {
+    novas = []
+    para celula em peca:celulas {
+        x = celula[0]
+        y = celula[1]
+        se peca:nome == "O" { novas += [[x, y]] }
+        ou se sentido == 1 { novas += [[peca:lado - 1 - y, x]] }
+        senao { novas += [[y, peca:lado - 1 - x]] }
+    }
+    novas
+}
+
+cor = funcao(valor) { catalogo[valor - 1]:cor }

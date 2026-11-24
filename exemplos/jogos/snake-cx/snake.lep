@@ -1,0 +1,3 @@
+// Entrada alternativa: mantém o comando antigo funcionando.
+// A implementação principal está em principal.lep.
+jogo = importe "principal"

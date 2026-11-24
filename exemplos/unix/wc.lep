@@ -1,0 +1,79 @@
+#!/usr/bin/env expressa
+
+importe "arquivo"
+importe "lib/linha_cmd"
+
+// Uma palavra é qualquer trecho entre espaços em branco; pontuação não separa.
+conta_palavras = função(texto) {
+    total = 0
+    dentro_da_palavra = falso
+    para caractere em texto {
+        se limpe(caractere) == "" {
+            dentro_da_palavra = falso
+        } ou se nao dentro_da_palavra {
+            total += 1
+            dentro_da_palavra = verdadeiro
+        }
+    }
+    total
+}
+
+conta_linhas = função(texto) {
+    total = 0
+    para caractere em texto {
+        se caractere == "\n" { total += 1 }
+    }
+    total
+}
+
+mostrar_ajuda = função() {
+    escreva("Na raiz do projeto, com expressa disponível no PATH:")
+    escreva("expressa exemplos/unix/wc.lep meu-arquivo.txt")
+    escreva("expressa exemplos/unix/wc.lep -l meu-arquivo.txt")
+    escreva("")
+    escreva("Para ler texto enviado por outro comando (entrada padrão):")
+    escreva("echo um dois | expressa exemplos/unix/wc.lep")
+    escreva("-l conta linhas; sem essa opção, conta palavras separadas por espaços em branco.")
+    escreva("Arquivos e dados recebidos pelo pipe são interpretados como UTF-8.")
+}
+
+exec_wc = função(args)
+{
+    função_contagem = se args:op contém "l" {
+        conta_linhas
+    } senao {
+        conta_palavras
+    }
+
+    se args:pos.tamanho() == 0
+    {
+        // Sem nomes de arquivos, lê o texto da entrada padrão.
+        texto = texto_utf8(leia_bytes(), :substitua)
+        total = função_contagem(texto)
+        escreva(total)
+    }
+    senao
+    {
+        // Conta cada arquivo informado e acumula o total.
+        total_geral = 0
+        para i em 0..args:pos.tamanho()
+        {
+            arg = args:pos[i]
+            caminho = junte_caminho(pasta_atual(), arg)
+            texto = texto_utf8(leia_bytes(caminho), :substitua)
+            total = função_contagem(texto)
+            escreva(arg, "=", total)
+            total_geral = total_geral + total
+        }
+        escreva("Total geral:", total_geral)
+    }
+}
+
+// Programa principal
+args = separa_args(argumentos, [])
+se args:op contem "ajuda" {
+    mostrar_ajuda()
+} senao {
+    exec_wc(args)
+}
+

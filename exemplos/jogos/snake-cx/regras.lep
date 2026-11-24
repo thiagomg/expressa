@@ -1,0 +1,120 @@
+// O corpo é uma lista de posições [coluna, linha], da cabeça até a cauda.
+// A simulação não depende do teclado nem da janela.
+mat = importe "mat"
+
+sorteie_comida = funcao(estado) {
+    livres = []
+    para y em 0..estado:altura {
+        para x em 0..estado:largura {
+            ocupada = falso
+            para parte em estado:corpo {
+                se parte == [x, y] { ocupada = verdadeiro }
+            }
+            se nao ocupada { livres += [[x, y]] }
+        }
+    }
+    // Enumerar os espaços livres evita repetir sorteios indefinidamente
+    // quando o tabuleiro está quase cheio.
+    se tamanho(livres) == 0 {
+        estado:comida = nada
+        estado:venceu = verdadeiro
+        estado:terminou = verdadeiro
+        estado:motivo = "Você ocupou todo o tabuleiro!"
+    } senao {
+        estado:comida = livres[mat::aleatorio(0, tamanho(livres) - 1)]
+    }
+}
+
+crie = funcao(largura, altura) {
+    garanta(largura >= 5 e altura >= 5)
+    x = mat::piso(largura / 2)
+    y = mat::piso(altura / 2)
+    estado = mapa([
+        :largura -> largura, :altura -> altura,
+        :corpo -> [[x, y], [x - 1, y], [x - 2, y]], :direcao -> [1, 0],
+        :pendentes -> [], :comida -> nada, :frutas -> 0, :pontos -> 0,
+        :nivel -> 1, :acumulado -> 0, :tempo -> 0,
+        :iniciou -> falso, :pausado -> falso, :terminou -> falso,
+        :venceu -> falso, :motivo -> "",
+    ])
+    sorteie_comida(estado)
+    estado
+}
+
+novo = funcao() { crie(24, 18) }
+
+reinicie = funcao(estado) {
+    outro = crie(estado:largura, estado:altura)
+    para campo em outro { estado[campo:chave] = campo:valor }
+}
+
+solicite_direcao = funcao(estado, nova) {
+    se estado:pausado ou estado:terminou { retorne falso }
+    se nao (nova == [1, 0] ou nova == [-1, 0] ou nova == [0, 1] ou nova == [0, -1]) {
+        retorne falso
+    }
+    referencia = se tamanho(estado:pendentes) > 0 { ultimo(estado:pendentes) } senao { estado:direcao }
+    se nova == [-referencia[0], -referencia[1]] { retorne falso }
+    se nova == referencia {
+        estado:iniciou = verdadeiro
+        retorne verdadeiro
+    }
+    // Duas curvas podem chegar entre passos. Elas são aplicadas uma por vez,
+    // em vez de trocar a direção duas vezes antes de a cabeça sair da célula.
+    se tamanho(estado:pendentes) >= 2 { retorne falso }
+    estado:pendentes += [clone(nova)]
+    estado:iniciou = verdadeiro
+    verdadeiro
+}
+
+intervalo = funcao(estado) {
+    periodo = 0.16 - (estado:nivel - 1) * 0.015
+    se periodo < 0.07 { 0.07 } senao { periodo }
+}
+
+passo = funcao(estado) {
+    se nao estado:iniciou ou estado:pausado ou estado:terminou { retorne nada }
+    se tamanho(estado:pendentes) > 0 {
+        estado:direcao = estado:pendentes[0]
+        estado:pendentes = remova(estado:pendentes, 0)
+    }
+    cabeca = estado:corpo[0]
+    destino = [cabeca[0] + estado:direcao[0], cabeca[1] + estado:direcao[1]]
+    se destino[0] < 0 ou destino[0] >= estado:largura ou destino[1] < 0 ou destino[1] >= estado:altura {
+        estado:terminou = verdadeiro
+        estado:motivo = "Você bateu na parede."
+        retorne nada
+    }
+    crescendo = destino == estado:comida
+    verificar = tamanho(estado:corpo)
+    se nao crescendo { verificar -= 1 }
+    // Sem crescimento, a cauda sai neste mesmo passo: entrar na célula dela é válido.
+    para i em 0..verificar {
+        se destino == estado:corpo[i] {
+            estado:terminou = verdadeiro
+            estado:motivo = "Você bateu no próprio corpo."
+            retorne nada
+        }
+    }
+    novo_corpo = [destino]
+    para i em 0..verificar { novo_corpo += [estado:corpo[i]] }
+    estado:corpo = novo_corpo
+    se crescendo {
+        estado:frutas += 1
+        estado:pontos += 10
+        estado:nivel = 1 + mat::piso(estado:frutas / 5)
+        sorteie_comida(estado)
+    }
+}
+
+avance_tempo = funcao(estado, segundos) {
+    se nao estado:iniciou ou estado:pausado ou estado:terminou { retorne nada }
+    estado:tempo += segundos
+    estado:acumulado += segundos
+    enquanto estado:acumulado >= intervalo(estado) {
+        // Subtraímos o período usado antes do passo, que pode aumentar o nível.
+        estado:acumulado -= intervalo(estado)
+        passo(estado)
+        se estado:terminou { pare }
+    }
+}

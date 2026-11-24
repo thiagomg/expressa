@@ -1,0 +1,70 @@
+grafica = importe "tela_grafica"
+mat = importe "mat"
+
+nova_tela = funcao(estado) { grafica::nova(estado:largura * 16 + 32, estado:altura * 16 + 112, 2) }
+
+aviso = funcao(tela, estado, titulo, subtitulo) {
+    meio = (estado:altura * 16) / 2 + 52
+    tela.grafica::cor(:branco)
+    tela.grafica::retangulo(38, meio - 28, estado:largura * 16 - 6, meio + 30)
+    tela.grafica::cor(:preto)
+    tela.grafica::retangulo(40, meio - 26, estado:largura * 16 - 8, meio + 28)
+    tela.grafica::cor(:branco)
+    tela.grafica::texto(55, meio - 15, titulo, 12)
+    tela.grafica::texto(55, meio + 9, subtitulo, 8)
+}
+
+quadro = funcao(tela, estado) {
+    tela.grafica::fundo(:preto)
+    tela.grafica::apague()
+    tela.grafica::cor(:ciano)
+    tela.grafica::texto(16, 8, "LABIRINTO", 20)
+    tela.grafica::cor(:branco)
+    painel = "Chaves: " + estado:coletadas + "/3  Passos: " + estado:passos
+    tela.grafica::texto(16, 34, painel, 8)
+    para y em 0..estado:altura {
+        para x em 0..estado:largura {
+            se estado:mundo[y][x] == 0 {
+                tela.grafica::cor(:azul)
+                tela.grafica::retangulo(16 + x * 16, 52 + y * 16, 30 + x * 16, 66 + y * 16)
+            }
+        }
+    }
+    tela.grafica::cor(:normal)
+    para ponto em estado:caminho {
+        x = 24 + ponto[0] * 16
+        y = 60 + ponto[1] * 16
+        tela.grafica::retangulo(x - 2, y - 2, x + 2, y + 2)
+    }
+    tela.grafica::cor(se estado:coletadas == 3 { :verde } senao { :vermelho })
+    x = 16 + estado:saida[0] * 16
+    y = 52 + estado:saida[1] * 16
+    tela.grafica::retangulo(x + 2, y + 2, x + 13, y + 13)
+    para chave em estado:chaves {
+        se nao chave:coletada {
+            x = 24 + chave:coluna * 16
+            y = 60 + chave:linha * 16
+            tela.grafica::cor(:amarelo)
+            tela.grafica::circulo(x - 3, y - 2, 3)
+            tela.grafica::linha(x, y, x + 5, y + 5)
+            tela.grafica::linha(x + 3, y + 3, x + 5, y + 1)
+        }
+    }
+    x = 16 + estado:coluna * 16
+    y = 52 + estado:linha * 16
+    tela.grafica::cor(:ciano)
+    tela.grafica::retangulo(x + 3, y + 3, x + 12, y + 12)
+    tela.grafica::cor(:branco)
+    tela.grafica::ponto(x + 5, y + 6)
+    tela.grafica::ponto(x + 10, y + 6)
+    rodape = 52 + estado:altura * 16 + 10
+    tela.grafica::texto(16, rodape, "Setas/WASD: andar  H: mostrar caminho", 8)
+    tela.grafica::texto(16, rodape + 14, "P: pausa  R: novo labirinto  Esc: sair", 8)
+    tela.grafica::cor(:amarelo)
+    resumo = se estado:coletadas < 3 { "Colete as 3 chaves para abrir a saída" } senao { "Saída aberta! Procure o quadrado verde" }
+    tela.grafica::texto(16, rodape + 28, resumo, 8)
+    tela.grafica::cor(:branco)
+    tela.grafica::texto(16, rodape + 42, "Tempo: " + mat::piso(estado:tempo) + " s", 8)
+    se estado:venceu { aviso(tela, estado, "VOCÊ SAIU!", "R para um novo desafio") }
+    ou se estado:pausado { aviso(tela, estado, "PAUSADO", "P para continuar") }
+}

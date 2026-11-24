@@ -1,0 +1,66 @@
+/// Monta uma matriz a partir de uma lista de listas de números.
+///
+/// Todas as linhas precisam ter o mesmo comprimento. Índices em 0: A[0, 1].
+/// A[0] é a linha como lista.
+///
+/// Exemplo: matriz([[1, 2], [3, 4]])
+matriz = funcao(linhas) { 0 }
+
+/// Troca linhas por colunas.
+///
+/// Exemplo: transposta(A)
+transposta = funcao(matriz) { 0 }
+
+/// Determinante (1×1, 2×2 ou 3×3).
+///
+/// Exemplo: det(A)
+det = funcao(matriz) { 0 }
+
+/// Matriz identidade n×n.
+///
+/// Exemplo: identidade(3)
+identidade = funcao(n) { 0 }
+
+/// Matriz só de zeros. Um argumento: n×n.
+///
+/// Dois argumentos: linhas × colunas. Inteiro >= 1.
+///
+/// Exemplo: zeros(2, 3)
+zeros = funcao(n) { 0 }
+zeros = funcao(linhas, colunas) { 0 }
+
+/// Matriz só de uns. Um argumento: n×n.
+///
+/// Como zeros, mas preenchida com 1.
+///
+/// Exemplo: uns(2, 3)
+uns = funcao(n) { 0 }
+uns = funcao(linhas, colunas) { 0 }
+
+/// Matriz retangular preenchida com o mesmo número.
+///
+/// Exemplo: cheia(2, 3, 7)
+cheia = funcao(linhas, colunas, valor) { 0 }
+
+/// Quantidade de linhas da matriz.
+///
+/// Exemplo: linhas(A)
+linhas = funcao(matriz) { 0 }
+
+/// Quantidade de colunas da matriz.
+///
+/// Exemplo: colunas(A)
+colunas = funcao(matriz) { 0 }
+
+/// Lê ou altera a célula em (x, y): x é a coluna e y é a linha.
+///
+/// xy(matriz, x, y) lê matriz[y, x]. Com valor, altera essa célula e
+/// devolve a mesma matriz, permitindo encadear chamadas. A alteração é
+/// visível por outras referências à matriz. Valor deve ser um número.
+/// Coordenadas inteiras em base zero, com os mesmos limites do acesso
+/// por índices. Fora da matriz é erro. Importe "matriz" antes de usar.
+///
+/// Exemplo: A.xy(2, 0)
+/// Exemplo: A.xy(2, 0, 9)
+xy = funcao(matriz, x, y) { 0 }
+xy = funcao(matriz, x, y, valor) { 0 }

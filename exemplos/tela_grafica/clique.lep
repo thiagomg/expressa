@@ -1,0 +1,21 @@
+importe "sistema"
+// Clique na janela para desenhar um círculo. Pressione Q ou feche a janela para sair.
+
+tela_grafica = importe "tela_grafica"
+
+g = tela_grafica::nova(320, 200)
+g.tela_grafica::cor(:azul)
+g.tela_grafica::mostre()
+
+enquanto verdadeiro
+inicio
+    ev = g.tela_grafica::evento()
+    se ev:sair ou ev:apertadas contem :q { pare }
+    para acontecimento em ev:eventos {
+        se acontecimento:tipo == :clique {
+            g.tela_grafica::circulo(acontecimento:x, acontecimento:y, 8)
+            g.tela_grafica::mostre()
+        }
+    }
+    durma(0.02)
+fim

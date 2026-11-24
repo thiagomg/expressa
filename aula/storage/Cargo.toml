@@ -1,0 +1,13 @@
+[package]
+name = "expressa-aula-storage"
+version.workspace = true
+edition.workspace = true
+rust-version = "1.89"
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+sha2 = "0.11"
+tempfile = "3.27"

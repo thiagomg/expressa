@@ -1,0 +1,103 @@
+use crate::lexer::Span;
+use crate::parser::block_types::Block;
+use crate::parser::expression_types::Expr;
+use crate::parser::operator_types::BinaryOp;
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum Stmt {
+    /// Expression used only for effect (e.g. escreva("Thiago") or any other call); value discarded.
+    Expr { expr: Expr, span: Span },
+
+    /// `alvo = valor`
+    Assign {
+        target: AssignTarget,
+        /// Preserve +=/-= so the evaluator resolves the destination only once.
+        compound: Option<BinaryOp>,
+        value: Expr,
+        span: Span,
+        /// `///` immediately above this assignment (functions also copy it
+        /// onto `Expr::Function.doc`).
+        doc: Option<String>,
+    },
+
+    /// `repita n vezes inicio ... fim`
+    Repita {
+        count: Expr,
+        body: Block,
+        span: Span,
+    },
+
+    /// `para x em lista` / `para i em 0..n`
+    ParaIn {
+        var: String,
+        iter: Expr,
+        body: Block,
+        span: Span,
+    },
+
+    /// `enquanto condicao inicio ... fim`
+    Enquanto { cond: Expr, body: Block, span: Span },
+
+    /// `retorne` or `retorne expr` — leaves the enclosing `funcao`.
+    Retorne { value: Option<Expr>, span: Span },
+
+    /// Leaves the innermost `para` / `enquanto` / `repita`.
+    Pare { span: Span },
+
+    /// Next iteration of the innermost loop.
+    Continue { span: Span },
+}
+
+/// Left-hand side of `=`.
+#[derive(Debug, Clone, PartialEq)]
+pub enum AssignTarget {
+    Name {
+        name: String,
+        span: Span,
+    },
+    /// `lista[i]`, `mapa[k]` or `texto[i]` (not a slice).
+    Index {
+        object: Expr,
+        index: Expr,
+        span: Span,
+    },
+    /// `m[i, j]`
+    Index2 {
+        object: Expr,
+        row: Expr,
+        col: Expr,
+        span: Span,
+    },
+    /// `pessoa:nome = ...`
+    MapField {
+        object: Expr,
+        field: String,
+        span: Span,
+    },
+}
+
+impl Stmt {
+    pub fn span(&self) -> Span {
+        match self {
+            Stmt::Expr { span, .. }
+            | Stmt::Assign { span, .. }
+            | Stmt::Repita { span, .. }
+            | Stmt::ParaIn { span, .. }
+            | Stmt::Enquanto { span, .. }
+            | Stmt::Retorne { span, .. }
+            | Stmt::Pare { span, .. }
+            | Stmt::Continue { span, .. } => *span,
+        }
+    }
+}
+
+impl AssignTarget {
+    pub fn span(&self) -> Span {
+        match self {
+            AssignTarget::Name { span, .. }
+            | AssignTarget::Index { span, .. }
+            | AssignTarget::Index2 { span, .. }
+            | AssignTarget::MapField { span, .. } => *span,
+        }
+    }
+}

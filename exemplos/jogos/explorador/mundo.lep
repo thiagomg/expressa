@@ -1,0 +1,216 @@
+/// Mundo 2D: a simulação pode ser testada sem abrir janela.
+tela = importe "tela_grafica"
+mat = importe "mat"
+
+terreno = [
+    "########################",
+    "#.......#..............#",
+    "#.......#..............#",
+    "#.......#.......######.#",
+    "#.......#.......#......#",
+    "#.......#..............#",
+    "#.......#.......#......#",
+    "#...............#......#",
+    "#.......#.......######.#",
+    "#.......#..............#",
+    "#.###.########.#######.#",
+    "#.......#..............#",
+    "#......................#",
+    "#......................#",
+    "#......................#",
+    "########################",
+]
+
+reinicie = função(estado) {
+    estado:x = 32
+    estado:y = 32
+    estado:tempo = 0
+    estado:animacao = 0
+    estado:quadro = 0
+    estado:direcao = :baixo
+    estado:andando = falso
+    estado:colidiu = falso
+    estado:camera_x = 0
+    estado:camera_y = 0
+    estado:coletados = 0
+    estado:cristais = [
+        mapa([:coluna -> 5, :linha -> 4, :coletado -> falso]),
+        mapa([:coluna -> 12, :linha -> 6, :coletado -> falso]),
+        mapa([:coluna -> 20, :linha -> 12, :coletado -> falso]),
+    ]
+    estado
+}
+
+novo = função() {
+    estado = mapa([:mapa -> terreno])
+    reinicie(estado)
+}
+
+solido = função(estado, coluna, linha) {
+    se linha < 0 ou linha >= tamanho(estado:mapa) ou coluna < 0 ou coluna >= tamanho(estado:mapa[0]) {
+        verdadeiro
+    } senao {
+        estado:mapa[linha][coluna] == "#"
+    }
+}
+
+// A caixa de colisão cobre os pés: 10 por 10 pixels.
+colide = função(estado, x, y) {
+    esquerda = mat::piso(x / 16)
+    direita = mat::piso((x + 9.999) / 16)
+    cima = mat::piso(y / 16)
+    baixo = mat::piso((y + 9.999) / 16)
+    (solido(estado, esquerda, cima) ou solido(estado, direita, cima) ou
+        solido(estado, esquerda, baixo) ou solido(estado, direita, baixo))
+}
+
+avance = função(estado, teclas, dt) {
+    // Uma pausa longa não deve lançar o personagem através do mapa.
+    dt = se dt < 0 { 0 } ou se dt > 0.25 { 0.25 } senao { dt }
+    estado:tempo += dt
+    horizontal = 0
+    vertical = 0
+    se teclas contem :esquerda { horizontal -= 1 }
+    se teclas contem :direita { horizontal += 1 }
+    se teclas contem :cima { vertical -= 1 }
+    se teclas contem :baixo { vertical += 1 }
+    se horizontal != 0 {
+        estado:direcao = se horizontal > 0 { :direita } senao { :esquerda }
+    } ou se vertical != 0 {
+        estado:direcao = se vertical > 0 { :baixo } senao { :cima }
+    }
+    velocidade = se teclas contem :shift { 144 } senao { 72 }
+    se horizontal != 0 e vertical != 0 { velocidade = velocidade / mat::raiz(2) }
+    dx = horizontal * velocidade * dt
+    dy = vertical * velocidade * dt
+    distancia_x = se dx < 0 { -dx } senao { dx }
+    distancia_y = se dy < 0 { -dy } senao { dy }
+    distancia = se distancia_x > distancia_y { distancia_x } senao { distancia_y }
+    passos = mat::teto(distancia / 2)
+    anterior_x = estado:x
+    anterior_y = estado:y
+    estado:colidiu = falso
+    se passos > 0 {
+        // Subpassos de até dois pixels evitam atravessar paredes em quadros lentos.
+        passo_x = dx / passos
+        passo_y = dy / passos
+        repita passos vezes {
+            se nao colide(estado, estado:x + passo_x, estado:y) {
+                estado:x += passo_x
+            } senao { estado:colidiu = verdadeiro }
+            se nao colide(estado, estado:x, estado:y + passo_y) {
+                estado:y += passo_y
+            } senao { estado:colidiu = verdadeiro }
+        }
+    }
+    estado:andando = estado:x != anterior_x ou estado:y != anterior_y
+    se estado:andando {
+        estado:animacao += dt
+        estado:quadro = 1 + mat::piso(estado:animacao * 8) % 2
+    } senao {
+        estado:animacao = 0
+        estado:quadro = 0
+    }
+    para cristal em estado:cristais {
+        cx = cristal:coluna * 16 + 8 - estado:x - 5
+        cy = cristal:linha * 16 + 8 - estado:y - 5
+        se nao cristal:coletado e cx * cx + cy * cy < 100 {
+            cristal:coletado = verdadeiro
+            estado:coletados += 1
+        }
+    }
+    camera_x = estado:x + 5 - 120
+    camera_y = estado:y + 5 - 72
+    limite_x = tamanho(estado:mapa[0]) * 16 - 240
+    limite_y = tamanho(estado:mapa) * 16 - 144
+    estado:camera_x = se camera_x < 0 { 0 } ou se camera_x > limite_x { limite_x } senao { camera_x }
+    estado:camera_y = se camera_y < 0 { 0 } ou se camera_y > limite_y { limite_y } senao { camera_y }
+    estado
+}
+
+retangulo = função(g, cor, x1, y1, x2, y2) {
+    g.tela::cor(cor)
+    g.tela::retangulo(x1, y1, x2, y2)
+}
+
+sprite = função(direcao, quadro) {
+    g = tela::nova(12, 16)
+    g.tela::fundo(:transparente)
+    g.retangulo(:preto, 3, 1, 8, 4)
+    g.retangulo(:amarelo, 3, 4, 8, 7)
+    g.retangulo(:vermelho, 2, 8, 9, 12)
+    g.retangulo(:amarelo, 1, 9, 2, 11)
+    g.retangulo(:amarelo, 9, 9, 10, 11)
+    g.retangulo(:azul, 3, 13, 5, 14)
+    g.retangulo(:azul, 6, 13, 8, 14)
+    pe_esquerdo = se quadro == 1 { 14 } senao { 15 }
+    pe_direito = se quadro == 2 { 14 } senao { 15 }
+    g.retangulo(:preto, 3, pe_esquerdo, 5, pe_esquerdo)
+    g.retangulo(:preto, 6, pe_direito, 8, pe_direito)
+    se direcao == :cima {
+        g.retangulo(:preto, 3, 3, 8, 7)
+        g.retangulo(:verde, 4, 9, 7, 11)
+    } ou se direcao == :baixo {
+        g.retangulo(:preto, 4, 5, 4, 5)
+        g.retangulo(:preto, 7, 5, 7, 5)
+    } ou se direcao == :direita {
+        g.retangulo(:preto, 3, 3, 4, 7)
+        g.retangulo(:preto, 8, 5, 8, 5)
+    } senao {
+        g.retangulo(:preto, 7, 3, 8, 7)
+        g.retangulo(:preto, 3, 5, 3, 5)
+    }
+    g.tela::como_imagem()
+}
+
+arte = função(estado) {
+    largura = tamanho(estado:mapa[0]) * 16
+    altura = tamanho(estado:mapa) * 16
+    g = tela::nova(largura, altura)
+    para linha em 0..tamanho(estado:mapa) {
+        para coluna em 0..tamanho(estado:mapa[linha]) {
+            x = coluna * 16
+            y = linha * 16
+            se solido(estado, coluna, linha) {
+                g.retangulo(:azul, x, y, x + 15, y + 15)
+                g.retangulo(:ciano, x + 1, y + 1, x + 14, y + 2)
+                g.retangulo(:preto, x, y + 15, x + 15, y + 15)
+                g.retangulo(:preto, x + 15, y, x + 15, y + 15)
+            } senao {
+                g.retangulo(:branco, x, y, x + 15, y + 15)
+                se (linha + coluna) % 3 == 0 {
+                    g.retangulo(:verde, x + 3, y + 10, x + 3, y + 11)
+                    g.retangulo(:verde, x + 4, y + 9, x + 4, y + 10)
+                }
+            }
+        }
+    }
+    animacoes = mapa()
+    para direcao em [:baixo, :cima, :esquerda, :direita] {
+        animacoes[direcao] = [sprite(direcao, 0), sprite(direcao, 1), sprite(direcao, 2)]
+    }
+    mapa([:mapa -> g.tela::como_imagem(), :sprites -> animacoes])
+}
+
+desenhe = função(g, estado, imagens) {
+    cx = estado:camera_x
+    cy = estado:camera_y
+    largura = tamanho(estado:mapa[0]) * 16
+    altura = tamanho(estado:mapa) * 16
+    g.tela::imagem(imagens:mapa, largura / 2 - cx, altura / 2 - cy)
+    para cristal em estado:cristais {
+        se nao cristal:coletado {
+            x = cristal:coluna * 16 + 8 - cx
+            y = cristal:linha * 16 + 8 - cy
+            cor = se mat::piso(estado:tempo * 4) % 2 == 0 { :amarelo } senao { :vermelho }
+            g.retangulo(cor, x - 2, y - 3, x + 2, y + 3)
+            g.retangulo(:branco, x, y - 2, x, y)
+        }
+    }
+    figura = imagens:sprites[estado:direcao][estado:quadro]
+    g.tela::imagem(figura, estado:x + 5 - cx, estado:y + 2 - cy)
+    g.retangulo(:preto, 0, 144, 239, 159)
+    g.tela::cor(:branco)
+    texto = se estado:coletados == 3 { "Todos coletados! R: reiniciar" } senao { formate("Cristais {}/3  R: reiniciar", estado:coletados) }
+    g.tela::texto(4, 148, texto)
+}

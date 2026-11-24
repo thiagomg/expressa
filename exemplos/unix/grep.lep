@@ -1,0 +1,73 @@
+#!/usr/bin/env expressa
+
+importe "arquivo"
+importe "lib/linha_cmd"
+
+ajuda = função()
+início
+    escreva("Para ler texto enviado por outro comando (entrada padrão):")
+    escreva("cat meu-arq.txt | grep.lep <o-que-procurar>")
+    escreva("")
+    escreva("Para ler um ou mais arquivos:")
+    escreva("grep.lep [opções] <o-que-procurar> meu-arq.txt meu-arq-2.txt ...")
+    escreva("Opções:")
+    escreva("-h ou --humanos: mostra o nome de cada arquivo como cabeçalho")
+fim
+
+exec_grep = funcao(args)
+início
+    se args:pos.tamanho() == 1
+    inicio
+        // 1 argumento significa que arquivos não foram passados como
+        // argumento da aplicação
+        linhas = leia_linhas()
+        padrão = args:pos[0]
+        grep_linhas(linhas, padrão, "")
+    fim
+    senao
+    inicio
+        padrão = args:pos[0]
+        
+        // Pulando o arg 1, já que ele é o padrão a ser procurado
+        para i em 1..args:pos.tamanho()
+        inicio
+            arg = args:pos[i]
+            prefixo = se args:op contém "h" ou args:op contém "humanos"
+            inicio
+                escreva("====", arg, "================")
+                ""
+            fim
+            senão
+            inicio
+                arg + " - "
+            fim
+
+            grep_linhas(leia_arquivo(arg), padrão, prefixo)
+        fim
+    fim
+fim
+
+grep_linhas = função(linhas, padrão, prefixo)
+início
+    
+    num = 0
+    para linha em linhas
+    inicio
+        num = num + 1
+    	se linha contem padrão
+	    inicio
+            escreva(prefixo + num + ":", linha)
+        fim
+    fim 
+fim
+
+args = separa_args(argumentos, [])
+
+se args:pos.tamanho() == 0 ou args:op contem "ajuda"
+inicio
+    ajuda()
+fim
+senao
+inicio
+    exec_grep(args)
+fim

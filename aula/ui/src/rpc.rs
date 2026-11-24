@@ -1,0 +1,667 @@
+use expressa_aula_proto::turma_client::TurmaClient;
+use expressa_aula_proto::{
+    CreateProjectRequest, DeleteFileRequest, ListFilesRequest, ListProjectsRequest, MkdirRequest,
+    ReadFileBytesRequest, ReadFileRequest, RenameRequest, TreeEntry, WriteFileBytesRequest,
+    WriteFileRequest,
+};
+use std::process::Child;
+use std::sync::Mutex;
+use std::sync::atomic::{AtomicU32, Ordering};
+
+use tonic::transport::{Channel, Endpoint};
+
+#[cfg(windows)]
+const PROCESS_TERMINATE: u32 = 0x0001;
+#[cfg(windows)]
+const SYNCHRONIZE: u32 = 0x0010_0000;
+#[cfg(all(windows, test))]
+const WAIT_TIMEOUT: u32 = 0x0000_0102;
+
+#[cfg(windows)]
+unsafe extern "system" {
+    fn OpenProcess(access: u32, inherit: i32, pid: u32) -> *mut std::ffi::c_void;
+    fn TerminateProcess(process: *mut std::ffi::c_void, exit_code: u32) -> i32;
+    fn CloseHandle(handle: *mut std::ffi::c_void) -> i32;
+    fn WaitForSingleObject(handle: *mut std::ffi::c_void, millis: u32) -> u32;
+    fn SetConsoleCtrlHandler(
+        handler: Option<unsafe extern "system" fn(u32) -> i32>,
+        add: i32,
+    ) -> i32;
+    fn ExitProcess(code: u32) -> !;
+}
+
+static SPAWNED_PID: Mutex<Option<u32>> = Mutex::new(None);
+static SPAWNED_PID_ATOMIC: AtomicU32 = AtomicU32::new(0);
+
+fn pidfile() -> std::path::PathBuf {
+    std::env::temp_dir().join("expressa-aula-server.pid")
+}
+
+#[cfg(any(unix, test))]
+fn pid_is_alive(pid: u32) -> bool {
+    #[cfg(unix)]
+    {
+        std::process::Command::new("kill")
+            .args(["-0", &pid.to_string()])
+            .status()
+            .map(|s| s.success())
+            .unwrap_or(false)
+    }
+    #[cfg(windows)]
+    {
+        // `kill -0` does not exist here. Wait with timeout 0: still running
+        // means the wait timed out.
+        unsafe {
+            let handle = OpenProcess(SYNCHRONIZE, 0, pid);
+            if handle.is_null() {
+                return false;
+            }
+            let alive = WaitForSingleObject(handle, 0) == WAIT_TIMEOUT;
+            CloseHandle(handle);
+            alive
+        }
+    }
+}
+
+fn kill_pid(pid: u32) {
+    #[cfg(unix)]
+    {
+        let _ = std::process::Command::new("kill")
+            .args(["-TERM", &pid.to_string()])
+            .status();
+        std::thread::sleep(std::time::Duration::from_millis(80));
+        if pid_is_alive(pid) {
+            let _ = std::process::Command::new("kill")
+                .args(["-KILL", &pid.to_string()])
+                .status();
+        }
+    }
+    #[cfg(windows)]
+    {
+        // No SIGTERM. TerminateProcess is the same end state as `kill -KILL`.
+        unsafe {
+            let handle = OpenProcess(PROCESS_TERMINATE | SYNCHRONIZE, 0, pid);
+            if handle.is_null() {
+                return;
+            }
+            TerminateProcess(handle, 1);
+            WaitForSingleObject(handle, 2000);
+            CloseHandle(handle);
+        }
+    }
+}
+
+/// Ctrl+C / SIGTERM (and, on Windows, closing the console): kill the child
+/// then exit. GTK does not run Drop on those paths.
+pub fn install_signal_handlers() {
+    #[cfg(unix)]
+    unsafe {
+        libc::signal(
+            libc::SIGINT,
+            on_fatal_signal as *const () as libc::sighandler_t,
+        );
+        libc::signal(
+            libc::SIGTERM,
+            on_fatal_signal as *const () as libc::sighandler_t,
+        );
+    }
+    #[cfg(windows)]
+    unsafe {
+        SetConsoleCtrlHandler(Some(on_console_ctrl), 1);
+    }
+}
+
+#[cfg(unix)]
+extern "C" fn on_fatal_signal(sig: i32) {
+    let pid = SPAWNED_PID_ATOMIC.swap(0, Ordering::SeqCst);
+    if pid != 0 {
+        unsafe {
+            libc::kill(pid as i32, libc::SIGKILL);
+        }
+    }
+    unsafe {
+        libc::_exit(128 + sig);
+    }
+}
+
+#[cfg(windows)]
+unsafe extern "system" fn on_console_ctrl(ctrl: u32) -> i32 {
+    const CTRL_C_EVENT: u32 = 0;
+    const CTRL_BREAK_EVENT: u32 = 1;
+    const CTRL_CLOSE_EVENT: u32 = 2;
+    const CTRL_LOGOFF_EVENT: u32 = 5;
+    const CTRL_SHUTDOWN_EVENT: u32 = 6;
+    match ctrl {
+        CTRL_C_EVENT | CTRL_BREAK_EVENT | CTRL_CLOSE_EVENT | CTRL_LOGOFF_EVENT
+        | CTRL_SHUTDOWN_EVENT => {
+            let pid = SPAWNED_PID_ATOMIC.swap(0, Ordering::SeqCst);
+            if pid != 0 {
+                kill_pid(pid);
+            }
+            // Closing the console ends the process when the handler returns.
+            // Ctrl+C would otherwise leave the IDE running.
+            if ctrl == CTRL_CLOSE_EVENT {
+                1
+            } else {
+                unsafe { ExitProcess(128 + ctrl) }
+            }
+        }
+        _ => 0,
+    }
+}
+
+pub struct Rpc {
+    pub endpoint: String,
+    rt: tokio::runtime::Runtime,
+    channel: Channel,
+    /// Set only when this client started `expressa-aula-server`.
+    spawned_server: Option<Child>,
+}
+
+/// Longest a single request may take. Most calls now run off the GTK thread,
+/// but the few that still block it (open, save, rename…) must not hang the
+/// window forever when the server stops answering.
+const TEMPO_POR_PEDIDO: std::time::Duration = std::time::Duration::from_secs(10);
+
+impl Rpc {
+    pub fn connect(url: &str) -> Result<Self, String> {
+        // The window is built only after this returns. Without a limit, a
+        // closed port on Windows can sit in the TCP timeout for several
+        // seconds and the click looks like it did nothing.
+        Self::connect_within(url, std::time::Duration::from_secs(3))
+    }
+
+    fn connect_within(url: &str, limit: std::time::Duration) -> Result<Self, String> {
+        let normalized = crate::identidade::normalize_endpoint(url)?;
+        let threads = std::thread::available_parallelism()
+            .map(|n| n.get().clamp(1, 2))
+            .unwrap_or(1);
+        let rt = tokio::runtime::Builder::new_multi_thread()
+            .worker_threads(threads)
+            .max_blocking_threads(4)
+            .enable_all()
+            .build()
+            .map_err(|e| e.to_string())?;
+        let flag = crate::background::current_cancellation();
+        let channel = rt
+            .block_on(cancellable(
+                async {
+                    Endpoint::from_shared(normalized.clone())
+                        .map_err(|e| e.to_string())?
+                        .connect_timeout(limit)
+                        .timeout(TEMPO_POR_PEDIDO)
+                        .connect()
+                        .await
+                        .map_err(|e| e.to_string())
+                },
+                flag,
+            ))
+            .map_err(|_| "operação cancelada".to_string())??;
+        Ok(Self {
+            endpoint: normalized,
+            rt,
+            channel,
+            spawned_server: None,
+        })
+    }
+
+    /// Kill the server only if this UI process launched it. Connecting to a
+    /// remote server must not stop whatever is recorded in the pid file.
+    pub fn shutdown_spawned_server(&mut self) {
+        let Some(mut child) = self.spawned_server.take() else {
+            return;
+        };
+        let pid = child.id();
+        let _ = child.kill();
+        let _ = child.wait();
+        kill_pid(pid);
+        if SPAWNED_PID_ATOMIC.load(Ordering::SeqCst) == pid {
+            SPAWNED_PID_ATOMIC.store(0, Ordering::SeqCst);
+        }
+        if let Ok(mut guard) = SPAWNED_PID.lock()
+            && *guard == Some(pid)
+        {
+            *guard = None;
+        }
+        if std::fs::read_to_string(pidfile())
+            .ok()
+            .and_then(|s| s.trim().parse::<u32>().ok())
+            == Some(pid)
+        {
+            let _ = std::fs::remove_file(pidfile());
+        }
+    }
+}
+
+impl Drop for Rpc {
+    fn drop(&mut self) {
+        self.shutdown_spawned_server();
+    }
+}
+
+/// The server writes refusals (`já existe …`, bad paths) for the user; show
+/// those as they are, and the full status for anything unexpected.
+fn mensagem(status: tonic::Status) -> String {
+    let texto = status.message();
+    match status.code() {
+        tonic::Code::AlreadyExists
+        | tonic::Code::InvalidArgument
+        | tonic::Code::NotFound
+        | tonic::Code::FailedPrecondition
+        | tonic::Code::OutOfRange
+        | tonic::Code::Aborted
+        | tonic::Code::Cancelled => texto.to_string(),
+        tonic::Code::Unavailable => format!("servidor indisponível: {texto}"),
+        tonic::Code::DeadlineExceeded => format!("o servidor demorou demais: {texto}"),
+        tonic::Code::ResourceExhausted if texto.contains("servidor ocupado") => texto.to_string(),
+        tonic::Code::ResourceExhausted => format!("servidor ocupado: {texto}"),
+        _ => texto.to_string(),
+    }
+}
+
+fn servidor_ocupado(status: &tonic::Status) -> bool {
+    status.code() == tonic::Code::ResourceExhausted && status.message().contains("servidor ocupado")
+}
+
+fn cancelado_agora() -> bool {
+    crate::background::current_cancellation().is_some_and(|flag| flag.load(Ordering::Acquire))
+}
+
+/// Retry only a busy disk slot. Stop when the student cancelled the operation.
+fn pausa_se_ocupado(status: &tonic::Status, tentativa: u32) -> Result<(), String> {
+    const TENTATIVAS: u32 = 5;
+    if cancelado_agora() {
+        return Err("operação cancelada".into());
+    }
+    if !servidor_ocupado(status) || tentativa + 1 >= TENTATIVAS {
+        return Err(mensagem(status.clone()));
+    }
+    let espera = std::time::Duration::from_millis(200 << tentativa);
+    std::thread::sleep(espera.min(std::time::Duration::from_millis(1600)));
+    if cancelado_agora() {
+        return Err("operação cancelada".into());
+    }
+    Ok(())
+}
+
+fn nao_e_texto(status: &tonic::Status) -> bool {
+    if status.code() != tonic::Code::InvalidArgument {
+        return false;
+    }
+    let m = status.message().to_lowercase();
+    m.contains("não é texto")
+        || m.contains("nao e texto")
+        || m.contains("utf-8")
+        || m.contains("utf8")
+}
+
+async fn cancellable<F: std::future::Future>(
+    future: F,
+    flag: Option<std::sync::Arc<std::sync::atomic::AtomicBool>>,
+) -> Result<F::Output, ()> {
+    let Some(flag) = flag else {
+        return Ok(future.await);
+    };
+    tokio::pin!(future);
+    loop {
+        if flag.load(Ordering::Acquire) {
+            return Err(());
+        }
+        tokio::select! {
+            value = &mut future => return Ok(value),
+            _ = tokio::time::sleep(std::time::Duration::from_millis(10)) => {},
+        }
+    }
+}
+
+impl Rpc {
+    fn wait<T>(
+        &self,
+        future: impl std::future::Future<Output = Result<T, tonic::Status>>,
+    ) -> Result<T, tonic::Status> {
+        let flag = crate::background::current_cancellation();
+        self.rt
+            .block_on(cancellable(future, flag))
+            .map_err(|_| tonic::Status::cancelled("operação cancelada"))?
+    }
+    /// The student's projects, sorted.
+    pub fn list_projects(&self, student: &str) -> Result<Vec<String>, String> {
+        for tentativa in 0..5 {
+            let mut c = TurmaClient::new(self.channel.clone());
+            match self.wait(c.list_projects(ListProjectsRequest {
+                student: student.to_string(),
+            })) {
+                Ok(resp) => return Ok(resp.into_inner().projects),
+                Err(e) => pausa_se_ocupado(&e, tentativa)?,
+            }
+        }
+        Err("servidor ocupado; tente novamente".into())
+    }
+
+    /// Fails with `já existe o projeto …` when it exists.
+    pub fn create_project(&self, student: &str, project: &str) -> Result<(), String> {
+        let mut c = TurmaClient::new(self.channel.clone());
+        self.wait(c.create_project(CreateProjectRequest {
+            student: student.to_string(),
+            project: project.to_string(),
+        }))
+        .map_err(mensagem)?;
+        Ok(())
+    }
+
+    pub fn list_tree(&self, student: &str, project: &str) -> Result<Vec<TreeEntry>, String> {
+        for tentativa in 0..5 {
+            let mut c = TurmaClient::new(self.channel.clone());
+            match self.wait(c.list_files(ListFilesRequest {
+                student: student.to_string(),
+                project: project.to_string(),
+            })) {
+                Ok(resp) => return Ok(resp.into_inner().entries),
+                Err(e) => pausa_se_ocupado(&e, tentativa)?,
+            }
+        }
+        Err("servidor ocupado; tente novamente".into())
+    }
+
+    pub fn current_text(
+        &self,
+        student: &str,
+        project: &str,
+        path: &str,
+    ) -> Result<Option<crate::store::TextSnapshot>, String> {
+        for tentativa in 0..5 {
+            let mut c = TurmaClient::new(self.channel.clone());
+            match self.wait(c.read_file(ReadFileRequest {
+                student: student.to_string(),
+                project: project.to_string(),
+                path: path.to_string(),
+            })) {
+                Ok(response) => {
+                    let response = response.into_inner();
+                    return Ok(Some(crate::store::TextSnapshot {
+                        text: response.source,
+                        revision: (!response.revision.is_empty()).then_some(response.revision),
+                    }));
+                }
+                Err(e) if e.code() == tonic::Code::NotFound => return Ok(None),
+                Err(e) if nao_e_texto(&e) => {
+                    return Err(crate::store::ARQUIVO_NAO_E_TEXTO.into());
+                }
+                Err(e) => pausa_se_ocupado(&e, tentativa)?,
+            }
+        }
+        Err("servidor ocupado; tente novamente".into())
+    }
+
+    /// Whole-file bytes. An older server without this RPC falls back to
+    /// `ReadFile` for UTF-8 files and reports a typed error for the rest.
+    pub fn current_bytes(
+        &self,
+        student: &str,
+        project: &str,
+        path: &str,
+    ) -> Result<Option<expressa_aula_storage::Snapshot>, String> {
+        for tentativa in 0..5 {
+            let mut c = TurmaClient::new(self.channel.clone());
+            match self.wait(c.read_file_bytes(ReadFileBytesRequest {
+                student: student.to_string(),
+                project: project.to_string(),
+                path: path.to_string(),
+            })) {
+                Ok(response) => {
+                    let response = response.into_inner();
+                    return Ok(Some(expressa_aula_storage::Snapshot {
+                        bytes: response.contents,
+                        revision: response.revision,
+                    }));
+                }
+                Err(e) if e.code() == tonic::Code::NotFound => return Ok(None),
+                Err(e) if e.code() == tonic::Code::Unimplemented => {
+                    return self.current_bytes_via_text(student, project, path);
+                }
+                Err(e) => pausa_se_ocupado(&e, tentativa)?,
+            }
+        }
+        Err("servidor ocupado; tente novamente".into())
+    }
+
+    fn current_bytes_via_text(
+        &self,
+        student: &str,
+        project: &str,
+        path: &str,
+    ) -> Result<Option<expressa_aula_storage::Snapshot>, String> {
+        let mut c = TurmaClient::new(self.channel.clone());
+        match self.wait(c.read_file(ReadFileRequest {
+            student: student.to_string(),
+            project: project.to_string(),
+            path: path.to_string(),
+        })) {
+            Ok(response) => {
+                let response = response.into_inner();
+                let bytes = response.source.into_bytes();
+                let revision = if response.revision.is_empty() {
+                    expressa_aula_storage::revision(&bytes)
+                } else {
+                    response.revision
+                };
+                Ok(Some(expressa_aula_storage::Snapshot { bytes, revision }))
+            }
+            Err(e) if e.code() == tonic::Code::NotFound => Ok(None),
+            Err(e) if nao_e_texto(&e) => {
+                Err(format!("{} (`{path}`)", crate::store::SERVIDOR_SEM_BINARIO))
+            }
+            Err(e) => Err(mensagem(e)),
+        }
+    }
+
+    pub fn write_file(
+        &self,
+        student: &str,
+        project: &str,
+        path: &str,
+        source: &str,
+        expected: &expressa_aula_storage::Expected,
+    ) -> Result<expressa_aula_storage::Saved, expressa_aula_storage::SaveError> {
+        use expressa_aula_storage::{Expected, SaveError, Saved};
+        let (create_new, expected_revision) = match expected {
+            Expected::Missing => (true, String::new()),
+            Expected::Revision(revision) => (false, revision.clone()),
+            Expected::Unversioned => return Err(SaveError::Unsupported),
+        };
+        let mut c = TurmaClient::new(self.channel.clone());
+        let response = self
+            .wait(c.write_file_checked(WriteFileRequest {
+                student: student.to_string(),
+                project: project.to_string(),
+                path: path.to_string(),
+                source: source.to_string(),
+                create_new,
+                expected_revision,
+            }))
+            .map_err(|e| match e.code() {
+                tonic::Code::Aborted => SaveError::Conflict,
+                tonic::Code::AlreadyExists => SaveError::AlreadyExists,
+                tonic::Code::Unimplemented | tonic::Code::FailedPrecondition => {
+                    SaveError::Unsupported
+                }
+                _ => SaveError::Other(mensagem(e)),
+            })?
+            .into_inner();
+        if response.revision.is_empty() {
+            return Err(SaveError::Unsupported);
+        }
+        Ok(Saved {
+            revision: response.revision,
+            warning: (!response.warning.is_empty()).then_some(response.warning),
+        })
+    }
+
+    pub fn write_bytes(
+        &self,
+        student: &str,
+        project: &str,
+        path: &str,
+        contents: &[u8],
+        expected: &expressa_aula_storage::Expected,
+    ) -> Result<expressa_aula_storage::Saved, expressa_aula_storage::SaveError> {
+        use expressa_aula_storage::{Expected, SaveError, Saved};
+        let (create_new, expected_revision) = match expected {
+            Expected::Missing => (true, String::new()),
+            Expected::Revision(revision) => (false, revision.clone()),
+            Expected::Unversioned => return Err(SaveError::Unsupported),
+        };
+        let mut c = TurmaClient::new(self.channel.clone());
+        let response = self
+            .wait(c.write_file_bytes_checked(WriteFileBytesRequest {
+                student: student.to_string(),
+                project: project.to_string(),
+                path: path.to_string(),
+                contents: contents.to_vec(),
+                create_new,
+                expected_revision,
+            }))
+            .map_err(|e| match e.code() {
+                tonic::Code::Aborted => SaveError::Conflict,
+                tonic::Code::AlreadyExists => SaveError::AlreadyExists,
+                tonic::Code::Unimplemented => {
+                    SaveError::Other(crate::store::SERVIDOR_SEM_BINARIO.into())
+                }
+                tonic::Code::FailedPrecondition => SaveError::Unsupported,
+                _ => SaveError::Other(mensagem(e)),
+            })?
+            .into_inner();
+        if response.revision.is_empty() {
+            return Err(SaveError::Other(crate::store::SERVIDOR_SEM_BINARIO.into()));
+        }
+        Ok(Saved {
+            revision: response.revision,
+            warning: (!response.warning.is_empty()).then_some(response.warning),
+        })
+    }
+
+    pub fn delete_file(&self, student: &str, project: &str, path: &str) -> Result<(), String> {
+        let mut c = TurmaClient::new(self.channel.clone());
+        self.wait(c.delete_file(DeleteFileRequest {
+            student: student.to_string(),
+            project: project.to_string(),
+            path: path.to_string(),
+        }))
+        .map_err(mensagem)?;
+        Ok(())
+    }
+
+    pub fn mkdir(&self, student: &str, project: &str, path: &str) -> Result<(), String> {
+        let mut c = TurmaClient::new(self.channel.clone());
+        self.wait(c.mkdir(MkdirRequest {
+            student: student.to_string(),
+            project: project.to_string(),
+            path: path.to_string(),
+        }))
+        .map_err(mensagem)?;
+        Ok(())
+    }
+
+    pub fn rename(&self, student: &str, project: &str, from: &str, to: &str) -> Result<(), String> {
+        let mut c = TurmaClient::new(self.channel.clone());
+        self.wait(c.rename(RenameRequest {
+            student: student.to_string(),
+            project: project.to_string(),
+            from: from.to_string(),
+            to: to.to_string(),
+        }))
+        .map_err(mensagem)?;
+        Ok(())
+    }
+}
+
+#[cfg(all(test, windows))]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn kill_pid_stops_a_live_process() {
+        let mut child = std::process::Command::new("ping")
+            .args(["-n", "30", "127.0.0.1"])
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .spawn()
+            .expect("ping");
+        let pid = child.id();
+        assert!(pid_is_alive(pid), "processo recém-criado");
+        kill_pid(pid);
+        let _ = child.wait();
+        assert!(!pid_is_alive(pid), "processo encerrado");
+    }
+}
+
+#[cfg(test)]
+mod mensagem_tests {
+    use super::*;
+
+    #[test]
+    fn ocupado_nao_repete_o_prefixo() {
+        let status = tonic::Status::new(
+            tonic::Code::ResourceExhausted,
+            "servidor ocupado; tente novamente",
+        );
+        assert_eq!(mensagem(status), "servidor ocupado; tente novamente");
+        let outra = tonic::Status::new(tonic::Code::ResourceExhausted, "quota");
+        assert_eq!(mensagem(outra), "servidor ocupado: quota");
+    }
+
+    #[test]
+    fn quinta_tentativa_ocupada_devolve_a_frase_do_servidor() {
+        let status = tonic::Status::new(
+            tonic::Code::ResourceExhausted,
+            "servidor ocupado; tente novamente",
+        );
+        let err = pausa_se_ocupado(&status, 4).unwrap_err();
+        assert_eq!(err, "servidor ocupado; tente novamente");
+        let grande = tonic::Status::new(tonic::Code::OutOfRange, "arquivo grande demais");
+        assert_eq!(
+            pausa_se_ocupado(&grande, 0).unwrap_err(),
+            "arquivo grande demais"
+        );
+    }
+}
+
+#[cfg(test)]
+mod cancellation_tests {
+    use super::*;
+    #[test]
+    fn cancelling_a_background_operation_aborts_a_pending_rpc_future() {
+        use std::sync::{Arc, atomic::AtomicBool};
+        use std::time::{Duration, Instant};
+        let started = Arc::new(AtomicBool::new(false));
+        let finished = Arc::new(AtomicBool::new(false));
+        let s = started.clone();
+        let f = finished.clone();
+        let reply = crate::background::Reply::spawn(1, move || {
+            let rt = tokio::runtime::Builder::new_current_thread()
+                .enable_time()
+                .build()
+                .unwrap();
+            let cancellation = crate::background::current_cancellation();
+            assert!(cancellation.is_some());
+            s.store(true, Ordering::Release);
+            let result = rt.block_on(cancellable(std::future::pending::<()>(), cancellation));
+            assert!(result.is_err());
+            f.store(true, Ordering::Release);
+            Ok(())
+        });
+        let end = Instant::now() + Duration::from_secs(10);
+        while !started.load(Ordering::Acquire) {
+            assert!(Instant::now() < end);
+            std::thread::sleep(Duration::from_millis(1));
+        }
+        reply.cancel();
+        while !finished.load(Ordering::Acquire) {
+            assert!(
+                Instant::now() < end,
+                "cancelled RPC kept its worker blocked"
+            );
+            std::thread::sleep(Duration::from_millis(1));
+        }
+    }
+}

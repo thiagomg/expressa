@@ -1,0 +1,775 @@
+// Search must distinguish the first index (0) from absence.
+
+use std::cell::RefCell;
+use std::collections::{HashMap, HashSet};
+use std::rc::Rc;
+
+use crate::lexer::Span;
+use crate::parser::parse;
+
+use super::super::env::Env;
+use super::super::error::{CallFrame, EvalError};
+use super::super::eval::Vm;
+use super::super::numero::{Numero, NumeroAritmetica};
+use super::super::value::{MapKey, NumeroLocale, Value, conjunto_insert};
+use super::{lookup_ficha, sem_acento};
+
+impl Vm<'_, '_> {
+    pub(crate) fn bi_escreva(
+        &mut self,
+        args: &[Value],
+        span: Span,
+        env: &Rc<RefCell<Env>>,
+    ) -> Result<Value, EvalError> {
+        let mut first = true;
+        for arg in args {
+            if !first {
+                write!(self.out, " ").map_err(|e| self.io_err(e, span))?;
+            }
+            first = false;
+            let text = self.como_texto_de(arg, span, env)?;
+            write!(self.out, "{text}").map_err(|e| self.io_err(e, span))?;
+        }
+        writeln!(self.out).map_err(|e| self.io_err(e, span))?;
+        self.out.flush().map_err(|e| self.io_err(e, span))?;
+        Ok(Value::Nada)
+    }
+    pub(crate) fn bi_escreva_erro(
+        &mut self,
+        args: &[Value],
+        span: Span,
+        env: &Rc<RefCell<Env>>,
+    ) -> Result<Value, EvalError> {
+        let mut first = true;
+        for arg in args {
+            if !first {
+                write!(self.err, " ").map_err(|e| self.io_err(e, span))?;
+            }
+            first = false;
+            let text = self.como_texto_de(arg, span, env)?;
+            write!(self.err, "{text}").map_err(|e| self.io_err(e, span))?;
+        }
+        writeln!(self.err).map_err(|e| self.io_err(e, span))?;
+        self.err.flush().map_err(|e| self.io_err(e, span))?;
+        Ok(Value::Nada)
+    }
+    pub(crate) fn bi_saia(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
+        let code = match args {
+            [] => 0,
+            [v] => {
+                let n = self.expect_int(v, span)?;
+                i32::try_from(n).map_err(|_| self.err("código de saída fora do intervalo", span))?
+            }
+            _ => {
+                return Err(self.err(
+                    format!("saia() espera 0 ou 1 argumento(s), recebeu {}", args.len()),
+                    span,
+                ));
+            }
+        };
+        let _ = self.out.flush();
+        let _ = self.err.flush();
+        Err(EvalError::Quit(code))
+    }
+
+    pub(crate) fn bi_falhe(
+        &mut self,
+        args: &[Value],
+        span: Span,
+        env: &Rc<RefCell<Env>>,
+    ) -> Result<Value, EvalError> {
+        self.expect_arity(args, 1, span)?;
+        let text = self.como_texto_de(&args[0], span, env)?;
+        Err(self.err(text, span))
+    }
+
+    pub(crate) fn bi_garanta(
+        &mut self,
+        args: &[Value],
+        span: Span,
+        snippet: &str,
+    ) -> Result<Value, EvalError> {
+        self.expect_arity(args, 1, span)?;
+        if self.expect_bool(&args[0], span)? {
+            return Ok(Value::Nada);
+        }
+        let message = if snippet.is_empty() {
+            "condição incorreta".into()
+        } else {
+            format!("condição incorreta {snippet}")
+        };
+        Err(self.err(message, span))
+    }
+
+    pub(crate) fn bi_leia(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
+        if args.len() > 1 {
+            return Err(self.err(
+                format!("leia() espera 0 ou 1 argumento(s), recebeu {}", args.len()),
+                span,
+            ));
+        }
+        let prompt = match args.first() {
+            Some(v) => self.expect_texto(v, span)?,
+            None => String::new(),
+        };
+        if let Some(host) = self.leia_host.as_mut() {
+            return host
+                .ask(&prompt)
+                .map(Value::Texto)
+                .map_err(|e| self.err(e, span));
+        }
+        if !prompt.is_empty() {
+            write!(self.out, "{prompt}").map_err(|e| self.io_err(e, span))?;
+            self.out.flush().map_err(|e| self.io_err(e, span))?;
+        }
+        let mut line = String::new();
+        let n = self
+            .input
+            .read_line(&mut line)
+            .map_err(|e| self.io_err(e, span))?;
+        if n == 0 {
+            return Err(self.err("fim da entrada", span));
+        }
+        super::super::leia::strip_newline(&mut line);
+        Ok(Value::Texto(line))
+    }
+    pub(crate) fn bi_leia_linhas(
+        &mut self,
+        args: &[Value],
+        span: Span,
+    ) -> Result<Value, EvalError> {
+        if !args.is_empty() {
+            return Err(self.err(
+                format!(
+                    "leia_linhas() não espera argumentos, recebeu {}",
+                    args.len()
+                ),
+                span,
+            ));
+        }
+        if let Some(host) = self.leia_host.as_mut() {
+            let lines = host.read_all_lines().map_err(|e| self.err(e, span))?;
+            return Ok(Value::lista(lines.into_iter().map(Value::Texto).collect()));
+        }
+        let mut lines = Vec::new();
+        loop {
+            self.check_espera(span)?;
+            let mut line = String::new();
+            let n = self
+                .input
+                .read_line(&mut line)
+                .map_err(|e| self.io_err(e, span))?;
+            if n == 0 {
+                break;
+            }
+            super::super::leia::strip_newline(&mut line);
+            lines.push(Value::Texto(line));
+        }
+        Ok(Value::lista(lines))
+    }
+    pub(crate) fn bi_numero(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
+        self.expect_arity(args, 1, span)?;
+        match &args[0] {
+            Value::Numero(n) => Ok(Value::Numero(*n)),
+            Value::Texto(s) => match self.numero_locale.parse_texto(s) {
+                Some(n) => Ok(Value::Numero(n)),
+                None => Err(self.err(
+                    match self.numero_locale.dica(s) {
+                        Some(dica) => {
+                            format!("não foi possível transformar `{s}` em número: {dica}")
+                        }
+                        None => format!("não foi possível transformar `{s}` em número"),
+                    },
+                    span,
+                )),
+            },
+            other => Err(self.err(
+                format!(
+                    "numero() espera texto ou numero, encontrado {}",
+                    other.type_name()
+                ),
+                span,
+            )),
+        }
+    }
+    pub(crate) fn bi_define_opcao(
+        &mut self,
+        args: &[Value],
+        span: Span,
+    ) -> Result<Value, EvalError> {
+        self.expect_arity(args, 2, span)?;
+        let opcao = self.expect_texto(&args[0], span)?;
+        match opcao.as_str() {
+            "tipo_numero" => {
+                self.numero_aritmetica = match self.expect_texto(&args[1], span)?.as_str() {
+                    "decimal" => NumeroAritmetica::Decimal,
+                    "float" => NumeroAritmetica::Float,
+                    _ => return Err(self.err("tipo_numero espera :decimal ou :float", span)),
+                };
+            }
+            "formato_numero" => {
+                self.numero_locale = match self.expect_texto(&args[1], span)?.as_str() {
+                    "pt" => NumeroLocale::PtBr,
+                    "en" => NumeroLocale::EnUs,
+                    _ => return Err(self.err("formato_numero espera :pt ou :en", span)),
+                };
+            }
+            "fechar_janelas" => {
+                let Value::Bool(fechar) = args[1] else {
+                    return Err(self.err("fechar_janelas espera verdadeiro ou falso", span));
+                };
+                self.fechar_janelas_ao_terminar = fechar;
+            }
+            _ => return Err(self.err(format!("opção desconhecida `{opcao}` (use :tipo_numero, :formato_numero ou :fechar_janelas)"), span)),
+        }
+        Ok(Value::Nada)
+    }
+    pub(crate) fn bi_formate(
+        &mut self,
+        args: &[Value],
+        span: Span,
+        env: &Rc<RefCell<Env>>,
+    ) -> Result<Value, EvalError> {
+        if args.is_empty() {
+            return Err(self.err("formate() espera um modelo (texto) e os valores", span));
+        }
+        let modelo = self.expect_texto(&args[0], span)?;
+        let valores = &args[1..];
+        let mut texts = Vec::with_capacity(valores.len());
+        for v in valores {
+            texts.push(self.como_texto_de(v, span, env)?);
+        }
+        let text = super::super::formate::formate_with(&modelo, valores, &texts)
+            .map_err(|msg| self.err(msg, span))?;
+        Ok(Value::Texto(text))
+    }
+    pub(crate) fn bi_tipo(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
+        self.expect_arity(args, 1, span)?;
+        Ok(Value::Texto(args[0].type_name().into()))
+    }
+    pub(crate) fn bi_tipos(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
+        self.expect_arity(args, 0, span)?;
+        Ok(Value::lista(
+            Value::NOMES_DE_TIPO
+                .iter()
+                .map(|n| Value::Texto((*n).into()))
+                .collect(),
+        ))
+    }
+    pub(crate) fn bi_tamanho(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
+        self.expect_arity(args, 1, span)?;
+        let n = match &args[0] {
+            Value::Texto(s) => s.chars().count() as u64,
+            Value::Lista(xs) => xs.borrow().len() as u64,
+            Value::Mapa(xs) => xs.borrow().len() as u64,
+            Value::Conjunto(xs) => xs.borrow().len() as u64,
+            Value::Matriz(m) => m.borrow().len() as u64,
+            Value::Intervalo { end: None, .. } => {
+                return Err(self.err("tamanho() de intervalo sem teto", span));
+            }
+            Value::Intervalo {
+                start,
+                end: Some(end),
+            } => {
+                if start >= end {
+                    0
+                } else {
+                    (*end as i128 - *start as i128) as u64
+                }
+            }
+            other => {
+                return Err(self.err(
+                    format!(
+                        "tamanho() espera texto, lista, mapa, conjunto, matriz ou intervalo, encontrado {}",
+                        other.type_name()
+                    ),
+                    span,
+                ));
+            }
+        };
+        Ok(Value::Numero(Numero::from_u64(n)))
+    }
+    pub(crate) fn bi_primeiro(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
+        self.expect_arity(args, 1, span)?;
+        match &args[0] {
+            Value::Intervalo {
+                end: Some(end),
+                start,
+            } if start >= end => Err(self.err("primeiro() de intervalo vazio", span)),
+            Value::Intervalo { start, .. } => Ok(Value::Numero(Numero::from_i64(*start))),
+            Value::Lista(xs) => xs
+                .borrow()
+                .first()
+                .cloned()
+                .ok_or_else(|| self.err("primeiro() de lista vazia", span)),
+            Value::Texto(s) => s
+                .chars()
+                .next()
+                .map(|c| Value::Texto(c.to_string()))
+                .ok_or_else(|| self.err("primeiro() de texto vazio", span)),
+            other => Err(self.err(
+                format!(
+                    "primeiro() espera lista, texto ou intervalo, encontrado {}",
+                    other.type_name()
+                ),
+                span,
+            )),
+        }
+    }
+    pub(crate) fn bi_ultimo(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
+        self.expect_arity(args, 1, span)?;
+        match &args[0] {
+            Value::Intervalo { end: None, .. } => {
+                Err(self.err("ultimo() de intervalo sem teto", span))
+            }
+            Value::Intervalo {
+                start,
+                end: Some(end),
+            } if start >= end => Err(self.err("ultimo() de intervalo vazio", span)),
+            Value::Intervalo { end: Some(end), .. } => Ok(Value::Numero(Numero::from_i64(end - 1))),
+            Value::Lista(xs) => xs
+                .borrow()
+                .last()
+                .cloned()
+                .ok_or_else(|| self.err("ultimo() de lista vazia", span)),
+            Value::Texto(s) => s
+                .chars()
+                .next_back()
+                .map(|c| Value::Texto(c.to_string()))
+                .ok_or_else(|| self.err("ultimo() de texto vazio", span)),
+            other => Err(self.err(
+                format!(
+                    "ultimo() espera lista, texto ou intervalo, encontrado {}",
+                    other.type_name()
+                ),
+                span,
+            )),
+        }
+    }
+    /// `como_texto(valor)`: the text `escreva` would print (uses `:_como_texto`).
+    pub(crate) fn bi_como_texto(
+        &mut self,
+        args: &[Value],
+        span: Span,
+        env: &Rc<RefCell<Env>>,
+    ) -> Result<Value, EvalError> {
+        self.expect_arity(args, 1, span)?;
+        Ok(Value::Texto(self.como_texto_de(&args[0], span, env)?))
+    }
+
+    /// `chaves_de(m)` / `valores_de(m)`: in the order a map prints its keys.
+    pub(crate) fn bi_chaves_de(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
+        self.expect_arity(args, 1, span)?;
+        let pares = self.pares_ordenados(&args[0], "chaves_de", span)?;
+        Ok(Value::lista(
+            pares.into_iter().map(|(k, _)| k.to_value()).collect(),
+        ))
+    }
+
+    pub(crate) fn bi_valores_de(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
+        self.expect_arity(args, 1, span)?;
+        let pares = self.pares_ordenados(&args[0], "valores_de", span)?;
+        Ok(Value::lista(pares.into_iter().map(|(_, v)| v).collect()))
+    }
+
+    fn pares_ordenados(
+        &self,
+        v: &Value,
+        nome: &str,
+        span: Span,
+    ) -> Result<Vec<(MapKey, Value)>, EvalError> {
+        match v {
+            Value::Mapa(m) => Ok(super::super::value::pares_em_ordem(&m.borrow())),
+            other => Err(self.err(
+                format!("{nome}() espera mapa, encontrado {}", other.type_name()),
+                span,
+            )),
+        }
+    }
+
+    pub(crate) fn bi_infinito(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
+        self.expect_arity(args, 1, span)?;
+        match &args[0] {
+            Value::Intervalo { end, .. } => Ok(Value::Bool(end.is_none())),
+            other => Err(self.err(
+                format!(
+                    "eh_infinito() espera intervalo, encontrado {}",
+                    other.type_name()
+                ),
+                span,
+            )),
+        }
+    }
+    pub(crate) fn bi_maiuscula(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
+        self.expect_arity(args, 1, span)?;
+        let s = self.expect_texto(&args[0], span)?;
+        Ok(Value::Texto(s.to_uppercase()))
+    }
+    pub(crate) fn bi_minuscula(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
+        self.expect_arity(args, 1, span)?;
+        let s = self.expect_texto(&args[0], span)?;
+        Ok(Value::Texto(s.to_lowercase()))
+    }
+    pub(crate) fn bi_sem_acento(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
+        self.expect_arity(args, 1, span)?;
+        let s = self.expect_texto(&args[0], span)?;
+        Ok(Value::Texto(sem_acento(&s)))
+    }
+    pub(crate) fn bi_remova(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
+        if args.len() == 3 {
+            return Err(self.err(
+                "use remova(xs, a..b) ou remova(xs, a..=b) no lugar de dois índices",
+                span,
+            ));
+        }
+        if args.len() != 2 {
+            return Err(self.err(
+                format!("remova espera 2 argumentos, recebeu {}", args.len()),
+                span,
+            ));
+        }
+        match &args[0] {
+            Value::Mapa(_) => {
+                if matches!(args[1], Value::Intervalo { .. }) {
+                    return Err(self.err(
+                        "remova em mapa espera a chave (não um intervalo de índices)",
+                        span,
+                    ));
+                }
+                self.remova_mapa(&args[0], &args[1], span)
+            }
+            Value::Conjunto(_) => {
+                if matches!(args[1], Value::Intervalo { .. }) {
+                    return Err(self.err(
+                        "remova em conjunto espera o elemento (não um intervalo de índices)",
+                        span,
+                    ));
+                }
+                self.remova_conjunto(&args[0], &args[1], span)
+            }
+            Value::Lista(_) | Value::Texto(_) => match &args[1] {
+                Value::Intervalo { end: None, .. } => {
+                    Err(self.err("intervalo sem teto não pode remover", span))
+                }
+                Value::Intervalo {
+                    start,
+                    end: Some(end),
+                } => self.remova_faixa(
+                    &args[0],
+                    &Value::Numero(Numero::from_i64(*start)),
+                    &Value::Numero(Numero::from_i64(*end)),
+                    span,
+                ),
+                _ => {
+                    let i = self.expect_int(&args[1], span)?;
+                    let fim = i
+                        .checked_add(1)
+                        .ok_or_else(|| self.err(format!("índice {i} fora do intervalo"), span))?;
+                    self.remova_faixa(
+                        &args[0],
+                        &Value::Numero(Numero::from_i64(i)),
+                        &Value::Numero(Numero::from_i64(fim)),
+                        span,
+                    )
+                }
+            },
+            other => Err(self.err(
+                format!(
+                    "remova espera lista, texto, mapa ou conjunto, encontrado {}",
+                    other.type_name()
+                ),
+                span,
+            )),
+        }
+    }
+    pub(crate) fn remova_mapa(
+        &self,
+        map: &Value,
+        key_v: &Value,
+        span: Span,
+    ) -> Result<Value, EvalError> {
+        let Value::Mapa(xs) = map else {
+            unreachable!();
+        };
+        let key = MapKey::from_value(key_v).ok_or_else(|| {
+            self.err(
+                format!("chave de mapa inválida ({})", key_v.type_name()),
+                span,
+            )
+        })?;
+        let mut entries = xs.borrow().clone();
+        if entries.remove(&key).is_none() {
+            return Err(self.err(format!("chave {key} não existe no mapa"), span));
+        }
+        Ok(Value::mapa_com_politica(entries, xs.recurso_nao_clonavel()))
+    }
+    pub(crate) fn remova_conjunto(
+        &self,
+        set: &Value,
+        elem: &Value,
+        span: Span,
+    ) -> Result<Value, EvalError> {
+        let Value::Conjunto(xs) = set else {
+            unreachable!();
+        };
+        let key = MapKey::from_value(elem).ok_or_else(|| {
+            self.err(
+                format!("elemento de conjunto inválido ({})", elem.type_name()),
+                span,
+            )
+        })?;
+        let mut items = xs.borrow().clone();
+        if !items.remove(&key) {
+            return Err(self.err(format!("elemento {key} não existe no conjunto"), span));
+        }
+        Ok(Value::conjunto_de_hash(items))
+    }
+    pub(crate) fn remova_faixa(
+        &self,
+        coll: &Value,
+        start: &Value,
+        end: &Value,
+        span: Span,
+    ) -> Result<Value, EvalError> {
+        let s = self.expect_int(start, span)?;
+        let e = self.expect_int(end, span)?;
+        if s > e {
+            return Ok(coll.clone());
+        }
+        match coll {
+            Value::Lista(xs) => {
+                let mut v = xs.borrow().clone();
+                let (a, b) = self.to_slice_bounds(start, Some(end), v.len(), span)?;
+                v.drain(a..b);
+                Ok(Value::lista(v))
+            }
+            Value::Texto(t) => {
+                let mut chars: Vec<char> = t.chars().collect();
+                let (a, b) = self.to_slice_bounds(start, Some(end), chars.len(), span)?;
+                chars.drain(a..b);
+                Ok(Value::Texto(chars.into_iter().collect()))
+            }
+            _ => unreachable!(),
+        }
+    }
+    pub(crate) fn bi_substitua(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
+        self.expect_arity(args, 3, span)?;
+        let s = self.expect_texto(&args[0], span)?;
+        let from = self.expect_texto(&args[1], span)?;
+        let to = self.expect_texto(&args[2], span)?;
+        Ok(Value::Texto(s.replace(&from, &to)))
+    }
+    pub(crate) fn bi_procure(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
+        self.expect_arity(args, 2, span)?;
+        match &args[0] {
+            Value::Texto(s) => {
+                let needle = self.expect_texto(&args[1], span)?;
+                if needle.is_empty() {
+                    return Err(self.err("procure espera um trecho não vazio", span));
+                }
+                Ok(match s.find(&needle) {
+                    Some(byte_i) => Value::Numero((s[..byte_i].chars().count() as i64).into()),
+                    None => Value::Nada,
+                })
+            }
+            Value::Lista(xs) => Ok(xs
+                .borrow()
+                .iter()
+                .position(|x| x == &args[1])
+                .map(|i| Value::Numero((i as i64).into()))
+                .unwrap_or(Value::Nada)),
+            other => Err(self.err(
+                format!(
+                    "procure espera texto ou lista, encontrado {}",
+                    other.type_name()
+                ),
+                span,
+            )),
+        }
+    }
+    pub(crate) fn bi_separe(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
+        self.expect_arity(args, 2, span)?;
+        let s = self.expect_texto(&args[0], span)?;
+        let sep = self.expect_texto(&args[1], span)?;
+        let parts = if sep.is_empty() {
+            s.chars().map(|c| Value::Texto(c.to_string())).collect()
+        } else {
+            s.split(&sep).map(|p| Value::Texto(p.to_string())).collect()
+        };
+        Ok(Value::lista(parts))
+    }
+    pub(crate) fn bi_junte(
+        &mut self,
+        args: &[Value],
+        span: Span,
+        env: &Rc<RefCell<Env>>,
+    ) -> Result<Value, EvalError> {
+        self.expect_arity(args, 2, span)?;
+        let xs = self.expect_lista(&args[0], span)?;
+        let sep = self.expect_texto(&args[1], span)?;
+        let mut parts = Vec::new();
+        for v in xs.borrow().iter() {
+            parts.push(self.como_texto_de(v, span, env)?);
+        }
+        Ok(Value::Texto(parts.join(&sep)))
+    }
+    pub(crate) fn bi_limpe(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
+        self.expect_arity(args, 1, span)?;
+        let s = self.expect_texto(&args[0], span)?;
+        Ok(Value::Texto(s.trim().to_string()))
+    }
+    pub(crate) fn bi_mapa(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
+        match args {
+            [] => Ok(Value::mapa(vec![])),
+            [v] => {
+                let xs = self.expect_lista(v, span)?;
+                let mut map = HashMap::with_capacity(xs.borrow().len());
+                for item in xs.borrow().iter() {
+                    self.check_espera(span)?;
+                    let Value::Par(k, val) = item else {
+                        return Err(self.err(
+                            format!(
+                                "mapa() espera lista de pares, encontrado {}",
+                                item.type_name()
+                            ),
+                            span,
+                        ));
+                    };
+                    if map.contains_key(k) {
+                        return Err(self.err(format!("chave duplicada {k} no mapa"), span));
+                    }
+                    map.insert(k.clone(), val.as_ref().clone());
+                }
+                Ok(Value::mapa_com_politica(map, false))
+            }
+            _ => Err(self.err(
+                format!("mapa() espera 0 ou 1 argumento(s), recebeu {}", args.len()),
+                span,
+            )),
+        }
+    }
+
+    pub(crate) fn bi_conjunto(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
+        match args {
+            [] => Ok(Value::conjunto(vec![])),
+            [v] => {
+                let xs = self.expect_lista(v, span)?;
+                let mut out = HashSet::with_capacity(xs.borrow().len());
+                for item in xs.borrow().iter() {
+                    self.check_espera(span)?;
+                    let k = MapKey::from_value(item).ok_or_else(|| {
+                        self.err(
+                            format!("elemento de conjunto inválido ({})", item.type_name()),
+                            span,
+                        )
+                    })?;
+                    conjunto_insert(&mut out, k);
+                }
+                Ok(Value::conjunto_de_hash(out))
+            }
+            _ => Err(self.err(
+                format!(
+                    "conjunto() espera 0 ou 1 argumento(s), recebeu {}",
+                    args.len()
+                ),
+                span,
+            )),
+        }
+    }
+
+    pub(crate) fn bi_avalie(
+        &mut self,
+        args: &[Value],
+        span: Span,
+        env: &Rc<RefCell<Env>>,
+    ) -> Result<Value, EvalError> {
+        self.expect_arity(args, 1, span)?;
+        let src = self.expect_texto(&args[0], span)?;
+        let program = parse(&src).map_err(|e| self.err(format!("avalie: {}", e.message), span))?;
+        if program.items.is_empty() {
+            return Err(self.err("avalie espera uma expressão", span));
+        }
+        self.check_profundidade(span)?;
+        self.stack.push(CallFrame {
+            name: "avalie".into(),
+            file: self.file.clone(),
+            span,
+        });
+        let prev_file = std::mem::replace(&mut self.file, "<avalie>".into());
+        let prev_source = std::mem::replace(&mut self.source, std::rc::Rc::from(src));
+        let result = self.execute_program_value(program, env);
+        self.source = prev_source;
+        self.file = prev_file;
+        self.stack.pop();
+        result
+    }
+
+    pub(crate) fn bi_ajuda(&mut self, args: &[Value], span: Span) -> Result<Value, EvalError> {
+        let [v] = args else {
+            return Err(self.err(
+                format!("ajuda() espera 1 argumento, recebeu {}", args.len()),
+                span,
+            ));
+        };
+        match v {
+            Value::Texto(s) => lookup_ficha(s)
+                .map(Value::Texto)
+                .ok_or_else(|| self.err(format!("não há ficha para `{s}`"), span)),
+            Value::Builtin(canon) => lookup_ficha(canon)
+                .map(Value::Texto)
+                .ok_or_else(|| self.err(format!("não há ficha para `{canon}`"), span)),
+            Value::Funcao(c) => {
+                let sig = format!("funcao({})", c.args_text());
+                let body = match &c.doc {
+                    Some(d) if !d.is_empty() => format!("{sig}\n\n{d}"),
+                    _ => sig,
+                };
+                Ok(Value::Texto(body))
+            }
+            other => Err(self.err(
+                format!(
+                    "ajuda espera um texto, função ou nativa, encontrado {}",
+                    other.type_name()
+                ),
+                span,
+            )),
+        }
+    }
+}
+
+pub(crate) fn texto_da_condicao(source: &str, span: Span) -> String {
+    let raw = source.get(span.start..span.end).unwrap_or("");
+    let mut out = String::new();
+    let mut space = false;
+    for ch in raw.chars() {
+        if ch.is_whitespace() {
+            space = true;
+            continue;
+        }
+        if space && !out.is_empty() {
+            out.push(' ');
+        }
+        space = false;
+        out.push(ch);
+    }
+    out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::lexer::Span;
+
+    #[test]
+    fn texto_da_condicao_junta_espacos() {
+        let src = "garanta(\n    x > 0\n)";
+        let start = src.find("x > 0").unwrap();
+        let span = Span::new(2, 5, start, start + "x > 0".len());
+        assert_eq!(texto_da_condicao(src, span), "x > 0");
+        let src = "garanta(\n  1 >\n  2\n)";
+        let start = src.find("1 >").unwrap();
+        let end = src.rfind('2').unwrap() + 1;
+        let span = Span::new(2, 3, start, end);
+        assert_eq!(texto_da_condicao(src, span), "1 > 2");
+    }
+}

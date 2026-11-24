@@ -1,0 +1,947 @@
+use std::collections::HashSet;
+#[cfg(feature = "terminal")]
+use std::io::BufRead;
+use std::io::{self, Write};
+use std::rc::Rc;
+
+use crate::lexer::Span;
+
+use super::env::{Env, FrameKind};
+use super::error::CallFrame;
+use super::value::Value;
+
+pub struct DebugCtx<'a> {
+    pub file: &'a str,
+    pub source: &'a str,
+    pub span: Span,
+    pub env: &'a Rc<RefCellEnv>,
+    pub stack: &'a [CallFrame],
+}
+
+/// Alias so DebugCtx can mention the env without importing RefCell in every use.
+pub type RefCellEnv = std::cell::RefCell<Env>;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DebugAction {
+    Continue,
+    Quit,
+    /// Stop the program as a runtime error (used for time limits).
+    Timeout,
+    /// Stop the program as a runtime error: the user asked (editor REPL).
+    Interrompido,
+}
+
+#[derive(Debug, Clone)]
+pub struct DebugBinding {
+    pub scope: String,
+    pub name: String,
+    pub value: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct DebugFrameInfo {
+    pub name: String,
+    pub file: String,
+    pub line: u32,
+}
+
+#[derive(Debug, Clone)]
+pub struct DebugPaused {
+    pub file: String,
+    pub line: u32,
+    pub col: u32,
+    pub source_line: String,
+    pub vars: Vec<DebugBinding>,
+    pub stack: Vec<DebugFrameInfo>,
+    /// Set when paused because of a runtime error (the program ends on resume).
+    pub error: Option<String>,
+}
+
+pub fn collect_vars(ctx: &DebugCtx<'_>) -> Vec<DebugBinding> {
+    let mut out = Vec::new();
+    let mut current = Some(Rc::clone(ctx.env));
+    while let Some(cell) = current {
+        let env = cell.borrow();
+        if env.kind != FrameKind::Builtins {
+            let label = match env.kind {
+                FrameKind::Module => "módulo",
+                FrameKind::Block => "bloco",
+                FrameKind::Function => "função",
+                FrameKind::Builtins => "",
+            };
+            for (k, v) in env.bindings_sorted() {
+                if matches!(v, Value::Builtin(_)) {
+                    continue;
+                }
+                out.push(DebugBinding {
+                    scope: label.to_string(),
+                    name: k,
+                    value: v.to_string(),
+                });
+            }
+        }
+        let parent = env.parent.clone();
+        drop(env);
+        current = parent;
+    }
+    out
+}
+
+pub fn collect_stack(ctx: &DebugCtx<'_>) -> Vec<DebugFrameInfo> {
+    ctx.stack
+        .iter()
+        .rev()
+        .map(|frame| DebugFrameInfo {
+            name: frame.name.clone(),
+            file: frame.file.clone(),
+            line: frame.span.line,
+        })
+        .collect()
+}
+
+pub fn snapshot(ctx: &DebugCtx<'_>) -> DebugPaused {
+    DebugPaused {
+        file: ctx.file.to_string(),
+        line: ctx.span.line,
+        col: ctx.span.col,
+        source_line: source_line(ctx.source, ctx.span.line).to_string(),
+        vars: collect_vars(ctx),
+        stack: collect_stack(ctx),
+        error: None,
+    }
+}
+
+pub trait DebugHook {
+    fn before_stmt(&mut self, ctx: &DebugCtx<'_>) -> DebugAction;
+
+    /// A runtime error not caught by `se_falhar`, seen from the statement
+    /// where it happened. The error keeps unwinding after this returns.
+    fn on_error(&mut self, _ctx: &DebugCtx<'_>, _message: &str) {}
+
+    /// Polled while the program sleeps (`durma`): true stops it.
+    fn interrupted(&mut self) -> bool {
+        false
+    }
+}
+
+pub struct NoopHook;
+
+impl DebugHook for NoopHook {
+    fn before_stmt(&mut self, _ctx: &DebugCtx<'_>) -> DebugAction {
+        DebugAction::Continue
+    }
+}
+
+#[derive(Debug, Clone)]
+enum StepMode {
+    /// Run until a breakpoint (or the first statement, if `pause_on_start`).
+    Continue,
+    /// Pause on the next statement.
+    StepIn,
+    /// Pause on the next statement outside `span` at this call depth.
+    StepOver {
+        depth: usize,
+        file: String,
+        span: Span,
+    },
+    /// Pause when the call stack is at or below `depth`.
+    StepOut { depth: usize },
+}
+
+/// Stepping + breakpoints. Shared by the CLI debugger and the Aula hook.
+pub struct DebugSession {
+    pub breakpoints: HashSet<(String, u32)>,
+    mode: StepMode,
+    pause_on_start: bool,
+}
+
+impl DebugSession {
+    pub fn step_in() -> Self {
+        Self {
+            breakpoints: HashSet::new(),
+            mode: StepMode::StepIn,
+            pause_on_start: true,
+        }
+    }
+
+    fn should_pause(&self, ctx: &DebugCtx<'_>) -> bool {
+        if self
+            .breakpoints
+            .contains(&(ctx.file.to_string(), ctx.span.line))
+        {
+            return true;
+        }
+        match &self.mode {
+            StepMode::Continue => false,
+            StepMode::StepIn => true,
+            StepMode::StepOver { depth, file, span } => {
+                if ctx.stack.len() < *depth {
+                    true
+                } else if ctx.stack.len() == *depth {
+                    ctx.file != file.as_str() || !strictly_inside(*span, ctx.span)
+                } else {
+                    false
+                }
+            }
+            StepMode::StepOut { depth } => ctx.stack.len() <= *depth,
+        }
+    }
+
+    fn consume_pause_on_start(&mut self) -> bool {
+        if self.pause_on_start {
+            self.pause_on_start = false;
+            true
+        } else {
+            false
+        }
+    }
+
+    /// `Some` = resume the VM. `None` = stay paused (list vars, set a breakpoint).
+    pub fn handle_command(&mut self, line: &str, ctx: &DebugCtx<'_>) -> Option<DebugAction> {
+        self.handle_command_out(line, ctx, &mut io::sink())
+    }
+
+    fn handle_command_out(
+        &mut self,
+        line: &str,
+        ctx: &DebugCtx<'_>,
+        out: &mut dyn Write,
+    ) -> Option<DebugAction> {
+        let mut parts = line.split_whitespace();
+        let cmd = parts.next().unwrap_or("");
+        match cmd {
+            "continuar" | "c" | "continue" => {
+                self.mode = StepMode::Continue;
+                Some(DebugAction::Continue)
+            }
+            "proximo" | "próximo" | "n" | "next" => {
+                self.mode = StepMode::StepOver {
+                    depth: ctx.stack.len(),
+                    file: ctx.file.to_string(),
+                    span: ctx.span,
+                };
+                Some(DebugAction::Continue)
+            }
+            "entrar" | "s" | "step" => {
+                self.mode = StepMode::StepIn;
+                Some(DebugAction::Continue)
+            }
+            "sair" | "o" | "out" | "fin" => {
+                let depth = ctx.stack.len().saturating_sub(1);
+                self.mode = StepMode::StepOut { depth };
+                Some(DebugAction::Continue)
+            }
+            "vars" | "v" | "locais" => None,
+            "pilha" | "k" | "stack" | "bt" => None,
+            "ponto" | "break" | "b" => match parts.next() {
+                None => None,
+                Some(spec) => {
+                    if let Some((file, line)) = parse_breakpoint(spec, ctx.file) {
+                        self.breakpoints.insert((file, line));
+                    } else {
+                        let _ = writeln!(out, "uso: ponto [arquivo:]linha");
+                    }
+                    None
+                }
+            },
+            "remover" | "delete" | "d" => {
+                if let Some(bp) = parts.next().and_then(|s| parse_breakpoint(s, ctx.file)) {
+                    self.breakpoints.remove(&bp);
+                }
+                None
+            }
+            "ajuda" | "h" | "help" | "?" => None,
+            "terminar" | "q" | "quit" => Some(DebugAction::Quit),
+            "" => None,
+            _ => None,
+        }
+    }
+}
+
+#[cfg(feature = "terminal")]
+pub struct CliDebugger {
+    session: DebugSession,
+    last_line: String,
+    out: Box<dyn Write>,
+}
+
+#[cfg(feature = "terminal")]
+impl CliDebugger {
+    pub fn new() -> Self {
+        Self::with_out(Box::new(io::stderr()))
+    }
+
+    pub fn with_out(out: Box<dyn Write>) -> Self {
+        Self {
+            session: DebugSession::step_in(),
+            last_line: String::new(),
+            out,
+        }
+    }
+
+    fn print_location(&mut self, ctx: &DebugCtx<'_>) {
+        let _ = writeln!(self.out, "quebrado em {}", ctx.span.location_in(ctx.file));
+        let line = source_line(ctx.source, ctx.span.line);
+        let _ = writeln!(self.out, "{:>4} | {}", ctx.span.line, line.trim_end());
+    }
+
+    fn print_vars(&mut self, ctx: &DebugCtx<'_>) {
+        let mut current = Some(Rc::clone(ctx.env));
+        let mut any = false;
+        while let Some(cell) = current {
+            let env = cell.borrow();
+            if env.kind != FrameKind::Builtins {
+                let bindings: Vec<_> = env
+                    .bindings_sorted()
+                    .into_iter()
+                    .filter(|(_, v)| !matches!(v, Value::Builtin(_)))
+                    .collect();
+                if !bindings.is_empty() {
+                    any = true;
+                    let label = match env.kind {
+                        FrameKind::Module => "módulo",
+                        FrameKind::Block => "bloco",
+                        FrameKind::Function => "função",
+                        FrameKind::Builtins => "",
+                    };
+                    let _ = writeln!(self.out, "[{label}]");
+                    for (k, v) in bindings {
+                        let _ = writeln!(self.out, "  {k} = {v}");
+                    }
+                }
+            }
+            let parent = env.parent.clone();
+            drop(env);
+            current = parent;
+        }
+        if !any {
+            let _ = writeln!(self.out, "(nenhuma variável)");
+        }
+    }
+
+    fn print_stack(&mut self, ctx: &DebugCtx<'_>) {
+        if ctx.stack.is_empty() {
+            let _ = writeln!(self.out, "(pilha vazia)");
+            return;
+        }
+        for (i, frame) in ctx.stack.iter().rev().enumerate() {
+            let _ = writeln!(
+                self.out,
+                "  {i}: {} ({})",
+                frame.name,
+                frame.span.location_in(&frame.file)
+            );
+        }
+    }
+
+    fn print_help(&mut self) {
+        let _ = writeln!(
+            self.out,
+            "comandos:\n  \
+             continuar, c          continua até o próximo ponto de parada\n  \
+             proximo, n            executa o próximo comando (sem entrar em chamadas)\n  \
+             entrar, s             entra na próxima chamada / bloco\n  \
+             sair, o               sai da função atual\n  \
+             vars, v               mostra variáveis visíveis\n  \
+             pilha, k              mostra a pilha de chamadas\n  \
+             ponto [arquivo:]N     coloca (ou lista) pontos de parada\n  \
+             remover [arquivo:]N   remove um ponto de parada\n  \
+             ajuda, h              mostra esta ajuda\n  \
+             terminar, q           encerra o programa"
+        );
+    }
+
+    fn handle_command(&mut self, line: &str, ctx: &DebugCtx<'_>) -> Option<DebugAction> {
+        let cmd = line.split_whitespace().next().unwrap_or("");
+        match cmd {
+            "vars" | "v" | "locais" => {
+                self.print_vars(ctx);
+                None
+            }
+            "pilha" | "k" | "stack" | "bt" => {
+                self.print_stack(ctx);
+                None
+            }
+            "ponto" | "break" | "b" if line.split_whitespace().nth(1).is_none() => {
+                if self.session.breakpoints.is_empty() {
+                    let _ = writeln!(self.out, "(nenhum ponto de parada)");
+                } else {
+                    let mut bps: Vec<_> = self.session.breakpoints.iter().collect();
+                    bps.sort_by(|a, b| a.0.cmp(&b.0).then(a.1.cmp(&b.1)));
+                    for (file, line) in bps {
+                        let _ = writeln!(self.out, "  {file}:{line}");
+                    }
+                }
+                None
+            }
+            "ponto" | "break" | "b" => {
+                let spec = line.split_whitespace().nth(1).unwrap();
+                match parse_breakpoint(spec, ctx.file) {
+                    Some((file, line)) => {
+                        self.session.breakpoints.insert((file.clone(), line));
+                        let _ = writeln!(self.out, "ponto de parada em {file}:{line}");
+                    }
+                    None => {
+                        let _ = writeln!(self.out, "uso: ponto [arquivo:]linha");
+                    }
+                }
+                None
+            }
+            "remover" | "delete" | "d" => {
+                match line
+                    .split_whitespace()
+                    .nth(1)
+                    .and_then(|s| parse_breakpoint(s, ctx.file))
+                {
+                    Some((file, n)) => {
+                        if self.session.breakpoints.remove(&(file.clone(), n)) {
+                            let _ = writeln!(self.out, "removido {file}:{n}");
+                        } else {
+                            let _ = writeln!(self.out, "nenhum ponto de parada em {file}:{n}");
+                        }
+                    }
+                    None => {
+                        let _ = writeln!(self.out, "uso: remover [arquivo:]linha");
+                    }
+                }
+                None
+            }
+            "ajuda" | "h" | "help" | "?" => {
+                self.print_help();
+                None
+            }
+            "" => None,
+            "continuar" | "c" | "continue" | "proximo" | "próximo" | "n" | "next" | "entrar"
+            | "s" | "step" | "sair" | "o" | "out" | "fin" | "terminar" | "q" | "quit" => {
+                self.session.handle_command_out(line, ctx, &mut self.out)
+            }
+            other => {
+                let _ = writeln!(
+                    self.out,
+                    "comando desconhecido: {other} (ajuda para a lista)"
+                );
+                None
+            }
+        }
+    }
+}
+
+#[cfg(feature = "terminal")]
+impl Default for CliDebugger {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[cfg(feature = "terminal")]
+impl DebugHook for CliDebugger {
+    fn before_stmt(&mut self, ctx: &DebugCtx<'_>) -> DebugAction {
+        if self.session.consume_pause_on_start() {
+            // first statement
+        } else if !self.session.should_pause(ctx) {
+            return DebugAction::Continue;
+        }
+
+        self.print_location(ctx);
+        let stdin = io::stdin();
+        let mut handle = stdin.lock();
+        loop {
+            let _ = write!(self.out, "(debug) ");
+            let _ = self.out.flush();
+            let mut line = String::new();
+            match handle.read_line(&mut line) {
+                Ok(0) => return DebugAction::Quit,
+                Ok(_) => {}
+                Err(_) => return DebugAction::Quit,
+            }
+            let trimmed = line.trim();
+            let command = if trimmed.is_empty() {
+                self.last_line.clone()
+            } else {
+                self.last_line = trimmed.to_string();
+                self.last_line.clone()
+            };
+            if let Some(action) = self.handle_command(&command, ctx) {
+                return action;
+            }
+        }
+    }
+}
+
+/// For **Executar**: ignore step commands, honour `terminar` so Parar works.
+pub struct StopHook {
+    cmd_rx: std::sync::mpsc::Receiver<String>,
+}
+
+impl StopHook {
+    pub fn new(cmd_rx: std::sync::mpsc::Receiver<String>) -> Self {
+        Self { cmd_rx }
+    }
+}
+
+impl DebugHook for StopHook {
+    fn interrupted(&mut self) -> bool {
+        self.stop_requested()
+    }
+
+    fn before_stmt(&mut self, _ctx: &DebugCtx<'_>) -> DebugAction {
+        if self.stop_requested() {
+            DebugAction::Quit
+        } else {
+            DebugAction::Continue
+        }
+    }
+}
+
+impl StopHook {
+    /// Whether `terminar` arrived (or the IDE went away).
+    fn stop_requested(&mut self) -> bool {
+        loop {
+            match self.cmd_rx.try_recv() {
+                Ok(cmd) => {
+                    if is_quit(&cmd) {
+                        return true;
+                    }
+                }
+                Err(std::sync::mpsc::TryRecvError::Empty) => return false,
+                Err(std::sync::mpsc::TryRecvError::Disconnected) => return true,
+            }
+        }
+    }
+}
+
+fn is_quit(cmd: &str) -> bool {
+    matches!(cmd.trim(), "terminar" | "q" | "quit")
+}
+
+fn is_breakpoint_cmd(cmd: &str) -> bool {
+    matches!(
+        cmd.split_whitespace().next(),
+        Some("ponto" | "break" | "b" | "remover" | "delete" | "d")
+    )
+}
+
+/// Pauses by sending a snapshot and waiting for a command string (Aula).
+pub struct ChannelDebugger {
+    pub session: DebugSession,
+    pause_tx: std::sync::mpsc::Sender<DebugPaused>,
+    cmd_rx: std::sync::mpsc::Receiver<String>,
+    /// Breakpoint changes received while running, applied before the next
+    /// statement (they need its context).
+    pending: Vec<String>,
+}
+
+impl ChannelDebugger {
+    pub fn new(
+        pause_tx: std::sync::mpsc::Sender<DebugPaused>,
+        cmd_rx: std::sync::mpsc::Receiver<String>,
+    ) -> Self {
+        Self {
+            session: DebugSession::step_in(),
+            pause_tx,
+            cmd_rx,
+            pending: Vec::new(),
+        }
+    }
+}
+
+impl DebugHook for ChannelDebugger {
+    fn interrupted(&mut self) -> bool {
+        self.drain()
+    }
+
+    fn before_stmt(&mut self, ctx: &DebugCtx<'_>) -> DebugAction {
+        // Commands sent while running: Parar stops now, and breakpoints
+        // added or removed after Continuar take effect.
+        if self.drain() {
+            return DebugAction::Quit;
+        }
+        for cmd in std::mem::take(&mut self.pending) {
+            self.session.handle_command(&cmd, ctx);
+        }
+        if self.session.consume_pause_on_start() {
+            // first statement
+        } else if !self.session.should_pause(ctx) {
+            return DebugAction::Continue;
+        }
+        let snap = snapshot(ctx);
+        if self.pause_tx.send(snap.clone()).is_err() {
+            return DebugAction::Quit;
+        }
+        self.wait(ctx, &snap)
+    }
+
+    /// Stop on the failing statement so the variables can be inspected.
+    /// Any command resumes; the error then ends the program.
+    fn on_error(&mut self, ctx: &DebugCtx<'_>, message: &str) {
+        let mut snap = snapshot(ctx);
+        snap.error = Some(message.to_string());
+        if self.pause_tx.send(snap.clone()).is_ok() {
+            self.wait(ctx, &snap);
+        }
+    }
+}
+
+impl ChannelDebugger {
+    /// Read commands without waiting. Keeps breakpoint changes for the next
+    /// statement; true when the program must stop. Step commands only mean
+    /// something while paused and are dropped.
+    fn drain(&mut self) -> bool {
+        loop {
+            match self.cmd_rx.try_recv() {
+                Ok(cmd) if is_quit(&cmd) => return true,
+                Ok(cmd) if is_breakpoint_cmd(&cmd) => self.pending.push(cmd),
+                Ok(_) => {}
+                Err(std::sync::mpsc::TryRecvError::Empty) => return false,
+                Err(std::sync::mpsc::TryRecvError::Disconnected) => return true,
+            }
+        }
+    }
+
+    /// Wait for a command while paused; `ponto` / `remover` stay paused.
+    fn wait(&mut self, ctx: &DebugCtx<'_>, snap: &DebugPaused) -> DebugAction {
+        loop {
+            match self.cmd_rx.recv() {
+                Ok(cmd) => {
+                    let cmd = cmd.trim();
+                    if cmd.is_empty() {
+                        continue;
+                    }
+                    if let Some(action) = self.session.handle_command(cmd, ctx) {
+                        return action;
+                    }
+                    let _ = self.pause_tx.send(snap.clone());
+                }
+                Err(_) => return DebugAction::Quit,
+            }
+        }
+    }
+}
+
+fn strictly_inside(outer: Span, inner: Span) -> bool {
+    inner.start >= outer.start
+        && inner.end <= outer.end
+        && (inner.start != outer.start || inner.end != outer.end)
+}
+
+fn parse_breakpoint(spec: &str, current_file: &str) -> Option<(String, u32)> {
+    if let Some((file, line)) = spec.rsplit_once(':') {
+        let looks_like_path = file
+            .chars()
+            .any(|c| c.is_ascii_alphabetic() || matches!(c, '/' | '\\' | '.'));
+        if looks_like_path {
+            let line = line.parse().ok()?;
+            return Some((file.to_string(), line));
+        }
+    }
+    let line = spec.parse().ok()?;
+    Some((current_file.to_string(), line))
+}
+
+pub fn source_line(source: &str, line: u32) -> &str {
+    source
+        .lines()
+        .nth((line as usize).saturating_sub(1))
+        .unwrap_or("")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::runtime::env::Env;
+
+    fn env() -> Rc<RefCellEnv> {
+        Env::new(FrameKind::Module, None)
+    }
+
+    fn ctx<'a>(
+        file: &'a str,
+        source: &'a str,
+        span: Span,
+        env: &'a Rc<RefCellEnv>,
+        stack: &'a [CallFrame],
+    ) -> DebugCtx<'a> {
+        DebugCtx {
+            file,
+            source,
+            span,
+            env,
+            stack,
+        }
+    }
+
+    #[cfg(feature = "terminal")]
+    fn debugger() -> CliDebugger {
+        CliDebugger::with_out(Box::new(io::sink()))
+    }
+
+    #[test]
+    fn breakpoint_spec() {
+        assert_eq!(parse_breakpoint("12", "a.lep"), Some(("a.lep".into(), 12)));
+        assert_eq!(
+            parse_breakpoint("lib.lep:3", "a.lep"),
+            Some(("lib.lep".into(), 3))
+        );
+        assert_eq!(parse_breakpoint("abc", "a.lep"), None);
+    }
+
+    #[test]
+    #[cfg(feature = "terminal")]
+    fn ponto_and_remover_take_file_and_line() {
+        let e = env();
+        let c = ctx("/p/main.lep", "", Span::new(1, 1, 0, 1), &e, &[]);
+        let mut s = DebugSession::step_in();
+        s.handle_command("ponto /p/lib/a.lep:4", &c);
+        s.handle_command("ponto 2", &c);
+        assert!(s.breakpoints.contains(&("/p/lib/a.lep".into(), 4)));
+        assert!(s.breakpoints.contains(&("/p/main.lep".into(), 2)));
+        s.handle_command("remover /p/lib/a.lep:4", &c);
+        s.handle_command("remover 2", &c);
+        assert!(s.breakpoints.is_empty());
+    }
+
+    #[test]
+    #[cfg(feature = "terminal")]
+    fn cli_remover_aceita_arquivo_e_linha() {
+        struct Mem(std::rc::Rc<std::cell::RefCell<Vec<u8>>>);
+        impl std::io::Write for Mem {
+            fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+                self.0.borrow_mut().extend_from_slice(buf);
+                Ok(buf.len())
+            }
+            fn flush(&mut self) -> std::io::Result<()> {
+                Ok(())
+            }
+        }
+        let e = env();
+        let c = ctx("main.lep", "", Span::new(1, 1, 0, 1), &e, &[]);
+        let log = std::rc::Rc::new(std::cell::RefCell::new(Vec::new()));
+        let mut dbg = CliDebugger::with_out(Box::new(Mem(std::rc::Rc::clone(&log))));
+        let texto = || String::from_utf8(log.borrow().clone()).unwrap();
+        assert!(dbg.handle_command("ponto lib.lep:4", &c).is_none());
+        assert!(dbg.handle_command("remover lib.lep:4", &c).is_none());
+        assert!(texto().contains("removido lib.lep:4"), "{}", texto());
+        assert!(dbg.handle_command("remover lib.lep:4", &c).is_none());
+        assert!(
+            texto().contains("nenhum ponto de parada em lib.lep:4"),
+            "{}",
+            texto()
+        );
+        assert!(dbg.handle_command("remover", &c).is_none());
+        assert!(
+            texto().contains("uso: remover [arquivo:]linha"),
+            "{}",
+            texto()
+        );
+        assert!(dbg.handle_command("ponto 3", &c).is_none());
+        assert!(dbg.handle_command("remover 3", &c).is_none());
+        assert!(texto().contains("removido main.lep:3"), "{}", texto());
+    }
+
+    #[test]
+    fn span_nesting() {
+        let outer = Span::new(1, 1, 0, 20);
+        let inner = Span::new(2, 1, 5, 10);
+        assert!(strictly_inside(outer, inner));
+        assert!(!strictly_inside(outer, outer));
+        let sibling = Span::new(3, 1, 20, 25);
+        assert!(!strictly_inside(outer, sibling));
+    }
+
+    #[test]
+    fn source_line_is_one_based() {
+        let src = "a = 1\nb = 2\n";
+        assert_eq!(source_line(src, 1), "a = 1");
+        assert_eq!(source_line(src, 2), "b = 2");
+        assert_eq!(source_line(src, 99), "");
+    }
+
+    #[test]
+    #[cfg(feature = "terminal")]
+    fn commands_change_step_mode() {
+        let env = env();
+        let span = Span::new(1, 1, 0, 5);
+        let stack = [CallFrame {
+            name: "<modulo>".into(),
+            file: "a.lep".into(),
+            span,
+        }];
+        let ctx = ctx("a.lep", "x = 1", span, &env, &stack);
+        let mut dbg = debugger();
+
+        assert_eq!(
+            dbg.handle_command("continuar", &ctx),
+            Some(DebugAction::Continue)
+        );
+        assert!(matches!(dbg.session.mode, StepMode::Continue));
+
+        assert_eq!(
+            dbg.handle_command("entrar", &ctx),
+            Some(DebugAction::Continue)
+        );
+        assert!(matches!(dbg.session.mode, StepMode::StepIn));
+
+        assert_eq!(
+            dbg.handle_command("proximo", &ctx),
+            Some(DebugAction::Continue)
+        );
+        assert!(matches!(
+            dbg.session.mode,
+            StepMode::StepOver { depth: 1, .. }
+        ));
+
+        assert_eq!(
+            dbg.handle_command("sair", &ctx),
+            Some(DebugAction::Continue)
+        );
+        assert!(matches!(dbg.session.mode, StepMode::StepOut { depth: 0 }));
+
+        assert_eq!(
+            dbg.handle_command("terminar", &ctx),
+            Some(DebugAction::Quit)
+        );
+        assert_eq!(dbg.handle_command("vars", &ctx), None);
+        assert_eq!(dbg.handle_command("xyzzy", &ctx), None);
+    }
+
+    #[test]
+    #[cfg(feature = "terminal")]
+    fn ponto_and_remover_use_current_file() {
+        let env = env();
+        let span = Span::new(3, 1, 0, 1);
+        let ctx = ctx("media.lep", "x = 1", span, &env, &[]);
+        let mut dbg = debugger();
+
+        assert_eq!(dbg.handle_command("ponto 7", &ctx), None);
+        assert!(dbg.session.breakpoints.contains(&("media.lep".into(), 7)));
+
+        assert_eq!(dbg.handle_command("ponto lib.lep:2", &ctx), None);
+        assert!(dbg.session.breakpoints.contains(&("lib.lep".into(), 2)));
+
+        assert_eq!(dbg.handle_command("remover 7", &ctx), None);
+        assert!(!dbg.session.breakpoints.contains(&("media.lep".into(), 7)));
+    }
+
+    #[test]
+    #[cfg(feature = "terminal")]
+    fn continue_only_pauses_on_breakpoints() {
+        let env = env();
+        let span3 = Span::new(3, 1, 0, 4);
+        let span4 = Span::new(4, 1, 5, 8);
+        let stack = [];
+        let mut dbg = debugger();
+        dbg.session.mode = StepMode::Continue;
+        dbg.session.breakpoints.insert(("a.lep".into(), 3));
+
+        assert!(
+            dbg.session
+                .should_pause(&ctx("a.lep", "", span3, &env, &stack))
+        );
+        assert!(
+            !dbg.session
+                .should_pause(&ctx("a.lep", "", span4, &env, &stack))
+        );
+    }
+
+    #[test]
+    #[cfg(feature = "terminal")]
+    fn step_in_pauses_on_every_statement() {
+        let env = env();
+        let span = Span::new(1, 1, 0, 1);
+        let mut dbg = debugger();
+        dbg.session.mode = StepMode::StepIn;
+        assert!(dbg.session.should_pause(&ctx("a.lep", "", span, &env, &[])));
+    }
+
+    #[test]
+    #[cfg(feature = "terminal")]
+    fn step_over_skips_statements_nested_in_the_current_span() {
+        let env = env();
+        let outer = Span::new(1, 1, 0, 20);
+        let inner = Span::new(2, 1, 5, 10);
+        let after = Span::new(3, 1, 21, 25);
+        let stack = [CallFrame {
+            name: "<modulo>".into(),
+            file: "a.lep".into(),
+            span: outer,
+        }];
+        let mut dbg = debugger();
+        dbg.session.mode = StepMode::StepOver {
+            depth: 1,
+            file: "a.lep".into(),
+            span: outer,
+        };
+
+        assert!(
+            !dbg.session
+                .should_pause(&ctx("a.lep", "", inner, &env, &stack))
+        );
+        assert!(
+            dbg.session
+                .should_pause(&ctx("a.lep", "", after, &env, &stack))
+        );
+        assert!(
+            dbg.session
+                .should_pause(&ctx("a.lep", "", inner, &env, &[]))
+        );
+    }
+
+    #[test]
+    #[cfg(feature = "terminal")]
+    fn step_out_pauses_when_the_call_stack_shrinks() {
+        let env = env();
+        let span = Span::new(1, 1, 0, 1);
+        let deep = vec![
+            CallFrame {
+                name: "<modulo>".into(),
+                file: "a.lep".into(),
+                span,
+            },
+            CallFrame {
+                name: "f".into(),
+                file: "a.lep".into(),
+                span,
+            },
+        ];
+        let shallow = vec![CallFrame {
+            name: "<modulo>".into(),
+            file: "a.lep".into(),
+            span,
+        }];
+        let mut dbg = debugger();
+        dbg.session.mode = StepMode::StepOut { depth: 1 };
+
+        assert!(
+            !dbg.session
+                .should_pause(&ctx("a.lep", "", span, &env, &deep))
+        );
+        assert!(
+            dbg.session
+                .should_pause(&ctx("a.lep", "", span, &env, &shallow))
+        );
+    }
+
+    #[test]
+    fn collect_vars_lists_module_bindings() {
+        let env = env();
+        env.borrow_mut()
+            .vars
+            .insert("n".into(), Value::Numero(3.0.try_into().unwrap()));
+        let span = Span::new(1, 1, 0, 1);
+        let ctx = ctx("a.lep", "n = 3", span, &env, &[]);
+        let vars = collect_vars(&ctx);
+        assert!(
+            vars.iter().any(|b| b.name == "n" && b.value.contains('3')),
+            "{vars:?}"
+        );
+    }
+
+    #[test]
+    fn noop_hook_never_stops() {
+        let env = env();
+        let span = Span::new(1, 1, 0, 1);
+        let ctx = ctx("a.lep", "x = 1", span, &env, &[]);
+        let mut hook = NoopHook;
+        assert_eq!(hook.before_stmt(&ctx), DebugAction::Continue);
+    }
+}

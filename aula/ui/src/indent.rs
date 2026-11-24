@@ -1,0 +1,735 @@
+//! Indentation and `inicio`/`fim` matching for the Aula editor.
+//!
+//! Body indent is the **leading whitespace of the line that opened the
+//! block** plus 4, not `n_tokens * 4`. So `se a == 1 {` opens one level
+//! from column 0, not two. The same rule applies to `[` / `]` lists and
+//! `(` / `)` argument lists.
+
+use gtk::prelude::*;
+use sourceview5::Buffer as SourceBuffer;
+
+const OFFSET: usize = 4;
+
+fn line_text(buffer: &SourceBuffer, line: i32) -> String {
+    let Some(start) = buffer.iter_at_line(line) else {
+        return String::new();
+    };
+    let mut end = start;
+    // On an empty line forward_to_line_end() would jump to the next line's end.
+    if !end.ends_line() && !end.forward_to_line_end() {
+        end = buffer.end_iter();
+    }
+    buffer.text(&start, &end, false).to_string()
+}
+
+fn strip_line_code(s: &str) -> String {
+    crate::lang::blank_comments_and_strings(s)
+}
+
+fn leading_ws(s: &str) -> usize {
+    s.chars().take_while(|c| *c == ' ' || *c == '\t').count()
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Ev {
+    Open,
+    Close,
+}
+
+fn events(code: &str) -> Vec<Ev> {
+    let mut out = Vec::new();
+    let mut i = 0;
+    while i < code.len() {
+        if code[i..].starts_with("inicio") && word_at(code, i, "inicio") {
+            out.push(Ev::Open);
+            i += "inicio".len();
+            continue;
+        }
+        if code[i..].starts_with("início") && word_at(code, i, "início") {
+            out.push(Ev::Open);
+            i += "início".len();
+            continue;
+        }
+        if code[i..].starts_with("fim") && word_at(code, i, "fim") {
+            out.push(Ev::Close);
+            i += "fim".len();
+            continue;
+        }
+        match code[i..].chars().next() {
+            Some('{') | Some('[') | Some('(') => {
+                out.push(Ev::Open);
+                i += 1;
+            }
+            Some('}') | Some(']') | Some(')') => {
+                out.push(Ev::Close);
+                i += 1;
+            }
+            Some(c) => i += c.len_utf8(),
+            None => break,
+        }
+    }
+    out
+}
+
+fn word_at(s: &str, i: usize, word: &str) -> bool {
+    let before_ok = i == 0
+        || !s[..i]
+            .chars()
+            .last()
+            .is_some_and(|c| c.is_alphanumeric() || c == '_');
+    let after = i + word.len();
+    let after_ok = after >= s.len()
+        || !s[after..]
+            .chars()
+            .next()
+            .is_some_and(|c| c.is_alphanumeric() || c == '_');
+    before_ok && after_ok
+}
+
+fn starts_with_closer(code: &str) -> bool {
+    let t = code.trim_start();
+    t.starts_with('}')
+        || t.starts_with(']')
+        || t.starts_with(')')
+        || (t.starts_with("fim") && word_at(t, 0, "fim"))
+}
+
+/// Stack of leading indents of lines that still have an open block.
+///
+/// Each opener is pushed with **this line's** indent, so `se a { se b {` or
+/// `mapa([` still open one visual level. Each closer pops once, so a nested
+/// call like `limpe(nova(t, falso))` cannot close the enclosing `enquanto`.
+fn opener_stack(prev_lines: &[&str]) -> Vec<usize> {
+    let mut stack = Vec::new();
+    for raw in prev_lines {
+        let lead = leading_ws(raw);
+        let code = strip_line_code(raw);
+        for ev in events(&code) {
+            match ev {
+                Ev::Close => {
+                    stack.pop();
+                }
+                Ev::Open => stack.push(lead),
+            }
+        }
+    }
+    stack
+}
+
+fn want_indent(prev_lines: &[&str], current: &str) -> usize {
+    let stack = opener_stack(prev_lines);
+    let code = strip_line_code(current);
+    match stack.last().copied() {
+        None => 0,
+        Some(base) if starts_with_closer(&code) => base,
+        Some(base) => base + OFFSET,
+    }
+}
+
+pub fn line_is_blank(buffer: &SourceBuffer, line: i32) -> bool {
+    line_text(buffer, line).trim().is_empty()
+}
+
+pub fn line_starts_with_closer(buffer: &SourceBuffer, line: i32) -> bool {
+    let t = strip_line_code(&line_text(buffer, line));
+    starts_with_closer(&t)
+}
+
+/// Reindent `line` only if it is a closer (`fim` / `}` / `]` / `)`).
+pub fn indent_if_closer(buffer: &SourceBuffer, line: i32) {
+    if line_starts_with_closer(buffer, line) {
+        indent_line(buffer, line);
+    }
+}
+
+/// Replace the leading whitespace of `line` with `want` spaces. Like Emacs
+/// `indent-line-to`: a cursor inside the indentation lands on the first
+/// non-blank char, a cursor after it keeps its place in the text.
+fn set_line_indent(buffer: &SourceBuffer, line: i32, want: usize) {
+    let have = leading_ws(&line_text(buffer, line));
+    let Some(start) = buffer.iter_at_line(line) else {
+        return;
+    };
+    let cursor = buffer.iter_at_mark(&buffer.get_insert());
+    let cursor_col = (cursor.line() == line).then(|| cursor.line_offset() as usize);
+    let has_selection = buffer.has_selection();
+    if have != want {
+        let mut ws_end = start;
+        ws_end.forward_chars(have as i32);
+        buffer.delete(&mut start.clone(), &mut ws_end);
+        let mut ins = buffer.iter_at_line(line).unwrap_or(start);
+        buffer.insert(&mut ins, &" ".repeat(want));
+    }
+    if let (Some(col), false) = (cursor_col, has_selection) {
+        let col = if col <= have { want } else { col - have + want };
+        if let Some(it) = buffer.iter_at_line_offset(line, col as i32) {
+            buffer.place_cursor(&it);
+        }
+    }
+}
+
+pub fn indent_line(buffer: &SourceBuffer, line: i32) {
+    if line < 0 || line >= buffer.line_count() {
+        return;
+    }
+    let prev: Vec<String> = (0..line).map(|l| line_text(buffer, l)).collect();
+    let prev_refs: Vec<&str> = prev.iter().map(String::as_str).collect();
+    let want = want_indent(&prev_refs, &line_text(buffer, line));
+    set_line_indent(buffer, line, want);
+}
+
+pub fn indent_current_line(buffer: &SourceBuffer) {
+    let insert = buffer.iter_at_mark(&buffer.get_insert());
+    buffer.begin_user_action();
+    indent_line(buffer, insert.line());
+    buffer.end_user_action();
+}
+
+/// First and last line touched by the selection. A selection ending at
+/// column 0 does not include that last line (as when selecting whole lines).
+fn selection_lines(buffer: &SourceBuffer) -> Option<(i32, i32)> {
+    let (a, b) = buffer.selection_bounds()?;
+    let last = if b.starts_line() && b.line() > a.line() {
+        b.line() - 1
+    } else {
+        b.line()
+    };
+    Some((a.line(), last))
+}
+
+/// Lines to shift with Tab / Shift+Tab: the selection, if it spans more than
+/// one line or covers a whole line. `None` for no selection or a selection
+/// inside a single line.
+pub fn selected_full_lines(buffer: &SourceBuffer) -> Option<(i32, i32)> {
+    let (a, b) = buffer.selection_bounds()?;
+    let (first, last) = selection_lines(buffer)?;
+    let whole_line = a.starts_line() && (b.ends_line() || b.line() > a.line());
+    (last > first || whole_line).then_some((first, last))
+}
+
+/// Emacs `indent-region` (C-M-\): reindent every non-blank line of the
+/// selection, or the current line without a selection.
+pub fn indent_region_or_line(buffer: &SourceBuffer) {
+    let Some((first, last)) = selection_lines(buffer) else {
+        indent_current_line(buffer);
+        return;
+    };
+    buffer.begin_user_action();
+    for line in first..=last {
+        if !line_is_blank(buffer, line) {
+            indent_line(buffer, line);
+        }
+    }
+    select_lines(buffer, first, last);
+    buffer.end_user_action();
+}
+
+/// Emacs `indent-rigidly`: move lines `first..=last` right (`delta > 0`) or
+/// left by `delta` columns. Blank lines are left alone.
+pub fn shift_lines(buffer: &SourceBuffer, first: i32, last: i32, delta: i32) {
+    buffer.begin_user_action();
+    for line in first..=last {
+        if line_is_blank(buffer, line) {
+            continue;
+        }
+        let have = leading_ws(&line_text(buffer, line)) as i32;
+        set_line_indent(buffer, line, (have + delta).max(0) as usize);
+    }
+    select_lines(buffer, first, last);
+    buffer.end_user_action();
+}
+
+fn select_lines(buffer: &SourceBuffer, first: i32, last: i32) {
+    let Some(start) = buffer.iter_at_line(first) else {
+        return;
+    };
+    let end = buffer
+        .iter_at_line(last + 1)
+        .unwrap_or_else(|| buffer.end_iter());
+    buffer.select_range(&end, &start);
+}
+
+/// Tab: shift the selected lines, else auto-indent the current line.
+pub fn tab(buffer: &SourceBuffer) {
+    match selected_full_lines(buffer) {
+        Some((first, last)) => shift_lines(buffer, first, last, OFFSET as i32),
+        None => indent_current_line(buffer),
+    }
+}
+
+/// Shift+Tab: shift the selected lines (or the current line) left.
+pub fn backtab(buffer: &SourceBuffer) {
+    if let Some((first, last)) = selected_full_lines(buffer) {
+        shift_lines(buffer, first, last, -(OFFSET as i32));
+        return;
+    }
+    let line = buffer.iter_at_mark(&buffer.get_insert()).line();
+    let have = leading_ws(&line_text(buffer, line));
+    buffer.begin_user_action();
+    set_line_indent(buffer, line, have.saturating_sub(OFFSET));
+    buffer.end_user_action();
+}
+
+/// Block delimiters in `text` (comments and strings skipped), as
+/// (opens, byte start, byte end).
+pub(crate) fn block_tokens(text: &str) -> Vec<(bool, usize, usize)> {
+    let code = crate::lang::blank_comments_and_strings(text);
+    let mut out = Vec::new();
+    let mut i = 0;
+    while i < code.len() {
+        let rest = &code[i..];
+        let word = |w: &str| rest.starts_with(w) && word_at(&code, i, w);
+        if word("inicio") || word("início") {
+            let len = if rest.starts_with("inicio") {
+                6
+            } else {
+                "início".len()
+            };
+            out.push((true, i, i + len));
+            i += len;
+        } else if word("fim") {
+            out.push((false, i, i + 3));
+            i += 3;
+        } else if rest.starts_with('{') {
+            out.push((true, i, i + 1));
+            i += 1;
+        } else if rest.starts_with('}') {
+            out.push((false, i, i + 1));
+            i += 1;
+        } else {
+            i += rest.chars().next().map_or(1, char::len_utf8);
+        }
+    }
+    out
+}
+
+/// The block pair to highlight for the cursor at byte `cursor`: byte ranges
+/// of the opener (`inicio` / `{`) and its closer (`fim` / `}`). Prefers the
+/// token under the cursor, then a closer starting the line, then the last
+/// opener of the line whose block continues below.
+#[cfg(test)]
+pub fn block_pair(text: &str, cursor: usize) -> Option<((usize, usize), (usize, usize))> {
+    let tokens = block_tokens(text);
+    let mut pair = vec![None; tokens.len()];
+    let mut stack = Vec::new();
+    for (i, t) in tokens.iter().enumerate() {
+        if t.0 {
+            stack.push(i);
+        } else if let Some(o) = stack.pop() {
+            pair[o] = Some(i);
+            pair[i] = Some(o);
+        }
+    }
+    let line_start = text[..cursor].rfind('\n').map_or(0, |i| i + 1);
+    let line_end = text[cursor..].find('\n').map_or(text.len(), |i| cursor + i);
+    let on_line: Vec<usize> = (0..tokens.len())
+        .filter(|&i| tokens[i].1 >= line_start && tokens[i].2 <= line_end && pair[i].is_some())
+        .collect();
+    let chosen = on_line
+        .iter()
+        .copied()
+        .find(|&i| tokens[i].1 <= cursor && cursor <= tokens[i].2)
+        .or_else(|| {
+            on_line
+                .first()
+                .copied()
+                .filter(|&i| !tokens[i].0 && text[line_start..tokens[i].1].trim().is_empty())
+        })
+        .or_else(|| {
+            on_line
+                .iter()
+                .rev()
+                .copied()
+                .find(|&i| tokens[i].0 && tokens[pair[i].unwrap()].1 > line_end)
+        })?;
+    let other = pair[chosen]?;
+    let (o, c) = if tokens[chosen].0 {
+        (chosen, other)
+    } else {
+        (other, chosen)
+    };
+    Some(((tokens[o].1, tokens[o].2), (tokens[c].1, tokens[c].2)))
+}
+
+/// Electric indent: after a typed newline, indent the new line; after `}`,
+/// `]`, `)`, or the `m` of `fim` at the start of a line, reindent it.
+///
+/// Runs after the buffer's own `insert-text` handler (GtkSourceBuffer still
+/// uses the iterator inside it), within the keystroke's user action: one
+/// undo removes the key and the indentation. Undo/redo and programmatic
+/// inserts happen outside user actions and are left alone. (Not a
+/// GtkSourceView `Indenter`: the sourceview5 0.9 binding frees the view's
+/// stack iterator in `indent` and crashes.)
+pub fn attach_electric(buffer: &SourceBuffer) {
+    use std::cell::Cell;
+    use std::rc::Rc;
+    let depth = Rc::new(Cell::new(0u32));
+    // Inserts in the current user action. A keystroke is one insert (`\n`,
+    // `}` or `m`). Paste between two Aula windows copies tagged runs, so
+    // Gtk emits one insert-text per token/`\n`; indent in the middle of
+    // that aborts the rest of the paste.
+    let inserts = Rc::new(Cell::new(0u32));
+    {
+        let d = Rc::clone(&depth);
+        let n = Rc::clone(&inserts);
+        buffer.connect_begin_user_action(move |_| {
+            d.set(d.get() + 1);
+            if d.get() == 1 {
+                n.set(0);
+            }
+        });
+    }
+    {
+        let d = Rc::clone(&depth);
+        buffer.connect_end_user_action(move |_| d.set(d.get().saturating_sub(1)));
+    }
+    buffer.connect_local("insert-text", true, move |args| {
+        if depth.get() == 0 {
+            return None;
+        }
+        let n = inserts.get().saturating_add(1);
+        inserts.set(n);
+        if n != 1 {
+            return None;
+        }
+        let b = args[0].get::<SourceBuffer>().ok()?;
+        let at = args[1].get::<gtk::TextIter>().ok()?;
+        let text = args[2].get::<String>().ok()?;
+        let line = at.line();
+        match text.as_str() {
+            "\n" => indent_line(&b, line),
+            "}" | "]" | ")" | "m" => indent_if_closer(&b, line),
+            _ => {}
+        }
+        None
+    });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn block_pairs() {
+        let src = "se a {\n    x // {\n    s = \"}\"\n}\npara i em 1..=2\ninicio\n    y\nfim\n";
+        let at = |needle: &str, nth: usize| src.match_indices(needle).nth(nth).unwrap().0;
+        let brace_open = at("{", 0);
+        let brace_close = at("}\n", 0);
+        // Cursor anywhere on `se a {` line: the block continues below.
+        assert_eq!(
+            block_pair(src, 0),
+            Some(((brace_open, brace_open + 1), (brace_close, brace_close + 1)))
+        );
+        // On the closing line.
+        assert_eq!(block_pair(src, brace_close), block_pair(src, 0));
+        // `{` in a comment and `}` in a string are not delimiters.
+        assert_eq!(block_pair(src, at("x //", 0)), None);
+        let inicio = at("inicio", 0);
+        let fim = at("fim", 0);
+        assert_eq!(
+            block_pair(src, inicio + 2),
+            Some(((inicio, inicio + 6), (fim, fim + 3)))
+        );
+        assert_eq!(
+            block_pair(src, fim + 3),
+            Some(((inicio, inicio + 6), (fim, fim + 3)))
+        );
+        // `funcao(x) { x }` on one line: the token under the cursor.
+        let one = "f = funcao(x) { x }";
+        assert_eq!(block_pair(one, 14), Some(((14, 15), (18, 19))));
+        // Unbalanced: nothing.
+        assert_eq!(block_pair("se a {\n", 0), None);
+        // Accents before the cursor.
+        let acc = "ação = 1\nse x {\n}\n";
+        assert!(block_pair(acc, acc.find("se").unwrap()).is_some());
+    }
+
+    #[test]
+    fn brace_on_same_line_as_se_is_one_level() {
+        assert_eq!(want_indent(&["se a == 1 {"], "x"), 4);
+        assert_eq!(want_indent(&["se a == 1 {"], "}"), 0);
+        assert_eq!(want_indent(&["x = funcao(a) {"], "retorne a"), 4);
+    }
+
+    #[test]
+    fn top_level_statement_does_not_indent() {
+        assert_eq!(want_indent(&["escreva(1)"], "escreva(2)"), 0);
+        assert_eq!(want_indent(&[], "escreva(1)"), 0);
+        assert_eq!(want_indent(&["x = 1"], ""), 0);
+    }
+
+    #[test]
+    fn after_closer_next_line_is_not_indented() {
+        assert_eq!(want_indent(&["se a {", "    x", "}"], ""), 0);
+        assert_eq!(want_indent(&["se a {", "}"], "escreva(1)"), 0);
+        assert_eq!(want_indent(&["se a {", "    }"], ""), 0);
+    }
+
+    #[test]
+    fn nested_uses_opener_line_indent() {
+        assert_eq!(want_indent(&["se a {", "    se b {"], "x"), 8);
+        assert_eq!(want_indent(&["se a {", "    se b {", "        x"], "}"), 4);
+        assert_eq!(
+            want_indent(&["    se a == 1 {"], "x"),
+            8,
+            "opener already indented by 4"
+        );
+    }
+
+    #[test]
+    fn close_then_open_on_same_line() {
+        assert_eq!(want_indent(&["se a {", "    x", "} se b {"], "y"), 4);
+    }
+
+    #[test]
+    fn keywords_in_strings_and_comments_do_not_indent() {
+        assert_eq!(
+            want_indent(
+                &[r#"escreva("início: " + verso[1..5])"#],
+                r#"escreva("hashtag: " + junte(palavras, "0"))"#
+            ),
+            0
+        );
+        assert_eq!(want_indent(&[r#"s = "{""#], "x"), 0);
+        assert_eq!(want_indent(&["x // {"], "y"), 0);
+        assert_eq!(want_indent(&["se a {", r#"    s = "fim""#], "x"), 4);
+    }
+
+    #[test]
+    fn list_items_are_indented() {
+        assert_eq!(
+            want_indent(&["tarefas = ["], r#"nova("Dormir", falso),"#),
+            4
+        );
+        assert_eq!(
+            want_indent(
+                &["tarefas = [", r#"    nova("Dormir", falso),"#],
+                r#"nova("Acordar", falso),"#
+            ),
+            4
+        );
+        assert_eq!(
+            want_indent(
+                &[
+                    "tarefas = [",
+                    r#"    nova("Dormir", falso),"#,
+                    r#"    nova("Acordar", falso),"#,
+                    r#"    nova("Trabalhar", verdadeiro)"#,
+                ],
+                "]"
+            ),
+            0
+        );
+        assert_eq!(want_indent(&["x = verso[1..5]"], "y = 1"), 0);
+        assert_eq!(want_indent(&["xs = [", "    ["], "1"), 8);
+        assert_eq!(want_indent(&["xs = [", "    [", "        1"], "]"), 4);
+        assert_eq!(want_indent(&["escreva("], "1,"), 4);
+        assert_eq!(want_indent(&["escreva(", "    1,"], ")"), 0);
+        assert_eq!(want_indent(&["se a { se b {"], "x"), 4);
+    }
+
+    #[test]
+    fn nested_calls_do_not_close_the_enclosing_block() {
+        assert_eq!(
+            want_indent(
+                &[
+                    r#"nova("Dormir", agora(), falso),"#,
+                    r#"nova("Acordar", agora(), falso),"#,
+                ],
+                r#"nova("Trabalhar", agora(), verdadeiro)"#,
+            ),
+            0,
+            "balanced calls at the top level stay at column 0"
+        );
+        assert_eq!(
+            want_indent(
+                &["tarefas = [", r#"    nova("Dormir", agora(), falso),"#,],
+                r#"nova("Acordar", agora(), falso),"#,
+            ),
+            4
+        );
+        assert_eq!(
+            want_indent(
+                &["f = funcao() {", "    mapa([", "        :a -> 1", "    ])"],
+                "}"
+            ),
+            0
+        );
+        assert_eq!(
+            want_indent(&["para i em 0..=n {", "    escreva(i+1, ts[i])",], "}"),
+            0
+        );
+        assert_eq!(
+            want_indent(
+                &[
+                    r#"enquanto op != "S" {"#,
+                    r#"    se op == "N" {"#,
+                    "        item = limpe(nova(t, falso))",
+                    "    } ou se op == \"S\" {",
+                    r#"        escreva("Tchau")"#,
+                    "        pare",
+                    "    }",
+                ],
+                "ps::salva(tarefas)",
+            ),
+            4
+        );
+    }
+}
+
+#[cfg(test)]
+mod buffer_tests {
+    use super::*;
+
+    fn buf(text: &str) -> Option<SourceBuffer> {
+        if !gtk::is_initialized() && gtk::init().is_err() {
+            return None; // no display
+        }
+        let b = SourceBuffer::new(None::<&gtk::TextTagTable>);
+        b.set_text(text);
+        Some(b)
+    }
+
+    fn text(b: &SourceBuffer) -> String {
+        let (s, e) = b.bounds();
+        b.text(&s, &e, false).to_string()
+    }
+
+    /// Typing, like the TextView does it: one user action per key.
+    fn type_text(b: &SourceBuffer, t: &str) {
+        b.begin_user_action();
+        b.insert_interactive_at_cursor(t, true);
+        b.end_user_action();
+    }
+
+    fn electric_indent_is_one_undo_step() {
+        let Some(b) = buf("") else {
+            return;
+        };
+        attach_electric(&b);
+        b.begin_irreversible_action();
+        b.set_text("se a {");
+        b.end_irreversible_action();
+        assert!(!b.can_undo(), "loading a file is not undoable");
+        b.place_cursor(&b.end_iter());
+        type_text(&b, "\n");
+        assert_eq!(text(&b), "se a {\n    ");
+        type_text(&b, "x");
+        type_text(&b, "\n");
+        type_text(&b, "}");
+        assert_eq!(text(&b), "se a {\n    x\n}");
+        b.undo();
+        assert_eq!(
+            text(&b),
+            "se a {\n    x\n    ",
+            "undo removes `}}` and its reindent together"
+        );
+        b.undo();
+        assert_eq!(text(&b), "se a {\n    x");
+        // Redo is not typing: it must not indent again.
+        b.redo();
+        assert_eq!(text(&b), "se a {\n    x\n    ");
+        // `fim` reindents on its `m`; programmatic inserts are left alone.
+        b.set_text("se a\ninicio\n    x\n    fi");
+        b.place_cursor(&b.end_iter());
+        type_text(&b, "m");
+        assert_eq!(text(&b), "se a\ninicio\n    x\nfim");
+        b.insert_at_cursor("\n");
+        assert_eq!(text(&b), "se a\ninicio\n    x\nfim\n");
+    }
+
+    fn cursor(b: &SourceBuffer, line: i32, col: i32) {
+        b.place_cursor(&b.iter_at_line_offset(line, col).unwrap());
+    }
+
+    fn select(b: &SourceBuffer, l1: i32, c1: i32, l2: i32, c2: i32) {
+        let a = b.iter_at_line_offset(l1, c1).unwrap();
+        let z = b.iter_at_line_offset(l2, c2).unwrap();
+        b.select_range(&z, &a);
+    }
+
+    // One test: GTK objects must stay on the thread that initialized GTK.
+    #[test]
+    fn tab_backtab_and_region() {
+        crate::gtk_test::run(|| {
+            electric_indent_is_one_undo_step();
+            let Some(b) = buf("se a {\nx = 1\n}\n") else {
+                return;
+            };
+
+            // Tab without selection auto-indents; cursor in the indentation
+            // moves to the first char.
+            cursor(&b, 1, 0);
+            tab(&b);
+            assert_eq!(text(&b), "se a {\n    x = 1\n}\n");
+            assert_eq!(b.iter_at_mark(&b.get_insert()).line_offset(), 4);
+            // Again: no change (Emacs Tab is idempotent), cursor after the text
+            // keeps its place.
+            cursor(&b, 1, 9);
+            tab(&b);
+            assert_eq!(text(&b), "se a {\n    x = 1\n}\n");
+            assert_eq!(b.iter_at_mark(&b.get_insert()).line_offset(), 9);
+
+            // Shift+Tab without selection unindents the current line.
+            backtab(&b);
+            assert_eq!(text(&b), "se a {\nx = 1\n}\n");
+            assert_eq!(b.iter_at_mark(&b.get_insert()).line_offset(), 5);
+
+            // Selection inside one line: Tab auto-indents instead of shifting.
+            select(&b, 1, 1, 1, 3);
+            tab(&b);
+            assert_eq!(text(&b), "se a {\n    x = 1\n}\n");
+
+            // Full lines selected (ending at column 0 of the next line): shift.
+            select(&b, 0, 0, 2, 0);
+            tab(&b);
+            assert_eq!(text(&b), "    se a {\n        x = 1\n}\n");
+            tab(&b);
+            assert_eq!(text(&b), "        se a {\n            x = 1\n}\n");
+            backtab(&b);
+            backtab(&b);
+            backtab(&b);
+            assert_eq!(text(&b), "se a {\nx = 1\n}\n");
+            let (s, e) = b.selection_bounds().unwrap();
+            assert_eq!(
+                (s.line(), s.line_offset(), e.line(), e.line_offset()),
+                (0, 0, 2, 0)
+            );
+
+            // Ctrl+Alt+\ reindents the region, skipping blank lines.
+            b.set_text("se a {\n      x\n\nse b {\ny\n  }\n}\n");
+            select(&b, 0, 0, 7, 0);
+            indent_region_or_line(&b);
+            assert_eq!(
+                text(&b),
+                "se a {\n    x\n\n    se b {\n        y\n    }\n}\n"
+            );
+
+            // Multiline list: Tab and reindent follow the `[`.
+            b.set_text("tarefas = [\nnova(\"Dormir\", falso),\nnova(\"Acordar\", falso),\nnova(\"Trabalhar\", verdadeiro)\n]\n");
+            select(&b, 0, 0, 5, 0);
+            indent_region_or_line(&b);
+            assert_eq!(
+                text(&b),
+                "tarefas = [\n    nova(\"Dormir\", falso),\n    nova(\"Acordar\", falso),\n    nova(\"Trabalhar\", verdadeiro)\n]\n"
+            );
+            cursor(&b, 1, 0);
+            tab(&b);
+            assert_eq!(
+                text(&b),
+                "tarefas = [\n    nova(\"Dormir\", falso),\n    nova(\"Acordar\", falso),\n    nova(\"Trabalhar\", verdadeiro)\n]\n"
+            );
+
+            // Nested calls inside the loop must not pop `enquanto` (`ps::salva`).
+            b.set_text(
+                "enquanto op != \"S\" {\n    se op == \"N\" {\n        item = limpe(nova(t, falso))\n    }\nps::salva(tarefas)\n}\n",
+            );
+            select(&b, 0, 0, 6, 0);
+            indent_region_or_line(&b);
+            assert_eq!(
+                text(&b),
+                "enquanto op != \"S\" {\n    se op == \"N\" {\n        item = limpe(nova(t, falso))\n    }\n    ps::salva(tarefas)\n}\n"
+            );
+        });
+    }
+}

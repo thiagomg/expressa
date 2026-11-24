@@ -1,0 +1,26 @@
+// Euclides: mdc(a, b) = mdc(b, a % b).
+entrada = importe "../lib/entrada"
+
+escreva("Máximo divisor comum (MDC) e mínimo múltiplo comum (MMC).")
+escreva("O MDC é o maior inteiro que divide os dois números sem deixar resto.")
+escreva("O MMC é o menor inteiro positivo que é múltiplo dos dois números.")
+escreva("Informe dois inteiros positivos; eles também serão usados como fração a/b.")
+escreva("Para sair, pressione Enter sem digitar nada.")
+escreva()
+a = entrada::leia_numero("Primeiro número (a): ", funcao(n) { n > 0 e n % 1 == 0 }, "Digite um inteiro maior que zero.")
+se a == falso { saia(0) }
+b = entrada::leia_numero("Segundo número (b): ", funcao(n) { n > 0 e n % 1 == 0 }, "Digite um inteiro maior que zero.")
+se b == falso { saia(0) }
+x = a
+y = b
+escreva("Passos do algoritmo de Euclides:")
+enquanto y != 0 {
+    resto = x % y
+    escreva("resto de " + x + " dividido por " + y + " = " + resto)
+    x = y
+    y = resto
+}
+d = x
+multiplo = (a / d) * b
+escreva("mdc(" + a + ", " + b + ") = " + d)
+escreva("mmc(" + a + ", " + b + ") = " + multiplo)

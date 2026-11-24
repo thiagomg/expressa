@@ -1,0 +1,65 @@
+grafica = importe "tela_grafica"
+
+nova_tela = funcao(estado) { grafica::nova(estado:largura * 12 + 32, estado:altura * 12 + 104, 2) }
+
+aviso = funcao(tela, estado, titulo, subtitulo) {
+    meio = 56 + estado:altura * 6
+    tela.grafica::cor(:branco)
+    tela.grafica::retangulo(27, meio - 26, estado:largura * 12 + 4, meio + 28)
+    tela.grafica::cor(:preto)
+    tela.grafica::retangulo(29, meio - 24, estado:largura * 12 + 2, meio + 26)
+    tela.grafica::cor(:branco)
+    tela.grafica::texto(42, meio - 13, titulo, 12)
+    tela.grafica::texto(42, meio + 10, subtitulo, 8)
+}
+
+quadro = funcao(tela, estado) {
+    tela.grafica::fundo(:preto)
+    tela.grafica::apague()
+    tela.grafica::cor(:verde)
+    tela.grafica::texto(16, 8, "COBRINHA", 20)
+    tela.grafica::cor(:branco)
+    resumo = "Pontos: " + estado:pontos + "  Nível: " + estado:nivel
+    tela.grafica::texto(16, 36, resumo, 8)
+    tela.grafica::cor(:normal)
+    para coluna em 0..=estado:largura {
+        x = 16 + coluna * 12
+        tela.grafica::linha(x, 56, x, 56 + estado:altura * 12)
+    }
+    para linha em 0..=estado:altura {
+        y = 56 + linha * 12
+        tela.grafica::linha(16, y, 16 + estado:largura * 12, y)
+    }
+    se estado:comida != nada {
+        x = 22 + estado:comida[0] * 12
+        y = 62 + estado:comida[1] * 12
+        tela.grafica::cor(:vermelho)
+        tela.grafica::retangulo(x - 3, y - 2, x + 3, y + 3)
+        tela.grafica::cor(:verde)
+        tela.grafica::linha(x, y - 3, x + 2, y - 5)
+    }
+    para indice em 0..tamanho(estado:corpo) {
+        parte = estado:corpo[indice]
+        x = 16 + parte[0] * 12
+        y = 56 + parte[1] * 12
+        tela.grafica::cor(se indice == 0 { :ciano } senao { :verde })
+        tela.grafica::retangulo(x + 1, y + 1, x + 10, y + 10)
+    }
+    cabeca = estado:corpo[0]
+    x = 16 + cabeca[0] * 12
+    y = 56 + cabeca[1] * 12
+    olhos = se estado:direcao == [1, 0] { [[8, 3], [8, 8]] }
+        ou se estado:direcao == [-1, 0] { [[3, 3], [3, 8]] }
+        ou se estado:direcao == [0, -1] { [[3, 3], [8, 3]] }
+        senao { [[3, 8], [8, 8]] }
+    tela.grafica::cor(:branco)
+    para olho em olhos { tela.grafica::ponto(x + olho[0], y + olho[1]) }
+    rodape = 56 + estado:altura * 12 + 16
+    tela.grafica::texto(16, rodape, "Setas/WASD: virar  P: pausa", 8)
+    tela.grafica::texto(16, rodape + 14, "R: reiniciar  Esc: sair", 8)
+    se estado:terminou {
+        titulo = se estado:venceu { "VOCÊ VENCEU!" } senao { "FIM DE JOGO" }
+        aviso(tela, estado, titulo, "R para reiniciar")
+    } ou se estado:pausado { aviso(tela, estado, "PAUSADO", "P para continuar") }
+    ou se nao estado:iniciou { aviso(tela, estado, "VAMOS JOGAR?", "Use uma seta ou WASD") }
+}

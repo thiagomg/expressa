@@ -1,0 +1,1711 @@
+{
+  "keywords": {
+    "constantes": [
+      "verdadeiro",
+      "falso",
+      "nada"
+    ],
+    "operadores": [
+      "e",
+      "ou",
+      "nao",
+      "não",
+      "contem",
+      "contém"
+    ],
+    "blocos": [
+      "inicio",
+      "início",
+      "fim"
+    ],
+    "funcao": [
+      "funcao",
+      "função"
+    ],
+    "importe": [
+      "importe"
+    ],
+    "controle": [
+      "se",
+      "senao",
+      "senão",
+      "para",
+      "em",
+      "repita",
+      "enquanto",
+      "vezes",
+      "se_falhar",
+      "retorne",
+      "pare",
+      "continue"
+    ]
+  },
+  "modules": [
+    "arquivo",
+    "cartesiano",
+    "crono",
+    "imagem",
+    "mat",
+    "matriz",
+    "processo",
+    "sistema",
+    "tela",
+    "tela_grafica"
+  ],
+  "moduleAliases": {
+    "tela_gráfica": "tela_grafica"
+  },
+  "nativas": [
+    {
+      "name": "clone",
+      "aliases": [],
+      "module": null,
+      "kind": "funcao",
+      "signatures": [
+        "clone(valor)"
+      ],
+      "summary": "Copia recursivamente dados, preservando ciclos e aliases internos. Funções sem capturas são permitidas; módulos, processos, recursos e mapas com :_clonavel = falso impedem a cópia. Textos têm comportamento de valor. Imagens clonadas são objetos independentes com pixels que podem ser compartilhados internamente até uma escrita.",
+      "doc": "Copia recursivamente dados, preservando ciclos e aliases internos.\nFunções sem capturas são permitidas; módulos, processos, recursos e\nmapas com :_clonavel = falso impedem a cópia. Textos têm comportamento\nde valor. Imagens clonadas são objetos independentes com pixels que\npodem ser compartilhados internamente até uma escrita.\n\nExemplo: b = clone([[1, 2]])"
+    },
+    {
+      "name": "escreva",
+      "aliases": [],
+      "module": null,
+      "kind": "funcao",
+      "signatures": [
+        "escreva(valor, ...)",
+        "escreva()",
+        "escreva(valor)"
+      ],
+      "summary": "Imprime os argumentos separados por espaço e quebra a linha.",
+      "doc": "Imprime os argumentos separados por espaço e quebra a linha.\n\nAceita zero ou mais argumentos. Sem argumentos, imprime só a linha vazia.\nNúmeros inteiros aparecem sem casas decimais. Booleanos como verdadeiro e falso.\nListas e mapas são impressos de forma legível. Devolve nada.\n\nExemplo: escreva(\"Olá\", 10)"
+    },
+    {
+      "name": "escreva_erro",
+      "aliases": [],
+      "module": null,
+      "kind": "funcao",
+      "signatures": [
+        "escreva_erro()",
+        "escreva_erro(valor, ...)",
+        "escreva_erro(valor)"
+      ],
+      "summary": "Como escreva, mas na saída de erro (stderr). Não vai para arquivos com >.",
+      "doc": "Como escreva, mas na saída de erro (stderr). Não vai para arquivos com >.\n\nDevolve nada.\n\nExemplo: escreva_erro(\"nome vazio\")"
+    },
+    {
+      "name": "saia",
+      "aliases": [],
+      "module": null,
+      "kind": "funcao",
+      "signatures": [
+        "saia()",
+        "saia(codigo)"
+      ],
+      "summary": "Encerra o programa. Sem argumento, código 0; saia(1) indica falha.",
+      "doc": "Encerra o programa. Sem argumento, código 0; saia(1) indica falha.\n\nNada depois da chamada executa. Não é capturado por se_falhar.\nNo REPL, a linha sair (sem parênteses) sai do interpretador; saia() encerra o processo.\n\nExemplo: se nome == \"\" { saia(1) }"
+    },
+    {
+      "name": "falhe",
+      "aliases": [],
+      "module": null,
+      "kind": "funcao",
+      "signatures": [
+        "falhe(descricao)"
+      ],
+      "summary": "Interrompe com um erro de execução. A descrição vira a mensagem.",
+      "doc": "Interrompe com um erro de execução. A descrição vira a mensagem.\n\nA pilha aponta para esta chamada, sem um quadro chamado falhe. se_falhar pega.\n\nExemplo: se n < 0 { falhe(\"negativo\") }"
+    },
+    {
+      "name": "garanta",
+      "aliases": [],
+      "module": null,
+      "kind": "funcao",
+      "signatures": [
+        "garanta(condicao)"
+      ],
+      "summary": "Se a condição for falsa, erro \"condição incorreta …\" com o texto do teste.",
+      "doc": "Se a condição for falsa, erro \"condição incorreta …\" com o texto do teste.\n\nA condição tem que ser verdadeiro ou falso (como no se). Devolve nada.\nse_falhar pega. A pilha aponta para esta chamada.\n\nExemplo: garanta(n > 0)"
+    },
+    {
+      "name": "durma",
+      "aliases": [],
+      "module": "sistema",
+      "kind": "funcao",
+      "signatures": [
+        "durma(segundos)"
+      ],
+      "summary": "Espera o número de segundos (aceita fração: durma(0.5)).",
+      "doc": "Espera o número de segundos (aceita fração: durma(0.5)).\n\ndurma(0) não espera. Na Aula, o tempo-limite do programa continua valendo.\nDevolve nada.\n\nErros: falta o argumento, valor que não é número, ou número negativo.\n\nExemplo: durma(1)"
+    },
+    {
+      "name": "leia",
+      "aliases": [],
+      "module": null,
+      "kind": "funcao",
+      "signatures": [
+        "leia()",
+        "leia(prompt)"
+      ],
+      "summary": "Lê uma linha do teclado (sem o Enter). Prompt opcional.",
+      "doc": "Lê uma linha do teclado (sem o Enter). Prompt opcional.\n\nSem argumentos, apenas espera a linha. Com um prompt (texto), imprime o\nprompt sem quebra de linha, descarrega a saída e então espera.\nFim da entrada é erro (\"fim da entrada\"); use se_falhar.\n\nExemplo: nome = leia(\"Seu nome:\")"
+    },
+    {
+      "name": "leia_linhas",
+      "aliases": [],
+      "module": null,
+      "kind": "funcao",
+      "signatures": [
+        "leia_linhas()"
+      ],
+      "summary": "Lê todas as linhas da entrada padrão (pipe/arquivo) até o fim.",
+      "doc": "Lê todas as linhas da entrada padrão (pipe/arquivo) até o fim.\n\nDevolve uma lista de textos (uma linha cada, sem a quebra). Entrada vazia\ndevolve []. Depois de um leia(), continua do que ainda não foi lido.\nNa Aula (diálogo) não há fim de arquivo: a chamada é um erro.\n\nExemplo: para linha em leia_linhas() { escreva(linha) }"
+    },
+    {
+      "name": "numero",
+      "aliases": [
+        "número"
+      ],
+      "module": null,
+      "kind": "funcao",
+      "signatures": [
+        "numero(texto)",
+        "numero(numero)"
+      ],
+      "summary": "Transforma texto em número (aceita 3.14 ou 3,14). Também número().",
+      "doc": "Transforma texto em número (aceita 3.14 ou 3,14). Também número().\n\nAceita espaços nas pontas e _ como em literais. O padrão de texto é pt-BR\n(1.000,5). Mude com define_opcao(:formato_numero, :en) para en-US (1,000.5).\nSe o argumento já é número, devolve o mesmo valor.\n\nExemplo: idade = numero(leia(\"Idade: \")) se_falhar { 0 }"
+    },
+    {
+      "name": "define_opcao",
+      "aliases": [
+        "define_opção"
+      ],
+      "module": null,
+      "kind": "funcao",
+      "signatures": [
+        "define_opcao(opcao, valor)"
+      ],
+      "summary": "Configura uma opção para toda a execução. Também define_opção().",
+      "doc": "Configura uma opção para toda a execução. Também define_opção().\n\n:tipo_numero aceita :decimal (padrão) ou :float para a aritmética.\n:formato_numero aceita :pt (padrão) ou :en para exibição e conversão de texto.\nAs escolhas numéricas são independentes; literais sempre usam ponto decimal.\n:fechar_janelas aceita verdadeiro ou falso (padrão). Quando ativa, fecha\nas janelas desta execução ao terminar, inclusive por erro ou interrupção.\nPode ser ativada depois de abrir uma janela e desativada novamente.\nNo REPL, vale até o encerramento da sessão, não só da linha atual.\nOpções ou valores desconhecidos produzem erro. Devolve nada.\n\nExemplo: define_opcao(:tipo_numero, :float)\nExemplo: define_opcao(:formato_numero, :en)\nExemplo: define_opcao(:fechar_janelas, verdadeiro)"
+    },
+    {
+      "name": "formate",
+      "aliases": [],
+      "module": null,
+      "kind": "funcao",
+      "signatures": [
+        "formate(modelo, valor, ...)",
+        "formate(modelo, valor)"
+      ],
+      "summary": "Monta um texto: {} valor, {:<n} esquerda, {:>n} direita, {:^n} centro.",
+      "doc": "Monta um texto: {} valor, {:<n} esquerda, {:>n} direita, {:^n} centro.\n\nCada {} (ou {0}, {1}, …) é substituído pelo valor correspondente.\nSem < > ^, texto encosta à esquerda e número à direita: {:8}.\nSe o valor já é mais largo que n, entra inteiro. n vai de 0 a 10000;\nacima disso formate devolve erro. {0} é o primeiro valor.\n{{ e }} escrevem { e }. Números seguem o formato atual.\nMapa com :_como_texto (função de um argumento que devolve texto) usa essa função.\n\nExemplo: formate(\"{:<8} {:>5}\", \"Ana\", 10)"
+    },
+    {
+      "name": "avalie",
+      "aliases": [],
+      "module": null,
+      "kind": "funcao",
+      "signatures": [
+        "avalie(texto)"
+      ],
+      "summary": "Executa o texto como código Expressa no escopo atual e devolve o último valor.",
+      "doc": "Executa o texto como código Expressa no escopo atual e devolve o último valor.\n\nVê as variáveis e funções já definidas; uma atribuição no texto altera o\nescopo de quem chamou (função não escreve nomes de fora).\n\nErros: o argumento não é texto; o texto está vazio; erro de sintaxe ou de\nexecução no código avaliado. Tudo isso pode ir em se_falhar.\n\nExemplo: avalie(\"2 + 3 * 4\")"
+    },
+    {
+      "name": "modulos",
+      "aliases": [
+        "módulos"
+      ],
+      "module": null,
+      "kind": "funcao",
+      "signatures": [
+        "modulos()",
+        "modulos(modo)"
+      ],
+      "summary": "Lista os módulos disponíveis: núcleo, nativos e arquivos já importados.",
+      "doc": "Lista os módulos disponíveis: núcleo, nativos e arquivos já importados.\n\nSem argumento, imprime os nomes em ordem alfabética e devolve nada.\nCom :dados, devolve uma lista de mapas com :nome (texto) e :funcoes\n(lista de mapas com :nome, :args e :doc, como funcoes).\nTambém módulos(). O núcleo aparece como \"nucleo\".\nArquivos aparecem pelo primeiro caminho usado para importá-los, sem\nduplicar aliases do mesmo arquivo. Se nomes colidirem, usa o caminho absoluto.\n\nExemplo: dados = modulos(:dados)"
+    },
+    {
+      "name": "funcoes",
+      "aliases": [
+        "funções"
+      ],
+      "module": null,
+      "kind": "funcao",
+      "signatures": [
+        "funcoes()",
+        "funcoes(alvo)",
+        "funcoes(alvo, modo)"
+      ],
+      "summary": "Lista funções públicas com argumentos e documentação completa.",
+      "doc": "Lista funções públicas com argumentos e documentação completa.\n\nSem alvo, ou com nada, consulta as funções visíveis no escopo atual.\nAceita nome de módulo (\"arquivo\", \"nucleo\", caminho importado ou apelido)\nou o próprio módulo. Nomes iniciados por _ e valores que não são funções\nficam de fora. A lista é ordenada pelo nome. Também funções().\nSem modo, imprime e devolve nada. Com :dados no segundo argumento,\ndevolve uma lista de mapas: :nome (texto), :args (lista de textos) e\n:doc (documentação completa, ou \"\" se não houver).\n\nExemplo: dados = funcoes(\"arquivo\", :dados)"
+    },
+    {
+      "name": "ajuda",
+      "aliases": [],
+      "module": null,
+      "kind": "funcao",
+      "signatures": [
+        "ajuda(alvo)"
+      ],
+      "summary": "Ficha de uma função nativa ou definida: assinatura, argumentos e documentação.",
+      "doc": "Ficha de uma função nativa ou definida: assinatura, argumentos e documentação.\n\nO alvo é um texto (\"escreva\", \"matriz::zeros\"), uma função ou uma nativa.\nA mesma ficha alimenta ajuda(\"escreva\") no REPL e a janela Ajuda da Aula.\n\nExemplo: ajuda(\"matriz::zeros\")"
+    },
+    {
+      "name": "tipo",
+      "aliases": [],
+      "module": null,
+      "kind": "funcao",
+      "signatures": [
+        "tipo(valor)"
+      ],
+      "summary": "Nome do tipo do valor: numero, intervalo, texto, bool, lista, par, mapa, conjunto, matriz, imagem, funcao, modulo, processo ou nada.",
+      "doc": "Nome do tipo do valor: numero, intervalo, texto, bool, lista, par, mapa,\nconjunto, matriz, imagem, funcao, modulo, processo ou nada.\n\nServe para uma função aceitar mais de um tipo (se tipo(x) == \"numero\").\nOs nomes são os mesmos das mensagens de erro (sem acento).\n\nExemplo: tipo(10)"
+    },
+    {
+      "name": "tipos",
+      "aliases": [],
+      "module": null,
+      "kind": "funcao",
+      "signatures": [
+        "tipos()"
+      ],
+      "summary": "Lista os nomes de tipo que tipo() pode devolver.",
+      "doc": "Lista os nomes de tipo que tipo() pode devolver.\n\nExemplo: tipos()"
+    },
+    {
+      "name": "tamanho",
+      "aliases": [],
+      "module": null,
+      "kind": "funcao",
+      "signatures": [
+        "tamanho(valor)"
+      ],
+      "summary": "Quantidade de caracteres, itens, pares ou linhas.",
+      "doc": "Quantidade de caracteres, itens, pares ou linhas.\n\nTexto usa caracteres Unicode, não bytes. Para colunas de matriz, use colunas.\nQuantos inteiros o intervalo gera: tamanho(0..3) é 3. Intervalo sem teto (0..) é erro.\n\nExemplo: tamanho(\"olá\")"
+    },
+    {
+      "name": "primeiro",
+      "aliases": [],
+      "module": null,
+      "kind": "funcao",
+      "signatures": [
+        "primeiro(lista)"
+      ],
+      "summary": "Primeiro elemento da lista (índice 0), primeiro caractere do texto ou primeiro número do intervalo. Erro se não houver elementos.",
+      "doc": "Primeiro elemento da lista (índice 0), primeiro caractere do texto ou\nprimeiro número do intervalo. Erro se não houver elementos.\n\nExemplo: primeiro([10, 20])"
+    },
+    {
+      "name": "ultimo",
+      "aliases": [
+        "último"
+      ],
+      "module": null,
+      "kind": "funcao",
+      "signatures": [
+        "ultimo(lista)"
+      ],
+      "summary": "Último elemento da lista, último caractere do texto ou último número gerado do intervalo. Erro se não houver elementos ou se não tiver teto.",
+      "doc": "Último elemento da lista, último caractere do texto ou último número\ngerado do intervalo. Erro se não houver elementos ou se não tiver teto.\n\nExemplo: ultimo([10, 20])"
+    },
+    {
+      "name": "eh_infinito",
+      "aliases": [
+        "é_infinito"
+      ],
+      "module": null,
+      "kind": "funcao",
+      "signatures": [
+        "eh_infinito(r)"
+      ],
+      "summary": "verdadeiro se o intervalo não tem teto (0..). Só vale para intervalo. Também é_infinito().",
+      "doc": "verdadeiro se o intervalo não tem teto (0..). Só vale para intervalo.\nTambém é_infinito().\n\nExemplo: eh_infinito(0..)"
+    },
+    {
+      "name": "como_texto",
+      "aliases": [],
+      "module": null,
+      "kind": "funcao",
+      "signatures": [
+        "como_texto(valor)"
+      ],
+      "summary": "O texto que escreva mostraria para o valor. Números seguem a opção :formato_numero (2,5 em pt) fora de coleções; um mapa com :_como_texto usa essa função.",
+      "doc": "O texto que escreva mostraria para o valor. Números seguem a opção :formato_numero\n(2,5 em pt) fora de coleções; um mapa com :_como_texto usa essa função.\n\nExemplo: como_texto(2.5)"
+    },
+    {
+      "name": "chaves_de",
+      "aliases": [],
+      "module": null,
+      "kind": "funcao",
+      "signatures": [
+        "chaves_de(mapa)"
+      ],
+      "summary": "Lista das chaves do mapa, na ordem da impressão.",
+      "doc": "Lista das chaves do mapa, na ordem da impressão.\n\nExemplo: chaves_de(mapa([:b -> 2, :a -> 1]))"
+    },
+    {
+      "name": "valores_de",
+      "aliases": [],
+      "module": null,
+      "kind": "funcao",
+      "signatures": [
+        "valores_de(mapa)"
+      ],
+      "summary": "Lista dos valores do mapa, na ordem das chaves na impressão.",
+      "doc": "Lista dos valores do mapa, na ordem das chaves na impressão.\n\nExemplo: valores_de(mapa([:b -> 2, :a -> 1]))"
+    },
+    {
+      "name": "maiuscula",
+      "aliases": [
+        "maiúscula"
+      ],
+      "module": null,
+      "kind": "funcao",
+      "signatures": [
+        "maiuscula(texto)"
+      ],
+      "summary": "Copia o texto em letras maiúsculas. Também maiúscula().",
+      "doc": "Copia o texto em letras maiúsculas. Também maiúscula().\n\nExemplo: maiuscula(\"olá\")"
+    },
+    {
+      "name": "minuscula",
+      "aliases": [
+        "minúscula"
+      ],
+      "module": null,
+      "kind": "funcao",
+      "signatures": [
+        "minuscula(texto)"
+      ],
+      "summary": "Copia o texto em letras minúsculas. Também minúscula().",
+      "doc": "Copia o texto em letras minúsculas. Também minúscula().\n\nExemplo: minuscula(\"Olá\")"
+    },
+    {
+      "name": "sem_acento",
+      "aliases": [],
+      "module": null,
+      "kind": "funcao",
+      "signatures": [
+        "sem_acento(texto)"
+      ],
+      "summary": "Tira acentos e cedilha: ã/á→a, é→e, ç→c. Não muda maiúscula.",
+      "doc": "Tira acentos e cedilha: ã/á→a, é→e, ç→c. Não muda maiúscula.\n\nExemplo: sem_acento(\"São Paulo\")"
+    },
+    {
+      "name": "remova",
+      "aliases": [],
+      "module": null,
+      "kind": "funcao",
+      "signatures": [
+        "remova(lista, i)",
+        "remova(lista, r)",
+        "remova(mapa, chave)"
+      ],
+      "summary": "Devolve uma cópia sem o índice/intervalo (0…n−1) ou sem a chave do mapa.",
+      "doc": "Devolve uma cópia sem o índice/intervalo (0…n−1) ou sem a chave do mapa.\n\nÍndices começam em 0. O intervalo é exclusivo no fim: remova(xs, 1..3) tira os\níndices 1 e 2. Use remova(xs, 1..=2) para incluir o 2. No conjunto, o elemento some.\n\nExemplo: xs = xs.remova(2)"
+    },
+    {
+      "name": "substitua",
+      "aliases": [],
+      "module": null,
+      "kind": "funcao",
+      "signatures": [
+        "substitua(texto, antigo, novo)"
+      ],
+      "summary": "Troca todas as ocorrências de antigo por novo.",
+      "doc": "Troca todas as ocorrências de antigo por novo.\n\nExemplo: substitua(\"aa\", \"a\", \"b\")"
+    },
+    {
+      "name": "procure",
+      "aliases": [],
+      "module": null,
+      "kind": "funcao",
+      "signatures": [
+        "procure(texto, trecho)",
+        "procure(lista, item)"
+      ],
+      "summary": "Índice (0…n−1) da primeira ocorrência; nada se não achar.",
+      "doc": "Índice (0…n−1) da primeira ocorrência; nada se não achar.\n\nNo texto, trecho é um pedaço. Na lista, compara o item com ==.\nTrecho vazio (\"\") é erro.\n\nExemplo: procure(\"onde\", \"n\")"
+    },
+    {
+      "name": "separe",
+      "aliases": [],
+      "module": null,
+      "kind": "funcao",
+      "signatures": [
+        "separe(texto, separador)"
+      ],
+      "summary": "Parte o texto. Separador \"\" gera um item por caractere.",
+      "doc": "Parte o texto. Separador \"\" gera um item por caractere.\n\nTrechos vazios entre separadores entram na lista.\n\nExemplo: separe(\"a,b\", \",\")"
+    },
+    {
+      "name": "junte",
+      "aliases": [],
+      "module": null,
+      "kind": "funcao",
+      "signatures": [
+        "junte(lista, separador)"
+      ],
+      "summary": "Junta os itens da lista com o separador no meio.",
+      "doc": "Junta os itens da lista com o separador no meio.\n\nCada item é convertido para texto.\n\nExemplo: junte([\"a\", \"b\"], \"-\")"
+    },
+    {
+      "name": "limpe",
+      "aliases": [],
+      "module": null,
+      "kind": "funcao",
+      "signatures": [
+        "limpe(texto)"
+      ],
+      "summary": "Remove espaços do começo e do fim.",
+      "doc": "Remove espaços do começo e do fim.\n\nExemplo: limpe(\"  x  \")"
+    },
+    {
+      "name": "mapa",
+      "aliases": [],
+      "module": null,
+      "kind": "funcao",
+      "signatures": [
+        "mapa()",
+        "mapa(pares)"
+      ],
+      "summary": "Monta um mapa a partir de uma lista de pares chave -> valor.",
+      "doc": "Monta um mapa a partir de uma lista de pares chave -> valor.\n\nSem argumento (ou com []) o mapa é vazio. Chaves duplicadas são erro.\nNão preserva ordem de inserção. A impressão ordena as chaves.\npara p em m percorre os pares (p:chave, p:valor) na ordem da impressão.\nm + (chave -> valor) é um mapa novo com essa chave.\n\nExemplo: mapa([:nome -> \"Ana\", :idade -> 25])"
+    },
+    {
+      "name": "conjunto",
+      "aliases": [],
+      "module": null,
+      "kind": "funcao",
+      "signatures": [
+        "conjunto()",
+        "conjunto(xs)"
+      ],
+      "summary": "Monta um conjunto a partir de uma lista (valores únicos).",
+      "doc": "Monta um conjunto a partir de uma lista (valores únicos).\n\nSem argumento (ou com []) o conjunto é vazio. Duplicatas caem.\nElementos: texto, número inteiro ou bool. A iteração não tem ordem\ngarantida; a impressão ordena os elementos.\n\nExemplo: conjunto([:ana, :bia])"
+    },
+    {
+      "name": "ambiente",
+      "aliases": [],
+      "module": "sistema",
+      "kind": "funcao",
+      "signatures": [
+        "ambiente(nome)"
+      ],
+      "summary": "Valor da variável de ambiente (HOME, PATH, …) como texto.",
+      "doc": "Valor da variável de ambiente (HOME, PATH, …) como texto.\n\nVariável que não existe é erro; use se_falhar para ter um padrão.\n\nExemplo: editor = ambiente(\"EDITOR\") se_falhar { \"vim\" }"
+    },
+    {
+      "name": "ordene",
+      "aliases": [],
+      "module": null,
+      "kind": "funcao",
+      "signatures": [
+        "ordene(lista)",
+        "ordene(lista, chave)"
+      ],
+      "summary": "Cópia da lista em ordem crescente. Com chave, ordena por chave(item).",
+      "doc": "Cópia da lista em ordem crescente. Com chave, ordena por chave(item).\n\nOs itens (ou as chaves) têm que ser todos números ou todos textos,\ncomparados como em <. Itens iguais mantêm a ordem original.\nPara ordem decrescente, use uma chave que inverte: funcao(x) { -x }.\n\nExemplo: ordene(pessoas, funcao(p) { p:idade })"
+    },
+    {
+      "name": "comeca_com",
+      "aliases": [
+        "começa_com"
+      ],
+      "module": null,
+      "kind": "funcao",
+      "signatures": [
+        "comeca_com(texto, prefixo)"
+      ],
+      "summary": "Verdadeiro se o texto começa com o prefixo. Também começa_com.",
+      "doc": "Verdadeiro se o texto começa com o prefixo. Também começa_com.\n\nExemplo: comeca_com(\"relatorio.csv\", \"rel\")"
+    },
+    {
+      "name": "termina_com",
+      "aliases": [],
+      "module": null,
+      "kind": "funcao",
+      "signatures": [
+        "termina_com(texto, sufixo)"
+      ],
+      "summary": "Verdadeiro se o texto termina com o sufixo.",
+      "doc": "Verdadeiro se o texto termina com o sufixo.\n\nExemplo: termina_com(\"relatorio.csv\", \".csv\")"
+    },
+    {
+      "name": "limpe_tela",
+      "aliases": [],
+      "module": "tela",
+      "kind": "funcao",
+      "signatures": [
+        "limpe_tela()"
+      ],
+      "summary": "Limpa a tela do terminal. Também limpe_tela().",
+      "doc": "Limpa a tela do terminal. Também limpe_tela().\n\nColoca o cursor no canto superior esquerdo. Sem argumentos.\nNo REPL, a linha limpe_tela (sem parênteses) também limpa a tela.\nNa Aula, limpa o painel de saída.\nEm uma animação, limpe_tela() a cada quadro pisca: use posicao_cursor(0, 0, falso) no laço.\n\nExemplo: limpe_tela()"
+    },
+    {
+      "name": "posicao_cursor",
+      "aliases": [
+        "posição_cursor"
+      ],
+      "module": "tela",
+      "kind": "funcao",
+      "signatures": [
+        "posicao_cursor()",
+        "posicao_cursor(pos)",
+        "posicao_cursor(linha, coluna)",
+        "posicao_cursor(linha, coluna, mostre)"
+      ],
+      "summary": "Consulta ou altera a posição do cursor de saída. Também posição_cursor().",
+      "doc": "Consulta ou altera a posição do cursor de saída. Também posição_cursor().\n\nSem argumentos, devolve um mapa {:linha, :coluna}, com posições a partir de zero.\nCom um mapa, move o cursor sem apagar nem alterar o mapa recebido.\nCom linha e coluna, move para essas coordenadas (inteiros >= 0).\nmostre é bool e vale verdadeiro por padrão: faz flush da saída após mover.\nCom falso, não faz flush: o próximo escreva pode desenhar junto com o movimento.\nUse posicao_cursor(0, 0, falso) para voltar ao canto em animações, sem apagar.\nFunciona na Aula e em terminais compatíveis. A consulta falha em pipes/arquivos\nou quando o terminal não responde. Na Aula, as linhas são as quebras explícitas:\no ajuste visual de uma linha longa não muda a numeração. Rolagem pode invalidar\nposições guardadas. Na Aula, leia() começa na posição escolhida e substitui\no restante daquela linha, preservando as linhas de baixo.\n\nExemplo: pos = posicao_cursor()"
+    },
+    {
+      "name": "apague_linha",
+      "aliases": [],
+      "module": "tela",
+      "kind": "funcao",
+      "signatures": [
+        "apague_linha()"
+      ],
+      "summary": "Apaga a linha atual inteira e deixa o cursor no início dela.",
+      "doc": "Apaga a linha atual inteira e deixa o cursor no início dela.\n\nNão remove a linha nem desloca as linhas de baixo. Sem argumentos.\nFunciona no terminal e no painel de saída da Aula.\n\nExemplo: apague_linha()"
+    },
+    {
+      "name": "eh_terminal",
+      "aliases": [
+        "é_terminal"
+      ],
+      "module": "tela",
+      "kind": "funcao",
+      "signatures": [
+        "eh_terminal()"
+      ],
+      "summary": "Verdadeiro se a entrada é o teclado (não um pipe). Também é_terminal().",
+      "doc": "Verdadeiro se a entrada é o teclado (não um pipe). Também é_terminal().\n\nFalso se veio de um pipe, de um arquivo ou da Aula. Sem argumentos.\n\nExemplo: se eh_terminal() { nome = leia(\"Nome: \") }"
+    },
+    {
+      "name": "pinte",
+      "aliases": [],
+      "module": "tela",
+      "kind": "funcao",
+      "signatures": [
+        "pinte(texto, frente)",
+        "pinte(texto, frente, fundo)"
+      ],
+      "summary": "Devolve o texto com cor ANSI (letra e fundo opcional) e reset no fim.",
+      "doc": "Devolve o texto com cor ANSI (letra e fundo opcional) e reset no fim.\n\nCores: normal, preto, vermelho, verde, amarelo, azul, magenta, ciano, branco.\n:verde é o texto \"verde\". normal é a cor padrão do terminal naquele slot.\n\nExemplo: \"HP\".pinte(:verde)"
+    },
+    {
+      "name": "fundo",
+      "aliases": [],
+      "module": "tela",
+      "kind": "funcao",
+      "signatures": [
+        "fundo(texto, cor)"
+      ],
+      "summary": "Devolve o texto com cor de fundo ANSI e reset no fim.",
+      "doc": "Devolve o texto com cor de fundo ANSI e reset no fim.\n\nLetra no padrão do terminal.\n\nExemplo: \"    \".fundo(:vermelho)"
+    },
+    {
+      "name": "negrito",
+      "aliases": [],
+      "module": "tela",
+      "kind": "funcao",
+      "signatures": [
+        "negrito(texto)"
+      ],
+      "summary": "Devolve o texto em negrito (ANSI) e reset no fim.",
+      "doc": "Devolve o texto em negrito (ANSI) e reset no fim.\n\nExemplo: \"GAME OVER\".negrito()"
+    },
+    {
+      "name": "tamanho_tela",
+      "aliases": [],
+      "module": "tela",
+      "kind": "funcao",
+      "signatures": [
+        "tamanho_tela()"
+      ],
+      "summary": "Tamanho da tela em caracteres: mapa com :linhas e :colunas.",
+      "doc": "Tamanho da tela em caracteres: mapa com :linhas e :colunas.\n\nNo terminal, o tamanho atual. Sem TTY (pipe, testes, Aula sem painel),\n24 linhas e 80 colunas.\n\nExemplo: se tamanho_tela():colunas >= 48 { ... }"
+    },
+    {
+      "name": "quadro",
+      "aliases": [],
+      "module": "tela",
+      "kind": "funcao",
+      "signatures": [
+        "quadro(texto)"
+      ],
+      "summary": "Redesenha a tela: cursor no canto, escreve o texto, apaga o que sobrar.",
+      "doc": "Redesenha a tela: cursor no canto, escreve o texto, apaga o que sobrar.\n\nEm cada linha apaga o resto à direita; no fim apaga o que estava embaixo.\nUse no lugar de cls()/posicao_cursor() + vários escreva em um jogo. O texto já vem\ncom nova_linha (ou \"\\\\n\"). Devolve nada.\n\nExemplo: quadro(tela)"
+    },
+    {
+      "name": "bloco",
+      "aliases": [],
+      "module": "tela",
+      "kind": "funcao",
+      "signatures": [
+        "bloco(linha, coluna)"
+      ],
+      "summary": "Cursor de um bloco: mapa {:linha, :coluna}, base zero.",
+      "doc": "Cursor de um bloco: mapa {:linha, :coluna}, base zero.\n\nNão desenha. Passe o mapa a escreva_em. A coluna fica fixa; cada\nescreva_em anda uma linha.\n\nExemplo: b = bloco(0, 27)"
+    },
+    {
+      "name": "escreva_em",
+      "aliases": [],
+      "module": "tela",
+      "kind": "funcao",
+      "signatures": [
+        "escreva_em(bloco, texto)"
+      ],
+      "summary": "Escreve uma linha no bloco, na coluna dele, e devolve o mesmo mapa.",
+      "doc": "Escreve uma linha no bloco, na coluna dele, e devolve o mesmo mapa.\n\nUFCS: b.escreva_em(\"Q W E\").escreva_em(\" A S D\"). Sem \"\\\\n\" no texto.\nO que estava à esquerda na mesma linha permanece.\n\nExemplo: b.escreva_em(\"Q W E R T\")"
+    },
+    {
+      "name": "raiz",
+      "aliases": [],
+      "module": "mat",
+      "kind": "funcao",
+      "signatures": [
+        "raiz(numero)"
+      ],
+      "summary": "Raiz quadrada. Erro se o número for negativo (use se_falhar).",
+      "doc": "Raiz quadrada. Erro se o número for negativo (use se_falhar).\n\nraiz(9) vale 3, raiz(0) vale 0.\n\nExemplo: raiz(9)"
+    },
+    {
+      "name": "aleatorio",
+      "aliases": [
+        "aleatório"
+      ],
+      "module": "mat",
+      "kind": "funcao",
+      "signatures": [
+        "aleatorio(min, max)"
+      ],
+      "summary": "Inteiro ao acaso entre min e max (inclusive). Também aleatório().",
+      "doc": "Inteiro ao acaso entre min e max (inclusive). Também aleatório().\n\nSem semente(), cada execução do programa gera uma sequência diferente.\n\nExemplo: aleatorio(1, 6)"
+    },
+    {
+      "name": "semente",
+      "aliases": [],
+      "module": "mat",
+      "kind": "funcao",
+      "signatures": [
+        "semente(n)"
+      ],
+      "summary": "Fixa a sequência de aleatorio() (útil para repetir um teste).",
+      "doc": "Fixa a sequência de aleatorio() (útil para repetir um teste).\n\nO mesmo n produz a mesma sequência. Devolve nada.\n\nExemplo: semente(1)"
+    },
+    {
+      "name": "seno",
+      "aliases": [
+        "sen"
+      ],
+      "module": "mat",
+      "kind": "funcao",
+      "signatures": [
+        "seno(x)"
+      ],
+      "summary": "Seno de x em radianos. Também sen().",
+      "doc": "Seno de x em radianos. Também sen().\n\nPara graus: seno(radianos(30)).\n\nExemplo: seno(0)"
+    },
+    {
+      "name": "cosseno",
+      "aliases": [
+        "cos"
+      ],
+      "module": "mat",
+      "kind": "funcao",
+      "signatures": [
+        "cosseno(x)"
+      ],
+      "summary": "Cosseno de x em radianos. Também cos().",
+      "doc": "Cosseno de x em radianos. Também cos().\n\nExemplo: cosseno(0)"
+    },
+    {
+      "name": "tangente",
+      "aliases": [],
+      "module": "mat",
+      "kind": "funcao",
+      "signatures": [
+        "tangente(x)"
+      ],
+      "summary": "Tangente de x em radianos.",
+      "doc": "Tangente de x em radianos.\n\nErro se o resultado não for um número finito (use se_falhar).\n\nExemplo: tangente(0)"
+    },
+    {
+      "name": "arcosseno",
+      "aliases": [],
+      "module": "mat",
+      "kind": "funcao",
+      "signatures": [
+        "arcosseno(x)"
+      ],
+      "summary": "Ângulo em radianos cujo seno é x. x entre -1 e 1.",
+      "doc": "Ângulo em radianos cujo seno é x. x entre -1 e 1.\n\nExemplo: arcosseno(0)"
+    },
+    {
+      "name": "arcocosseno",
+      "aliases": [],
+      "module": "mat",
+      "kind": "funcao",
+      "signatures": [
+        "arcocosseno(x)"
+      ],
+      "summary": "Ângulo em radianos cujo cosseno é x. x entre -1 e 1.",
+      "doc": "Ângulo em radianos cujo cosseno é x. x entre -1 e 1.\n\nExemplo: arcocosseno(1)"
+    },
+    {
+      "name": "arcotangente",
+      "aliases": [],
+      "module": "mat",
+      "kind": "funcao",
+      "signatures": [
+        "arcotangente(x)"
+      ],
+      "summary": "Ângulo em radianos cuja tangente é x.",
+      "doc": "Ângulo em radianos cuja tangente é x.\n\nExemplo: arcotangente(0)"
+    },
+    {
+      "name": "arcotangente2",
+      "aliases": [],
+      "module": "mat",
+      "kind": "funcao",
+      "signatures": [
+        "arcotangente2(y, x)"
+      ],
+      "summary": "Ângulo em radianos do vetor (x, y), no estilo atan2(y, x).",
+      "doc": "Ângulo em radianos do vetor (x, y), no estilo atan2(y, x).\n\nExemplo: arcotangente2(1, 1)"
+    },
+    {
+      "name": "radianos",
+      "aliases": [],
+      "module": "mat",
+      "kind": "funcao",
+      "signatures": [
+        "radianos(graus)"
+      ],
+      "summary": "Converte graus em radianos.",
+      "doc": "Converte graus em radianos.\n\nExemplo: seno(radianos(90))"
+    },
+    {
+      "name": "graus",
+      "aliases": [],
+      "module": "mat",
+      "kind": "funcao",
+      "signatures": [
+        "graus(radianos)"
+      ],
+      "summary": "Converte radianos em graus.",
+      "doc": "Converte radianos em graus.\n\nExemplo: graus(pi)"
+    },
+    {
+      "name": "exp",
+      "aliases": [],
+      "module": "mat",
+      "kind": "funcao",
+      "signatures": [
+        "exp(x)"
+      ],
+      "summary": "e elevado a x. exp(1) é a constante de Euler (e é palavra-chave).",
+      "doc": "e elevado a x. exp(1) é a constante de Euler (e é palavra-chave).\n\nErro se o resultado estourar (use se_falhar).\n\nExemplo: exp(0)"
+    },
+    {
+      "name": "log",
+      "aliases": [],
+      "module": "mat",
+      "kind": "funcao",
+      "signatures": [
+        "log(x)"
+      ],
+      "summary": "Logaritmo natural (base e). x > 0.",
+      "doc": "Logaritmo natural (base e). x > 0.\n\nPara base 10 use log10. Erro se x não for positivo (use se_falhar).\n\nExemplo: log(1)"
+    },
+    {
+      "name": "log10",
+      "aliases": [],
+      "module": "mat",
+      "kind": "funcao",
+      "signatures": [
+        "log10(x)"
+      ],
+      "summary": "Logaritmo decimal (base 10). x > 0.",
+      "doc": "Logaritmo decimal (base 10). x > 0.\n\nExemplo: log10(1000)"
+    },
+    {
+      "name": "potencia",
+      "aliases": [
+        "potência"
+      ],
+      "module": "mat",
+      "kind": "funcao",
+      "signatures": [
+        "potencia(base, exp)"
+      ],
+      "summary": "base elevado a exp (expoente pode ser fração). Também potência().",
+      "doc": "base elevado a exp (expoente pode ser fração). Também potência().\n\n0^0 vale 1. Erro se o resultado não for um número finito (base negativa\ncom expoente não inteiro, divisão por zero, …).\n\nExemplo: potencia(2, 3)"
+    },
+    {
+      "name": "piso",
+      "aliases": [],
+      "module": "mat",
+      "kind": "funcao",
+      "signatures": [
+        "piso(numero)"
+      ],
+      "summary": "Maior inteiro que não passa de x (chão).",
+      "doc": "Maior inteiro que não passa de x (chão).\n\npiso(3.7) vale 3; piso(-1.2) vale -2.\n\nExemplo: piso(3.7)"
+    },
+    {
+      "name": "teto",
+      "aliases": [],
+      "module": "mat",
+      "kind": "funcao",
+      "signatures": [
+        "teto(numero)"
+      ],
+      "summary": "Menor inteiro que não fica abaixo de x (teto).",
+      "doc": "Menor inteiro que não fica abaixo de x (teto).\n\nteto(3.1) vale 4; teto(-1.2) vale -1.\n\nExemplo: teto(3.1)"
+    },
+    {
+      "name": "arredonde",
+      "aliases": [],
+      "module": "mat",
+      "kind": "funcao",
+      "signatures": [
+        "arredonde(numero)"
+      ],
+      "summary": "Inteiro mais próximo. Empate (n,5) afasta de zero.",
+      "doc": "Inteiro mais próximo. Empate (n,5) afasta de zero.\n\narredonde(1.4) vale 1; arredonde(1.5) vale 2; arredonde(-1.5) vale -2.\n\nExemplo: arredonde(1.5)"
+    },
+    {
+      "name": "matriz",
+      "aliases": [],
+      "module": "matriz",
+      "kind": "funcao",
+      "signatures": [
+        "matriz(linhas)"
+      ],
+      "summary": "Monta uma matriz a partir de uma lista de listas de números.",
+      "doc": "Monta uma matriz a partir de uma lista de listas de números.\n\nTodas as linhas precisam ter o mesmo comprimento. Índices em 0: A[0, 1].\nA[0] é a linha como lista.\n\nExemplo: matriz([[1, 2], [3, 4]])"
+    },
+    {
+      "name": "transposta",
+      "aliases": [],
+      "module": "matriz",
+      "kind": "funcao",
+      "signatures": [
+        "transposta(matriz)"
+      ],
+      "summary": "Troca linhas por colunas.",
+      "doc": "Troca linhas por colunas.\n\nExemplo: transposta(A)"
+    },
+    {
+      "name": "det",
+      "aliases": [],
+      "module": "matriz",
+      "kind": "funcao",
+      "signatures": [
+        "det(matriz)"
+      ],
+      "summary": "Determinante (1×1, 2×2 ou 3×3).",
+      "doc": "Determinante (1×1, 2×2 ou 3×3).\n\nExemplo: det(A)"
+    },
+    {
+      "name": "identidade",
+      "aliases": [],
+      "module": "matriz",
+      "kind": "funcao",
+      "signatures": [
+        "identidade(n)"
+      ],
+      "summary": "Matriz identidade n×n.",
+      "doc": "Matriz identidade n×n.\n\nExemplo: identidade(3)"
+    },
+    {
+      "name": "zeros",
+      "aliases": [],
+      "module": "matriz",
+      "kind": "funcao",
+      "signatures": [
+        "zeros(n)",
+        "zeros(linhas, colunas)"
+      ],
+      "summary": "Matriz só de zeros. Um argumento: n×n.",
+      "doc": "Matriz só de zeros. Um argumento: n×n.\n\nDois argumentos: linhas × colunas. Inteiro >= 1.\n\nExemplo: zeros(2, 3)"
+    },
+    {
+      "name": "uns",
+      "aliases": [],
+      "module": "matriz",
+      "kind": "funcao",
+      "signatures": [
+        "uns(n)",
+        "uns(linhas, colunas)"
+      ],
+      "summary": "Matriz só de uns. Um argumento: n×n.",
+      "doc": "Matriz só de uns. Um argumento: n×n.\n\nComo zeros, mas preenchida com 1.\n\nExemplo: uns(2, 3)"
+    },
+    {
+      "name": "cheia",
+      "aliases": [],
+      "module": "matriz",
+      "kind": "funcao",
+      "signatures": [
+        "cheia(linhas, colunas, valor)"
+      ],
+      "summary": "Matriz retangular preenchida com o mesmo número.",
+      "doc": "Matriz retangular preenchida com o mesmo número.\n\nExemplo: cheia(2, 3, 7)"
+    },
+    {
+      "name": "linhas",
+      "aliases": [],
+      "module": "matriz",
+      "kind": "funcao",
+      "signatures": [
+        "linhas(matriz)"
+      ],
+      "summary": "Quantidade de linhas da matriz.",
+      "doc": "Quantidade de linhas da matriz.\n\nExemplo: linhas(A)"
+    },
+    {
+      "name": "colunas",
+      "aliases": [],
+      "module": "matriz",
+      "kind": "funcao",
+      "signatures": [
+        "colunas(matriz)"
+      ],
+      "summary": "Quantidade de colunas da matriz.",
+      "doc": "Quantidade de colunas da matriz.\n\nExemplo: colunas(A)"
+    },
+    {
+      "name": "xy",
+      "aliases": [],
+      "module": "matriz",
+      "kind": "funcao",
+      "signatures": [
+        "xy(matriz, x, y)",
+        "xy(matriz, x, y, valor)"
+      ],
+      "summary": "Lê ou altera a célula em (x, y): x é a coluna e y é a linha.",
+      "doc": "Lê ou altera a célula em (x, y): x é a coluna e y é a linha.\n\nxy(matriz, x, y) lê matriz[y, x]. Com valor, altera essa célula e\ndevolve a mesma matriz, permitindo encadear chamadas. A alteração é\nvisível por outras referências à matriz. Valor deve ser um número.\nCoordenadas inteiras em base zero, com os mesmos limites do acesso\npor índices. Fora da matriz é erro. Importe \"matriz\" antes de usar.\n\nExemplo: A.xy(2, 0)\nExemplo: A.xy(2, 0, 9)"
+    },
+    {
+      "name": "leia_arquivo",
+      "aliases": [],
+      "module": "arquivo",
+      "kind": "funcao",
+      "signatures": [
+        "leia_arquivo(caminho)"
+      ],
+      "summary": "Lê o arquivo; cada linha vira um texto (sem quebra de linha).",
+      "doc": "Lê o arquivo; cada linha vira um texto (sem quebra de linha).\n\nArquivo vazio devolve []. Caminhos relativos partem da pasta do .lep.\n`~` e `~/pasta` são a pasta pessoal. Falhas de leitura são erros (se_falhar).\n\nExemplo: leia_arquivo(\"dados.txt\") se_falhar { [] }"
+    },
+    {
+      "name": "leia_bytes",
+      "aliases": [],
+      "module": "arquivo",
+      "kind": "funcao",
+      "signatures": [
+        "leia_bytes()",
+        "leia_bytes(caminho)"
+      ],
+      "summary": "Lê os bytes sem modificar quebras de linha; devolve uma lista de números de 0 a 255. Com caminho, lê o arquivo (relativo à pasta do .lep). Sem caminho, lê a entrada padrão até o fim, incluindo bytes que não formam texto UTF-8. Na Aula, use um caminho. Exemplo: leia_bytes(\"dados.bin\")",
+      "doc": "Lê os bytes sem modificar quebras de linha; devolve uma lista de números de 0 a 255.\nCom caminho, lê o arquivo (relativo à pasta do .lep). Sem caminho, lê a entrada\npadrão até o fim, incluindo bytes que não formam texto UTF-8. Na Aula, use um caminho.\nExemplo: leia_bytes(\"dados.bin\")"
+    },
+    {
+      "name": "texto_utf8",
+      "aliases": [],
+      "module": "arquivo",
+      "kind": "funcao",
+      "signatures": [
+        "texto_utf8(bytes)",
+        "texto_utf8(bytes, modo)"
+      ],
+      "summary": "Converte uma lista de bytes em texto UTF-8. O modo padrão, :estrito, rejeita sequências inválidas. :substitua troca essas sequências pelo caractere �; :ignore descarta os bytes inválidos. Exemplo: texto_utf8([79, 108, 195, 161])",
+      "doc": "Converte uma lista de bytes em texto UTF-8.\nO modo padrão, :estrito, rejeita sequências inválidas. :substitua troca essas\nsequências pelo caractere �; :ignore descarta os bytes inválidos.\nExemplo: texto_utf8([79, 108, 195, 161])"
+    },
+    {
+      "name": "salve_arquivo",
+      "aliases": [],
+      "module": "arquivo",
+      "kind": "funcao",
+      "signatures": [
+        "salve_arquivo(caminho, linhas)"
+      ],
+      "summary": "Grava a lista de textos, substituindo o arquivo.",
+      "doc": "Grava a lista de textos, substituindo o arquivo.\n\nCada item vira uma linha, com quebra no final. Cria a pasta se faltar.\n\nExemplo: salve_arquivo(\"saida.txt\", [\"a\", \"b\"])"
+    },
+    {
+      "name": "adicione_arquivo",
+      "aliases": [],
+      "module": "arquivo",
+      "kind": "funcao",
+      "signatures": [
+        "adicione_arquivo(caminho, linhas)"
+      ],
+      "summary": "Acrescenta linhas no fim do arquivo (cria se não existir).",
+      "doc": "Acrescenta linhas no fim do arquivo (cria se não existir).\n\nExemplo: adicione_arquivo(\"saida.txt\", [\"c\"])"
+    },
+    {
+      "name": "leia_csv",
+      "aliases": [],
+      "module": "arquivo",
+      "kind": "funcao",
+      "signatures": [
+        "leia_csv(caminho)"
+      ],
+      "summary": "Lê CSV simples (vírgula, sem aspas). Lista de listas de textos.",
+      "doc": "Lê CSV simples (vírgula, sem aspas). Lista de listas de textos.\n\nCada célula é sempre um texto, mesmo quando parece um número.\n\nExemplo: leia_csv(\"notas.csv\")"
+    },
+    {
+      "name": "salve_csv",
+      "aliases": [],
+      "module": "arquivo",
+      "kind": "funcao",
+      "signatures": [
+        "salve_csv(caminho, dados)"
+      ],
+      "summary": "Grava uma lista de listas como CSV.",
+      "doc": "Grava uma lista de listas como CSV.\n\nSubstitui o arquivo. Células viram texto e são unidas por vírgula.\n\nExemplo: salve_csv(\"saida.csv\", [[\"Ana\", 25]])"
+    },
+    {
+      "name": "existe",
+      "aliases": [],
+      "module": "arquivo",
+      "kind": "funcao",
+      "signatures": [
+        "existe(caminho)"
+      ],
+      "summary": "Verdadeiro se o arquivo ou a pasta existe.",
+      "doc": "Verdadeiro se o arquivo ou a pasta existe.\n\nExemplo: se nao existe(\"dados.txt\") { saia(1) }"
+    },
+    {
+      "name": "eh_pasta",
+      "aliases": [
+        "é_pasta"
+      ],
+      "module": "arquivo",
+      "kind": "funcao",
+      "signatures": [
+        "eh_pasta(caminho)"
+      ],
+      "summary": "Verdadeiro se o caminho é uma pasta. Também é_pasta.",
+      "doc": "Verdadeiro se o caminho é uma pasta. Também é_pasta.\n\nExemplo: eh_pasta(\"fotos\")"
+    },
+    {
+      "name": "liste",
+      "aliases": [],
+      "module": "arquivo",
+      "kind": "funcao",
+      "signatures": [
+        "liste(pasta)",
+        "liste(pasta, padrao)"
+      ],
+      "summary": "Nomes dentro da pasta (sem o caminho), em ordem. Inclui os ocultos.",
+      "doc": "Nomes dentro da pasta (sem o caminho), em ordem. Inclui os ocultos.\n\nCom padrão, só os nomes que casam: * é qualquer trecho, ? é um caractere.\nPasta que não existe é erro.\n\nExemplo: liste(\"fotos\", \"*.png\")"
+    },
+    {
+      "name": "crie_pasta",
+      "aliases": [],
+      "module": "arquivo",
+      "kind": "funcao",
+      "signatures": [
+        "crie_pasta(caminho)"
+      ],
+      "summary": "Cria a pasta e as que faltarem no caminho. Já existir não é erro.",
+      "doc": "Cria a pasta e as que faltarem no caminho. Já existir não é erro.\n\n`~` é a pasta pessoal: crie_pasta(\"~/.local/share/tarefas\").\n\nExemplo: crie_pasta(\"saida/2024\")"
+    },
+    {
+      "name": "apague_arquivo",
+      "aliases": [],
+      "module": "arquivo",
+      "kind": "funcao",
+      "signatures": [
+        "apague_arquivo(caminho)"
+      ],
+      "summary": "Apaga um arquivo. Pasta é erro (use apague_pasta).",
+      "doc": "Apaga um arquivo. Pasta é erro (use apague_pasta).\n\nExemplo: apague_arquivo(\"temp.txt\") se_falhar { nada }"
+    },
+    {
+      "name": "apague_pasta",
+      "aliases": [],
+      "module": "arquivo",
+      "kind": "funcao",
+      "signatures": [
+        "apague_pasta(caminho)"
+      ],
+      "summary": "Apaga a pasta e tudo o que está dentro dela. Não há lixeira.",
+      "doc": "Apaga a pasta e tudo o que está dentro dela. Não há lixeira.\n\nRecusa a raiz (/) e a pasta pessoal. Arquivo é erro (use apague_arquivo).\n\nExemplo: apague_pasta(\"build\")"
+    },
+    {
+      "name": "mova",
+      "aliases": [],
+      "module": "arquivo",
+      "kind": "funcao",
+      "signatures": [
+        "mova(origem, destino)"
+      ],
+      "summary": "Move ou renomeia. Se o destino é uma pasta, o arquivo vai para dentro dela.",
+      "doc": "Move ou renomeia. Se o destino é uma pasta, o arquivo vai para dentro dela.\n\nExemplo: mova(\"rascunho.txt\", \"arquivo/\")"
+    },
+    {
+      "name": "copie",
+      "aliases": [],
+      "module": "arquivo",
+      "kind": "funcao",
+      "signatures": [
+        "copie(origem, destino)"
+      ],
+      "summary": "Copia um arquivo (pastas não). Se o destino é uma pasta, copia para dentro.",
+      "doc": "Copia um arquivo (pastas não). Se o destino é uma pasta, copia para dentro.\n\nSubstitui o destino se ele já existe.\n\nExemplo: copie(\"config.txt\", \"config.bak\")"
+    },
+    {
+      "name": "junte_caminho",
+      "aliases": [],
+      "module": "arquivo",
+      "kind": "funcao",
+      "signatures": [
+        "junte_caminho(parte, ...)"
+      ],
+      "summary": "Junta pedaços de caminho com a barra do sistema. Só monta o texto.",
+      "doc": "Junta pedaços de caminho com a barra do sistema. Só monta o texto.\n\nUm pedaço absoluto (/tmp) recomeça o caminho.\n\nExemplo: junte_caminho(pasta_atual(), \"dados\", \"a.txt\")"
+    },
+    {
+      "name": "nome_do_arquivo",
+      "aliases": [],
+      "module": "arquivo",
+      "kind": "funcao",
+      "signatures": [
+        "nome_do_arquivo(caminho)"
+      ],
+      "summary": "Último pedaço do caminho: \"fotos/a.png\" dá \"a.png\". Só lê o texto.",
+      "doc": "Último pedaço do caminho: \"fotos/a.png\" dá \"a.png\". Só lê o texto.\n\nExemplo: nome_do_arquivo(\"fotos/a.png\")"
+    },
+    {
+      "name": "pasta_de",
+      "aliases": [],
+      "module": "arquivo",
+      "kind": "funcao",
+      "signatures": [
+        "pasta_de(caminho)"
+      ],
+      "summary": "O caminho sem o último pedaço: \"fotos/a.png\" dá \"fotos\". Só lê o texto.",
+      "doc": "O caminho sem o último pedaço: \"fotos/a.png\" dá \"fotos\". Só lê o texto.\n\nSem pasta no caminho, devolve \"\".\n\nExemplo: pasta_de(\"fotos/a.png\")"
+    },
+    {
+      "name": "extensao",
+      "aliases": [
+        "extensão"
+      ],
+      "module": "arquivo",
+      "kind": "funcao",
+      "signatures": [
+        "extensao(caminho)"
+      ],
+      "summary": "Extensão sem o ponto: \"a.tar.gz\" dá \"gz\"; sem extensão, \"\". Também extensão.",
+      "doc": "Extensão sem o ponto: \"a.tar.gz\" dá \"gz\"; sem extensão, \"\". Também extensão.\n\nExemplo: extensao(\"foto.png\")"
+    },
+    {
+      "name": "pasta_atual",
+      "aliases": [],
+      "module": "arquivo",
+      "kind": "funcao",
+      "signatures": [
+        "pasta_atual()"
+      ],
+      "summary": "Pasta de onde o programa foi chamado (a do terminal).",
+      "doc": "Pasta de onde o programa foi chamado (a do terminal).\n\nCaminhos relativos nas funções de arquivo partem da pasta do .lep, não\ndesta. Para um arquivo passado na linha de comando, junte as duas.\n\nExemplo: junte_caminho(pasta_atual(), argumentos[0])"
+    },
+    {
+      "name": "execute",
+      "aliases": [],
+      "module": "processo",
+      "kind": "funcao",
+      "signatures": [
+        "execute(comando, etapa, ...)",
+        "execute(comando, etapa, ..., opcoes)",
+        "execute(comando, etapa)"
+      ],
+      "summary": "Roda o comando, espera terminar e devolve o mapa :codigo, :ok, :saida, :erro.",
+      "doc": "Roda o comando, espera terminar e devolve o mapa :codigo, :ok, :saida, :erro.\n\nO primeiro argumento é um comando: texto (\"ls -l\", com | para encadear)\nou lista de textos ([\"wc\", \"-l\"]). As etapas seguintes são comandos ou\nfunções. Uma função recebe cada linha: devolver nada descarta a linha,\num texto troca a linha, uma lista vira várias linhas. [filtro, \".txt\"]\nchama filtro(linha, \".txt\"). O texto do comando não passa por um shell:\n*, >, $ e && dão erro; use aspas ou [\"sh\", \"-c\", \"…\"].\n:saida e :erro são listas de linhas. :codigo é o primeiro código diferente\nde 0 entre os comandos; código diferente de 0 não é erro (veja :ok).\nOpções no último argumento: mapa([:pasta -> \"…\", :entrada -> linhas,\n:ambiente -> mapa([…]), :tempo -> segundos, :exija -> verdadeiro,\n:terminal -> verdadeiro]). :exija faz código diferente de 0 virar erro.\n:terminal liga o comando ao terminal (vim, ssh, cores): :saida fica vazia.\nErros (se_falhar): comando que não existe, tempo esgotado, falha com :exija.\nSó na linha de comando.\n\nExemplo: execute(\"ls\", [filtro, \".txt\"], [\"wc\", \"-l\"]):saida"
+    },
+    {
+      "name": "linhas_de",
+      "aliases": [],
+      "module": "processo",
+      "kind": "funcao",
+      "signatures": [
+        "linhas_de(comando, etapa, ...)",
+        "linhas_de(comando, etapa, ..., opcoes)",
+        "linhas_de(comando, etapa)"
+      ],
+      "summary": "O comando rodando, para ler linha a linha com para … em, enquanto chegam.",
+      "doc": "O comando rodando, para ler linha a linha com para … em, enquanto chegam.\n\nAceita as mesmas etapas e opções de execute, menos :terminal. Sair do\nlaço (pare, retorne, erro) encerra o comando. A saída de erro do comando\nvai direto para a tela. Com :exija, código diferente de 0 é erro no fim.\ntipo() é \"processo\"; tamanho() e [i] não valem: use execute para ter a lista.\nErros (se_falhar): comando que não existe. Só na linha de comando.\n\nExemplo: para linha em linhas_de(\"tail -f app.log\") { escreva(linha) }"
+    },
+    {
+      "name": "documento",
+      "aliases": [],
+      "module": "cartesiano",
+      "kind": "funcao",
+      "signatures": [
+        "documento()"
+      ],
+      "summary": "Folha de gráficos: uma janela. Ainda não abre nada.",
+      "doc": "Folha de gráficos: uma janela. Ainda não abre nada.\n\nAdicione gráficos com adicione e abra com mostre. Dois documentos são duas janelas.\n\nExemplo: c = documento()"
+    },
+    {
+      "name": "grafico",
+      "aliases": [
+        "gráfico"
+      ],
+      "module": "cartesiano",
+      "kind": "funcao",
+      "signatures": [
+        "grafico()"
+      ],
+      "summary": "Plano xy vazio. Defina eixos e depois plote. Também gráfico().",
+      "doc": "Plano xy vazio. Defina eixos e depois plote. Também gráfico().\n\ntipo(g) continua \"mapa\".\n\nExemplo: g = grafico()"
+    },
+    {
+      "name": "eixos",
+      "aliases": [],
+      "module": "cartesiano",
+      "kind": "funcao",
+      "signatures": [
+        "eixos(grafico, xmin, xmax, ymin, ymax)"
+      ],
+      "summary": "Limites do plano. xmin < xmax e ymin < ymax. y cresce para cima.",
+      "doc": "Limites do plano. xmin < xmax e ymin < ymax. y cresce para cima.\n\nSem eixos, plote é erro.\n\nExemplo: g.eixos(-2 * pi, 2 * pi, -1.5, 1.5)"
+    },
+    {
+      "name": "plote",
+      "aliases": [],
+      "module": "cartesiano",
+      "kind": "funcao",
+      "signatures": [
+        "plote(grafico, f, cor)"
+      ],
+      "summary": "Amostra a função de xmin a xmax (~400 pontos) e acrescenta a curva.",
+      "doc": "Amostra a função de xmin a xmax (~400 pontos) e acrescenta a curva.\n\nA função recebe um número e devolve um número. y não finito vira um furo na linha.\nCores: as mesmas da tela (azul, vermelho, …).\n\nExemplo: g.plote(função(x) { seno(x) }, :azul)"
+    },
+    {
+      "name": "adicione",
+      "aliases": [],
+      "module": "cartesiano",
+      "kind": "funcao",
+      "signatures": [
+        "adicione(documento, grafico)"
+      ],
+      "summary": "Copia o gráfico para o documento (congela as curvas).",
+      "doc": "Copia o gráfico para o documento (congela as curvas).\n\nPlotar de novo no gráfico original não muda o que já está na folha.\n\nExemplo: c.adicione(g)"
+    },
+    {
+      "name": "mostre",
+      "aliases": [],
+      "module": "cartesiano",
+      "kind": "funcao",
+      "signatures": [
+        "mostre(documento)"
+      ],
+      "summary": "Abre ou atualiza a janela deste documento e devolve o foco. Não espera fechar.",
+      "doc": "Abre ou atualiza a janela deste documento e devolve o foco. Não espera fechar.\n\nO primeiro mostre abre; os seguintes só atualizam a mesma janela. Folha vazia é erro.\n\nExemplo: c.mostre()"
+    },
+    {
+      "name": "agora",
+      "aliases": [],
+      "module": "crono",
+      "kind": "funcao",
+      "signatures": [
+        "agora()"
+      ],
+      "summary": "Data e hora locais: mapa :ano, :mes, :dia, :hora, :minuto, :segundo.",
+      "doc": "Data e hora locais: mapa :ano, :mes, :dia, :hora, :minuto, :segundo.\n\nTambém :dia_da_semana (1 = domingo … 7 = sábado) e :epoch (segundos\ndesde 1970). Fora do Linux/macOS o horário é UTC.\n\nExemplo: agora():ano"
+    },
+    {
+      "name": "hoje",
+      "aliases": [],
+      "module": "crono",
+      "kind": "funcao",
+      "signatures": [
+        "hoje()"
+      ],
+      "summary": "Data de hoje à meia-noite local (hora, minuto e segundo 0).",
+      "doc": "Data de hoje à meia-noite local (hora, minuto e segundo 0).\n\nExemplo: hoje():dia"
+    },
+    {
+      "name": "data",
+      "aliases": [],
+      "module": "crono",
+      "kind": "funcao",
+      "signatures": [
+        "data(ano, mes, dia)",
+        "data(ano, mes, dia, hora, minuto, segundo)"
+      ],
+      "summary": "Constrói uma data. Sem hora, fica meia-noite (0, 0, 0).",
+      "doc": "Constrói uma data. Sem hora, fica meia-noite (0, 0, 0).\n\nData inválida (29 de fevereiro fora de bissexto, mês 13, …) é erro (se_falhar).\nO mapa é o mesmo de agora(): :ano :mes :dia :hora :minuto :segundo\n:dia_da_semana :epoch.\n\nExemplo: data(2024, 2, 29)"
+    },
+    {
+      "name": "adicione",
+      "aliases": [],
+      "module": "crono",
+      "kind": "funcao",
+      "signatures": [
+        "adicione(data, n, unidade)"
+      ],
+      "summary": "Soma n unidades à data. n pode ser negativo.",
+      "doc": "Soma n unidades à data. n pode ser negativo.\n\nUnidades: :dias, :meses, :anos, :horas, :minutos, :segundos.\nDias, meses e anos andam no calendário (31 de janeiro + 1 mês = último\ndia de fevereiro). Horas, minutos e segundos andam no relógio (:epoch).\n\nExemplo: data(2024, 1, 31).adicione(1, :meses)"
+    },
+    {
+      "name": "dias_entre",
+      "aliases": [],
+      "module": "crono",
+      "kind": "funcao",
+      "signatures": [
+        "dias_entre(a, b)"
+      ],
+      "summary": "Dias de calendário de a até b (positivo se b é depois; ignora a hora).",
+      "doc": "Dias de calendário de a até b (positivo se b é depois; ignora a hora).\n\nExemplo: dias_entre(data(2024, 1, 1), data(2024, 1, 8))"
+    },
+    {
+      "name": "eh_bissexto",
+      "aliases": [
+        "é_bissexto"
+      ],
+      "module": "crono",
+      "kind": "funcao",
+      "signatures": [
+        "eh_bissexto(ano)"
+      ],
+      "summary": "Verdadeiro se o ano é bissexto. Também é_bissexto. Aceita o mapa de data.",
+      "doc": "Verdadeiro se o ano é bissexto. Também é_bissexto. Aceita o mapa de data.\n\nExemplo: eh_bissexto(2024)"
+    },
+    {
+      "name": "formate_data",
+      "aliases": [],
+      "module": "crono",
+      "kind": "funcao",
+      "signatures": [
+        "formate_data(data, modelo)"
+      ],
+      "summary": "Monta um texto com a data: %Y ano, %m mês, %d dia, %H hora, %M minuto, %S segundo.",
+      "doc": "Monta um texto com a data: %Y ano, %m mês, %d dia, %H hora, %M minuto, %S segundo.\n\nA data é o mapa de agora() ou um número de segundos desde 1970 (:epoch).\n%% escreve %. Outra letra depois de % é erro.\n\nExemplo: formate_data(agora(), \"backup-%Y-%m-%d.tar\")"
+    },
+    {
+      "name": "nova",
+      "aliases": [],
+      "module": "tela_grafica",
+      "kind": "funcao",
+      "signatures": [
+        "nova(largura, altura)",
+        "nova(largura, altura, tamanho_pixel)"
+      ],
+      "summary": "Tela de pixels. A janela abre no primeiro mostre().",
+      "doc": "Tela de pixels. A janela abre no primeiro mostre().\n\nlargura e altura são inteiros de 1 a 2048. Origem no canto superior\nesquerdo, y para baixo, (0, 0) no primeiro pixel. tamanho_pixel (1 a 16,\npadrão 1) é o lado do quadrado na janela para cada pixel da tela:\n2 vira 2×2. Clique, pixel e PNG continuam no tamanho lógico.\n\nExemplo: g = nova(160, 144, 4)"
+    },
+    {
+      "name": "cor",
+      "aliases": [],
+      "module": "tela_grafica",
+      "kind": "funcao",
+      "signatures": [
+        "cor(g, cor)"
+      ],
+      "summary": "Caneta atual. Cores: as da tela (azul, vermelho, …) e transparente. Padrão: preto.",
+      "doc": "Caneta atual. Cores: as da tela (azul, vermelho, …) e transparente.\nPadrão: preto.\n\nExemplo: g.cor(:azul)"
+    },
+    {
+      "name": "fundo",
+      "aliases": [],
+      "module": "tela_grafica",
+      "kind": "funcao",
+      "signatures": [
+        "fundo(g, cor)"
+      ],
+      "summary": "Papel da tela. Padrão: branco. transparente deixa furos no como_imagem(); na janela o furo mostra branco.",
+      "doc": "Papel da tela. Padrão: branco. transparente deixa furos no\ncomo_imagem(); na janela o furo mostra branco.\n\nExemplo: g.fundo(:transparente)"
+    },
+    {
+      "name": "linha",
+      "aliases": [],
+      "module": "tela_grafica",
+      "kind": "funcao",
+      "signatures": [
+        "linha(g, x1, y1, x2, y2)"
+      ],
+      "summary": "Reta da caneta. Coordenadas entre -4096 e 4096; fora disso é erro. Pixels fora da tela são recortados.",
+      "doc": "Reta da caneta. Coordenadas entre -4096 e 4096; fora disso é erro.\nPixels fora da tela são recortados.\n\nExemplo: g.linha(10, 10, 310, 190)"
+    },
+    {
+      "name": "circulo",
+      "aliases": [
+        "círculo"
+      ],
+      "module": "tela_grafica",
+      "kind": "funcao",
+      "signatures": [
+        "circulo(g, x, y, r)"
+      ],
+      "summary": "Circunferência (contorno). Centro entre -4096 e 4096 e raio de 0 a 4096.",
+      "doc": "Circunferência (contorno). Centro entre -4096 e 4096 e raio de 0 a 4096.\n\nExemplo: g.circulo(160, 100, 40)"
+    },
+    {
+      "name": "ponto",
+      "aliases": [],
+      "module": "tela_grafica",
+      "kind": "funcao",
+      "signatures": [
+        "ponto(g, x, y)"
+      ],
+      "summary": "Um pixel da caneta. Coordenadas entre -4096 e 4096. Fora da tela, ignora.",
+      "doc": "Um pixel da caneta. Coordenadas entre -4096 e 4096. Fora da tela, ignora.\n\nExemplo: g.ponto(5, 5)"
+    },
+    {
+      "name": "retangulo",
+      "aliases": [
+        "retângulo"
+      ],
+      "module": "tela_grafica",
+      "kind": "funcao",
+      "signatures": [
+        "retangulo(g, x1, y1, x2, y2)"
+      ],
+      "summary": "Retângulo preenchido da caneta, cantos (x1, y1) e (x2, y2) inclusivos. A ordem dos cantos não importa. Coordenadas entre -4096 e 4096. Pixels fora da tela são recortados.",
+      "doc": "Retângulo preenchido da caneta, cantos (x1, y1) e (x2, y2) inclusivos.\nA ordem dos cantos não importa. Coordenadas entre -4096 e 4096.\nPixels fora da tela são recortados.\n\nExemplo: g.retangulo(10, 10, 40, 30)"
+    },
+    {
+      "name": "texto",
+      "aliases": [],
+      "module": "tela_grafica",
+      "kind": "funcao",
+      "signatures": [
+        "texto(g, x, y, t)",
+        "texto(g, x, y, t, tamanho)"
+      ],
+      "summary": "Escreve t na caneta. (x, y) é o canto superior esquerdo do primeiro glifo, entre -4096 e 4096. tamanho é a altura da célula em pixels (padrão 8). Acento e ç entram. Quebra de linha (`\\n`) desce uma célula. Fundo transparente.",
+      "doc": "Escreve t na caneta. (x, y) é o canto superior esquerdo do primeiro\nglifo, entre -4096 e 4096. tamanho é a altura da célula em pixels (padrão 8). Acento e\nç entram. Quebra de linha (`\\n`) desce uma célula. Fundo transparente.\n\nExemplo: g.texto(8, 8, \"olá\")"
+    },
+    {
+      "name": "imagem",
+      "aliases": [],
+      "module": "tela_grafica",
+      "kind": "funcao",
+      "signatures": [
+        "imagem(g, caminho, x, y, angulo)",
+        "imagem(g, img, x, y, angulo)",
+        "imagem(g, img, x, y)"
+      ],
+      "summary": "Carimba uma imagem centrada em (x, y), entre -4096 e 4096. O segundo argumento é um caminho PNG, um valor de `importe \"imagem\"` ou outra tela gráfica (vira imagem na hora). O arquivo é lido uma vez; os pixels ficam no comando. angulo é em graus, no sentido horário; 0 deixa o topo para cima. Pixels transparentes não cobrem o desenho.",
+      "doc": "Carimba uma imagem centrada em (x, y), entre -4096 e 4096. O segundo argumento é um caminho\nPNG, um valor de `importe \"imagem\"` ou outra tela gráfica (vira imagem\nna hora). O arquivo é lido uma vez; os pixels ficam no comando. angulo\né em graus, no sentido horário; 0 deixa o topo para cima. Pixels\ntransparentes não cobrem o desenho.\n\nExemplo: g.imagem(img, 160, 100, 90)"
+    },
+    {
+      "name": "apague",
+      "aliases": [],
+      "module": "tela_grafica",
+      "kind": "funcao",
+      "signatures": [
+        "apague(g)"
+      ],
+      "summary": "Apaga o desenho. O papel continua a cor de fundo.",
+      "doc": "Apaga o desenho. O papel continua a cor de fundo.\n\nExemplo: g.apague()"
+    },
+    {
+      "name": "pixel",
+      "aliases": [],
+      "module": "tela_grafica",
+      "kind": "funcao",
+      "signatures": [
+        "pixel(g, x, y)"
+      ],
+      "summary": "Cor do pixel (texto). Fora da tela é erro. Rasteriza se precisar.",
+      "doc": "Cor do pixel (texto). Fora da tela é erro. Rasteriza se precisar.\n\nExemplo: escreva(g.pixel(10, 10))"
+    },
+    {
+      "name": "como_imagem",
+      "aliases": [],
+      "module": "tela_grafica",
+      "kind": "funcao",
+      "signatures": [
+        "como_imagem(g)"
+      ],
+      "summary": "Cópia em pixels (tipo imagem). transparente vira alpha 0; o resto é opaco. A tela original não muda.",
+      "doc": "Cópia em pixels (tipo imagem). transparente vira alpha 0; o resto\né opaco. A tela original não muda.\n\nExemplo: sprite = g.como_imagem()"
+    },
+    {
+      "name": "salve",
+      "aliases": [],
+      "module": "tela_grafica",
+      "kind": "funcao",
+      "signatures": [
+        "salve(g, caminho)"
+      ],
+      "summary": "Grava um PNG (com transparência). Não precisa de janela. Caminho relativo ao .lep.",
+      "doc": "Grava um PNG (com transparência). Não precisa de janela. Caminho\nrelativo ao .lep.\n\nExemplo: g.salve(\"casa.png\")"
+    },
+    {
+      "name": "mostre",
+      "aliases": [],
+      "module": "tela_grafica",
+      "kind": "funcao",
+      "signatures": [
+        "mostre(g)"
+      ],
+      "summary": "Abre ou atualiza a janela desta tela. Não espera fechar.",
+      "doc": "Abre ou atualiza a janela desta tela. Não espera fechar.\n\nO primeiro mostre abre; os seguintes só atualizam a mesma janela.\nCada nova() é uma janela. Não acopla na IDE.\nMantém somente o último quadro completo pendente por janela. Se o visor\nfor mais lento, quadros antigos ainda não apresentados são substituídos.\nImagens, formas e texto são compostos na ordem dos comandos.\n\nExemplo: g.mostre()"
+    },
+    {
+      "name": "laco_grafico",
+      "aliases": [
+        "laço_gráfico"
+      ],
+      "module": "tela_grafica",
+      "kind": "funcao",
+      "signatures": [
+        "laco_grafico(g)"
+      ],
+      "summary": "Cria um laço associado à tela, sem abrir janela nem iniciar a execução. Também laço_gráfico(). O recurso não pode ser clonado; pode ser executado novamente depois de terminar. Cada tela admite somente um laço ativo.",
+      "doc": "Cria um laço associado à tela, sem abrir janela nem iniciar a execução.\nTambém laço_gráfico(). O recurso não pode ser clonado; pode ser executado\nnovamente depois de terminar. Cada tela admite somente um laço ativo.\n\nExemplo: l = g.tela_grafica::laço_gráfico()"
+    },
+    {
+      "name": "execute",
+      "aliases": [],
+      "module": "tela_grafica",
+      "kind": "funcao",
+      "signatures": [
+        "execute(l, config)"
+      ],
+      "summary": "Inicia o laço e espera seu encerramento. config é um mapa com as três opções obrigatórias :fps, :eventos e :desenho. Outras opções dão erro. :fps deve ser um número positivo e finito com período representável. :eventos é função(ev, dt); :desenho é função(g). A configuração é capturada no início da execução; alterá-la depois não muda o laço ativo.",
+      "doc": "Inicia o laço e espera seu encerramento. config é um mapa com as três\nopções obrigatórias :fps, :eventos e :desenho. Outras opções dão erro.\n:fps deve ser um número positivo e finito com período representável.\n:eventos é função(ev, dt); :desenho é função(g). A configuração é\ncapturada no início da execução; alterá-la depois não muda o laço ativo.\n\nA cada quadro: captura a entrada, chama eventos(ev, dt), apaga o desenho,\nchama desenho(g) e apresenta. Usa o mesmo mapa de evento(): :teclas,\n:apertadas, :soltas, :eventos e :sair. eventos é chamada mesmo sem novos\nacontecimentos. Não chame evento(), mostre() ou durma() nos callbacks.\n\ndt é o tempo real em segundos entre chamadas de eventos, medido por\nrelógio monotônico; na primeira chamada é 0. Movimento: x += 90 * dt.\nO tempo dos callbacks e da apresentação é descontado da espera até o\npróximo quadro. Se um quadro demora demais, o seguinte começa sem espera;\nnão há uma fila de atualizações para recuperar o atraso. A frequência\ndesejada depende da capacidade do programa e do visor.\n\nFechar a janela entrega uma última chamada de eventos com ev:sair\nverdadeiro e termina sem chamar desenho. l.tela_grafica::pare() termina\ndepois do callback atual, sem apresentar outro quadro. Erros nos callbacks\nsão propagados. O botão Parar e o limite de tempo continuam funcionando.\nDevolve o próprio laço; ele pode ser executado novamente após terminar.\n\nExemplo: l.tela_grafica::execute(mapa([:fps -> 30, :eventos -> eventos, :desenho -> desenhe]))"
+    },
+    {
+      "name": "pare_laco",
+      "aliases": [
+        "pare_laço",
+        "pare"
+      ],
+      "module": "tela_grafica",
+      "kind": "funcao",
+      "signatures": [
+        "pare_laco(l)"
+      ],
+      "summary": "Solicita encerrar o laço depois do callback atual. Não fecha a janela. Use l.tela_grafica::pare(); pare_laco() e pare_laço() são equivalentes. Fora da execução não faz nada; execute() inicia uma nova execução.",
+      "doc": "Solicita encerrar o laço depois do callback atual. Não fecha a janela.\nUse l.tela_grafica::pare(); pare_laco() e pare_laço() são equivalentes.\nFora da execução não faz nada; execute() inicia uma nova execução.\n\nExemplo: se ev:apertadas contem :escape { l.tela_grafica::pare() }"
+    },
+    {
+      "name": "feche",
+      "aliases": [],
+      "module": "tela_grafica",
+      "kind": "funcao",
+      "signatures": [
+        "feche(g)"
+      ],
+      "summary": "Fecha a janela desta tela e solicita parar os laços associados a ela. Não apaga o desenho nem fecha outras janelas. Devolve a própria tela. Pode ser chamada antes de mostre() ou repetida depois de fechar. mostre() pode abrir a tela novamente. O fechamento da janela é assíncrono.",
+      "doc": "Fecha a janela desta tela e solicita parar os laços associados a ela.\nNão apaga o desenho nem fecha outras janelas. Devolve a própria tela.\nPode ser chamada antes de mostre() ou repetida depois de fechar.\nmostre() pode abrir a tela novamente. O fechamento da janela é assíncrono.\n\npare_laco() apenas interrompe o laço; feche() também encerra a janela.\n\nExemplo: g.feche()"
+    },
+    {
+      "name": "evento",
+      "aliases": [],
+      "module": "tela_grafica",
+      "kind": "funcao",
+      "signatures": [
+        "evento(g)"
+      ],
+      "summary": "Captura o teclado e consome todos os acontecimentos pendentes desta janela. Não espera interação. Chame mostre() antes e evento() uma vez por quadro. No CLI, consulta o estado recebido em segundo plano, sem esperar o visor ou o VSync. Durante a inicialização da janela, esse estado pode estar vazio.",
+      "doc": "Captura o teclado e consome todos os acontecimentos pendentes desta janela.\nNão espera interação. Chame mostre() antes e evento() uma vez por quadro.\nNo CLI, consulta o estado recebido em segundo plano, sem esperar o visor\nou o VSync. Durante a inicialização da janela, esse estado pode estar vazio.\n\nDevolve um mapa:\n:teclas — conjunto das teclas apertadas agora;\n:apertadas — conjunto das teclas apertadas desde a captura anterior;\n:soltas — conjunto das teclas soltas desde a captura anterior;\n:eventos — lista dos acontecimentos em ordem;\n:sair — verdadeiro se houve pedido de fechar a janela.\n\nSegurar mantém a tecla em :teclas, sem repetir :apertadas. Um toque completo\nentre capturas aparece em :apertadas e :soltas, mas não em :teclas.\nPerder o foco limpa :teclas e registra as teclas liberadas em :soltas.\nConsultar os campos não consome nada. Cada janela tem sua própria captura.\n\nCada item de :eventos tem :tipo (:tecla, :tecla_solta, :clique, :solte,\n:desfoco ou :sair), :tecla, :x, :y, :botao, :modificadores e :repeticao.\n:modificadores é o conjunto ativo naquele instante; repetição automática\nde teclado é ignorada (:repeticao é falso). Mouse usa pixels lógicos e\n:botao (:esquerdo, :direito, :meio ou :nenhum).\n\nModificadores (também aparecem nos conjuntos de teclas):\n:shift — Shift; :control — Control/Ctrl; :alt — Alt/Option;\n:super — Windows/Super/Command. Ambos os lados usam o mesmo nome;\nsoltar um lado não solta o modificador enquanto o outro está apertado.\n\nNomes das teclas (texto; :direita é igual a \"direita\"):\nletras :a a :z; números :num_0 a :num_9; funções :f1 a :f15;\n:esquerda, :direita, :cima, :baixo, :espaco, :enter, :escape, :tab,\n:backspace, :inicio, :fim, :pagina_acima, :pagina_abaixo, :insert, :delete;\n:apostrofo, :crase, :barra_invertida, :virgula, :igual,\n:colchete_esquerdo, :colchete_direito, :menos, :ponto, :ponto_e_virgula,\n:barra, :menu, :pause, :caps_lock, :num_lock, :scroll_lock;\nteclado numérico :numerico_0 a :numerico_9, :numerico_ponto,\n:numerico_barra, :numerico_asterisco, :numerico_menos, :numerico_mais.\nEnter numérico usa :enter. Travas indicam a tecla física, não o estado\nligado/desligado. Disponibilidade depende do teclado e sistema.\nLetras não mudam com Shift/Caps Lock; isto não é entrada de texto.\n\nExemplo: ev = g.evento()\nExemplo: se ev:teclas contem :direita { x += 3 }\nExemplo: se ev:apertadas contem :espaco { pule() }"
+    },
+    {
+      "name": "carregue",
+      "aliases": [],
+      "module": "imagem",
+      "kind": "funcao",
+      "signatures": [
+        "carregue(caminho)"
+      ],
+      "summary": "Lê um PNG (até 2048×2048). Devolve um valor do tipo imagem, em memória.",
+      "doc": "Lê um PNG (até 2048×2048). Devolve um valor do tipo imagem, em memória.\n\nCaminho relativo ao .lep. Pixels transparentes são preservados.\n\nExemplo: img = carregue(\"tartaruga.png\")"
+    },
+    {
+      "name": "salve",
+      "aliases": [],
+      "module": "imagem",
+      "kind": "funcao",
+      "signatures": [
+        "salve(img, caminho)"
+      ],
+      "summary": "Grava a imagem em PNG (com transparência). Caminho relativo ao .lep.",
+      "doc": "Grava a imagem em PNG (com transparência). Caminho relativo ao .lep.\n\nExemplo: img.salve(\"copia.png\")"
+    },
+    {
+      "name": "rotacione",
+      "aliases": [],
+      "module": "imagem",
+      "kind": "funcao",
+      "signatures": [
+        "rotacione(img, graus)"
+      ],
+      "summary": "Gira no sentido horário, em graus. 0 deixa o topo apontando para cima. 90, 180 e 270 são exatos. Devolve uma imagem nova; a original não muda.",
+      "doc": "Gira no sentido horário, em graus. 0 deixa o topo apontando para cima.\n90, 180 e 270 são exatos. Devolve uma imagem nova; a original não muda.\n\nExemplo: r = rotacione(img, 90)"
+    },
+    {
+      "name": "redimensione",
+      "aliases": [],
+      "module": "imagem",
+      "kind": "funcao",
+      "signatures": [
+        "redimensione(img, fator)",
+        "redimensione(img, fator_x, fator_y)"
+      ],
+      "summary": "Redimensiona. Fator 2 dobra; 0,5 reduz à metade. Vizinho mais próximo (bom para sprites). Devolve uma imagem nova.",
+      "doc": "Redimensiona. Fator 2 dobra; 0,5 reduz à metade. Vizinho mais próximo\n(bom para sprites). Devolve uma imagem nova.\n\nExemplo: d = redimensione(img, 2)"
+    },
+    {
+      "name": "largura",
+      "aliases": [],
+      "module": "imagem",
+      "kind": "funcao",
+      "signatures": [
+        "largura(img)"
+      ],
+      "summary": "Largura em pixels.",
+      "doc": "Largura em pixels.\n\nExemplo: escreva(largura(img))"
+    },
+    {
+      "name": "altura",
+      "aliases": [],
+      "module": "imagem",
+      "kind": "funcao",
+      "signatures": [
+        "altura(img)"
+      ],
+      "summary": "Altura em pixels.",
+      "doc": "Altura em pixels.\n\nExemplo: escreva(altura(img))"
+    },
+    {
+      "name": "argumentos",
+      "aliases": [],
+      "module": null,
+      "kind": "valor",
+      "signatures": [],
+      "summary": "Lista dos valores após o .lep na linha de comando (argumentos[0], …).",
+      "doc": "Lista dos valores após o .lep na linha de comando (argumentos[0], …).\n\nNão é uma função: é uma lista já definida em todo programa.\nNo REPL a lista é []. Não dá para fazer argumentos = ….\n\nExemplo: escreva(argumentos[0])"
+    },
+    {
+      "name": "nova_linha",
+      "aliases": [],
+      "module": "tela",
+      "kind": "valor",
+      "signatures": [],
+      "summary": "Quebra de linha do sistema. Valor, não função: use nova_linha, não nova_linha().",
+      "doc": "Quebra de linha do sistema. Valor, não função: use nova_linha, não nova_linha().\n\n\"\\\\n\" no Unix e na Aula; \"\\\\r\\\\n\" no Windows. Monte o texto de quadro com ela.\n\nExemplo: tela += linha + nova_linha"
+    },
+    {
+      "name": "pi",
+      "aliases": [],
+      "module": "mat",
+      "kind": "valor",
+      "signatures": [],
+      "summary": "π. Valor, não função: use pi, não pi().",
+      "doc": "π. Valor, não função: use pi, não pi().\n\n180 graus são pi radianos. Converta com graus() e radianos().\n\nExemplo: area = pi * r * r"
+    }
+  ]
+}

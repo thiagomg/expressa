@@ -1,0 +1,44 @@
+// Compare juros simples e compostos para a mesma taxa e duração.
+// A taxa é uma porcentagem por período: digite 2 para 2%.
+// Execute: cargo run -- exemplos/escola/juros.lep
+entrada = importe "../lib/entrada"
+importe "mat"
+
+// Multiplica em decimal
+potencia_exata = funcao(base, exp) {
+    r = 1
+    repita exp vezes { r = r * base }
+    r
+}
+
+// Arredonda apenas a apresentação; os cálculos mantêm a precisão.
+em_reais = funcao(valor) {
+    centavos = arredonde(valor * 100)
+    formate("{},{:0>2}", piso(centavos / 100), centavos % 100)
+}
+
+escreva("Juros simples e compostos. Para sair, pressione Enter sem digitar nada.")
+escreva("O capital é o valor inicial; o montante é o total após acrescentar os juros.")
+escreva("Use a mesma unidade para taxa e duração: por exemplo, taxa mensal e número de meses.")
+capital = entrada::leia_numero("Capital inicial (R$): ", funcao(n) { n > 0 }, "Digite um capital maior que zero.")
+se capital == falso { saia(0) }
+porcentagem = entrada::leia_numero("Taxa por período (digite 2 para 2%): ", funcao(n) { n >= 0 }, "Digite uma taxa maior ou igual a zero.")
+se porcentagem == falso { saia(0) }
+periodos = entrada::leia_numero("Número de períodos: ", funcao(n) { n >= 0 e n % 1 == 0 }, "Digite uma quantidade inteira maior ou igual a zero.")
+se periodos == falso { saia(0) }
+
+taxa = porcentagem / 100
+simples = capital * (1 + taxa * periodos)
+compostos = capital * potencia_exata(1 + taxa, periodos)
+
+escreva("capital inicial: R$ " + em_reais(capital))
+escreva("taxa: " + porcentagem + "% ao período")
+escreva("períodos: " + periodos)
+escreva("juros simples")
+escreva("  montante: R$ " + em_reais(simples))
+escreva("  juros:    R$ " + em_reais(simples - capital))
+escreva("juros compostos")
+escreva("  montante: R$ " + em_reais(compostos))
+escreva("  juros:    R$ " + em_reais(compostos - capital))
+escreva("diferença (compostos − simples): R$ " + em_reais(compostos - simples))
+escreva()

@@ -1,0 +1,149 @@
+name: Build packages
+
+on:
+  push:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-packages-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_PROFILE: release-lto
+
+jobs:
+  testes:
+    name: Testes sem interface
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Dependências de compilação
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential cmake pkg-config protobuf-compiler \
+            libx11-dev libxcursor-dev libxext-dev libxi-dev \
+            libxinerama-dev libxkbcommon-dev libxrandr-dev
+      - name: Interpretador e servidor
+        env:
+          SDL_VIDEODRIVER: dummy
+        run: |
+          cargo test -p expressa --locked --lib --test ast_regressions --test exb --test runtime_profiles
+          cargo test -p expressa-aula-server --locked
+
+  ubuntu:
+    name: Ubuntu ${{ matrix.ubuntu }} (x64)
+    strategy:
+      fail-fast: false
+      matrix:
+        ubuntu: ['24.04', '26.04']
+    runs-on: ubuntu-${{ matrix.ubuntu }}
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Build Debian package
+        env:
+          UBUNTU_VERSION: ${{ matrix.ubuntu }}
+        run: ./empacotar-deb.sh "$UBUNTU_VERSION"
+
+      - name: Upload Debian package
+        uses: actions/upload-artifact@v7
+        with:
+          path: dist/expressa_*_amd64.deb
+          if-no-files-found: error
+          retention-days: 30
+          archive: false
+
+  windows:
+    name: Windows (x64)
+    runs-on: windows-2022
+    timeout-minutes: 90
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable-x86_64-pc-windows-msvc
+
+      - name: Testar ferramentas de texto no Windows
+        run: cargo test -p expressa --locked --no-default-features --test unix_tools --test exb
+
+      # Same native dependency versions recorded in deps/versoes.txt.
+      - name: Download GTK and Protocol Buffers
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $downloads = Join-Path $env:RUNNER_TEMP 'expressa-deps'
+          New-Item -ItemType Directory -Force $downloads | Out-Null
+          gh release download 2026.8.0 --repo wingtk/gvsbuild --pattern GTK4_Gvsbuild_2026.8.0_x64.zip --dir $downloads
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          gh release download v36.2 --repo protocolbuffers/protobuf --pattern protoc-36.2-win64.zip --dir $downloads
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $gtkZip = Join-Path $downloads 'GTK4_Gvsbuild_2026.8.0_x64.zip'
+          $protocZip = Join-Path $downloads 'protoc-36.2-win64.zip'
+          if ((Get-FileHash $gtkZip -Algorithm SHA256).Hash -ne '1f95a92d037f5292da05e6ab1037032ff21ddb7b20d4ac8e83e3674c864c07b0') {
+            throw 'GTK archive checksum mismatch'
+          }
+          if ((Get-FileHash $protocZip -Algorithm SHA256).Hash -ne 'f0c128dc0d8492eceece83bb459a4c0e316764b929ffbf1aa416357fd644edd3') {
+            throw 'Protocol Buffers archive checksum mismatch'
+          }
+          Expand-Archive $gtkZip -DestinationPath deps/gtk
+          Expand-Archive $protocZip -DestinationPath deps/protoc
+
+      - name: Install Inno Setup 7
+        run: |
+          $installer = Join-Path $env:RUNNER_TEMP 'innosetup-7.1.1-x64.exe'
+          Invoke-WebRequest 'https://github.com/jrsoftware/issrc/releases/download/is-7_1_1/innosetup-7.1.1-x64.exe' -OutFile $installer
+          $signature = Get-AuthenticodeSignature $installer
+          if ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notmatch 'CN=Pyrsys B.V.') {
+            throw 'Inno Setup installer signature verification failed'
+          }
+          $setup = Start-Process -FilePath $installer -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/SP-' -Wait -PassThru
+          if ($setup.ExitCode -ne 0) { throw "Inno Setup installation failed: $($setup.ExitCode)" }
+
+      - name: Build Windows installer
+        run: |
+          . ./deps/ativar.ps1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          ./criar-instalador.ps1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Smoke test packaged interpreter
+        run: |
+          # Only Windows system paths: no build-time GTK or Rust on PATH.
+          $env:PATH = "$env:SystemRoot\System32;$env:SystemRoot"
+          & ./dist/expressa-aula/bin/expressa.exe --help
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $source = Join-Path $env:RUNNER_TEMP 'runner-smoke.lep'
+          $compiled = Join-Path $env:RUNNER_TEMP 'runner-smoke.lepc'
+          Set-Content -LiteralPath $source -Value 'escreva(42)' -Encoding utf8NoBOM
+          & ./dist/expressa-aula/bin/expressa.exe compilar $source -o $compiled
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Remove-Item -LiteralPath $source
+          $result = & ./dist/expressa-aula/bin/lep-exec.exe $compiled
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if ("$result".Trim() -ne '42') { throw "Runner output: $result" }
+
+      - name: Upload Windows installer
+        uses: actions/upload-artifact@v7
+        with:
+          path: dist/ExpressaAula-*-Setup.exe
+          if-no-files-found: error
+          retention-days: 30
+          archive: false

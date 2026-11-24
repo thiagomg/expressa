@@ -1,0 +1,134 @@
+// transforma uma fração em texto
+em_texto = função(fr)
+inicio
+    se fr:denominador == 1
+    início
+        formate("{}", fr:numerador)
+    fim
+    senão
+    início
+        formate("{}/{}", fr:numerador, fr:denominador)
+    fim
+fim
+
+
+// cria uma nova fração
+nova = função(numerador, denominador)
+inicio
+    mapa([
+        :numerador -> numerador,
+        :denominador -> denominador,
+        :_como_texto -> em_texto
+    ])
+fim
+
+// Calcula o MDC de dois números
+mdc = funcao(x, y)
+inicio
+    se y == 0
+    inicio
+        x
+    fim
+    senao
+    inicio
+        mdc(y, x % y)
+    fim
+fim
+
+// Calcula o MMC de dois números
+mmc = funcao(x, y)
+inicio
+    x * y / mdc(x, y)
+fim
+
+// transforma um número em fração
+// se já for fração, retorna a mesma
+em_fracao = função(n)
+inicio
+    se tipo(n) == "numero"
+    inicio
+        nova(n, 1)
+    fim
+    senão
+    inicio
+        n
+    fim
+fim
+
+// simplifica a fração. Por exemplo, 2/4 vira 1/2
+simplifica = função(fr)
+início
+    fr = em_fracao(fr)
+    val = mdc(fr:numerador, fr:denominador)
+    nova(fr:numerador / val, fr:denominador / val)
+fim
+
+// Soma duas frações
+soma = função(fr1, fr2)
+inicio
+    fr1 = em_fracao(fr1)
+    fr2 = em_fracao(fr2)
+    
+    resultado = se fr1:denominador == fr2:denominador
+    inicio
+        // Este é muito simples. Basta somar o numerador
+        nova(fr1:numerador + fr2:numerador, fr1:denominador)
+    fim
+    senão
+    inicio
+        // Precisamos calcular o MMC do denominador primeiro
+        novo_den = mmc(fr1:denominador, fr2:denominador)
+        // E agora dividir por cada denominador e multiplicar pelo numerador
+        novo_num = função(valor_mmc, num, den)
+        inicio
+            (valor_mmc / den) * num
+        fim
+        num1 = novo_num(novo_den, fr1:numerador, fr1:denominador)
+        num2 = novo_num(novo_den, fr2:numerador, fr2:denominador)
+        
+        nova(num1 + num2, novo_den)
+    fim
+            
+    // Aqui, precisamos simplificar a fração
+    // Por exemplo, 2/4 vira 1/2
+    simplifica(resultado)    
+fim
+
+// Se fr1 for maior, retorna -1
+// Se fr2 for maior, retorna 1 
+// Se fr1 for igual a fr2, retorna 0
+compara = função(fr1, fr2)
+início
+    fr1 = em_fracao(fr1)
+    fr2 = em_fracao(fr2)
+
+    // Precisamos calcular o MMC do denominador primeiro
+    novo_den = mmc(fr1:denominador, fr2:denominador)
+    // E agora dividir por cada denominador e multiplicar pelo numerador
+    novo_num = função(valor_mmc, num, den)
+    inicio
+        (valor_mmc / den) * num
+    fim
+    num1 = novo_num(novo_den, fr1:numerador, fr1:denominador)
+    num2 = novo_num(novo_den, fr2:numerador, fr2:denominador)
+        
+    fr1n = nova(num1, novo_den)
+    fr2n = nova(num2, novo_den)
+
+    // Descomente esta linha se você quiser ver as frações depois do MMC
+    // escreva(formate("- {} -> {}", fr1, fr1n))
+    // escreva(formate("- {} -> {}", fr2, fr2n))
+    
+    se fr1n:numerador > fr2n:numerador
+    inicio
+        -1
+    fim
+    ou se fr1n:numerador < fr2n:numerador
+    inicio
+        1
+    fim
+    senão
+    início
+        0
+    fim
+fim

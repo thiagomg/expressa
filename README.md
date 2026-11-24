@@ -1,0 +1,90 @@
+# Expressa
+
+Linguagem de programação em **português brasileiro**, para quem quer aprender a escrever código com uma passagem mais simples do que já se sabe da escola para a programação.
+
+Arquivos `.lep`. Índices começam em **0**. Inspirada em SML, Rust, Lua, C, Pascal, D e algumas ideias próprias.
+
+- **Um tipo número** — não há `i16`, `i32`, `i64`, `f32`, `f64`. Contas de caderno são: `0.1 + 0.2` é `0.3`.
+- **Pouca ambiguidade** — uma leitura, um significado; o par de bloco combina (`{` com `}`, `inicio` com `fim`).
+- **Baterias inclusas** — texto, listas, mapas, arquivo, tela, matemática, matriz, data (`crono`) e gráfico cartesiano, sem baixar biblioteca para o primeiro programa.
+- **REPL com introspecção** — `ajuda`, `ajuda escreva`, `ls`, `ls mat`, `tipo`, `tipos`.
+- **Editor com executar e depurar** — [expressa-aula](aula/README.md).
+- **Manual e exemplos** — [tutorial](docs/tutoriais/basico.md), [avançado](docs/tutoriais/avancado.md), [manual](docs/manual.md), [folha](docs/folha-de-consulta.md), [exemplos/](exemplos/).
+
+Implementada em Rust.
+
+```text
+nome = leia("Qual o seu nome? ")
+escreva("Olá, " + nome)
+
+notas = [7, 8, 6.5]
+soma = 0
+para n em notas {
+    soma += n
+}
+escreva("média: " + (soma / tamanho(notas)))
+```
+
+## Executando
+
+O binário `expressa` (`expressa.exe` no Windows) no PATH:
+
+```text
+expressa                 REPL
+expressa prog.lep        arquivo
+expressa debug prog.lep  depurador
+expressa compilar prog.lep -o prog.lepc
+expressa prog.lepc        bytecode previamente compilado
+lep-exec prog.lepc [args…]    runner dedicado de programas compilados
+```
+
+No REPL: `2 + 3`, `escreva("oi")`, `ajuda("escreva")`. `sair` ou Ctrl+D encerra.
+
+Um diretório com `principal.lep` pode ser executado diretamente: `expressa exemplos/tetris-cx`. No programa, `define_opcao(:fechar_janelas, verdadeiro)` fecha suas janelas ao terminar.
+
+Compilar: `cargo build --release` (Rust, edition 2024; CMake e compilador C/C++ para o SDL2 incluído no build gráfico). Binários em `target/release/`, incluindo o runner `lep-exec`, compilado por padrão e incluído nos pacotes `.deb` e no instalador `.exe`. A pipeline empacota com `--profile release-lto` (`target/release-lto/`).
+
+No Windows (MSVC x64), `cargo build --release --all` compila também a Aula.
+Com os pacotes nativos extraídos em `deps/gtk/` e `deps/protoc/`
+(versões em `deps/versoes.txt`), o Cargo encontra o pkgconf e o protoc
+automaticamente. Para executar a interface, ative também as DLLs no PATH:
+`Set-ExecutionPolicy -Scope Process Bypass` e `. .\deps\ativar.ps1` no PowerShell.
+
+O backend padrão executa bytecode, sem JIT. Para comparar com o interpretador AST de referência: `expressa --backend ast prog.lep`; `--backend bytecode` seleciona explicitamente a VM. A opção `--ast` apenas imprime a árvore sintática. Veja [a revisão da migração](lang-tasks/BYTECODE-REVIEW.md) e [a comparação de CPU e memória](benchmarks/AST-VS-BYTECODE.md).
+
+O formato [EXB v2](docs/exb.md) inclui fonte para diagnósticos, valida instruções no carregamento e dispensa o `.lep` original. Imports sem extensão seguem o formato do módulo: `.lep` procura `.lep` e `.lepc` procura `.lepc`. Para distribuir, compile também os módulos e preserve as pastas. Veja [a medição de CPU e memória](benchmarks/EXB-V1-REVIEW.md).
+
+Um [perfil mínimo de compilação](docs/runtime-profiles.md) mantém bytecode, EXB e `avalie`, excluindo o executor AST, gráficos, processos e terminal interativo com `--no-default-features`. O build padrão continua completo.
+
+Pacote `.deb` (Ubuntu 24.04 e 26.04, via Docker): `./empacotar-deb.sh`. Os arquivos saem em `dist/`.
+
+### Builds no GitHub
+
+O workflow [Build packages](.github/workflows/build.yml) compila e empacota a cada
+push na `main`, incluindo merges de pull requests, com o perfil `release-lto`.
+Ele não roda para outras branches, pull requests ainda não integrados ou tags.
+
+No GitHub, abra **Actions → Build packages → execução → Artifacts** para baixar:
+
+| Artefato | Conteúdo |
+| --- | --- |
+| `expressa_*-1~ubuntu24.04_amd64.deb` | Pacote para Ubuntu 24.04 |
+| `expressa_*-1~ubuntu26.04_amd64.deb` | Pacote para Ubuntu 26.04 |
+| `ExpressaAula-*-Setup.exe` | Instalador Windows com executáveis, GTK e runtime do Visual C++ |
+
+Os três pacotes incluem o interpretador, visualizador de gráficos, IDE Aula,
+servidor e tutoriais. O editor não inicia o `expressa-aula-server`. Na sala,
+o professor abre o atalho **Servidor da sala**, com `--bind 0.0.0.0:50051` e
+um `--root` absoluto (por exemplo `$HOME/expressa-aula-data` ou
+`%LOCALAPPDATA%\Expressa Aula\aula-data`). O padrão `./aula-data` segue a
+pasta de trabalho e pode gravar os arquivos dos alunos em `Program Files`.
+Libere a porta 50051 no firewall do computador do professor. Os artefatos
+ficam disponíveis por **30 dias**. No Windows,
+execute `ExpressaAula-*-Setup.exe`; no Ubuntu,
+instale o `.deb` correspondente com `sudo apt install ./expressa_*.deb`.
+
+Os arquivos são produzidos em `dist/` nos runners e enviados diretamente, sem
+um ZIP adicional, como artefatos da execução. Esse workflow não publica uma GitHub Release. O workflow separado
+**Project storage** mantém seus próprios gatilhos de testes.
+
+Especificação: [especificacao-linguagem.md](docs/especificacao-linguagem.md).

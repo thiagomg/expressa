@@ -1,0 +1,1457 @@
+//! Runs and debugs programs in this process. The server is only a file
+//! repository: before a run the student's project is copied into a local
+//! durable run folder, and files the program created or changed are sent back.
+
+use std::collections::{HashMap, HashSet};
+use std::io::{self, Write};
+use std::path::{Path, PathBuf};
+use std::sync::mpsc::{Receiver, Sender, SyncSender};
+#[cfg(test)]
+use std::time::Duration;
+
+use expressa::runtime::{
+    CapturaEvento, CartesianoHost, ChannelDebugger, DebugHook, DebugPaused, EstadoEntrada,
+    EventoGraf, FolhaPronta, GrafHost, LeiaHost, QuadrosPendentes, StopHook, TelaGrafica,
+    run_with_hosts,
+};
+
+use crate::store::{Expected, Files};
+
+/// Start of the message for a crash inside the interpreter.
+pub const ERRO_INTERNO: &str =
+    "erro interno da Expressa (não é um erro do seu programa; avise o professor)";
+
+/// What the console shows for a panic in the interpreter.
+fn mensagem_de_panico(panico: &(dyn std::any::Any + Send)) -> String {
+    let detalhe = panico
+        .downcast_ref::<&str>()
+        .map(|s| s.to_string())
+        .or_else(|| panico.downcast_ref::<String>().cloned());
+    match detalhe {
+        Some(d) => format!("{ERRO_INTERNO}: {d}"),
+        None => ERRO_INTERNO.to_string(),
+    }
+}
+
+/// Events the UI may lag behind before the program blocks. Keeps a program
+/// that prints forever from piling up memory or starving the UI.
+const EVENT_BACKLOG: usize = 256;
+
+pub enum ExecEvent {
+    Stdout(String),
+    Stderr(String),
+    Leia(String),
+    CursorPosition(std::sync::mpsc::Sender<(i64, i64)>),
+    Folha(FolhaPronta),
+    FecheFolha(u64),
+    TelaGraf,
+    Source(std::sync::Arc<crate::debug_sources::Source>),
+    Paused(DebugPaused),
+    Finished(Finished),
+}
+
+pub struct StackFrame {
+    pub name: String,
+    pub file: String,
+    pub line: u32,
+    /// How many more identical frames follow this one (deep recursion).
+    pub repeticoes: usize,
+}
+
+pub struct Finished {
+    pub ok: bool,
+    pub error_message: String,
+    /// Relative to the project folder.
+    pub error_file: String,
+    pub error_line: u32,
+    /// Innermost first. Empty when the error is only the top-level module.
+    pub stack: Vec<StackFrame>,
+}
+
+/// Local copy of one student's project.
+/// What [`Workspace::upload_changes`] did.
+#[derive(Default)]
+pub struct Envio {
+    /// Files sent, with their new text (`None` for binary files).
+    pub enviados: Vec<(String, Option<String>)>,
+    /// Files that could not be sent, as messages for the console.
+    pub erros: Vec<String>,
+    pub avisos: Vec<String>,
+    pub conflitos: Vec<UploadConflict>,
+    pub pending_dir: Option<PathBuf>,
+}
+
+pub struct UploadConflict {
+    pub path: String,
+    pub bytes: Vec<u8>,
+}
+
+pub struct EditorSource {
+    pub path: String,
+    pub text: String,
+    pub expected: Expected,
+}
+
+/// Each execution owns a unique durable directory. Journals remain after a
+/// crash or failed upload and are never synchronized over by a later run.
+pub struct Workspace {
+    pub dir: PathBuf,
+    revisions: HashMap<String, Expected>,
+    journal: crate::pendencias::Journal,
+}
+
+impl Workspace {
+    #[cfg(test)]
+    pub(crate) fn sync_at(root: &Path, files: &Files, project: &str) -> Result<Self, String> {
+        Self::sync_em(root, files, project, None)
+    }
+
+    pub fn sync(files: &Files, project: &str) -> Result<Self, String> {
+        Self::sync_em(&crate::pendencias::root(), files, project, None)
+    }
+
+    fn sync_em(
+        root: &Path,
+        files: &Files,
+        project: &str,
+        anterior: Option<Self>,
+    ) -> Result<Self, String> {
+        // Release only our old lease. Its outputs remain durable and are
+        // discovered independently; this run never writes into that directory.
+        drop(anterior);
+        let identity = files.identity(project)?;
+        let journal = crate::pendencias::Journal::create(root, identity)?;
+        let dir = journal.dir().canonicalize().map_err(|e| e.to_string())?;
+        let mut revisions = HashMap::new();
+        for entry in files.list_tree(project)? {
+            if crate::background::current_cancellation()
+                .is_some_and(|flag| flag.load(std::sync::atomic::Ordering::Acquire))
+            {
+                return Err("operação cancelada".into());
+            }
+            if !crate::pendencias::valid_relative(&entry.path) {
+                return Err(format!("caminho inválido no projeto: {}", entry.path));
+            }
+            let local = dir.join(&entry.path);
+            if entry.is_dir {
+                std::fs::create_dir_all(&local).map_err(|e| e.to_string())?;
+            } else if let Some(expected) = copy_project_file(files, project, &entry.path, &local)? {
+                revisions.insert(entry.path.clone(), expected);
+            }
+        }
+        journal.baseline(&revisions)?;
+        Ok(Self {
+            dir,
+            revisions,
+            journal,
+        })
+    }
+
+    /// Put the editor's text of `rel` in the copy (open tabs, saved or not).
+    /// Only subsequent program changes are uploaded. Repository revisions stay
+    /// separate: unsaved text never grants permission to replace newer files.
+    #[cfg(test)]
+    pub fn write_editor_text(&mut self, rel: &str, source: &str) -> Result<(), String> {
+        if !crate::pendencias::valid_relative(rel) {
+            return Err("caminho de aba inválido".into());
+        }
+        let expected = self
+            .revisions
+            .get(rel)
+            .cloned()
+            .unwrap_or(Expected::Missing);
+        self.journal.overlay(rel, source.as_bytes(), &expected)?;
+        self.revisions.insert(rel.to_string(), expected);
+        self.arm()
+    }
+
+    pub fn write_editor_source(&mut self, source: &EditorSource) -> Result<(), String> {
+        self.write_editor_sources(std::slice::from_ref(source))
+    }
+
+    pub fn write_editor_sources(&mut self, sources: &[EditorSource]) -> Result<(), String> {
+        for source in sources {
+            if !crate::pendencias::valid_relative(&source.path) {
+                return Err("caminho de aba inválido".into());
+            }
+        }
+        self.journal.overlay_todos(sources.iter().map(|source| {
+            (
+                source.path.as_str(),
+                source.text.as_bytes(),
+                &source.expected,
+            )
+        }))?;
+        for source in sources {
+            self.revisions
+                .insert(source.path.clone(), source.expected.clone());
+        }
+        Ok(())
+    }
+
+    pub fn arm(&self) -> Result<(), String> {
+        self.journal.arm()
+    }
+
+    /// Capture before the worker starts: later writes by the program must not
+    /// change the source displayed for an existing run.
+    pub fn capture_sources(&self) -> Result<crate::debug_sources::Sources, String> {
+        let mut sources = crate::debug_sources::Sources::new();
+        for path in self.revisions.keys().filter(|p| p.ends_with(".lep")) {
+            let bytes = std::fs::read(self.dir.join(path)).map_err(|e| e.to_string())?;
+            if let Ok(text) = String::from_utf8(bytes) {
+                let source = std::sync::Arc::new(crate::debug_sources::Source::new(path, text));
+                sources.insert(source.path.clone(), source);
+            }
+        }
+        Ok(sources)
+    }
+
+    /// Absolute path of `rel` in the copy, as the interpreter names files.
+    pub fn abs(&self, rel: &str) -> String {
+        self.dir.join(rel).to_string_lossy().into_owned()
+    }
+
+    /// Send files that are new or differ from the download. One file that
+    /// fails does not stop the others: every failure is reported.
+    pub fn upload_changes(&self, files: &Files, project: &str) -> Envio {
+        let delivery = self.journal.retry(files, project);
+        let pending_dir = if delivery.errors.is_empty() && delivery.conflicts.is_empty() {
+            None
+        } else {
+            Some(self.journal.run_dir.clone())
+        };
+        Envio {
+            enviados: delivery.sent,
+            erros: delivery.errors,
+            avisos: delivery.warnings,
+            conflitos: delivery
+                .conflicts
+                .into_iter()
+                .map(|(path, bytes)| UploadConflict { path, bytes })
+                .collect(),
+            pending_dir,
+        }
+    }
+}
+
+/// Path as the editor names tabs: relative to `root` when it sits inside,
+/// always with `/`. The debugger reports Windows paths with `\`; a second
+/// form would open another tab of the same file and the breakpoint, which
+/// lives on the first tab, would look gone.
+pub fn display_path(root: &Path, path: &str) -> String {
+    Path::new(path)
+        .strip_prefix(root)
+        .map(|r| r.to_string_lossy().into_owned())
+        .unwrap_or_else(|_| path.to_string())
+        .replace('\\', "/")
+}
+
+/// Tab names and debugger paths name the same file when only `\` and `/` differ.
+pub fn same_project_path(a: &str, b: &str) -> bool {
+    a.replace('\\', "/") == b.replace('\\', "/")
+}
+
+/// Download text and binary data, preserving the repository revision.
+fn copy_project_file(
+    files: &Files,
+    project: &str,
+    rel: &str,
+    dest: &Path,
+) -> Result<Option<Expected>, String> {
+    match files.current_bytes(project, rel)? {
+        Some(snapshot) => {
+            write_bytes(dest, &snapshot.bytes)?;
+            Ok(Some(Expected::Revision(snapshot.revision)))
+        }
+        None => Err(format!("arquivo `{rel}` foi removido durante a cópia")),
+    }
+}
+
+fn write_bytes(path: &Path, bytes: &[u8]) -> Result<(), String> {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    std::fs::write(path, bytes).map_err(|e| format!("{}: {e}", path.display()))
+}
+
+#[cfg(test)]
+fn write_file(path: &Path, source: &str) -> Result<(), String> {
+    write_bytes(path, source.as_bytes())
+}
+
+struct ChannelLeia {
+    prompts: SyncSender<ExecEvent>,
+    lines: Receiver<String>,
+}
+
+impl LeiaHost for ChannelLeia {
+    fn cursor_position(&mut self) -> Result<(i64, i64), String> {
+        let (tx, rx) = std::sync::mpsc::channel();
+        self.prompts
+            .send(ExecEvent::CursorPosition(tx))
+            .map_err(|_| "IDE fechada".to_string())?;
+        rx.recv()
+            .map_err(|_| "consulta da posição do cursor cancelada".to_string())
+    }
+
+    fn ask(&mut self, prompt: &str) -> Result<String, String> {
+        self.prompts
+            .send(ExecEvent::Leia(prompt.to_string()))
+            .map_err(|_| "IDE fechada".to_string())?;
+        self.lines.recv().map_err(|_| "IDE fechada".to_string())
+    }
+}
+
+struct ChannelCartesiano {
+    tx: SyncSender<ExecEvent>,
+}
+
+impl CartesianoHost for ChannelCartesiano {
+    fn feche(&mut self, id: u64) -> Result<(), String> {
+        self.tx
+            .send(ExecEvent::FecheFolha(id))
+            .map_err(|_| "IDE fechada".to_string())
+    }
+    fn mostre(&mut self, folha: FolhaPronta) -> Result<(), String> {
+        self.tx
+            .send(ExecEvent::Folha(folha))
+            .map_err(|_| "IDE fechada".to_string())
+    }
+}
+
+pub enum AtualizacaoGraf {
+    Mostre(TelaGrafica),
+    Feche(u64),
+}
+
+struct ChannelGraf {
+    tx: SyncSender<ExecEvent>,
+    eventos: Receiver<EventoGraf>,
+    estados: HashMap<u64, EstadoEntrada>,
+    quadros: std::sync::Arc<std::sync::Mutex<QuadrosPendentes<AtualizacaoGraf>>>,
+    fechadas: HashSet<u64>,
+}
+
+impl ChannelGraf {
+    fn publique(&mut self, id: u64, atualizacao: AtualizacaoGraf) -> Result<(), String> {
+        let notify = self.quadros.lock().unwrap().publique(id, atualizacao);
+        if notify {
+            self.tx
+                .send(ExecEvent::TelaGraf)
+                .map_err(|_| "IDE fechada".to_string())?;
+        }
+        Ok(())
+    }
+}
+
+impl GrafHost for ChannelGraf {
+    fn mostre(&mut self, tela: TelaGrafica) -> Result<(), String> {
+        if self.fechadas.remove(&tela.id) {
+            self.estados.remove(&tela.id);
+        }
+        self.publique(tela.id, AtualizacaoGraf::Mostre(tela))
+    }
+
+    fn feche(&mut self, id: u64) -> Result<(), String> {
+        self.fechadas.insert(id);
+        self.estados.remove(&id);
+        // Closing replaces an unpresented frame in the same per-window slot.
+        // A slow UI cannot display that stale frame after processing the close.
+        self.publique(id, AtualizacaoGraf::Feche(id))
+    }
+
+    fn evento(&mut self, tela: &TelaGrafica) -> Result<CapturaEvento, String> {
+        // Route every transition by window before taking this window's snapshot.
+        while let Ok(e) = self.eventos.try_recv() {
+            let id = if e.janela == 0 { tela.id } else { e.janela };
+            if !self.fechadas.contains(&id) {
+                self.estados.entry(id).or_default().registre(e);
+            }
+        }
+        let mut captura = self.estados.entry(tela.id).or_default().capture();
+        captura.sair |= self.fechadas.contains(&tela.id);
+        Ok(captura)
+    }
+}
+
+struct ChannelOut {
+    tx: SyncSender<ExecEvent>,
+    stderr: bool,
+}
+
+impl Write for ChannelOut {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        // Blocks while the UI is behind. Parar still works: the hook checks
+        // for it before every statement, and the UI keeps draining.
+        let text = String::from_utf8_lossy(buf).into_owned();
+        let _ = self.tx.send(if self.stderr {
+            ExecEvent::Stderr(text)
+        } else {
+            ExecEvent::Stdout(text)
+        });
+        Ok(buf.len())
+    }
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
+}
+
+/// Channels the UI keeps for one run.
+pub struct RunHandle {
+    /// Output, prompts, pauses and the end, in program order.
+    pub events: Receiver<ExecEvent>,
+    /// Answers to `leia`.
+    pub lines: Sender<String>,
+    /// Clique / tecla / fechar da janela gráfica.
+    pub graf_eventos: Sender<EventoGraf>,
+    pub quadros_graf: std::sync::Arc<std::sync::Mutex<QuadrosPendentes<AtualizacaoGraf>>>,
+    /// continuar | proximo | entrar | sair | terminar
+    pub debug_cmd: Sender<String>,
+}
+
+/// Report the source actually loaded by the interpreter before forwarding a
+/// pause. This also covers modules generated by a program before importing
+/// them; their contents cannot be inferred by rereading a mutable run folder.
+struct SourceDebugger {
+    inner: ChannelDebugger,
+    root: PathBuf,
+    events: SyncSender<ExecEvent>,
+    seen: HashMap<String, std::sync::Arc<crate::debug_sources::Source>>,
+}
+impl SourceDebugger {
+    fn report(&mut self, ctx: &expressa::runtime::DebugCtx<'_>) -> bool {
+        if self
+            .seen
+            .get(ctx.file)
+            .is_some_and(|source| source.text == ctx.source)
+        {
+            return true;
+        }
+        let source = std::sync::Arc::new(crate::debug_sources::Source::new(
+            &display_path(&self.root, ctx.file),
+            ctx.source.to_string(),
+        ));
+        self.seen.insert(ctx.file.to_string(), source.clone());
+        self.events.send(ExecEvent::Source(source)).is_ok()
+    }
+}
+impl DebugHook for SourceDebugger {
+    fn before_stmt(
+        &mut self,
+        ctx: &expressa::runtime::DebugCtx<'_>,
+    ) -> expressa::runtime::DebugAction {
+        if !self.report(ctx) {
+            return expressa::runtime::DebugAction::Quit;
+        }
+        self.inner.before_stmt(ctx)
+    }
+    fn on_error(&mut self, ctx: &expressa::runtime::DebugCtx<'_>, message: &str) {
+        if self.report(ctx) {
+            self.inner.on_error(ctx, message);
+        }
+    }
+    fn interrupted(&mut self) -> bool {
+        self.inner.interrupted()
+    }
+}
+
+/// Run `rel_path` inside `ws` on a new thread. No time limit: Parar
+/// (`terminar`) is how a program that never ends is stopped.
+pub fn spawn(
+    ws: &Workspace,
+    rel_path: &str,
+    source: String,
+    debug: bool,
+    breakpoints: Vec<(String, u32)>,
+    args: Vec<String>,
+) -> RunHandle {
+    let (event_tx, events) = std::sync::mpsc::sync_channel(EVENT_BACKLOG);
+    let quadros_graf = std::sync::Arc::new(std::sync::Mutex::new(QuadrosPendentes::default()));
+    let quadros_worker = std::sync::Arc::clone(&quadros_graf);
+    let (lines, line_rx) = std::sync::mpsc::channel::<String>();
+    let (graf_eventos, graf_rx) = std::sync::mpsc::channel::<EventoGraf>();
+    let (debug_cmd, ui_cmd_rx) = std::sync::mpsc::channel::<String>();
+    let (dcmd_tx, dcmd_rx) = std::sync::mpsc::channel::<String>();
+    let (pause_tx, pause_rx) = std::sync::mpsc::channel::<DebugPaused>();
+
+    // Parar during `leia`: the program waits on a line, not on the hook.
+    {
+        let lines = lines.clone();
+        let graf_eventos = graf_eventos.clone();
+        std::thread::spawn(move || {
+            while let Ok(cmd) = ui_cmd_rx.recv() {
+                if matches!(cmd.trim(), "terminar" | "q" | "quit") {
+                    let _ = lines.send(String::new());
+                    let _ = graf_eventos.send(EventoGraf::sair());
+                }
+                if dcmd_tx.send(cmd).is_err() {
+                    break;
+                }
+            }
+        });
+    }
+
+    let file = ws.abs(rel_path);
+    let breakpoints: Vec<(String, u32)> = breakpoints
+        .into_iter()
+        .map(|(f, l)| (ws.abs(&f), l))
+        .collect();
+    let root = ws.dir.clone();
+    let rel = move |p: &str| display_path(&root, p);
+    let ws_dir = ws.dir.clone();
+
+    // Paused snapshots carry cache paths; show them relative to the project.
+    {
+        let event_tx = event_tx.clone();
+        let rel = rel.clone();
+        std::thread::spawn(move || {
+            while let Ok(mut p) = pause_rx.recv() {
+                p.file = rel(&p.file);
+                for f in &mut p.stack {
+                    f.file = rel(&f.file);
+                }
+                if event_tx.send(ExecEvent::Paused(p)).is_err() {
+                    break;
+                }
+            }
+        });
+    }
+
+    let lease = ws.journal.lease();
+    std::thread::spawn(move || {
+        let _lease = lease; // Keep the run owned even if its window closes.
+        let mut host = ChannelLeia {
+            prompts: event_tx.clone(),
+            lines: line_rx,
+        };
+        let mut cart = ChannelCartesiano {
+            tx: event_tx.clone(),
+        };
+        let mut graf = ChannelGraf {
+            tx: event_tx.clone(),
+            eventos: graf_rx,
+            estados: HashMap::new(),
+            fechadas: HashSet::new(),
+            quadros: quadros_worker,
+        };
+        let mut out = ChannelOut {
+            tx: event_tx.clone(),
+            stderr: false,
+        };
+        let mut err = ChannelOut {
+            tx: event_tx.clone(),
+            stderr: true,
+        };
+        let hook: Box<dyn DebugHook> = if debug {
+            let mut dbg = ChannelDebugger::new(pause_tx, dcmd_rx);
+            for bp in breakpoints {
+                dbg.session.breakpoints.insert(bp);
+            }
+            Box::new(SourceDebugger {
+                inner: dbg,
+                root: ws_dir.clone(),
+                events: event_tx.clone(),
+                seen: HashMap::new(),
+            })
+        } else {
+            drop(pause_tx);
+            Box::new(StopHook::new(dcmd_rx))
+        };
+        // A panic is a bug in the interpreter, not in the student's program:
+        // say so, and still end the run normally (upload files, clean up).
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            run_with_hosts(
+                &source,
+                &file,
+                hook,
+                Some(ws_dir),
+                None,
+                &mut out,
+                &mut err,
+                &mut host,
+                Some(&mut cart),
+                Some(&mut graf),
+                &args,
+            )
+        }));
+        let result = match result {
+            Ok(result) => result,
+            Err(panico) => {
+                let _ = event_tx.send(ExecEvent::Finished(Finished {
+                    ok: false,
+                    error_message: mensagem_de_panico(panico.as_ref()),
+                    error_file: String::new(),
+                    error_line: 0,
+                    stack: Vec::new(),
+                }));
+                return;
+            }
+        };
+        let finished = match result {
+            Ok(0) => Finished {
+                ok: true,
+                error_message: String::new(),
+                error_file: String::new(),
+                error_line: 0,
+                stack: Vec::new(),
+            },
+            Ok(code) => Finished {
+                ok: false,
+                error_message: format!("encerrou com código {code}"),
+                error_file: String::new(),
+                error_line: 0,
+                stack: Vec::new(),
+            },
+            Err(e) => {
+                let stack = if e.shows_stack() {
+                    e.pilha_compacta()
+                        .into_iter()
+                        .map(|(f, repeticoes)| StackFrame {
+                            name: f.name.clone(),
+                            file: rel(&f.file),
+                            line: f.span.line,
+                            repeticoes,
+                        })
+                        .collect()
+                } else {
+                    Vec::new()
+                };
+                Finished {
+                    ok: false,
+                    error_file: rel(&e.file),
+                    error_message: e.message,
+                    error_line: e.span.line,
+                    stack,
+                }
+            }
+        };
+        let _ = event_tx.send(ExecEvent::Finished(finished));
+    });
+    RunHandle {
+        events,
+        lines,
+        graf_eventos,
+        quadros_graf,
+        debug_cmd,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::execution_state::{Event, ExecutionState, Unavailable};
+
+    #[test]
+    fn slow_graphical_consumer_receives_one_notice_and_the_latest_frame_per_window() {
+        let (tx, rx) = std::sync::mpsc::sync_channel(1);
+        let (_input, eventos) = std::sync::mpsc::channel();
+        let quadros = std::sync::Arc::new(std::sync::Mutex::new(QuadrosPendentes::default()));
+        let mut host = ChannelGraf {
+            tx,
+            eventos,
+            estados: HashMap::new(),
+            fechadas: HashSet::new(),
+            quadros: quadros.clone(),
+        };
+        for n in 0..10_000 {
+            host.mostre(TelaGrafica {
+                id: 1,
+                largura: 8,
+                altura: 8,
+                tamanho_pixel: 1,
+                fundo: "branco".into(),
+                ops: vec![expressa::runtime::OpGraf::Ponto {
+                    x: n,
+                    y: 0,
+                    cor: "azul".into(),
+                }],
+            })
+            .unwrap();
+        }
+        host.mostre(TelaGrafica {
+            id: 2,
+            largura: 8,
+            altura: 8,
+            tamanho_pixel: 1,
+            fundo: "branco".into(),
+            ops: vec![],
+        })
+        .unwrap();
+        assert!(matches!(rx.try_recv().unwrap(), ExecEvent::TelaGraf));
+        assert!(rx.try_recv().is_err());
+        let mut frames = quadros.lock().unwrap().retire();
+        frames.sort_by_key(|t| match t {
+            AtualizacaoGraf::Mostre(tela) => tela.id,
+            AtualizacaoGraf::Feche(id) => *id,
+        });
+        assert_eq!(frames.len(), 2);
+        assert!(matches!(
+            match &frames[0] {
+                AtualizacaoGraf::Mostre(tela) => &tela.ops[0],
+                _ => panic!("esperado quadro"),
+            },
+            expressa::runtime::OpGraf::Ponto { x: 9_999, .. }
+        ));
+        let AtualizacaoGraf::Mostre(tela) = frames.remove(1) else {
+            panic!("esperado quadro")
+        };
+        host.mostre(tela).unwrap();
+        assert!(matches!(rx.try_recv().unwrap(), ExecEvent::TelaGraf));
+    }
+
+    #[test]
+    fn graphical_capture_routes_windows_and_preserves_held_keys() {
+        let (tx, _rx) = std::sync::mpsc::sync_channel(1);
+        let (eventos_tx, eventos) = std::sync::mpsc::channel();
+        let mut host = ChannelGraf {
+            tx,
+            eventos,
+            estados: HashMap::new(),
+            fechadas: HashSet::new(),
+            quadros: std::sync::Arc::new(std::sync::Mutex::new(QuadrosPendentes::default())),
+        };
+        let a = TelaGrafica {
+            id: 1,
+            largura: 8,
+            altura: 8,
+            tamanho_pixel: 1,
+            fundo: "branco".into(),
+            ops: vec![],
+        };
+        let b = TelaGrafica { id: 2, ..a.clone() };
+        eventos_tx
+            .send(EventoGraf {
+                janela: 1,
+                ..EventoGraf::tecla("direita")
+            })
+            .unwrap();
+        eventos_tx
+            .send(EventoGraf {
+                janela: 2,
+                ..EventoGraf::tecla("espaco")
+            })
+            .unwrap();
+        assert!(host.evento(&a).unwrap().apertadas.contains("direita"));
+        let ev = host.evento(&b).unwrap();
+        assert!(ev.apertadas.contains("espaco"));
+        assert!(!ev.teclas.contains("direita"));
+        eventos_tx
+            .send(EventoGraf {
+                janela: 1,
+                tipo: "desfoco".into(),
+                ..EventoGraf::nada()
+            })
+            .unwrap();
+        let ev = host.evento(&a).unwrap();
+        assert!(ev.teclas.is_empty());
+        assert!(ev.soltas.contains("direita"));
+        assert!(host.evento(&b).unwrap().teclas.contains("espaco"));
+    }
+
+    #[test]
+    fn explicit_close_replaces_pending_frames_and_reopening_replaces_close() {
+        let (tx, rx) = std::sync::mpsc::sync_channel(1);
+        let (_input, eventos) = std::sync::mpsc::channel();
+        let quadros = std::sync::Arc::new(std::sync::Mutex::new(QuadrosPendentes::default()));
+        let mut host = ChannelGraf {
+            tx,
+            eventos,
+            estados: HashMap::new(),
+            fechadas: HashSet::new(),
+            quadros: quadros.clone(),
+        };
+        let tela = TelaGrafica {
+            id: 11,
+            largura: 8,
+            altura: 8,
+            tamanho_pixel: 1,
+            fundo: "preto".into(),
+            ops: vec![],
+        };
+        host.mostre(tela.clone()).unwrap();
+        host.mostre(TelaGrafica {
+            id: 12,
+            ..tela.clone()
+        })
+        .unwrap();
+        host.feche(11).unwrap();
+        let frames = quadros.lock().unwrap().retire();
+        assert_eq!(frames.len(), 2);
+        assert!(
+            frames
+                .iter()
+                .any(|q| matches!(q, AtualizacaoGraf::Feche(11)))
+        );
+        assert!(
+            frames
+                .iter()
+                .any(|q| matches!(q, AtualizacaoGraf::Mostre(t) if t.id == 12))
+        );
+        assert!(matches!(rx.try_recv().unwrap(), ExecEvent::TelaGraf));
+        assert!(host.evento(&tela).unwrap().sair);
+        host.feche(11).unwrap();
+        host.mostre(tela.clone()).unwrap();
+        assert!(!host.evento(&tela).unwrap().sair);
+        let frames = quadros.lock().unwrap().retire();
+        assert!(matches!(&frames[..], [AtualizacaoGraf::Mostre(t)] if t.id == 11));
+    }
+
+    struct RunProject {
+        root: PathBuf,
+        files: Files,
+        project: String,
+        cache: PathBuf,
+    }
+
+    impl RunProject {
+        fn new(name: &str) -> Self {
+            let (root, files, project, cache) = projeto_para_sync(name);
+            Self {
+                root,
+                files,
+                project,
+                cache,
+            }
+        }
+
+        fn workspace(&self) -> Workspace {
+            let ws = Workspace::sync_em(&self.cache, &self.files, &self.project, None).unwrap();
+            ws.arm().unwrap();
+            ws
+        }
+    }
+
+    impl Drop for RunProject {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.cache);
+            let _ = std::fs::remove_dir_all(&self.root);
+        }
+    }
+
+    #[test]
+    fn cursor_query_and_retry_input_follow_output_order() {
+        crate::gtk_test::run(|| {
+            use gtk::prelude::*;
+            let project = RunProject::new("cursor-retry");
+            let ws = project.workspace();
+            let source = r#"importe "tela"
+escreva("1 - Continuar | 2 - Sair")
+pos = posicao_cursor()
+enquanto verdadeiro {
+    posicao_cursor(pos)
+    apague_linha()
+    opcao = leia("Opção: ")
+    se opcao == "1" ou opcao == "2" {
+        apague_linha()
+        pare
+    }
+    apague_linha()
+    escreva("Opção inválida. Escolha 1 ou 2.")
+}
+"#;
+            let run = spawn(&ws, "a.lep", source.into(), false, vec![], vec![]);
+            let console = crate::console::Console::new();
+            let mut queries = 0;
+            let mut inputs = 0;
+            loop {
+                match run.events.recv_timeout(Duration::from_secs(5)).unwrap() {
+                    ExecEvent::Stdout(text) => console.stdout(&text),
+                    ExecEvent::Stderr(text) => panic!("{text}"),
+                    ExecEvent::CursorPosition(reply) => {
+                        assert_eq!(console.cursor_position(), (1, 0));
+                        queries += 1;
+                        reply.send(console.cursor_position()).unwrap();
+                    }
+                    ExecEvent::Leia(prompt) => {
+                        inputs += 1;
+                        console.begin_input(&prompt, run.lines.clone());
+                        let buf = console.view.buffer();
+                        if inputs == 2 {
+                            let (s, e) = buf.bounds();
+                            assert!(buf.text(&s, &e, false).contains("Opção inválida."));
+                        }
+                        buf.insert_interactive_at_cursor(if inputs == 1 { "x" } else { "1" }, true);
+                        assert!(console.commit_input());
+                    }
+                    ExecEvent::Finished(finished) => {
+                        assert!(finished.ok, "{}", finished.error_message);
+                        break;
+                    }
+                    _ => {}
+                }
+            }
+            assert_eq!((queries, inputs), (1, 2));
+            let buf = console.view.buffer();
+            let (s, e) = buf.bounds();
+            assert_eq!(
+                buf.text(&s, &e, false),
+                "1 - Continuar | 2 - Sair\nOpção: 1\n\n"
+            );
+        });
+    }
+
+    #[test]
+    fn lifecycle_with_worker_completion_error_and_stop() {
+        let project = RunProject::new("lifecycle");
+        let mut state = ExecutionState::default();
+        state.transition(Event::Prepare).unwrap();
+        assert!(Workspace::sync_em(&project.cache, &Files::None, "", None).is_err());
+        state.transition(Event::PreparationFailed).unwrap();
+        assert_eq!(state.availability(), Ok(()));
+
+        for (source, stop, succeeds) in [
+            ("escreva(1)\n", false, true),
+            ("escreva(nome_inexistente)\n", false, false),
+            ("leia(\"nome: \")\n", true, true),
+        ] {
+            state.transition(Event::Prepare).unwrap();
+            let mut ws = project.workspace();
+            ws.write_editor_text("a.lep", source).unwrap();
+            let run = spawn(&ws, "a.lep", source.into(), false, vec![], vec![]);
+            state.transition(Event::Started).unwrap();
+            let mut stopped = false;
+            loop {
+                match run
+                    .events
+                    .recv_timeout(Duration::from_secs(5))
+                    .expect("run should finish or request input")
+                {
+                    ExecEvent::Leia(_) => {
+                        assert!(stop);
+                        assert_eq!(state.availability(), Err(Unavailable::Running));
+                        run.debug_cmd.send("terminar".into()).unwrap();
+                        stopped = true;
+                    }
+                    ExecEvent::Finished(finished) => {
+                        if !stop {
+                            assert_eq!(finished.ok, succeeds, "{}", finished.error_message);
+                        }
+                        assert_eq!(stopped, stop);
+                        state.transition(Event::Finished).unwrap();
+                        break;
+                    }
+                    _ => {}
+                }
+            }
+            assert_eq!(state.availability(), Err(Unavailable::Uploading));
+            // Failed uploads finish the lifecycle while the journal retains output.
+            write_file(&ws.dir.join("generated.txt"), "output from the run").unwrap();
+            let failed = ws.upload_changes(&Files::None, "");
+            assert!(!failed.erros.is_empty());
+            state.transition(Event::Uploaded).unwrap();
+            assert_eq!(state.availability(), Ok(()));
+        }
+    }
+
+    #[test]
+    fn debug_uses_unsaved_import_and_project_relative_breakpoint() {
+        let project = RunProject::new("debug-import");
+        let mut ws = project.workspace();
+        let source = "importe \"lib/b\"\nescreva(dobro(3))\n";
+        ws.write_editor_text("a.lep", source).unwrap();
+        ws.write_editor_text("lib/b.lep", "dobro = funcao(x) {\n    retorne x * 2\n}\n")
+            .unwrap();
+        let run = spawn(
+            &ws,
+            "a.lep",
+            source.into(),
+            true,
+            vec![("lib/b.lep".into(), 2)],
+            vec![],
+        );
+        let mut paused_in_import = false;
+        let mut output = String::new();
+        loop {
+            match run
+                .events
+                .recv_timeout(Duration::from_secs(5))
+                .expect("debugger should pause or finish")
+            {
+                ExecEvent::Paused(pause) => {
+                    assert!(pause.error.is_none(), "{:?}", pause.error);
+                    // Import evaluation can also pause at the module's first
+                    // statement. The breakpoint must still pause inside the call.
+                    if pause.file == "lib/b.lep" && pause.line == 2 {
+                        assert_eq!(pause.source_line.trim(), "retorne x * 2");
+                        paused_in_import = true;
+                    }
+                    run.debug_cmd.send("continuar".into()).unwrap();
+                }
+                ExecEvent::Stdout(text) => output.push_str(&text),
+                ExecEvent::Finished(finished) => {
+                    assert!(finished.ok, "{}", finished.error_message);
+                    break;
+                }
+                _ => {}
+            }
+        }
+        assert!(paused_in_import);
+        assert_eq!(output, "6\n");
+        assert_eq!(
+            std::fs::read_to_string(project.root.join("lib/b.lep")).unwrap(),
+            "b"
+        );
+    }
+
+    #[test]
+    fn moved_breakpoint_pauses_on_snapshot_statement_and_next_run_applies_edits() {
+        crate::gtk_test::run(|| {
+            use gtk::prelude::*;
+            let project = RunProject::new("anchored-debug-source");
+            let language = sourceview5::LanguageManager::new();
+            let search = sourceview5::SearchSettings::new();
+            let imported = crate::docs::Doc::new(
+                Some("lib/b.lep".into()),
+                String::new(),
+                "dobro = funcao(x) {\n    retorne x * 2\n}\n",
+                &language,
+                &search,
+            );
+            imported.toggle_breakpoint(2);
+            imported.buffer.insert(
+                &mut imported.buffer.start_iter(),
+                "// inserted before breakpoint\n",
+            );
+            assert_eq!(
+                imported.breakpoint_lines(),
+                std::collections::BTreeSet::from([3])
+            );
+            let initial = imported.text();
+            for (iteration, expected) in [(0, "6\n"), (1, "297\n")] {
+                let mut ws = project.workspace();
+                let path = imported.name();
+                let source = format!(
+                    "importe \"{}\"\nescreva(dobro(3))\n",
+                    path.trim_end_matches(".lep")
+                );
+                ws.write_editor_text("a.lep", &source).unwrap();
+                ws.write_editor_text(&path, &imported.text()).unwrap();
+                let sources = ws.capture_sources().unwrap();
+                let snapshot = sources[&path].clone();
+                imported.set_running_source(Some(snapshot.clone()));
+                let points = imported
+                    .breakpoint_lines()
+                    .into_iter()
+                    .map(|line| (path.clone(), line))
+                    .collect();
+                let run = spawn(&ws, "a.lep", source, true, points, vec![]);
+                let mut hit = false;
+                let mut output = String::new();
+                let mut observed = HashMap::new();
+                loop {
+                    match run
+                        .events
+                        .recv_timeout(Duration::from_secs(5))
+                        .expect("debugger event")
+                    {
+                        ExecEvent::Source(source) => {
+                            observed.insert(source.path.clone(), source);
+                        }
+                        ExecEvent::Paused(pause) => {
+                            assert!(pause.error.is_none(), "{:?}", pause.error);
+                            assert!(
+                                observed.contains_key(&pause.file),
+                                "source must precede its pause"
+                            );
+                            if iteration == 0 && !hit {
+                                // Change and rename the editor while its original source is running.
+                                imported.buffer.set_text(
+                                    "// next run\ndobro = funcao(x) {\n    retorne x * 99\n}\n",
+                                );
+                                imported.set_path("lib/renamed.lep".into());
+                            }
+                            if pause.file == path && pause.line == 3 {
+                                hit = true;
+                                assert_eq!(
+                                    pause.source_line.trim(),
+                                    if iteration == 0 {
+                                        "retorne x * 2"
+                                    } else {
+                                        "retorne x * 99"
+                                    }
+                                );
+                                assert!(pause.vars.iter().any(|v| v.name == "x" && v.value == "3"));
+                                assert!(!pause.stack.is_empty());
+                                assert_eq!(observed[&path].revision, snapshot.revision);
+                                let viewer = crate::debug_sources::Viewer::new(
+                                    snapshot.clone(),
+                                    &language,
+                                    &search,
+                                );
+                                assert_eq!(viewer.doc.text(), snapshot.text);
+                                assert!(!viewer.doc.view.is_editable());
+                                if iteration == 0 {
+                                    assert_eq!(snapshot.text, initial);
+                                }
+                            }
+                            run.debug_cmd.send("continuar".into()).unwrap();
+                        }
+                        ExecEvent::Stdout(text) => output.push_str(&text),
+                        ExecEvent::Finished(finished) => {
+                            assert!(finished.ok, "{}", finished.error_message);
+                            break;
+                        }
+                        _ => (),
+                    }
+                }
+                assert!(
+                    hit,
+                    "breakpoint must pause on the imported function statement"
+                );
+                assert_eq!(output, expected);
+                imported.set_running_source(None);
+                if iteration == 0 {
+                    // Replacing all text moves old anchors to EOF by policy;
+                    // the user sets the desired breakpoint for the next run.
+                    for line in imported.breakpoint_lines() {
+                        imported.toggle_breakpoint(line);
+                    }
+                    imported.toggle_breakpoint(3);
+                }
+            }
+        });
+    }
+
+    #[test]
+    fn source_capture_survives_workspace_file_replacement() {
+        let project = RunProject::new("immutable-source");
+        let mut ws = project.workspace();
+        ws.write_editor_text("a.lep", "escreva(1)\n").unwrap();
+        let sources = ws.capture_sources().unwrap();
+        std::fs::write(ws.dir.join("a.lep"), "escreva(999)\n").unwrap();
+        assert_eq!(sources["a.lep"].text, "escreva(1)\n");
+    }
+
+    #[test]
+    fn uploads_detect_changes_to_text_binary_and_new_file_destinations() {
+        let project = RunProject::new("upload-conflicts");
+        std::fs::write(project.root.join("asset.bin"), [0xff, 0x01]).unwrap();
+        let ws = project.workspace();
+        std::fs::write(ws.dir.join("a.lep"), "program output").unwrap();
+        std::fs::write(ws.dir.join("asset.bin"), [0xff, 0x02]).unwrap();
+        std::fs::write(ws.dir.join("new.lep"), "new program output").unwrap();
+        // A user/editor changes all three destination files during execution.
+        std::fs::write(project.root.join("a.lep"), "user text").unwrap();
+        std::fs::write(project.root.join("asset.bin"), [0xff, 0x03]).unwrap();
+        std::fs::write(project.root.join("new.lep"), "user creation").unwrap();
+        let upload = ws.upload_changes(&project.files, &project.project);
+        assert!(upload.enviados.is_empty());
+        assert_eq!(upload.conflitos.len(), 3);
+        assert_eq!(
+            std::fs::read_to_string(project.root.join("a.lep")).unwrap(),
+            "user text"
+        );
+        assert_eq!(
+            std::fs::read(project.root.join("asset.bin")).unwrap(),
+            [0xff, 0x03]
+        );
+        assert_eq!(
+            std::fs::read_to_string(project.root.join("new.lep")).unwrap(),
+            "user creation"
+        );
+        assert!(
+            upload
+                .conflitos
+                .iter()
+                .any(|c| c.bytes == b"program output")
+        );
+    }
+
+    #[test]
+    fn editor_overlay_keeps_its_original_revision_even_if_preparation_reads_newer_disk_text() {
+        let project = RunProject::new("stale-editor");
+        let old_revision = expressa_aula_storage::revision(b"a");
+        std::fs::write(project.root.join("a.lep"), "external update before F5").unwrap();
+        let mut ws = project.workspace();
+        ws.write_editor_source(&EditorSource {
+            path: "a.lep".into(),
+            text: "unsaved editor text".into(),
+            expected: Expected::Revision(old_revision),
+        })
+        .unwrap();
+        ws.arm().unwrap();
+        std::fs::write(ws.dir.join("a.lep"), "program changed stale editor text").unwrap();
+        let upload = ws.upload_changes(&project.files, &project.project);
+        assert_eq!(upload.conflitos.len(), 1);
+        assert_eq!(
+            std::fs::read_to_string(project.root.join("a.lep")).unwrap(),
+            "external update before F5"
+        );
+    }
+
+    #[test]
+    fn debug_file_uses_the_same_slashes_as_the_tab() {
+        let root = std::env::temp_dir().join("expressa-aula-path");
+        let abs = root.join("jogos").join("forca.lep");
+        assert_eq!(
+            display_path(&root, &abs.to_string_lossy()),
+            "jogos/forca.lep"
+        );
+        assert!(same_project_path(
+            "jogos/forca.lep",
+            &display_path(&root, &abs.to_string_lossy())
+        ));
+        assert!(same_project_path(r"jogos\forca.lep", "jogos/forca.lep"));
+        assert!(!same_project_path("jogos/forca.lep", "jogos/termo.lep"));
+    }
+
+    #[test]
+    fn download_copies_a_png_without_failing() {
+        let root = std::env::temp_dir().join(format!("expressa-png-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(root.join("tela_grafica")).unwrap();
+        std::fs::create_dir_all(root.join("jogos")).unwrap();
+        std::fs::write(root.join("jogos/estrela.lep"), "escreva(1)\n").unwrap();
+        let png = [0xff, 0xd8, 0x00, 0xff];
+        std::fs::write(root.join("tela_grafica/casa.png"), png).unwrap();
+        let files = Files::Local(root.clone());
+        let name = format!("png{}", std::process::id());
+        let cache = root.with_extension("cache");
+        let ws = Workspace::sync_em(&cache, &files, &name, None).unwrap();
+        assert_eq!(
+            std::fs::read_to_string(ws.dir.join("jogos/estrela.lep")).unwrap(),
+            "escreva(1)\n"
+        );
+        assert_eq!(
+            std::fs::read(ws.dir.join("tela_grafica/casa.png")).unwrap(),
+            png
+        );
+        let _ = std::fs::remove_dir_all(&cache);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn remote_png_round_trips_through_the_execution_workspace() {
+        use crate::rpc::Rpc;
+        use expressa_aula_proto::turma_server::TurmaServer;
+        use std::sync::Arc;
+
+        let root = std::env::temp_dir().join(format!("expressa-remote-png-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(root.join("ana/tela")).unwrap();
+        std::fs::write(root.join("ana/a.lep"), "escreva(1)\n").unwrap();
+        let png = [0x89, b'P', b'N', b'G', 0x0d, 0x0a, 0x1a, 0x0a, 0xff];
+        std::fs::write(root.join("ana/tela/casa.png"), png).unwrap();
+        let aula = expressa_aula_server::Aula::new(root.clone());
+        let addr = std::net::TcpListener::bind("127.0.0.1:0")
+            .unwrap()
+            .local_addr()
+            .unwrap();
+        let (stop, stopped) = tokio::sync::oneshot::channel::<()>();
+        let server = std::thread::spawn(move || {
+            let rt = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .unwrap();
+            rt.block_on(async {
+                tonic::transport::Server::builder()
+                    .add_service(TurmaServer::new(aula))
+                    .serve_with_shutdown(addr, async {
+                        let _ = stopped.await;
+                    })
+                    .await
+                    .unwrap();
+            });
+        });
+        let url = format!("http://{addr}");
+        let started = std::time::Instant::now();
+        let rpc = loop {
+            match Rpc::connect(&url) {
+                Ok(rpc) => break rpc,
+                Err(e) => {
+                    assert!(
+                        started.elapsed() < std::time::Duration::from_secs(5),
+                        "servidor de teste: {e}"
+                    );
+                    std::thread::sleep(std::time::Duration::from_millis(20));
+                }
+            }
+        };
+        let files = Files::Remote {
+            rpc: Arc::new(rpc),
+            projeto: "principal".into(),
+        };
+        assert_eq!(
+            files.current_text("ana", "tela/casa.png").unwrap_err(),
+            crate::store::ARQUIVO_NAO_E_TEXTO
+        );
+        let cache = root.with_extension("cache");
+        let ws = Workspace::sync_em(&cache, &files, "ana", None).unwrap();
+        ws.arm().unwrap();
+        assert_eq!(
+            std::fs::read(ws.dir.join("a.lep")).unwrap(),
+            b"escreva(1)\n"
+        );
+        assert_eq!(std::fs::read(ws.dir.join("tela/casa.png")).unwrap(), png);
+        let gerado = [0xff, 0xd8, 0x00, 0xff];
+        std::fs::write(ws.dir.join("tela/casa.png"), gerado).unwrap();
+        std::fs::write(ws.dir.join("novo.bin"), [0x00, 0xff]).unwrap();
+        let envio = ws.upload_changes(&files, "ana");
+        assert!(envio.erros.is_empty(), "{}", envio.erros.join("; "));
+        assert!(
+            envio.conflitos.is_empty(),
+            "{}",
+            envio
+                .conflitos
+                .iter()
+                .map(|c| c.path.as_str())
+                .collect::<Vec<_>>()
+                .join(", ")
+        );
+        assert!(
+            envio
+                .enviados
+                .iter()
+                .any(|(path, text)| path == "tela/casa.png" && text.is_none())
+        );
+        assert!(
+            envio
+                .enviados
+                .iter()
+                .any(|(path, text)| path == "novo.bin" && text.is_none())
+        );
+        assert_eq!(
+            files
+                .current_bytes("ana", "tela/casa.png")
+                .unwrap()
+                .unwrap()
+                .bytes,
+            gerado
+        );
+        assert_eq!(
+            files
+                .current_bytes("ana", "novo.bin")
+                .unwrap()
+                .unwrap()
+                .bytes,
+            [0x00, 0xff]
+        );
+        let _ = stop.send(());
+        let _ = server.join();
+        let _ = std::fs::remove_dir_all(&cache);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// A local project, under a fresh folder, with `a.lep` and `lib/b.lep`,
+    /// and a folder for its run copies.
+    fn projeto_para_sync(nome: &str) -> (PathBuf, Files, String, PathBuf) {
+        let root =
+            std::env::temp_dir().join(format!("expressa-sync-{nome}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(root.join("lib")).unwrap();
+        std::fs::write(root.join("a.lep"), "a").unwrap();
+        std::fs::write(root.join("lib/b.lep"), "b").unwrap();
+        let projeto = format!("sync-{nome}-{}", std::process::id());
+        let cache = root.with_extension("copias");
+        (root.clone(), Files::Local(root), projeto, cache)
+    }
+
+    #[test]
+    fn sync_always_uses_a_fresh_directory() {
+        let project = RunProject::new("fresh");
+        let first = project.workspace();
+        let first_dir = first.dir.clone();
+        let second = project.workspace();
+        assert_ne!(first.dir, second.dir);
+        assert!(
+            first_dir.join("a.lep").exists(),
+            "another run deleted the active copy"
+        );
+        assert_eq!(first.journal.identity(), second.journal.identity());
+    }
+
+    #[test]
+    fn sync_refreshes_sources_without_touching_prior_output() {
+        let project = RunProject::new("refresh");
+        let first = project.workspace();
+        let first_dir = first.dir.clone();
+        std::fs::write(first.dir.join("new.txt"), "not uploaded").unwrap();
+        std::fs::write(project.root.join("a.lep"), "a2").unwrap();
+        let second = Workspace::sync_em(
+            &project.cache,
+            &project.files,
+            &project.project,
+            Some(first),
+        )
+        .unwrap();
+        assert_eq!(
+            std::fs::read_to_string(second.dir.join("a.lep")).unwrap(),
+            "a2"
+        );
+        assert!(!second.dir.join("new.txt").exists());
+        assert_eq!(
+            std::fs::read_to_string(first_dir.join("new.txt")).unwrap(),
+            "not uploaded"
+        );
+        let scan = crate::pendencias::scan(&project.cache);
+        assert!(scan.errors.is_empty(), "{:?}", scan.errors);
+        assert_eq!(scan.runs.len(), 1);
+        assert_eq!(scan.runs[0].files[0].0, "new.txt");
+    }
+
+    #[test]
+    fn identical_folder_names_in_distinct_locations_have_distinct_identities() {
+        let temp = tempfile::tempdir().unwrap();
+        let a = temp.path().join("one/project");
+        let b = temp.path().join("two/project");
+        std::fs::create_dir_all(&a).unwrap();
+        std::fs::create_dir_all(&b).unwrap();
+        let first = Files::Local(a.clone());
+        let second = Files::Local(b);
+        assert_ne!(first.cache_key("project"), second.cache_key("project"));
+        assert_eq!(
+            first.cache_key("display name"),
+            Files::Local(a.join(".")).cache_key("other display name")
+        );
+        #[cfg(unix)]
+        {
+            let alias = temp.path().join("alias");
+            std::os::unix::fs::symlink(&a, &alias).unwrap();
+            assert_eq!(first.cache_key("a"), Files::Local(alias).cache_key("b"));
+        }
+        let cache = temp.path().join("runs");
+        let wa = Workspace::sync_em(&cache, &first, "project", None).unwrap();
+        let wb = Workspace::sync_em(&cache, &second, "project", None).unwrap();
+        assert_ne!(
+            wa.dir.parent().unwrap().parent(),
+            wb.dir.parent().unwrap().parent()
+        );
+    }
+
+    #[test]
+    fn panico_vira_erro_interno_com_o_detalhe() {
+        let texto = std::panic::catch_unwind(|| panic!("índice fora")).unwrap_err();
+        assert_eq!(
+            mensagem_de_panico(texto.as_ref()),
+            format!("{ERRO_INTERNO}: índice fora")
+        );
+        let formatado = std::panic::catch_unwind(|| panic!("valor {}", 3)).unwrap_err();
+        assert_eq!(
+            mensagem_de_panico(formatado.as_ref()),
+            format!("{ERRO_INTERNO}: valor 3")
+        );
+        let outro = std::panic::catch_unwind(|| std::panic::panic_any(7)).unwrap_err();
+        assert_eq!(mensagem_de_panico(outro.as_ref()), ERRO_INTERNO);
+    }
+
+    #[test]
+    fn upload_changes_continua_depois_de_uma_falha() {
+        let project = RunProject::new("upload-partial");
+        std::fs::write(project.root.join("sub"), "blocker").unwrap();
+        let ws = project.workspace();
+        write_file(&ws.dir.join("b.lep"), "novo").unwrap();
+        std::fs::remove_file(ws.dir.join("sub")).unwrap();
+        write_file(&ws.dir.join("sub/d.lep"), "x").unwrap();
+        let envio = ws.upload_changes(&project.files, &project.project);
+        assert_eq!(envio.enviados, [("b.lep".into(), Some("novo".into()))]);
+        assert_eq!(envio.erros.len(), 1, "{:?}", envio.erros);
+        assert!(envio.erros[0].starts_with("sub/d.lep"));
+        assert_eq!(
+            std::fs::read_to_string(project.root.join("a.lep")).unwrap(),
+            "a"
+        );
+        assert!(envio.pending_dir.is_some());
+        assert_eq!(ws.journal.outputs().unwrap().len(), 1);
+    }
+}

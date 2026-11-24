@@ -1,0 +1,269 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "Expressa",
+  "scopeName": "source.expressa",
+  "fileTypes": [
+    "lep"
+  ],
+  "patterns": [
+    {
+      "include": "#shebang"
+    },
+    {
+      "include": "#comentarios"
+    },
+    {
+      "include": "#textos"
+    },
+    {
+      "include": "#numeros"
+    },
+    {
+      "include": "#chave"
+    },
+    {
+      "include": "#definicao-funcao"
+    },
+    {
+      "include": "#modulo"
+    },
+    {
+      "include": "#constantes"
+    },
+    {
+      "include": "#operadores-palavra"
+    },
+    {
+      "include": "#blocos"
+    },
+    {
+      "include": "#palavra-funcao"
+    },
+    {
+      "include": "#palavra-importe"
+    },
+    {
+      "include": "#controle"
+    },
+    {
+      "include": "#nativas"
+    },
+    {
+      "include": "#valores-nativos"
+    },
+    {
+      "include": "#chamada"
+    },
+    {
+      "include": "#operadores"
+    },
+    {
+      "include": "#pontuacao"
+    }
+  ],
+  "repository": {
+    "shebang": {
+      "name": "comment.line.shebang.expressa",
+      "match": "\\A#!.*$"
+    },
+    "comentarios": {
+      "patterns": [
+        {
+          "name": "comment.block.documentation.expressa",
+          "begin": "///(?![/])",
+          "beginCaptures": {
+            "0": {
+              "name": "punctuation.definition.comment.expressa"
+            }
+          },
+          "end": "$"
+        },
+        {
+          "name": "comment.line.double-slash.expressa",
+          "begin": "//",
+          "beginCaptures": {
+            "0": {
+              "name": "punctuation.definition.comment.expressa"
+            }
+          },
+          "end": "$"
+        },
+        {
+          "name": "comment.block.expressa",
+          "begin": "/\\*",
+          "beginCaptures": {
+            "0": {
+              "name": "punctuation.definition.comment.expressa"
+            }
+          },
+          "end": "\\*/",
+          "endCaptures": {
+            "0": {
+              "name": "punctuation.definition.comment.expressa"
+            }
+          }
+        }
+      ]
+    },
+    "textos": {
+      "name": "string.quoted.double.expressa",
+      "begin": "\"",
+      "beginCaptures": {
+        "0": {
+          "name": "punctuation.definition.string.begin.expressa"
+        }
+      },
+      "end": "\"",
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.definition.string.end.expressa"
+        }
+      },
+      "patterns": [
+        {
+          "name": "constant.character.escape.expressa",
+          "match": "\\\\[\"\\\\nrt]"
+        },
+        {
+          "name": "invalid.illegal.escape.expressa",
+          "match": "\\\\."
+        },
+        {
+          "name": "constant.other.placeholder.expressa",
+          "match": "\\{(?:\\d+)?(?::[^{}]?[<>^]\\d+)?\\}"
+        }
+      ]
+    },
+    "numeros": {
+      "name": "constant.numeric.decimal.expressa",
+      "match": "(?<![\\p{L}\\p{M}\\p{N}_])[0-9][0-9_]*(?:\\.[0-9][0-9_]*)?(?![\\p{L}\\p{M}\\p{N}_])"
+    },
+    "chave": {
+      "comment": ":nome is the text \"nome\" (map keys, colors); not ::",
+      "name": "constant.other.symbol.expressa",
+      "match": "(?<!:):(?!:)[\\p{L}_][\\p{L}\\p{M}\\p{N}_]*"
+    },
+    "definicao-funcao": {
+      "match": "([\\p{L}_][\\p{L}\\p{M}\\p{N}_]*)\\s*(=)\\s*(?=(?<![\\p{L}\\p{M}\\p{N}_])(?:funcao|fun(?:ç|ç)(?:ã|ã)o)(?![\\p{L}\\p{M}\\p{N}_]))",
+      "captures": {
+        "1": {
+          "name": "entity.name.function.expressa"
+        },
+        "2": {
+          "name": "keyword.operator.assignment.expressa"
+        }
+      }
+    },
+    "modulo": {
+      "match": "([\\p{L}_][\\p{L}\\p{M}\\p{N}_]*)(::)",
+      "captures": {
+        "1": {
+          "name": "entity.name.namespace.expressa"
+        },
+        "2": {
+          "name": "punctuation.separator.namespace.expressa"
+        }
+      }
+    },
+    "constantes": {
+      "patterns": [
+        {
+          "name": "constant.language.boolean.expressa",
+          "match": "(?<![\\p{L}\\p{M}\\p{N}_])(?:verdadeiro|falso)(?![\\p{L}\\p{M}\\p{N}_])"
+        },
+        {
+          "name": "constant.language.null.expressa",
+          "match": "(?<![\\p{L}\\p{M}\\p{N}_])(?:nada)(?![\\p{L}\\p{M}\\p{N}_])"
+        }
+      ]
+    },
+    "operadores-palavra": {
+      "name": "keyword.operator.word.expressa",
+      "match": "(?<![\\p{L}\\p{M}\\p{N}_])(?:contem|cont(?:é|é)m|nao|n(?:ã|ã)o|ou|e)(?![\\p{L}\\p{M}\\p{N}_])"
+    },
+    "blocos": {
+      "name": "keyword.control.block.expressa",
+      "match": "(?<![\\p{L}\\p{M}\\p{N}_])(?:inicio|in(?:í|í)cio|fim)(?![\\p{L}\\p{M}\\p{N}_])"
+    },
+    "palavra-funcao": {
+      "name": "storage.type.function.expressa",
+      "match": "(?<![\\p{L}\\p{M}\\p{N}_])(?:funcao|fun(?:ç|ç)(?:ã|ã)o)(?![\\p{L}\\p{M}\\p{N}_])"
+    },
+    "palavra-importe": {
+      "name": "keyword.control.import.expressa",
+      "match": "(?<![\\p{L}\\p{M}\\p{N}_])(?:importe)(?![\\p{L}\\p{M}\\p{N}_])"
+    },
+    "controle": {
+      "name": "keyword.control.expressa",
+      "match": "(?<![\\p{L}\\p{M}\\p{N}_])(?:se_falhar|continue|enquanto|retorne|repita|senao|sen(?:ã|ã)o|vezes|para|pare|em|se)(?![\\p{L}\\p{M}\\p{N}_])"
+    },
+    "nativas": {
+      "name": "support.function.builtin.expressa",
+      "match": "(?<![\\p{L}\\p{M}\\p{N}_])(?:adicione_arquivo|nome_do_arquivo|apague_arquivo|posicao_cursor|posi(?:ç|ç)(?:ã|ã)o_cursor|arcotangente2|junte_caminho|salve_arquivo|apague_linha|apague_pasta|arcotangente|define_opcao|define_op(?:ç|ç)(?:ã|ã)o|escreva_erro|formate_data|laco_grafico|la(?:ç|ç)o_gr(?:á|á)fico|leia_arquivo|redimensione|tamanho_tela|arcocosseno|como_imagem|eh_bissexto|eh_infinito|eh_terminal|leia_linhas|pasta_atual|termina_com|comeca_com|come(?:ç|ç)a_com|como_texto|crie_pasta|dias_entre|(?:é|é)_bissexto|(?:é|é)_infinito|(?:é|é)_terminal|escreva_em|identidade|leia_bytes|limpe_tela|sem_acento|texto_utf8|transposta|valores_de|aleatorio|aleat(?:ó|ó)rio|arcosseno|arredonde|chaves_de|documento|linhas_de|maiuscula|mai(?:ú|ú)scula|minuscula|min(?:ú|ú)scula|pare_laco|pare_la(?:ç|ç)o|retangulo|ret(?:â|â)ngulo|rotacione|salve_csv|substitua|adicione|ambiente|carregue|conjunto|eh_pasta|extensao|extens(?:ã|ã)o|leia_csv|pasta_de|potencia|pot(?:ê|ê)ncia|primeiro|radianos|tangente|circulo|c(?:í|í)rculo|colunas|cosseno|(?:é|é)_pasta|escreva|execute|formate|funcoes|fun(?:ç|ç)(?:õ|õ)es|garanta|grafico|gr(?:á|á)fico|largura|modulos|m(?:ó|ó)dulos|negrito|procure|semente|tamanho|altura|apague|avalie|evento|existe|imagem|linhas|matriz|mostre|numero|n(?:ú|ú)mero|ordene|quadro|remova|separe|ultimo|(?:ú|ú)ltimo|agora|ajuda|bloco|cheia|clone|copie|durma|eixos|falhe|feche|fundo|graus|junte|limpe|linha|liste|log10|pinte|pixel|plote|ponto|salve|texto|tipos|zeros|data|hoje|leia|mapa|mova|nova|pare|piso|raiz|saia|seno|teto|tipo|cor|cos|det|exp|log|sen|uns|xy)(?![\\p{L}\\p{M}\\p{N}_])"
+    },
+    "valores-nativos": {
+      "name": "variable.language.expressa",
+      "match": "(?<![\\p{L}\\p{M}\\p{N}_])(?:argumentos|nova_linha|pi)(?![\\p{L}\\p{M}\\p{N}_])"
+    },
+    "chamada": {
+      "match": "([\\p{L}_][\\p{L}\\p{M}\\p{N}_]*)\\s*(?=\\()",
+      "captures": {
+        "1": {
+          "name": "entity.name.function.call.expressa"
+        }
+      }
+    },
+    "operadores": {
+      "patterns": [
+        {
+          "name": "keyword.operator.arrow.expressa",
+          "match": "->"
+        },
+        {
+          "name": "keyword.operator.range.expressa",
+          "match": "\\.\\."
+        },
+        {
+          "name": "keyword.operator.comparison.expressa",
+          "match": "==|!=|<=|>=|<|>"
+        },
+        {
+          "name": "keyword.operator.assignment.compound.expressa",
+          "match": "\\+=|-="
+        },
+        {
+          "name": "keyword.operator.assignment.expressa",
+          "match": "="
+        },
+        {
+          "name": "keyword.operator.arithmetic.expressa",
+          "match": "[-+*/%]"
+        },
+        {
+          "name": "punctuation.accessor.expressa",
+          "match": "\\.|:"
+        }
+      ]
+    },
+    "pontuacao": {
+      "patterns": [
+        {
+          "name": "punctuation.separator.comma.expressa",
+          "match": ","
+        },
+        {
+          "name": "punctuation.section.block.expressa",
+          "match": "[{}]"
+        },
+        {
+          "name": "punctuation.section.brackets.expressa",
+          "match": "[\\[\\]]"
+        },
+        {
+          "name": "punctuation.section.parens.expressa",
+          "match": "[()]"
+        }
+      ]
+    }
+  }
+}

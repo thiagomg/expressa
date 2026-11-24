@@ -1,0 +1,64 @@
+// Pequena biblioteca numérica, pensada para `importe`.
+
+soma = funcao(a, b)
+inicio
+    a + b
+fim
+
+media = funcao(lista)
+inicio
+    acc = 0
+    para x em lista
+    inicio
+        acc = acc + x
+    fim
+    acc / tamanho(lista)
+fim
+
+maximo = funcao(lista)
+inicio
+    m = primeiro(lista)
+    para x em lista
+    inicio
+        se x > m
+        inicio
+            m = x
+        fim
+    fim
+    m
+fim
+
+minimo = funcao(lista)
+inicio
+    m = primeiro(lista)
+    para x em lista
+    inicio
+        se x < m
+        inicio
+            m = x
+        fim
+    fim
+    m
+fim
+
+absoluto = funcao(n)
+inicio
+    se n < 0
+    inicio
+        -n
+    fim
+    senao
+    inicio
+        n
+    fim
+fim
+
+potencia = funcao(base, exp)
+inicio
+    r = 1
+    repita exp vezes
+    inicio
+        r = r * base
+    fim
+    r
+fim

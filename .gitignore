@@ -1,0 +1,20 @@
+/target
+.idea/
+exemplos/**/saida/
+exemplos/tela_grafica/*.png
+aula-data/
+
+# Binários nativos do Windows (GTK do gvsbuild e protoc). O script deps/ativar.ps1 fica versionado.
+/deps/gtk/
+/deps/protoc/
+/deps/_download/
+
+# Pasta e zip gerados por empacotar.ps1.
+/dist/
+
+# Notas locais de revisão.
+/claude-improvements/
+
+# Trava e temporário do salvamento atômico.
+.expressa-save.lock
+.expressa-save-*

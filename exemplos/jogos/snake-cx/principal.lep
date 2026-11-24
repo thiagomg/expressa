@@ -1,0 +1,30 @@
+// A política vale para a execução inteira, inclusive em caso de erro.
+define_opcao(:fechar_janelas, verdadeiro)
+// Execute: expressa exemplos/jogos/snake-cx
+// Este arquivo liga a simulação ao laço gráfico. Cada módulo fica nesta pasta.
+grafica = importe "tela_grafica"
+regras = importe "regras"
+controles = importe "controles"
+desenho = importe "desenho"
+
+partida = regras::novo()
+tela = desenho::nova_tela(partida)
+
+se argumentos contem "--imagem" {
+    destino = se tamanho(argumentos) > 1 { argumentos[1] } senao { "previa.png" }
+    desenho::quadro(tela, partida)
+    tela.grafica::salve(destino)
+    escreva("Prévia gravada em ", destino)
+} senao {
+    laco = tela.grafica::laco_grafico()
+    eventos = funcao(ev, dt) {
+        se ev:sair ou (ev:apertadas contem :escape) {
+            laco.grafica::pare()
+            retorne nada
+        }
+        controles::atualize(partida, ev, dt)
+    }
+    desenhe = funcao(superficie) { desenho::quadro(superficie, partida) }
+    desenho::quadro(tela, partida)
+    laco.grafica::execute(mapa([:fps -> 60, :eventos -> eventos, :desenho -> desenhe]))
+}

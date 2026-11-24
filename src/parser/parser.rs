@@ -1,0 +1,2280 @@
+//! Recursive-descent / Pratt parser: tokens → AST.
+
+use crate::lexer::scanner::{Token, tokenize};
+use crate::lexer::tokens::{texto_do_token, token_e_comando};
+use crate::lexer::{Span, TokenKind};
+use crate::parser::block_types::Block;
+use crate::parser::core_types::{Import, Item, Program};
+use crate::parser::error::{ParseError, ParseErrorKind};
+use crate::parser::expression_types::{Expr, IfBranch, Param};
+use crate::parser::operator_types::{BinaryOp, UnaryOp};
+use crate::parser::statement_types::{AssignTarget, Stmt};
+
+/// Parse Expressa source into a [`Program`] AST.
+pub fn parse(source: &str) -> Result<Program, ParseError> {
+    let tokens = tokenize(source)?;
+    let mut parser = Parser::new(tokens, source);
+    let program = parser.parse_program()?;
+    crate::parser::se_value::check_se_value(&program)?;
+    Ok(program)
+}
+
+/// Deepest syntax tree the parser builds. Every part of the interpreter
+/// that walks the tree (checks, evaluation, copies, even dropping it) is
+/// recursive, so a deeper tree would overflow the stack and abort.
+const PROFUNDIDADE_MAXIMA: usize = 1000;
+/// Right binding power of `..` / `..=` (`0..n-1` is `0..(n-1)`).
+const FAIXA_RIGHT_BP: u8 = 9;
+
+/// Stack left before the parser moves to a new segment, and its size.
+const PILHA_RESERVA: usize = 128 * 1024;
+const PILHA_SEGMENTO: usize = 2 * 1024 * 1024;
+
+struct Parser<'a> {
+    source: &'a str,
+    tokens: Vec<Token>,
+    pos: usize,
+    /// `obj:campo` postfix, only when `:` is on the same line.
+    /// Inside `(…)`, field access is always allowed (`(obj:campo)`).
+    allow_colon_field: bool,
+    /// Depth of the tree being built here: one per nested call below, and
+    /// one each time a loop wraps what it built (`a + b + c`, `x[1][2]`).
+    profundidade: usize,
+    /// Parsing the iterable of `para i em …`. `{` or `inicio` then starts
+    /// the body, so `para i em 0.. {` is an open range.
+    em_para: bool,
+    /// `(` still open around the expression being parsed.
+    parenteses: u32,
+    /// `(` and `[` open in the current block, one entry per nested block.
+    /// While the top is above zero, a line break does not end the expression;
+    /// `{`/`inicio` push a new entry, so a block inside brackets separates
+    /// statements by line again.
+    abertos: Vec<u32>,
+}
+
+impl<'a> Parser<'a> {
+    fn new(tokens: Vec<Token>, source: &'a str) -> Self {
+        Self {
+            source,
+            tokens,
+            pos: 0,
+            allow_colon_field: true,
+            profundidade: 0,
+            em_para: false,
+            parenteses: 0,
+            abertos: vec![0],
+        }
+    }
+
+    // ── depth ────────────────────────────────────────────────────
+
+    /// One more level of tree; an error past [`PROFUNDIDADE_MAXIMA`].
+    fn descer(&mut self) -> Result<(), ParseError> {
+        if self.profundidade >= PROFUNDIDADE_MAXIMA {
+            let mut error = self.err(format!(
+                "expressão longa ou aninhada demais (mais de {PROFUNDIDADE_MAXIMA} níveis); \
+                 divida em partes com variáveis"
+            ));
+            error.kind = ParseErrorKind::DepthLimit;
+            return Err(error);
+        }
+        self.profundidade += 1;
+        Ok(())
+    }
+
+    /// Runs `f` one level deeper, on a stack that grows if needed, and
+    /// restores the depth afterwards (levels `f` added by looping too).
+    fn aninhado<T>(
+        &mut self,
+        f: impl FnOnce(&mut Self) -> Result<T, ParseError>,
+    ) -> Result<T, ParseError> {
+        let antes = self.profundidade;
+        self.descer()?;
+        let r = stacker::maybe_grow(PILHA_RESERVA, PILHA_SEGMENTO, || f(self));
+        self.profundidade = antes;
+        r
+    }
+
+    // ── token helpers ────────────────────────────────────────────
+
+    fn peek(&self) -> &Token {
+        &self.tokens[self.pos]
+    }
+
+    fn peek_kind(&self) -> &TokenKind {
+        &self.peek().kind
+    }
+
+    /// Whether a postfix opener sits on the same line as the previous token.
+    fn on_same_line_as_previous(&self) -> bool {
+        if self.pos == 0 {
+            return true;
+        }
+        let previous_end = self.tokens[self.pos - 1].span.end;
+        !self.source.as_bytes()[previous_end..self.peek().span.start].contains(&b'\n')
+    }
+
+    /// Inside `(…)` or `[…]` of the current block, line breaks are free.
+    fn dentro_de_colchetes(&self) -> bool {
+        self.abertos.last().is_some_and(|n| *n > 0)
+    }
+
+    /// The current token continues the expression: same line as the previous
+    /// token, or inside brackets.
+    fn continua(&self) -> bool {
+        self.dentro_de_colchetes() || self.on_same_line_as_previous()
+    }
+
+    fn abre(&mut self) {
+        if let Some(n) = self.abertos.last_mut() {
+            *n += 1;
+        }
+    }
+
+    fn fecha(&mut self) {
+        if let Some(n) = self.abertos.last_mut() {
+            *n = n.saturating_sub(1);
+        }
+    }
+
+    /// After a statement, the next one must start on a new line.
+    fn exige_nova_linha(&self) -> Result<(), ParseError> {
+        let fecha_bloco = matches!(
+            self.peek_kind(),
+            TokenKind::Eof | TokenKind::Fim | TokenKind::RBrace
+        );
+        if !fecha_bloco && self.on_same_line_as_previous() {
+            return Err(self.err("dois comandos na mesma linha; coloque cada comando em uma linha"));
+        }
+        Ok(())
+    }
+
+    fn at_eof(&self) -> bool {
+        matches!(self.peek_kind(), TokenKind::Eof)
+    }
+
+    fn remove(&mut self) -> Token {
+        let tok = self.tokens[self.pos].clone();
+        if !matches!(tok.kind, TokenKind::Eof) {
+            self.pos += 1;
+        }
+        tok
+    }
+
+    fn expect_kind<F>(&mut self, pred: F, msg: &str) -> Result<Token, ParseError>
+    where
+        F: FnOnce(&TokenKind) -> bool,
+    {
+        if pred(self.peek_kind()) {
+            Ok(self.remove())
+        } else {
+            Err(self.err(msg))
+        }
+    }
+
+    /// `(` or `[` that never closed. The error points at the current token
+    /// and names the line and column of the opener.
+    fn expect_close<F>(&mut self, pred: F, simbolo: &str, aberto: Span) -> Result<Token, ParseError>
+    where
+        F: FnOnce(&TokenKind) -> bool,
+    {
+        if pred(self.peek_kind()) {
+            Ok(self.remove())
+        } else {
+            Err(self.err(format!(
+                "esperado '{simbolo}' (aberto em {}:{})",
+                aberto.line, aberto.col
+            )))
+        }
+    }
+
+    fn err(&self, message: impl Into<String>) -> ParseError {
+        ParseError {
+            kind: if self.at_eof() {
+                ParseErrorKind::UnexpectedEof
+            } else {
+                ParseErrorKind::Syntax
+            },
+            message: message.into(),
+            span: self.peek().span,
+        }
+    }
+
+    fn err_at(&self, message: impl Into<String>, span: Span) -> ParseError {
+        ParseError {
+            kind: if span.is_empty() && self.at_eof() && span.start == self.peek().span.start {
+                ParseErrorKind::UnexpectedEof
+            } else {
+                ParseErrorKind::Syntax
+            },
+            message: message.into(),
+            span,
+        }
+    }
+
+    // ── program ──────────────────────────────────────────────────
+
+    fn parse_program(&mut self) -> Result<Program, ParseError> {
+        let start = self.peek().span;
+        let mut items = Vec::new();
+
+        while !self.at_eof() {
+            items.push(self.parse_item()?);
+            self.exige_nova_linha()?;
+        }
+
+        let span = if let (Some(first), Some(last)) = (items.first(), items.last()) {
+            first.span().join(last.span())
+        } else {
+            start
+        };
+
+        Ok(Program { items, span })
+    }
+
+    fn parse_item(&mut self) -> Result<Item, ParseError> {
+        let docs = self.take_docs()?;
+        if matches!(self.peek_kind(), TokenKind::Importe) {
+            return Ok(Item::Import(self.parse_import(None, docs)?));
+        }
+
+        // `nome = importe "path"`
+        if matches!(self.peek_kind(), TokenKind::Ident(_))
+            && self.pos + 2 < self.tokens.len()
+            && matches!(self.tokens[self.pos + 1].kind, TokenKind::Eq)
+            && matches!(self.tokens[self.pos + 2].kind, TokenKind::Importe)
+        {
+            let name_tok = self.remove();
+            let TokenKind::Ident(name) = name_tok.kind else {
+                unreachable!();
+            };
+            self.remove(); // =
+            return Ok(Item::Import(self.parse_import(Some(name), docs)?));
+        }
+
+        Ok(Item::Stmt(self.parse_stmt_with_docs(docs)?))
+    }
+
+    /// Consecutive `///` lines immediately above a definition.
+    fn take_docs(&mut self) -> Result<Option<String>, ParseError> {
+        let mut lines = Vec::new();
+        let mut span: Option<Span> = None;
+        while let TokenKind::DocComment(text) = self.peek_kind() {
+            let aqui = self.peek().span;
+            if let Some(anterior) = span
+                && separa_doc(self.source, anterior.end, aqui.start)
+            {
+                return Err(self.err_at("documentação só vale antes de uma definição", anterior));
+            }
+            lines.push(text.clone());
+            let tok = self.remove();
+            span = Some(match span {
+                Some(s) => s.join(tok.span),
+                None => tok.span,
+            });
+        }
+        if lines.is_empty() {
+            return Ok(None);
+        }
+        let span = span.unwrap();
+        if separa_doc(self.source, span.end, self.peek().span.start) || !self.is_definition_start()
+        {
+            return Err(self.err_at("documentação só vale antes de uma definição", span));
+        }
+        Ok(Some(join_doc_lines(&lines)))
+    }
+
+    fn is_definition_start(&self) -> bool {
+        match self.peek_kind() {
+            TokenKind::Importe => true,
+            TokenKind::Ident(_) => matches!(
+                self.tokens.get(self.pos + 1).map(|t| &t.kind),
+                Some(TokenKind::Eq)
+            ),
+            _ => false,
+        }
+    }
+
+    fn parse_import(
+        &mut self,
+        alias: Option<String>,
+        doc: Option<String>,
+    ) -> Result<Import, ParseError> {
+        let start = self
+            .expect_kind(|k| matches!(k, TokenKind::Importe), "esperado 'importe'")?
+            .span;
+        let path_tok = self.remove();
+        match path_tok.kind {
+            TokenKind::String(path) => Ok(Import {
+                alias,
+                path,
+                span: start.join(path_tok.span),
+                doc,
+            }),
+            _ => Err(self.err_at("esperado caminho string após 'importe'", path_tok.span)),
+        }
+    }
+
+    // ── statements ───────────────────────────────────────────────
+
+    fn parse_stmt(&mut self) -> Result<Stmt, ParseError> {
+        let docs = self.take_docs()?;
+        self.parse_stmt_with_docs(docs)
+    }
+
+    fn parse_stmt_with_docs(&mut self, docs: Option<String>) -> Result<Stmt, ParseError> {
+        let stmt = match self.peek_kind() {
+            TokenKind::Repita => self.parse_repita(),
+            TokenKind::Enquanto => self.parse_enquanto(),
+            TokenKind::Para => self.parse_para(),
+            TokenKind::Retorne => self.parse_retorne(),
+            TokenKind::Pare => Ok(Stmt::Pare {
+                span: self.remove().span,
+            }),
+            TokenKind::Continue => Ok(Stmt::Continue {
+                span: self.remove().span,
+            }),
+            _ => {
+                let expr = self.parse_expr()?;
+                match self.peek_kind() {
+                    TokenKind::Eq => self.finish_assign(expr, None),
+                    TokenKind::PlusEq => self.finish_assign(expr, Some(BinaryOp::Add)),
+                    TokenKind::MinusEq => self.finish_assign(expr, Some(BinaryOp::Sub)),
+                    _ => {
+                        let span = expr.span();
+                        Ok(Stmt::Expr { expr, span })
+                    }
+                }
+            }
+        };
+        attach_doc(stmt?, docs)
+    }
+
+    fn finish_assign(&mut self, lhs: Expr, compound: Option<BinaryOp>) -> Result<Stmt, ParseError> {
+        let op_tok = self.remove();
+        let msg = match op_tok.kind {
+            TokenKind::PlusEq => "lado esquerdo de '+=' inválido",
+            TokenKind::MinusEq => "lado esquerdo de '-=' inválido",
+            _ => "lado esquerdo de '=' inválido",
+        };
+        let target = expr_to_assign_target(lhs).map_err(|span| self.err_at(msg, span))?;
+        let rhs = self.parse_expr()?;
+        let span = target.span().join(rhs.span());
+        Ok(Stmt::Assign {
+            target,
+            compound,
+            value: rhs,
+            span,
+            doc: None,
+        })
+    }
+
+    fn parse_repita(&mut self) -> Result<Stmt, ParseError> {
+        let start = self.remove().span; // repita
+        let count = self.parse_expr()?;
+        self.expect_kind(
+            |k| matches!(k, TokenKind::Vezes),
+            "esperado 'vezes' após contagem do 'repita'",
+        )?;
+        let body = self.parse_block()?;
+        Ok(Stmt::Repita {
+            count,
+            span: start.join(body.span),
+            body,
+        })
+    }
+
+    fn parse_para(&mut self) -> Result<Stmt, ParseError> {
+        let start = self.remove().span; // para
+        let var_tok = self.remove();
+        let TokenKind::Ident(var) = var_tok.kind else {
+            return Err(self.err_at("esperado nome da variável do 'para'", var_tok.span));
+        };
+
+        match self.peek_kind() {
+            TokenKind::Em => {
+                self.remove();
+                let antes = self.em_para;
+                self.em_para = true;
+                let iter = self.parse_expr();
+                self.em_para = antes;
+                let iter = iter?;
+                let body = self.parse_block()?;
+                Ok(Stmt::ParaIn {
+                    var,
+                    iter,
+                    span: start.join(body.span),
+                    body,
+                })
+            }
+            TokenKind::Ident(name) if matches!(name.as_str(), "de" | "ate" | "até") => {
+                let tok = self.remove();
+                Err(self.err_at(
+                    "use 'para i em 1..=n' ou 'para i em 0..n' (o 'para i de … até …' saiu da linguagem)",
+                    tok.span,
+                ))
+            }
+            _ => Err(self.err("esperado 'em' após variável do 'para'")),
+        }
+    }
+
+    fn parse_retorne(&mut self) -> Result<Stmt, ParseError> {
+        let start = self.remove().span;
+        // Value must be on the same line (`retorne` then a new statement
+        // would otherwise swallow `escreva(...)` as the returned value).
+        let same_line = self.peek().span.line == start.line;
+        if same_line && expr_can_start(self.peek_kind()) {
+            let value = self.parse_expr()?;
+            let span = start.join(value.span());
+            Ok(Stmt::Retorne {
+                value: Some(value),
+                span,
+            })
+        } else {
+            Ok(Stmt::Retorne {
+                value: None,
+                span: start,
+            })
+        }
+    }
+
+    fn parse_enquanto(&mut self) -> Result<Stmt, ParseError> {
+        let start = self.remove().span; // enquanto
+        let cond = self.parse_expr()?;
+        let body = self.parse_block()?;
+        Ok(Stmt::Enquanto {
+            cond,
+            span: start.join(body.span),
+            body,
+        })
+    }
+
+    fn parse_block(&mut self) -> Result<Block, ParseError> {
+        self.aninhado(Self::parse_block_inner)
+    }
+
+    fn parse_block_inner(&mut self) -> Result<Block, ParseError> {
+        let open = self.remove();
+        let brace = match open.kind {
+            TokenKind::Inicio => false,
+            TokenKind::LBrace => true,
+            _ => {
+                return Err(self.err_at("esperado 'inicio' ou '{'", open.span));
+            }
+        };
+        let mut stmts = Vec::new();
+        self.abertos.push(0);
+        let corpo = self.parse_block_stmts(brace, &mut stmts);
+        self.abertos.pop();
+        corpo?;
+        let end = if brace {
+            self.expect_kind(|k| matches!(k, TokenKind::RBrace), "esperado '}'")?
+        } else {
+            self.expect_kind(|k| matches!(k, TokenKind::Fim), "esperado 'fim'")?
+        };
+        if stmts.is_empty() {
+            return Err(self.err_at("bloco não pode ser vazio", open.span.join(end.span)));
+        }
+        Ok(Block {
+            stmts,
+            span: open.span.join(end.span),
+        })
+    }
+
+    fn parse_block_stmts(&mut self, brace: bool, stmts: &mut Vec<Stmt>) -> Result<(), ParseError> {
+        loop {
+            match self.peek_kind() {
+                TokenKind::Eof => break,
+                TokenKind::Fim if !brace => break,
+                TokenKind::RBrace if brace => break,
+                TokenKind::Fim if brace => {
+                    return Err(self.err("esperado '}' (bloco aberto com '{')"));
+                }
+                TokenKind::RBrace if !brace => {
+                    return Err(self.err("esperado 'fim' (bloco aberto com 'inicio')"));
+                }
+                _ => {
+                    stmts.push(self.parse_stmt()?);
+                    self.exige_nova_linha()?;
+                }
+            }
+        }
+        Ok(())
+    }
+
+    // ── expressions (Pratt / "binding power" parser) ─────────────
+    //
+    // Goal: parse `1 + 2 * 3` as `1 + (2 * 3)` without a separate
+    // function per precedence level (parse_or, parse_and, parse_add, …).
+    //
+    // Each infix operator has a *binding power* (bp): higher = tighter.
+    //   se_falhar < ou < e < comparisons/contem < + - < * / %
+    //
+    // `parse_bp(min_bp)` means:
+    //   "Build an expression, but stop before any infix whose left-bp
+    //    is *weaker* than min_bp."
+    //
+    // Top-level call uses min_bp = 0 (accept every infix).
+    // When we take `+` (left_bp 9), we parse the RHS with min_bp = 10,
+    // so `*` (11) is still allowed on the right, but another `+` (9)
+    // is not — that second `+` is left for the outer call.
+    //
+    // Example: 1 + 2 * 3
+    //   parse_bp(0): lhs=1, see +, RHS=parse_bp(10)
+    //     parse_bp(10): lhs=2, see * (11>=10), RHS=3 → (2*3)
+    //   result: 1 + (2*3)
+
+    fn parse_expr(&mut self) -> Result<Expr, ParseError> {
+        // 0 = “no restriction”: may consume any infix operator.
+        self.parse_bp(0)
+    }
+
+    /// Parse an expression that only continues through infix ops whose
+    /// **left** binding power is `>= min_bp`.
+    ///
+    /// See module comments above and [`infix_info`] for the two bp numbers.
+    fn parse_bp(&mut self, min_bp: u8) -> Result<Expr, ParseError> {
+        self.aninhado(|p| p.parse_bp_inner(min_bp))
+    }
+
+    fn parse_bp_inner(&mut self, min_bp: u8) -> Result<Expr, ParseError> {
+        // --- left-hand side: atom / unary / already-built subexpr ---
+        // Not an infix yet. Examples: 10, x, (a+b), -3, nao ok, se …, funcao …
+        let mut lhs = self.parse_unary()?;
+        // True only after this loop folds a comparison. A comparison that
+        // arrived from parentheses, `(a < b) == (c > d)`, is one value.
+        let mut comparacao_dobrada = false;
+
+        // --- infix operator? ---
+        // Returns (operator token kind, left_bp, right_bp).
+        // If the next token is not an infix (e.g. `)`, `fim`, Eof), stop.
+        while let Some((op_kind, l_bp, r_bp)) = infix_info(self.peek_kind()) {
+            // Gate: operator too weak for this nesting level → let the
+            // *caller* handle it. Example: inside RHS of `+` we used
+            // min_bp=10; a following `+` has l_bp=9 < 10, so we break
+            // and the outer parse_bp takes that second `+`.
+            if l_bp < min_bp {
+                break;
+            }
+            // Outside brackets a line break ends the expression. An operator
+            // that can start an expression (`-3`, `..5`) begins the next
+            // statement; any other operator here is an error.
+            if !self.continua() {
+                if matches!(
+                    op_kind,
+                    TokenKind::Minus | TokenKind::DotDot | TokenKind::DotDotEq
+                ) {
+                    break;
+                }
+                return Err(self.err(format!(
+                    "{} no começo da linha não continua a linha anterior; \
+                     coloque a expressão entre parênteses para quebrar a linha",
+                    texto_do_token(&op_kind)
+                )));
+            }
+
+            // Spec: no `a < b < c` (would be confusing with bool vs number).
+            if is_comparison_token(&op_kind) && comparacao_dobrada {
+                return Err(self.err_at(
+                    "comparações não podem ser encadeadas; use 'e' (ex.: a < b e b < c)",
+                    lhs.span(),
+                ));
+            }
+
+            // Commit to this operator, then parse its right-hand side.
+            // We pass *right_bp* as the new min_bp so the RHS only
+            // absorbs *tighter* operators (see infix_info docs).
+            if matches!(op_kind, TokenKind::DotDot | TokenKind::DotDotEq)
+                && matches!(lhs, Expr::Intervalo { .. })
+            {
+                return Err(self.err(
+                    "intervalos não podem ser encadeados; coloque cada intervalo entre parênteses",
+                ));
+            }
+            let op_tok = self.remove();
+            // The right operand must follow on the same line (or inside
+            // brackets). `se_falhar` may put its block on the next line, and
+            // `..` without a ceiling is an open interval.
+            // At the end of the input outside brackets nothing can follow
+            // either: the REPL must not wait for a line that would be an error.
+            let sem_continuacao =
+                !self.continua() || (self.at_eof() && !self.dentro_de_colchetes());
+            if !matches!(
+                op_kind,
+                TokenKind::SeFalhar | TokenKind::DotDot | TokenKind::DotDotEq
+            ) && sem_continuacao
+            {
+                return Err(self.err_at(
+                    format!(
+                        "a expressão não continua depois de {} no fim da linha; \
+                         coloque a expressão entre parênteses para quebrar a linha",
+                        texto_do_token(&op_kind)
+                    ),
+                    op_tok.span,
+                ));
+            }
+            if matches!(op_kind, TokenKind::DotDot | TokenKind::DotDotEq) {
+                let inclusive = matches!(op_kind, TokenKind::DotDotEq);
+                let end = self.parse_faixa_end(inclusive, op_tok.span)?;
+                let span = match &end {
+                    Some(e) => lhs.span().join(e.span()),
+                    None => lhs.span().join(op_tok.span),
+                };
+                self.descer()?;
+                lhs = Expr::Intervalo {
+                    start: Box::new(lhs),
+                    end: end.map(Box::new),
+                    span,
+                };
+                comparacao_dobrada = false;
+                continue;
+            }
+            if matches!(op_kind, TokenKind::Arrow) {
+                if matches!(lhs, Expr::Par { .. }) {
+                    return Err(self.err_at(
+                        "pares não podem ser encadeados (a -> b -> c); use parênteses no valor",
+                        lhs.span(),
+                    ));
+                }
+                let rhs = self.parse_bp(r_bp)?;
+                let span = lhs.span().join(rhs.span());
+                self.descer()?;
+                lhs = Expr::Par {
+                    key: Box::new(lhs),
+                    value: Box::new(rhs),
+                    span,
+                };
+                comparacao_dobrada = false;
+                continue;
+            }
+            if matches!(op_kind, TokenKind::SeFalhar) {
+                let error_name = if let TokenKind::Ident(name) = self.peek_kind() {
+                    let name = name.clone();
+                    self.remove();
+                    Some(name)
+                } else {
+                    None
+                };
+                if !matches!(self.peek_kind(), TokenKind::LBrace | TokenKind::Inicio) {
+                    return Err(self.err("esperado bloco após 'se_falhar' ou nome do erro"));
+                }
+                let fallback = self.parse_block()?;
+                let span = lhs.span().join(fallback.span);
+                self.descer()?;
+                lhs = Expr::SeFalhar {
+                    attempt: Box::new(lhs),
+                    fallback,
+                    error_name,
+                    span,
+                };
+                comparacao_dobrada = false;
+                continue;
+            }
+            let rhs = self.parse_bp(r_bp)?;
+            let span = lhs.span().join(rhs.span());
+            self.descer()?;
+
+            // Fold: lhs becomes (lhs OP rhs), then loop may take another op.
+            // e.g. 1 - 2 - 3 → first fold (1-2), then fold ((1-2)-3).
+            lhs = {
+                let op = token_to_binary(&op_kind).expect("infix op");
+                comparacao_dobrada = is_comparison_op(op);
+                Expr::Binary {
+                    left: Box::new(lhs),
+                    op,
+                    right: Box::new(rhs),
+                    span,
+                }
+            };
+        }
+
+        Ok(lhs)
+    }
+
+    /// Prefix operators and the primary underneath.
+    ///
+    /// Call / index / field bind *tighter* than prefix, so
+    /// `nao f(x)` is `nao (f(x))` and `-xs[1]` is `-(xs[1])`.
+    /// Unary still binds tighter than infix: `nao a e b` → `(nao a) e b`.
+    fn parse_unary(&mut self) -> Result<Expr, ParseError> {
+        match self.peek_kind() {
+            TokenKind::DotDot | TokenKind::DotDotEq => self.parse_prefix_faixa(),
+            TokenKind::Minus => {
+                let start = self.remove().span;
+                let expr = self.aninhado(Self::parse_unary)?;
+                let span = start.join(expr.span());
+                Ok(Expr::Unary {
+                    op: UnaryOp::Neg,
+                    expr: Box::new(expr),
+                    span,
+                })
+            }
+            TokenKind::Nao => {
+                let start = self.remove().span;
+                let expr = self.aninhado(Self::parse_unary)?;
+                let span = start.join(expr.span());
+                Ok(Expr::Unary {
+                    op: UnaryOp::Not,
+                    expr: Box::new(expr),
+                    span,
+                })
+            }
+            _ => self.parse_postfix(),
+        }
+    }
+
+    fn parse_prefix_faixa(&mut self) -> Result<Expr, ParseError> {
+        let op_tok = self.remove();
+        let inclusive = matches!(op_tok.kind, TokenKind::DotDotEq);
+        let start = Expr::Number {
+            raw: "0".into(),
+            span: op_tok.span,
+        };
+        let end = self.parse_faixa_end(inclusive, op_tok.span)?;
+        let span = match &end {
+            Some(e) => op_tok.span.join(e.span()),
+            None => op_tok.span,
+        };
+        Ok(Expr::Intervalo {
+            start: Box::new(start),
+            end: end.map(Box::new),
+            span,
+        })
+    }
+
+    fn parse_faixa_end(
+        &mut self,
+        inclusive: bool,
+        op_span: Span,
+    ) -> Result<Option<Expr>, ParseError> {
+        let _ = op_span;
+        let same_line = self.continua();
+        if inclusive {
+            if !same_line || !self.can_start_expr() {
+                let kind = if matches!(self.peek_kind(), TokenKind::Eof) {
+                    ParseErrorKind::UnexpectedEof
+                } else {
+                    ParseErrorKind::Syntax
+                };
+                return Err(ParseError {
+                    kind,
+                    message: "esperado teto após '..='".into(),
+                    span: self.peek_span(),
+                });
+            }
+            let end = self.parse_bp(FAIXA_RIGHT_BP)?;
+            Ok(Some(plus_one(end, op_span)))
+        } else if same_line && self.can_start_expr() && !self.faixa_aberta_antes_do_corpo() {
+            Ok(Some(self.parse_bp(FAIXA_RIGHT_BP)?))
+        } else {
+            Ok(None)
+        }
+    }
+
+    /// `{` or `inicio` after `..` in `para i em 0.. {` is the loop body.
+    fn faixa_aberta_antes_do_corpo(&self) -> bool {
+        self.em_para
+            && self.parenteses == 0
+            && matches!(self.peek_kind(), TokenKind::LBrace | TokenKind::Inicio)
+    }
+
+    fn can_start_expr(&self) -> bool {
+        expr_can_start(self.peek_kind())
+    }
+
+    fn peek_span(&self) -> Span {
+        self.tokens
+            .get(self.pos)
+            .map(|t| t.span)
+            .unwrap_or_default()
+    }
+
+    /// `f(a)[i].campo` — postfix attaches to the primary, not to a prefix op.
+    fn parse_postfix(&mut self) -> Result<Expr, ParseError> {
+        self.aninhado(Self::parse_postfix_inner)
+    }
+
+    fn parse_postfix_inner(&mut self) -> Result<Expr, ParseError> {
+        let mut lhs = self.parse_primary()?;
+        loop {
+            // A list or a call on the next line starts another expression.
+            // The contents may still span lines once the opener is consumed.
+            if !self.continua() {
+                if matches!(self.peek_kind(), TokenKind::Dot | TokenKind::ColonColon) {
+                    return Err(self.err(format!(
+                        "{} no começo da linha não continua a linha anterior; \
+                         junte à linha anterior ou coloque a expressão entre parênteses",
+                        texto_do_token(self.peek_kind())
+                    )));
+                }
+                break;
+            }
+            if matches!(
+                self.peek_kind(),
+                TokenKind::LParen
+                    | TokenKind::LBracket
+                    | TokenKind::ColonColon
+                    | TokenKind::Colon
+                    | TokenKind::Dot
+            ) {
+                self.descer()?;
+            }
+            match self.peek_kind() {
+                TokenKind::LParen => lhs = self.finish_call(lhs)?,
+                TokenKind::LBracket => lhs = self.finish_index_or_slice(lhs)?,
+                TokenKind::ColonColon => lhs = self.finish_module_field(lhs)?,
+                TokenKind::Colon if self.allow_colon_field => {
+                    if map_field_receiver(&lhs) {
+                        lhs = self.finish_map_field(lhs)?;
+                    } else {
+                        return Err(self.err("':' espera um mapa"));
+                    }
+                }
+                TokenKind::Dot => lhs = self.finish_ufcs(lhs)?,
+                _ => break,
+            }
+        }
+        Ok(lhs)
+    }
+
+    fn parse_primary(&mut self) -> Result<Expr, ParseError> {
+        let tok = self.remove();
+        match tok.kind {
+            TokenKind::Number(raw) => Ok(Expr::Number {
+                raw,
+                span: tok.span,
+            }),
+            TokenKind::String(value) => Ok(Expr::String {
+                value,
+                span: tok.span,
+            }),
+            TokenKind::Nada => Ok(Expr::Nada { span: tok.span }),
+            TokenKind::Verdadeiro => Ok(Expr::Bool {
+                value: true,
+                span: tok.span,
+            }),
+            TokenKind::Falso => Ok(Expr::Bool {
+                value: false,
+                span: tok.span,
+            }),
+            TokenKind::Ident(name) => Ok(Expr::Ident {
+                name,
+                span: tok.span,
+            }),
+            TokenKind::Colon => {
+                let name_tok = self.remove();
+                match name_tok.kind {
+                    TokenKind::Ident(name) => Ok(Expr::String {
+                        value: name,
+                        span: tok.span.join(name_tok.span),
+                    }),
+                    _ => Err(self.err_at(
+                        "esperado nome após ':'; palavras-chave usam aspas (ex.: \"se\")",
+                        name_tok.span,
+                    )),
+                }
+            }
+            TokenKind::LParen => {
+                let prev = self.allow_colon_field;
+                self.allow_colon_field = true;
+                self.parenteses += 1;
+                self.abre();
+                let expr = self.parse_expr();
+                self.fecha();
+                self.parenteses -= 1;
+                self.allow_colon_field = prev;
+                let expr = expr?;
+                self.expect_close(|k| matches!(k, TokenKind::RParen), ")", tok.span)?;
+                Ok(expr)
+            }
+            TokenKind::LBracket => self.finish_list(tok.span),
+            TokenKind::Inicio | TokenKind::LBrace => {
+                self.pos -= 1;
+                let block = self.parse_block()?;
+                Ok(Expr::Block(block))
+            }
+            TokenKind::Se => {
+                self.pos -= 1;
+                self.parse_if()
+            }
+            TokenKind::Funcao => {
+                self.pos -= 1;
+                self.parse_function()
+            }
+            _ => {
+                let escrito = texto_do_token(&tok.kind);
+                let mensagem = if token_e_comando(&tok.kind) {
+                    format!("{escrito} é um comando, não um valor")
+                } else {
+                    format!("expressão inválida (token inesperado: {escrito})")
+                };
+                Err(self.err_at(mensagem, tok.span))
+            }
+        }
+    }
+
+    fn finish_list(&mut self, start: Span) -> Result<Expr, ParseError> {
+        self.abre();
+        let r = self.finish_list_inner(start);
+        self.fecha();
+        r
+    }
+
+    fn finish_list_inner(&mut self, start: Span) -> Result<Expr, ParseError> {
+        let mut elements = Vec::new();
+        if !matches!(self.peek_kind(), TokenKind::RBracket) {
+            loop {
+                elements.push(self.parse_expr()?);
+                if matches!(self.peek_kind(), TokenKind::Comma) {
+                    self.remove();
+                    if matches!(self.peek_kind(), TokenKind::RBracket) {
+                        break; // trailing comma ok
+                    }
+                    continue;
+                }
+                break;
+            }
+        }
+        let end = self.expect_close(|k| matches!(k, TokenKind::RBracket), "]", start)?;
+        Ok(Expr::List {
+            elements,
+            span: start.join(end.span),
+        })
+    }
+
+    fn finish_call(&mut self, callee: Expr) -> Result<Expr, ParseError> {
+        let start = callee.span();
+        let aberto = self.remove(); // (
+        self.parenteses += 1;
+        self.abre();
+        let args = self.finish_call_args();
+        self.fecha();
+        self.parenteses -= 1;
+        let args = args?;
+        let end = self.expect_close(|k| matches!(k, TokenKind::RParen), ")", aberto.span)?;
+        Ok(Expr::Call {
+            callee: Box::new(callee),
+            args,
+            span: start.join(end.span),
+        })
+    }
+
+    fn finish_call_args(&mut self) -> Result<Vec<Expr>, ParseError> {
+        let mut args = Vec::new();
+        if !matches!(self.peek_kind(), TokenKind::RParen) {
+            loop {
+                args.push(self.parse_expr()?);
+                if matches!(self.peek_kind(), TokenKind::Comma) {
+                    self.remove();
+                    if matches!(self.peek_kind(), TokenKind::RParen) {
+                        break;
+                    }
+                    continue;
+                }
+                break;
+            }
+        }
+        Ok(args)
+    }
+
+    fn finish_index_or_slice(&mut self, object: Expr) -> Result<Expr, ParseError> {
+        self.abre();
+        let r = self.finish_index_or_slice_inner(object);
+        self.fecha();
+        r
+    }
+
+    fn finish_index_or_slice_inner(&mut self, object: Expr) -> Result<Expr, ParseError> {
+        let start = object.span();
+        let aberto = self.remove(); // [
+        let first = self.parse_expr()?;
+        if matches!(self.peek_kind(), TokenKind::Comma) {
+            self.remove();
+            let col = self.parse_expr()?;
+            let end = self.expect_close(|k| matches!(k, TokenKind::RBracket), "]", aberto.span)?;
+            Ok(Expr::Index2 {
+                object: Box::new(object),
+                row: Box::new(first),
+                col: Box::new(col),
+                span: start.join(end.span),
+            })
+        } else {
+            let end = self.expect_close(|k| matches!(k, TokenKind::RBracket), "]", aberto.span)?;
+            Ok(Expr::Index {
+                object: Box::new(object),
+                index: Box::new(first),
+                span: start.join(end.span),
+            })
+        }
+    }
+
+    fn finish_module_field(&mut self, object: Expr) -> Result<Expr, ParseError> {
+        let start = object.span();
+        self.remove(); // ::
+        let field_tok = self.remove();
+        match field_tok.kind {
+            TokenKind::Ident(field) => Ok(Expr::Field {
+                object: Box::new(object),
+                field,
+                span: start.join(field_tok.span),
+            }),
+            TokenKind::Pare => Ok(Expr::Field {
+                object: Box::new(object),
+                field: "pare".into(),
+                span: start.join(field_tok.span),
+            }),
+            _ => Err(self.err_at("esperado nome após '::'", field_tok.span)),
+        }
+    }
+
+    fn finish_map_field(&mut self, object: Expr) -> Result<Expr, ParseError> {
+        let start = object.span();
+        self.remove(); // :
+        let field_tok = self.remove();
+        match field_tok.kind {
+            TokenKind::Ident(field) => Ok(Expr::MapField {
+                object: Box::new(object),
+                field,
+                span: start.join(field_tok.span),
+            }),
+            _ => Err(self.err_at("esperado nome após ':'", field_tok.span)),
+        }
+    }
+
+    /// `xs.anexe(1)` → `anexe(xs, 1)`. `a.mod::f(x)` → `mod::f(a, x)`.
+    /// Bare `xs.anexe` is an error.
+    fn finish_ufcs(&mut self, object: Expr) -> Result<Expr, ParseError> {
+        let start = object.span();
+        self.remove(); // .
+        let field_tok = self.remove();
+        let name = match field_tok.kind {
+            TokenKind::Ident(name) => name,
+            TokenKind::Pare => "pare".into(),
+            _ => return Err(self.err_at("esperado nome de função após '.'", field_tok.span)),
+        };
+        let mut callee = Expr::Ident {
+            name,
+            span: field_tok.span,
+        };
+        while matches!(self.peek_kind(), TokenKind::ColonColon) {
+            callee = self.finish_module_field(callee)?;
+        }
+        if !matches!(self.peek_kind(), TokenKind::LParen) {
+            return Err(self.err(
+                "esperado '(' após '.' (xs.tamanho() é tamanho(xs); sem parênteses não vale)",
+            ));
+        }
+        let call = self.finish_call(callee)?;
+        match call {
+            Expr::Call {
+                callee,
+                mut args,
+                span,
+            } => {
+                args.insert(0, object);
+                Ok(Expr::Call {
+                    callee,
+                    args,
+                    span: start.join(span),
+                })
+            }
+            other => Ok(other),
+        }
+    }
+
+    fn parse_if(&mut self) -> Result<Expr, ParseError> {
+        let start = self
+            .expect_kind(|k| matches!(k, TokenKind::Se), "esperado 'se'")?
+            .span;
+
+        let mut branches = Vec::new();
+        let cond = self.parse_expr()?;
+        let body = self.parse_block()?;
+        let branch_span = cond.span().join(body.span);
+        branches.push(IfBranch {
+            cond,
+            body,
+            span: branch_span,
+        });
+
+        // `ou se`
+        while matches!(self.peek_kind(), TokenKind::Ou) {
+            // Lookahead: `ou se` vs binary `ou` (shouldn't appear here after a block usually)
+            if self.pos + 1 < self.tokens.len()
+                && matches!(self.tokens[self.pos + 1].kind, TokenKind::Se)
+            {
+                self.remove(); // ou
+                self.remove(); // se
+                let cond = self.parse_expr()?;
+                let body = self.parse_block()?;
+                let branch_span = cond.span().join(body.span);
+                branches.push(IfBranch {
+                    cond,
+                    body,
+                    span: branch_span,
+                });
+            } else {
+                break;
+            }
+        }
+
+        let else_block = if matches!(self.peek_kind(), TokenKind::Senao) {
+            self.remove();
+            Some(self.parse_block()?)
+        } else {
+            None
+        };
+
+        let end_span = else_block
+            .as_ref()
+            .map(|b| b.span)
+            .or_else(|| branches.last().map(|b| b.span))
+            .unwrap_or(start);
+
+        Ok(Expr::If {
+            branches,
+            else_block,
+            span: start.join(end_span),
+        })
+    }
+
+    fn parse_function(&mut self) -> Result<Expr, ParseError> {
+        let start = self
+            .expect_kind(|k| matches!(k, TokenKind::Funcao), "esperado 'funcao'")?
+            .span;
+        let aberto = self.expect_kind(
+            |k| matches!(k, TokenKind::LParen),
+            "esperado '(' após 'funcao'",
+        )?;
+
+        let mut params = Vec::new();
+        if !matches!(self.peek_kind(), TokenKind::RParen) {
+            loop {
+                let p = self.remove();
+                match p.kind {
+                    TokenKind::Ident(name) => params.push(Param { name, span: p.span }),
+                    _ => {
+                        return Err(self.err_at("esperado nome de parâmetro", p.span));
+                    }
+                }
+                if matches!(self.peek_kind(), TokenKind::Comma) {
+                    self.remove();
+                    if matches!(self.peek_kind(), TokenKind::RParen) {
+                        break;
+                    }
+                    continue;
+                }
+                break;
+            }
+        }
+        self.expect_close(|k| matches!(k, TokenKind::RParen), ")", aberto.span)?;
+        let mut vistos = std::collections::HashSet::new();
+        for p in &params {
+            if !vistos.insert(p.name.as_str()) {
+                return Err(self.err_at(format!("parâmetro duplicado `{}`", p.name), p.span));
+            }
+        }
+        let body = self.parse_block()?;
+        Ok(Expr::Function {
+            params,
+            span: start.join(body.span),
+            body: std::rc::Rc::new(body),
+            doc: None,
+        })
+    }
+}
+
+/// A blank line or a `//` comment between `///` and the definition.
+fn separa_doc(source: &str, from: usize, to: usize) -> bool {
+    let Some(gap) = source.get(from..to) else {
+        return true;
+    };
+    gap.matches('\n').count() > 1 || gap.contains("//")
+}
+
+fn join_doc_lines(lines: &[String]) -> String {
+    lines.join("\n").trim_end().to_string()
+}
+
+fn attach_doc(stmt: Stmt, doc: Option<String>) -> Result<Stmt, ParseError> {
+    let Some(doc) = doc else {
+        return Ok(stmt);
+    };
+    match stmt {
+        Stmt::Assign {
+            target,
+            mut value,
+            compound,
+            span,
+            ..
+        } => {
+            if let Expr::Function { doc: slot, .. } = &mut value {
+                *slot = Some(doc.clone());
+            }
+            Ok(Stmt::Assign {
+                target,
+                compound,
+                value,
+                span,
+                doc: Some(doc),
+            })
+        }
+        other => Err(ParseError {
+            kind: ParseErrorKind::Syntax,
+            message: "documentação só vale antes de uma definição".into(),
+            span: other.span(),
+        }),
+    }
+}
+
+fn map_field_receiver(expr: &Expr) -> bool {
+    matches!(
+        expr,
+        Expr::Ident { .. }
+            | Expr::Index { .. }
+            | Expr::Index2 { .. }
+            | Expr::Call { .. }
+            | Expr::Field { .. }
+            | Expr::MapField { .. }
+    )
+}
+
+fn expr_can_start(kind: &TokenKind) -> bool {
+    matches!(
+        kind,
+        TokenKind::Number(_)
+            | TokenKind::String(_)
+            | TokenKind::Nada
+            | TokenKind::Verdadeiro
+            | TokenKind::Falso
+            | TokenKind::Ident(_)
+            | TokenKind::LParen
+            | TokenKind::LBracket
+            | TokenKind::Inicio
+            | TokenKind::LBrace
+            | TokenKind::Se
+            | TokenKind::Funcao
+            | TokenKind::Minus
+            | TokenKind::Nao
+            | TokenKind::Colon
+            | TokenKind::DotDot
+            | TokenKind::DotDotEq
+    )
+}
+
+// ── helpers ──────────────────────────────────────────────────────
+
+/// Look up an **infix** operator and its two binding powers.
+///
+/// Returns `None` if `kind` is not a binary/infix operator (e.g. `)`, `fim`).
+///
+/// # Why two numbers? (`left_bp`, `right_bp`)
+///
+/// When we see `lhs OP ?`, we need two different questions:
+///
+/// 1. **`left_bp` — “May this `OP` attach to the current `lhs`?”**
+///    Compared with the caller’s `min_bp`:
+///    - if `left_bp < min_bp` → do **not** take this op; stop and return `lhs`
+///    - else → consume `OP` and parse the right-hand side
+///
+/// 2. **`right_bp` — “While parsing the RHS, how sticky should we be?”**
+///    We call `parse_bp(right_bp)`. The RHS may only continue with operators
+///    whose `left_bp >= right_bp`. That decides whether
+///    `1 + 2 * 3` becomes `1+(2*3)` (`*` stronger than the RHS gate of `+`).
+///
+/// # Why are the pairs fixed like `(9, 10)`, `(11, 12)`, …?
+///
+/// They encode **two language decisions** that do not change at runtime:
+///
+/// **A) Precedence (which op wins)**  
+///    Use *different* bands of numbers for different classes:
+///    ```text
+///    se_falhar  (1,2)   weakest
+///    ou         (3,4)
+///    e          (5,6)
+///    compare    (7,8)
+///    .. ..=     (8,9)
+///    + -        (9,10)
+///    * / %      (11,12) strongest infix
+///    ```
+///    Only the *relative* order matters (`*` > `+` > `e`). Gaps (1,3,5,…)
+///    leave room if we add a level later; even numbers on the right are
+///    just `left + 1` for left-associativity (below).
+///
+/// **B) Associativity (how same-level ops nest)**  
+///    For left-associative ops (`+`, `-`, `*`, `e`, …) we set:
+///    ```text
+///    right_bp = left_bp + 1
+///    ```
+///    Example: `1 - 2 - 3`
+///    - Take first `-` (left_bp 9). Parse RHS with `min_bp = 10`.
+///    - Second `-` has left_bp 9, and `9 < 10` → RHS stops after `2`.
+///    - Outer loop takes the second `-` → `((1-2)-3)`.
+///
+///    If we used `right_bp == left_bp` (same number both sides), the RHS
+///    would also take the second `-` and you’d get right-assoc
+///    `1-(2-3)` (or ambiguous behavior). So the “+1” is intentional.
+///
+/// Right-associative operators (e.g. `**` in some languages) would use
+/// `right_bp = left_bp` (or `left_bp - 1`); Expressa has none of those yet.
+///
+/// # Summary
+///
+/// | Number    | Role                                      |
+/// |-----------|-------------------------------------------|
+/// | `left_bp` | “Can I bind to the left operand now?”     |
+/// | `right_bp`| “What may the right operand still include?”|
+///
+/// Both are **constants** from the language precedence table, not computed
+/// from the source text.
+fn infix_info(kind: &TokenKind) -> Option<(TokenKind, u8, u8)> {
+    // (left_bp, right_bp) with right_bp = left_bp + 1 → left-associative.
+    // Higher bp = tighter binding.
+    let (l_bp, r_bp) = match kind {
+        TokenKind::SeFalhar => (1, 2),
+        TokenKind::Arrow => (2, 3),
+        TokenKind::Ou => (3, 4),
+        TokenKind::E => (5, 6),
+        TokenKind::EqEq
+        | TokenKind::BangEq
+        | TokenKind::Lt
+        | TokenKind::Gt
+        | TokenKind::LtEq
+        | TokenKind::GtEq
+        | TokenKind::Contem => (7, 8),
+        TokenKind::DotDot | TokenKind::DotDotEq => (8, 9),
+        TokenKind::Plus | TokenKind::Minus => (9, 10),
+        TokenKind::Star | TokenKind::Slash | TokenKind::Percent => (11, 12),
+        _ => return None,
+    };
+    Some((kind.clone(), l_bp, r_bp))
+}
+
+fn token_to_binary(kind: &TokenKind) -> Option<BinaryOp> {
+    Some(match kind {
+        TokenKind::Plus => BinaryOp::Add,
+        TokenKind::Minus => BinaryOp::Sub,
+        TokenKind::Star => BinaryOp::Mul,
+        TokenKind::Slash => BinaryOp::Div,
+        TokenKind::Percent => BinaryOp::Rem,
+        TokenKind::EqEq => BinaryOp::Eq,
+        TokenKind::BangEq => BinaryOp::Ne,
+        TokenKind::Lt => BinaryOp::Lt,
+        TokenKind::Gt => BinaryOp::Gt,
+        TokenKind::LtEq => BinaryOp::Le,
+        TokenKind::GtEq => BinaryOp::Ge,
+        TokenKind::E => BinaryOp::And,
+        TokenKind::Ou => BinaryOp::Or,
+        TokenKind::Contem => BinaryOp::Contem,
+        _ => return None,
+    })
+}
+
+fn is_comparison_token(kind: &TokenKind) -> bool {
+    matches!(
+        kind,
+        TokenKind::EqEq
+            | TokenKind::BangEq
+            | TokenKind::Lt
+            | TokenKind::Gt
+            | TokenKind::LtEq
+            | TokenKind::GtEq
+    )
+}
+
+fn is_comparison_op(op: BinaryOp) -> bool {
+    matches!(
+        op,
+        BinaryOp::Eq | BinaryOp::Ne | BinaryOp::Lt | BinaryOp::Le | BinaryOp::Gt | BinaryOp::Ge
+    )
+}
+
+fn plus_one(end: Expr, op_span: Span) -> Expr {
+    let span = end.span().join(op_span);
+    Expr::Binary {
+        left: Box::new(end),
+        op: BinaryOp::Add,
+        right: Box::new(Expr::Number {
+            raw: "1".into(),
+            span: op_span,
+        }),
+        span,
+    }
+}
+
+fn expr_to_assign_target(expr: Expr) -> Result<AssignTarget, Span> {
+    match expr {
+        Expr::Ident { name, span } => Ok(AssignTarget::Name { name, span }),
+        Expr::Index {
+            object,
+            index,
+            span,
+        } => Ok(AssignTarget::Index {
+            object: *object,
+            index: *index,
+            span,
+        }),
+        Expr::Index2 {
+            object,
+            row,
+            col,
+            span,
+        } => Ok(AssignTarget::Index2 {
+            object: *object,
+            row: *row,
+            col: *col,
+            span,
+        }),
+        Expr::MapField {
+            object,
+            field,
+            span,
+        } => Ok(AssignTarget::MapField {
+            object: *object,
+            field,
+            span,
+        }),
+        other => Err(other.span()),
+    }
+}
+
+impl Item {
+    pub fn span(&self) -> Span {
+        match self {
+            Item::Import(i) => i.span,
+            Item::Stmt(s) => s.span(),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::parser::operator_types::BinaryOp;
+
+    fn parse_ok(src: &str) -> Program {
+        parse(src).unwrap_or_else(|e| panic!("parse failed for {src:?}: {e}"))
+    }
+
+    fn first_stmt(p: &Program) -> &Stmt {
+        match &p.items[0] {
+            Item::Stmt(s) => s,
+            other => panic!("expected stmt, got {other:?}"),
+        }
+    }
+
+    fn expr_stmt(p: &Program) -> &Expr {
+        match first_stmt(p) {
+            Stmt::Expr { expr, .. } => expr,
+            other => panic!("expected expr stmt, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn compound_assign_keeps_operator_and_single_target() {
+        for (source, op) in [("i += 1", BinaryOp::Add), ("i -= 2", BinaryOp::Sub)] {
+            match first_stmt(&parse_ok(source)) {
+                Stmt::Assign {
+                    compound, value, ..
+                } => {
+                    assert_eq!(*compound, Some(op));
+                    assert!(matches!(value, Expr::Number { .. }));
+                }
+                other => panic!("{other:?}"),
+            }
+        }
+    }
+
+    #[test]
+    fn nada_literal_preserves_its_span() {
+        let p = parse("nada").unwrap();
+        let expr = expr_stmt(&p);
+        assert!(matches!(expr, Expr::Nada { .. }));
+        assert_eq!(expr.span().start, 0);
+        assert_eq!(expr.span().end, 4);
+    }
+
+    #[test]
+    fn number_literal() {
+        let p = parse_ok("42");
+        let e = expr_stmt(&p);
+        assert!(matches!(e, Expr::Number { raw, .. } if raw == "42"));
+    }
+
+    #[test]
+    fn string_and_bool() {
+        let p = parse_ok(r#""oi""#);
+        assert!(matches!(
+            expr_stmt(&p),
+            Expr::String { value, .. } if value == "oi"
+        ));
+        let p = parse_ok("verdadeiro");
+        assert!(matches!(expr_stmt(&p), Expr::Bool { value: true, .. }));
+    }
+
+    #[test]
+    fn precedence_mul_over_add() {
+        // 1 + 2 * 3  →  1 + (2 * 3)
+        let p = parse_ok("1 + 2 * 3");
+        let e = expr_stmt(&p);
+        match e {
+            Expr::Binary {
+                op: BinaryOp::Add,
+                left,
+                right,
+                ..
+            } => {
+                assert!(matches!(left.as_ref(), Expr::Number { raw, .. } if raw == "1"));
+                assert!(matches!(
+                    right.as_ref(),
+                    Expr::Binary {
+                        op: BinaryOp::Mul,
+                        ..
+                    }
+                ));
+            }
+            other => panic!("unexpected {other:?}"),
+        }
+    }
+
+    #[test]
+    fn assign_name() {
+        match first_stmt(&parse_ok("x = 10")) {
+            Stmt::Assign {
+                target: AssignTarget::Name { name, .. },
+                value: Expr::Number { raw, .. },
+                ..
+            } => {
+                assert_eq!(name, "x");
+                assert_eq!(raw, "10");
+            }
+            other => panic!("{other:?}"),
+        }
+    }
+
+    #[test]
+    fn block_expression() {
+        let p = parse_ok("inicio\n  1 + 2\nfim");
+        let e = expr_stmt(&p);
+        match e {
+            Expr::Block(b) => {
+                assert_eq!(b.stmts.len(), 1);
+            }
+            other => panic!("{other:?}"),
+        }
+    }
+
+    #[test]
+    fn empty_block_errors() {
+        let err = parse("inicio fim").unwrap_err();
+        assert!(err.message.contains("vazio"));
+        let err = parse("{ }").unwrap_err();
+        assert!(err.message.contains("vazio"));
+    }
+
+    #[test]
+    fn brace_block_same_as_inicio_fim() {
+        let a = parse_ok("inicio\n  1 + 2\nfim");
+        let b = parse_ok("{ 1 + 2 }");
+        match (expr_stmt(&a), expr_stmt(&b)) {
+            (Expr::Block(x), Expr::Block(y)) => assert_eq!(x.stmts.len(), y.stmts.len()),
+            other => panic!("{other:?}"),
+        }
+        let p = parse_ok("se verdadeiro { 1 } senao { 2 }");
+        match expr_stmt(&p) {
+            Expr::If {
+                else_block: Some(_),
+                ..
+            } => {}
+            other => panic!("{other:?}"),
+        }
+        let p = parse_ok("f = funcao(n) { n * 2 }");
+        assert!(matches!(&p.items[0], Item::Stmt(Stmt::Assign { .. })));
+        let p = parse_ok(r#"mapa(["a" -> 1])"#);
+        match expr_stmt(&p) {
+            Expr::Call { args, .. } => {
+                assert_eq!(args.len(), 1);
+                match &args[0] {
+                    Expr::List { elements, .. } => {
+                        assert!(matches!(elements[0], Expr::Par { .. }));
+                    }
+                    other => panic!("{other:?}"),
+                }
+            }
+            other => panic!("{other:?}"),
+        }
+        let err = parse("inicio 1 }").unwrap_err();
+        assert!(err.message.contains("fim"), "{err}");
+        let err = parse("{ 1 fim").unwrap_err();
+        assert!(err.message.contains("'}'"), "{err}");
+    }
+
+    #[test]
+    fn list_on_next_line_does_not_index_previous_expression() {
+        for source in [
+            "dt = format_date(tarefa:data)\n[c, dt, tarefa:desc]",
+            "dt = format_date(tarefa:data) // comment\n[c, dt, tarefa:desc]",
+            "dt = format_date(tarefa:data)\n/* comment */ [c, dt, tarefa:desc]",
+            "dt = format_date(tarefa:data) /*\ncomment */ [c, dt, tarefa:desc]",
+        ] {
+            let program = parse_ok(source);
+            assert_eq!(program.items.len(), 2, "{source}");
+            assert!(matches!(
+                &program.items[0],
+                Item::Stmt(Stmt::Assign {
+                    value: Expr::Call { .. },
+                    ..
+                })
+            ));
+            assert!(matches!(
+                &program.items[1],
+                Item::Stmt(Stmt::Expr { expr: Expr::List { elements, .. }, .. })
+                    if elements.len() == 3
+            ));
+        }
+        for source in [
+            "x = 1\n[2]",
+            "x = xs[0]\n[]",
+            "x = [1]\n[2]",
+            "f()\n[1, 2]",
+            "f()\r\n[1, 2]",
+        ] {
+            assert_eq!(parse_ok(source).items.len(), 2, "{source}");
+        }
+    }
+
+    #[test]
+    fn same_line_indexing_keeps_multiline_contents_and_chaining() {
+        for source in [
+            "f()[0]",
+            "f()[\n0\n]",
+            "f(/* comment */)[0]",
+            "xs /* comment */ [0]",
+            "\"a\nb\"[0]",
+        ] {
+            assert!(
+                matches!(expr_stmt(&parse_ok(source)), Expr::Index { .. }),
+                "{source}"
+            );
+        }
+        assert!(matches!(
+            expr_stmt(&parse_ok("xs[\n0,\n1\n]")),
+            Expr::Index2 { .. }
+        ));
+        match expr_stmt(&parse_ok("xs[\n0..\n]")) {
+            Expr::Index { index, .. } => {
+                assert!(matches!(index.as_ref(), Expr::Intervalo { end: None, .. }));
+            }
+            other => panic!("{other:?}"),
+        }
+        assert!(matches!(
+            expr_stmt(&parse_ok("f(\n[1,\n2]\n)[0]")),
+            Expr::Index { .. }
+        ));
+        let err = parse("xs\n.tamanho()").unwrap_err();
+        assert!(err.message.contains("começo da linha"), "{err}");
+        let err = parse("m\n::f()").unwrap_err();
+        assert!(err.message.contains("começo da linha"), "{err}");
+        assert!(matches!(
+            expr_stmt(&parse_ok("(xs\n.tamanho())")),
+            Expr::Call { .. }
+        ));
+        assert!(matches!(
+            expr_stmt(&parse_ok("(1 +\n2)")),
+            Expr::Binary { .. }
+        ));
+    }
+
+    #[test]
+    fn dois_comandos_na_mesma_linha_sao_erro() {
+        for source in [
+            "x = 1 y = 2",
+            "escreva(1) escreva(2)",
+            "f = funcao() { x = 1 x }",
+        ] {
+            let err = parse(source).unwrap_err();
+            assert!(err.message.contains("mesma linha"), "{source}: {err}");
+        }
+        parse_ok("se verdadeiro { escreva(1) } senao { escreva(2) }");
+        parse_ok("f = funcao(x) { x + 1 }");
+        parse_ok(
+            "se verdadeiro\ninicio\n    escreva(1)\nfim\nou se falso\ninicio\n    escreva(2)\nfim\nsenao\ninicio\n    escreva(3)\nfim",
+        );
+        parse_ok("x = 1 se_falhar\n{\n    2\n}");
+    }
+
+    #[test]
+    fn matriz_call_and_index2() {
+        let p = parse_ok("A = matriz([[1, 2, 3], [4, 5, 6]])");
+        match &p.items[0] {
+            Item::Stmt(Stmt::Assign { value, .. }) => {
+                assert!(matches!(value, Expr::Call { .. }));
+            }
+            other => panic!("{other:?}"),
+        }
+        let p = parse_ok("A[1, 2]");
+        assert!(matches!(expr_stmt(&p), Expr::Index2 { .. }));
+    }
+
+    #[test]
+    fn if_with_else() {
+        let src = r#"
+se x > 0
+inicio
+    1
+fim
+senao
+inicio
+    2
+fim
+"#;
+        let p = parse_ok(src);
+        match expr_stmt(&p) {
+            Expr::If {
+                branches,
+                else_block: Some(_),
+                ..
+            } => {
+                assert_eq!(branches.len(), 1);
+            }
+            other => panic!("{other:?}"),
+        }
+    }
+
+    #[test]
+    fn access_colon_ufcs_module() {
+        match expr_stmt(&parse_ok("pessoa:nome")) {
+            Expr::MapField { field, .. } => assert_eq!(field, "nome"),
+            other => panic!("{other:?}"),
+        }
+        match expr_stmt(&parse_ok("mat::soma")) {
+            Expr::Field { field, .. } => assert_eq!(field, "soma"),
+            other => panic!("{other:?}"),
+        }
+        match expr_stmt(&parse_ok("xs.tamanho()")) {
+            Expr::Call { callee, args, .. } => {
+                assert!(matches!(callee.as_ref(), Expr::Ident { name, .. } if name == "tamanho"));
+                assert_eq!(args.len(), 1);
+            }
+            other => panic!("{other:?}"),
+        }
+        match expr_stmt(&parse_ok("A.matriz::transposta()")) {
+            Expr::Call { callee, args, .. } => {
+                assert!(
+                    matches!(callee.as_ref(), Expr::Field { field, .. } if field == "transposta")
+                );
+                assert_eq!(args.len(), 1);
+            }
+            other => panic!("{other:?}"),
+        }
+        let err = parse("xs.tamanho").unwrap_err();
+        assert!(err.message.contains("esper"), "{err}");
+    }
+
+    #[test]
+    fn call_and_list() {
+        let p = parse_ok(r#"escreva([1, 2])"#);
+        match expr_stmt(&p) {
+            Expr::Call { callee, args, .. } => {
+                assert!(matches!(callee.as_ref(), Expr::Ident { name, .. } if name == "escreva"));
+                assert_eq!(args.len(), 1);
+                assert!(matches!(args[0], Expr::List { .. }));
+            }
+            other => panic!("{other:?}"),
+        }
+    }
+
+    #[test]
+    fn prefix_does_not_steal_postfix() {
+        match expr_stmt(&parse_ok("nao eh_par(n)")) {
+            Expr::Unary {
+                op: UnaryOp::Not,
+                expr,
+                ..
+            } => {
+                assert!(matches!(expr.as_ref(), Expr::Call { .. }));
+            }
+            other => panic!("expected nao (call), got {other:?}"),
+        }
+        match expr_stmt(&parse_ok("-xs[1]")) {
+            Expr::Unary {
+                op: UnaryOp::Neg,
+                expr,
+                ..
+            } => {
+                assert!(matches!(expr.as_ref(), Expr::Index { .. }));
+            }
+            other => panic!("expected -(index), got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn index_and_slice() {
+        let p = parse_ok("xs[1]");
+        assert!(matches!(expr_stmt(&p), Expr::Index { .. }));
+        let p = parse_ok("xs[1..3]");
+        match expr_stmt(&p) {
+            Expr::Index { index, .. } => {
+                assert!(matches!(
+                    index.as_ref(),
+                    Expr::Intervalo { end: Some(_), .. }
+                ));
+            }
+            other => panic!("{other:?}"),
+        }
+        match expr_stmt(&parse_ok("xs[2..]")) {
+            Expr::Index { index, .. } => {
+                assert!(matches!(index.as_ref(), Expr::Intervalo { end: None, .. }));
+            }
+            other => panic!("{other:?}"),
+        }
+        match expr_stmt(&parse_ok("xs[..]")) {
+            Expr::Index { index, .. } => {
+                assert!(matches!(index.as_ref(), Expr::Intervalo { end: None, .. }));
+            }
+            other => panic!("{other:?}"),
+        }
+        match expr_stmt(&parse_ok("0..3")) {
+            Expr::Intervalo { end: Some(end), .. } => {
+                assert!(matches!(end.as_ref(), Expr::Number { raw, .. } if raw == "3"));
+            }
+            other => panic!("{other:?}"),
+        }
+        match expr_stmt(&parse_ok("0..")) {
+            Expr::Intervalo { end: None, .. } => {}
+            other => panic!("{other:?}"),
+        }
+        match first_stmt(&parse_ok("r = 5..\nescreva(r)")) {
+            Stmt::Assign { value, .. } => {
+                assert!(matches!(value, Expr::Intervalo { end: None, .. }));
+            }
+            other => panic!("{other:?}"),
+        }
+        match expr_stmt(&parse_ok("..3")) {
+            Expr::Intervalo { .. } => {}
+            other => panic!("{other:?}"),
+        }
+        match expr_stmt(&parse_ok("1..=2")) {
+            Expr::Intervalo { end: Some(end), .. } => {
+                assert!(matches!(
+                    end.as_ref(),
+                    Expr::Binary {
+                        op: BinaryOp::Add,
+                        ..
+                    }
+                ));
+            }
+            other => panic!("{other:?}"),
+        }
+        let err = parse("0..=").unwrap_err();
+        assert!(err.message.contains("teto"), "{err}");
+    }
+
+    #[test]
+    fn se_falhar() {
+        let p = parse_ok("a se_falhar { b }");
+        match expr_stmt(&p) {
+            Expr::SeFalhar { .. } => {}
+            other => panic!("{other:?}"),
+        }
+    }
+
+    #[test]
+    fn se_falhar_requires_block_and_accepts_optional_capture() {
+        for source in [
+            "a se_falhar falso",
+            "a se_falhar(falso)",
+            "a se_falhar erro",
+            "a se_falhar erro {}",
+        ] {
+            assert!(parse(source).is_err(), "{source}");
+        }
+        for source in [
+            "a se_falhar { falso }",
+            "a se_falhar erro { erro }",
+            "a se_falhar erro inicio erro fim",
+        ] {
+            assert!(parse(source).is_ok(), "{source}");
+        }
+    }
+
+    #[test]
+    fn function_literal() {
+        let src = r#"
+funcao(x, y)
+inicio
+    x + y
+fim
+"#;
+        let p = parse_ok(src);
+        match expr_stmt(&p) {
+            Expr::Function { params, body, .. } => {
+                assert_eq!(params.len(), 2);
+                assert_eq!(params[0].name, "x");
+                assert_eq!(body.stmts.len(), 1);
+            }
+            other => panic!("{other:?}"),
+        }
+    }
+
+    #[test]
+    fn doc_comment_attaches_to_function() {
+        let src = r#"
+/// soma dois números
+///
+/// Exemplo: soma(1, 2)
+soma = funcao(a, b) { a + b }
+"#;
+        let p = parse_ok(src);
+        match &p.items[0] {
+            Item::Stmt(Stmt::Assign { doc, value, .. }) => {
+                assert_eq!(
+                    doc.as_deref(),
+                    Some("soma dois números\n\nExemplo: soma(1, 2)")
+                );
+                match value {
+                    Expr::Function {
+                        doc: fdoc, params, ..
+                    } => {
+                        assert_eq!(fdoc.as_deref(), doc.as_deref());
+                        assert_eq!(params.len(), 2);
+                    }
+                    other => panic!("{other:?}"),
+                }
+            }
+            other => panic!("{other:?}"),
+        }
+    }
+
+    #[test]
+    fn stray_doc_comment_is_error() {
+        let err = parse("/// solto\nescreva(1)").unwrap_err();
+        assert!(err.message.contains("documentação"));
+    }
+
+    #[test]
+    fn conjunto_call() {
+        parse_ok("conjunto()");
+        parse_ok("conjunto([1, :ana, verdadeiro])");
+    }
+
+    #[test]
+    fn colon_ident_is_string_key() {
+        match expr_stmt(&parse_ok(":nome")) {
+            Expr::String { value, .. } if value == "nome" => {}
+            other => panic!("{other:?}"),
+        }
+        parse_ok(r#"mapa([:nome -> "Thiago"])"#);
+        parse_ok(
+            r#"
+mapa([
+    :op -> opções,
+    :args -> args_pos,
+])
+"#,
+        );
+        parse_ok("mapa([:op -> (opções:campo), :args -> 1])");
+        parse_ok("pessoa:nome");
+        parse_ok("escreva(pessoa:nome)");
+        // Inside parentheses a line break is free: still a field.
+        parse_ok("escreva(pessoa\n:nome)");
+        // Outside, `:nome` on the next line is a new (discarded) value.
+        let err = parse("pessoa\n:nome\nescreva(1)").unwrap_err();
+        assert!(err.message.contains("não é usado"), "{err}");
+        let err = parse(":se").unwrap_err();
+        assert!(err.message.contains("nome após ':'"), "{err}");
+    }
+
+    #[test]
+    fn pair_and_mapa_call() {
+        match expr_stmt(&parse_ok(r#":a -> 1"#)) {
+            Expr::Par { .. } => {}
+            other => panic!("{other:?}"),
+        }
+        let p = parse_ok("mapa()");
+        assert!(matches!(expr_stmt(&p), Expr::Call { .. }));
+        let p = parse_ok(r#"mapa(["a" -> 1])"#);
+        match expr_stmt(&p) {
+            Expr::Call { args, .. } => assert_eq!(args.len(), 1),
+            other => panic!("{other:?}"),
+        }
+        let err = parse("1 -> 2 -> 3").unwrap_err();
+        assert!(err.message.contains("encadeados"), "{err}");
+    }
+
+    #[test]
+    fn repita_and_para() {
+        let src = r#"
+repita 3 vezes
+inicio
+    escreva("x")
+fim
+"#;
+        assert!(matches!(first_stmt(&parse_ok(src)), Stmt::Repita { .. }));
+
+        let src = r#"
+para i em 1..=5
+inicio
+    escreva(i)
+fim
+"#;
+        assert!(matches!(first_stmt(&parse_ok(src)), Stmt::ParaIn { .. }));
+        let err = parse("para i de 1 ate 5 { x }").unwrap_err();
+        assert!(
+            err.message.contains("em") || err.message.contains("até"),
+            "{err}"
+        );
+
+        let src = r#"
+para x em xs
+inicio
+    escreva(x)
+fim
+"#;
+        assert!(matches!(first_stmt(&parse_ok(src)), Stmt::ParaIn { .. }));
+    }
+
+    #[test]
+    fn comparacao_entre_parenteses_nao_e_encadeada() {
+        parse_ok("escreva((a < b) == (b > a))");
+        let err = parse("escreva(a < b < c)").unwrap_err();
+        assert!(err.message.contains("encadeadas"), "{err}");
+    }
+
+    #[test]
+    fn para_aberto_na_mesma_linha_do_corpo() {
+        let src = "para i em 0.. {\n    escreva(i)\n    pare\n}\n";
+        match first_stmt(&parse_ok(src)) {
+            Stmt::ParaIn { iter, .. } => match iter {
+                Expr::Intervalo { end: None, .. } => {}
+                other => panic!("{other:?}"),
+            },
+            other => panic!("{other:?}"),
+        }
+        let src = "para i em 0.. inicio\n    escreva(i)\n    pare\nfim\n";
+        match first_stmt(&parse_ok(src)) {
+            Stmt::ParaIn { iter, .. } => match iter {
+                Expr::Intervalo { end: None, .. } => {}
+                other => panic!("{other:?}"),
+            },
+            other => panic!("{other:?}"),
+        }
+    }
+
+    #[test]
+    fn operador_no_inicio_da_linha_nao_continua() {
+        let p = parse_ok("x = 5\n-3\n");
+        assert_eq!(p.items.len(), 2, "{p:?}");
+        let err = parse("x = 5\n-3\nescreva(x)").unwrap_err();
+        assert!(err.message.contains("'-'"), "{err}");
+        let err = parse("x = 1 +\n2\n").unwrap_err();
+        assert!(err.message.contains("parênteses"), "{err}");
+        let err = parse("x = 1\n+ 2\n").unwrap_err();
+        assert!(err.message.contains("começo da linha"), "{err}");
+        let err = parse("x = verdadeiro\ne falso\n").unwrap_err();
+        assert!(err.message.contains("começo da linha"), "{err}");
+        let err = parse("x = 1 -> \n2\n").unwrap_err();
+        assert!(err.message.contains("parênteses"), "{err}");
+        assert!(matches!(
+            first_stmt(&parse_ok("x = (1 +\n2)")),
+            Stmt::Assign {
+                value: Expr::Binary { .. },
+                ..
+            }
+        ));
+        assert!(matches!(
+            first_stmt(&parse_ok("x = (10\n- 3)")),
+            Stmt::Assign {
+                value: Expr::Binary { .. },
+                ..
+            }
+        ));
+        assert!(matches!(
+            first_stmt(&parse_ok("xs = [10\n- 3]")),
+            Stmt::Assign {
+                value: Expr::List { .. },
+                ..
+            }
+        ));
+        // A block inside brackets separates statements by line again.
+        let err = parse("f(funcao() {\n    1\n    + 2\n})").unwrap_err();
+        assert!(err.message.contains("começo da linha"), "{err}");
+        let p = parse_ok("se verdadeiro { escreva(\"sim\") }\n(1 + 2)\n");
+        assert_eq!(p.items.len(), 2, "{p:?}");
+    }
+
+    #[test]
+    fn parametro_com_virgula_final_e_sem_repeticao() {
+        parse_ok("f = funcao(\n    a,\n    b,\n) { a + b }\n");
+        let err = parse("f = funcao(a, a) { a }").unwrap_err();
+        assert!(err.message.contains("duplicado"), "{err}");
+    }
+
+    #[test]
+    fn doc_no_fim_da_linha_nao_vai_para_a_proxima_definicao() {
+        let p = parse_ok("contador = 0 /// zera\nf = funcao() { 1 }\n");
+        match first_stmt(&p) {
+            Stmt::Assign { doc: None, .. } => {}
+            other => panic!("{other:?}"),
+        }
+        let err = parse("/// longe\n\nf = funcao() { 1 }\n").unwrap_err();
+        assert!(err.message.contains("documentação"), "{err}");
+    }
+
+    #[test]
+    fn enquanto_loop() {
+        let src = r#"
+enquanto i < 10
+inicio
+    i = i + 1
+fim
+"#;
+        assert!(matches!(first_stmt(&parse_ok(src)), Stmt::Enquanto { .. }));
+
+        let src = "enquanto verdadeiro { i = i + 1 }";
+        assert!(matches!(first_stmt(&parse_ok(src)), Stmt::Enquanto { .. }));
+    }
+
+    #[test]
+    fn retorne_statement() {
+        assert!(matches!(
+            first_stmt(&parse_ok("retorne")),
+            Stmt::Retorne { value: None, .. }
+        ));
+        assert!(matches!(
+            first_stmt(&parse_ok("retorne 1 + 2")),
+            Stmt::Retorne { value: Some(_), .. }
+        ));
+        let src = r#"
+f = funcao(xs, alvo)
+inicio
+    para x em xs
+    inicio
+        se x == alvo
+        inicio
+            retorne verdadeiro
+        fim
+    fim
+    falso
+fim
+"#;
+        parse_ok(src);
+        match first_stmt(&parse_ok("retorne\nescreva(1)")) {
+            Stmt::Retorne { value: None, .. } => {}
+            other => panic!("{other:?}"),
+        }
+    }
+
+    #[test]
+    fn pare_and_continue_statements() {
+        assert!(matches!(first_stmt(&parse_ok("pare")), Stmt::Pare { .. }));
+        assert!(matches!(
+            first_stmt(&parse_ok("continue")),
+            Stmt::Continue { .. }
+        ));
+        // `continua` is an ordinary name now.
+        assert!(matches!(
+            first_stmt(&parse_ok("continua = 1")),
+            Stmt::Assign { .. }
+        ));
+    }
+
+    #[test]
+    fn importe() {
+        match &parse_ok(r#"importe "math""#).items[0] {
+            Item::Import(Import {
+                alias: None, path, ..
+            }) => assert_eq!(path, "math"),
+            other => panic!("{other:?}"),
+        }
+        match &parse_ok(r#"m = importe "math""#).items[0] {
+            Item::Import(Import {
+                alias: Some(a),
+                path,
+                ..
+            }) => {
+                assert_eq!(a, "m");
+                assert_eq!(path, "math");
+            }
+            other => panic!("{other:?}"),
+        }
+    }
+
+    #[test]
+    fn comparison_chain_errors() {
+        assert!(parse("1 < 2 < 3").is_err());
+    }
+
+    #[test]
+    fn assign_index() {
+        match first_stmt(&parse_ok("xs[1] = 9")) {
+            Stmt::Assign {
+                target: AssignTarget::Index { .. },
+                ..
+            } => {}
+            other => panic!("{other:?}"),
+        }
+    }
+
+    #[test]
+    fn mensagens_nomeiam_o_token_e_o_comando() {
+        let mais = parse("+").unwrap_err();
+        assert!(
+            mais.message.contains("token inesperado: '+'"),
+            "{}",
+            mais.message
+        );
+        assert!(!mais.message.contains("Plus"));
+        let pare = parse("(pare)").unwrap_err();
+        assert!(
+            pare.message.contains("'pare' é um comando, não um valor"),
+            "{}",
+            pare.message
+        );
+        let fim = parse("(").unwrap_err();
+        assert!(
+            fim.message.contains("fim do arquivo") || fim.message.contains("aberto em 1:1"),
+            "{}",
+            fim.message
+        );
+    }
+
+    #[test]
+    fn parentese_aberto_cita_a_linha() {
+        let err = parse("f(\n1").unwrap_err();
+        assert!(
+            err.message.contains("esperado ')'") && err.message.contains("aberto em 1:"),
+            "{}",
+            err.message
+        );
+    }
+
+    #[test]
+    fn dois_pontos_fora_de_mapa_e_faixa_encadeada() {
+        let campo = parse(r#"escreva("abc":x)"#).unwrap_err();
+        assert!(
+            campo.message.contains("':' espera um mapa"),
+            "{}",
+            campo.message
+        );
+        let intervalo = parse("0..3 + 0..3").unwrap_err();
+        assert!(
+            intervalo
+                .message
+                .contains("intervalos não podem ser encadeados"),
+            "{}",
+            intervalo.message
+        );
+    }
+
+    #[test]
+    fn retorne_aceita_faixa_aberta() {
+        match first_stmt(&parse_ok("retorne ..5")) {
+            Stmt::Retorne {
+                value: Some(Expr::Intervalo { end: Some(_), .. }),
+                ..
+            } => {}
+            other => panic!("{other:?}"),
+        }
+    }
+}

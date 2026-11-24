@@ -1,0 +1,6 @@
+// Um nome guarda um valor. Você usa o nome no lugar de copiar o valor.
+
+nome = "Armelina"
+idade = 16
+escreva("Olá, " + nome)
+escreva(nome + " tem " + idade + " anos")

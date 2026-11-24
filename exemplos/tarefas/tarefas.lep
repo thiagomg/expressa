@@ -1,0 +1,92 @@
+importe "crono"
+importe "menu"
+comum = importe "comum"
+ps = importe "persiste"
+
+// mostra a lista de tarefas formatada
+mostre = funcao(ts, tudo) {
+    escreva("Lista de tarefas")
+    escreva("----------------")
+    para i em 0..ts.tamanho() {
+        se ts[i]:completo == verdadeiro e tudo == falso {
+            continue
+        }
+        escreva(i+1, ts[i])
+    }
+    escreva()
+}
+
+// ------------------------
+
+// Carrega as tarefas previamente gravadas em disco
+tarefas = ps::carrega()
+
+// Ordena por data, indo da mais nova para a mais antiga
+// epoch é o número de segundos desde 1º de janeiro de 1970.
+tarefas = ordene(tarefas, funcao(p) { -p:data:epoch })
+
+// Gera exemplo de lista de tarefas, só se não tiver nada salvo
+se tarefas.tamanho() == 0 {
+    tarefas = [
+        comum::nova("Dormir", agora(), falso),
+        comum::nova("Acordar", agora(), falso),
+        comum::nova("Trabalhar", agora(), verdadeiro)
+    ]
+}
+
+// Opção do menu a ser selecionada
+op = ""
+// Mostrar todas as tarefas ou somente as pendentes.
+todos_itens = falso
+
+enquanto op != "S" {
+    // Limpa a tela
+    limpe_tela()
+    
+    opções = [
+        "Novo", "Concluir", "Editar", "Remover",
+        se todos_itens == verdadeiro { "Mostrar pendentes" } senao { "Mostrar todas" },
+        "Sair"
+    ]
+    
+    tarefas.mostre(todos_itens)
+    op = le_opção(opções)
+    escreva()
+    
+    se op == "N" {
+        // Caso seja um item novo
+        t = le_novo().limpe()
+        se t.tamanho() > 0 {
+            item = comum::nova(t, agora(), falso)
+            tarefas += [ item ]
+        }
+        tarefas = ordene(tarefas, funcao(p) { -p:data:epoch })
+    } ou se op == "C" {
+        // Caso seja para marcar ou desmarcar como completo
+        idx = le_completa(1, tarefas.tamanho())
+        se idx != falso {
+            tarefas[idx-1]:completo = se tarefas[idx-1]:completo == verdadeiro { falso } senão { verdadeiro }
+        }
+    } ou se op == "E" {
+        // Editar um item existente
+        idx = le_edita(1, tarefas.tamanho())
+        se idx != falso {
+            desc = le_nova_desc(tarefas[idx-1]:desc)
+            se desc.limpe().tamanho() > 0 {
+                tarefas[idx-1]:desc = desc
+            }
+        }
+    } ou se op == "R" {
+        idx = le_remova(1, tarefas.tamanho())
+        se idx != falso {
+            tarefas = tarefas.remova(idx-1)
+        }
+    } ou se op == "M" {
+        todos_itens = se todos_itens == verdadeiro { falso } senão { verdadeiro }
+    } ou se op == "S" {
+        escreva("Tchau")
+        pare
+    }
+    
+    ps::salva(tarefas)
+}

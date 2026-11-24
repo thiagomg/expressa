@@ -1,0 +1,60 @@
+fracao = importe "../lib/fracao"
+importe "tela"
+
+comp_e_mostre = funcao(fr1, fr2) {
+    res = fracao::compara(fr1, fr2)
+    sinal = se res == -1 { ">" } ou se res == 1 { "<" } senao { "=" }
+    escreva(formate("{} {} {}", fr1, sinal, fr2))
+}
+
+txt_como_fracao = funcao(txt) {
+    itens = txt.separe("/")
+    se tamanho(itens) < 1 ou tamanho(itens) > 2 {
+        falhe("Use um inteiro ou uma fração como 3/4.")
+    }
+    para i em 0..tamanho(itens) {
+        n = numero(itens[i]) se_falhar { falso }
+        se n == falso {
+            falhe("Use inteiros no número de cima (numerador) e no de baixo (denominador).")
+        }
+        se n % 1 != 0 {
+            falhe("Use inteiros no número de cima (numerador) e no de baixo (denominador).")
+        }
+        itens[i] = n
+    }
+    n = itens[0]
+    d = se tamanho(itens) == 2 { itens[1] } senao { 1 }
+    se d == 0 { falhe("O número de baixo (denominador) não pode ser zero.") }
+    // Um denominador positivo mantém a comparação dos produtos correta.
+    se d < 0 {
+        n = -n
+        d = -d
+    }
+    fracao::nova(n, d)
+}
+
+leia_opcao = funcao(txt) {
+    res = falso
+    enquanto res == falso {
+        pos = posicao_cursor()
+        fr_txt = limpe(leia(txt) se_falhar { "" })
+        se fr_txt == "" { retorne falso }
+        res = txt_como_fracao(fr_txt) se_falhar erro {
+            escreva("Erro: ".pinte(:vermelho) + erro)
+            posicao_cursor(pos)
+            apague_linha()
+            falso
+        }
+    }
+    res
+}
+
+escreva("Comparando frações")
+escreva("------------------")
+escreva("Digite uma fração, como 1/2 ou 3/4, ou um número inteiro, como 2.")
+escreva("Para sair, pressione Enter sem digitar nada.")
+fr1 = leia_opcao("Digite a primeira fração para comparar: ")
+se fr1 == falso { saia(0) }
+fr2 = leia_opcao("Digite a segunda fração para comparar: ")
+se fr2 == falso { saia(0) }
+comp_e_mostre(fr1, fr2)

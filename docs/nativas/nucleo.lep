@@ -1,0 +1,326 @@
+/// escreva(valor, ...)
+/// escreva()
+///
+/// Imprime os argumentos separados por espaço e quebra a linha.
+///
+/// Aceita zero ou mais argumentos. Sem argumentos, imprime só a linha vazia.
+/// Números inteiros aparecem sem casas decimais. Booleanos como verdadeiro e falso.
+/// Listas e mapas são impressos de forma legível. Devolve nada.
+///
+/// Exemplo: escreva("Olá", 10)
+escreva = funcao() { 0 }
+escreva = funcao(valor) { 0 }
+
+/// escreva_erro()
+/// escreva_erro(valor, ...)
+///
+/// Como escreva, mas na saída de erro (stderr). Não vai para arquivos com >.
+///
+/// Devolve nada.
+///
+/// Exemplo: escreva_erro("nome vazio")
+escreva_erro = funcao() { 0 }
+escreva_erro = funcao(valor) { 0 }
+
+/// Encerra o programa. Sem argumento, código 0; saia(1) indica falha.
+///
+/// Nada depois da chamada executa. Não é capturado por se_falhar.
+/// No REPL, a linha sair (sem parênteses) sai do interpretador; saia() encerra o processo.
+///
+/// Exemplo: se nome == "" { saia(1) }
+saia = funcao() { 0 }
+saia = funcao(codigo) { 0 }
+
+/// Interrompe com um erro de execução. A descrição vira a mensagem.
+///
+/// A pilha aponta para esta chamada, sem um quadro chamado falhe. se_falhar pega.
+///
+/// Exemplo: se n < 0 { falhe("negativo") }
+falhe = funcao(descricao) { 0 }
+
+/// Se a condição for falsa, erro "condição incorreta …" com o texto do teste.
+///
+/// A condição tem que ser verdadeiro ou falso (como no se). Devolve nada.
+/// se_falhar pega. A pilha aponta para esta chamada.
+///
+/// Exemplo: garanta(n > 0)
+garanta = funcao(condicao) { 0 }
+
+/// Lê uma linha do teclado (sem o Enter). Prompt opcional.
+///
+/// Sem argumentos, apenas espera a linha. Com um prompt (texto), imprime o
+/// prompt sem quebra de linha, descarrega a saída e então espera.
+/// Fim da entrada é erro ("fim da entrada"); use se_falhar.
+///
+/// Exemplo: nome = leia("Seu nome:")
+leia = funcao() { 0 }
+leia = funcao(prompt) { 0 }
+
+/// Lê todas as linhas da entrada padrão (pipe/arquivo) até o fim.
+///
+/// Devolve uma lista de textos (uma linha cada, sem a quebra). Entrada vazia
+/// devolve []. Depois de um leia(), continua do que ainda não foi lido.
+/// Na Aula (diálogo) não há fim de arquivo: a chamada é um erro.
+///
+/// Exemplo: para linha em leia_linhas() { escreva(linha) }
+leia_linhas = funcao() { 0 }
+
+/// Lista dos valores após o .lep na linha de comando (argumentos[0], …).
+///
+/// Não é uma função: é uma lista já definida em todo programa.
+/// No REPL a lista é []. Não dá para fazer argumentos = ….
+///
+/// Exemplo: escreva(argumentos[0])
+argumentos = []
+
+/// Transforma texto em número (aceita 3.14 ou 3,14). Também número().
+///
+/// Aceita espaços nas pontas e _ como em literais. O padrão de texto é pt-BR
+/// (1.000,5). Mude com define_opcao(:formato_numero, :en) para en-US (1,000.5).
+/// Se o argumento já é número, devolve o mesmo valor.
+///
+/// Exemplo: idade = numero(leia("Idade: ")) se_falhar { 0 }
+numero = funcao(texto) { 0 }
+numero = funcao(numero) { 0 }
+
+/// Configura uma opção para toda a execução. Também define_opção().
+///
+/// :tipo_numero aceita :decimal (padrão) ou :float para a aritmética.
+/// :formato_numero aceita :pt (padrão) ou :en para exibição e conversão de texto.
+/// As escolhas numéricas são independentes; literais sempre usam ponto decimal.
+/// :fechar_janelas aceita verdadeiro ou falso (padrão). Quando ativa, fecha
+/// as janelas desta execução ao terminar, inclusive por erro ou interrupção.
+/// Pode ser ativada depois de abrir uma janela e desativada novamente.
+/// No REPL, vale até o encerramento da sessão, não só da linha atual.
+/// Opções ou valores desconhecidos produzem erro. Devolve nada.
+///
+/// Exemplo: define_opcao(:tipo_numero, :float)
+/// Exemplo: define_opcao(:formato_numero, :en)
+/// Exemplo: define_opcao(:fechar_janelas, verdadeiro)
+define_opcao = funcao(opcao, valor) { 0 }
+
+/// formate(modelo, valor, ...)
+///
+/// Monta um texto: {} valor, {:<n} esquerda, {:>n} direita, {:^n} centro.
+///
+/// Cada {} (ou {0}, {1}, …) é substituído pelo valor correspondente.
+/// Sem < > ^, texto encosta à esquerda e número à direita: {:8}.
+/// Se o valor já é mais largo que n, entra inteiro. n vai de 0 a 10000;
+/// acima disso formate devolve erro. {0} é o primeiro valor.
+/// {{ e }} escrevem { e }. Números seguem o formato atual.
+/// Mapa com :_como_texto (função de um argumento que devolve texto) usa essa função.
+///
+/// Exemplo: formate("{:<8} {:>5}", "Ana", 10)
+formate = funcao(modelo) { 0 }
+formate = funcao(modelo, valor) { 0 }
+
+/// Executa o texto como código Expressa no escopo atual e devolve o último valor.
+///
+/// Vê as variáveis e funções já definidas; uma atribuição no texto altera o
+/// escopo de quem chamou (função não escreve nomes de fora).
+///
+/// Erros: o argumento não é texto; o texto está vazio; erro de sintaxe ou de
+/// execução no código avaliado. Tudo isso pode ir em se_falhar.
+///
+/// Exemplo: avalie("2 + 3 * 4")
+avalie = funcao(texto) { 0 }
+
+/// Lista os módulos disponíveis: núcleo, nativos e arquivos já importados.
+///
+/// Sem argumento, imprime os nomes em ordem alfabética e devolve nada.
+/// Com :dados, devolve uma lista de mapas com :nome (texto) e :funcoes
+/// (lista de mapas com :nome, :args e :doc, como funcoes).
+/// Também módulos(). O núcleo aparece como "nucleo".
+/// Arquivos aparecem pelo primeiro caminho usado para importá-los, sem
+/// duplicar aliases do mesmo arquivo. Se nomes colidirem, usa o caminho absoluto.
+///
+/// Exemplo: dados = modulos(:dados)
+modulos = funcao() { 0 }
+modulos = funcao(modo) { 0 }
+
+/// Lista funções públicas com argumentos e documentação completa.
+///
+/// Sem alvo, ou com nada, consulta as funções visíveis no escopo atual.
+/// Aceita nome de módulo ("arquivo", "nucleo", caminho importado ou apelido)
+/// ou o próprio módulo. Nomes iniciados por _ e valores que não são funções
+/// ficam de fora. A lista é ordenada pelo nome. Também funções().
+/// Sem modo, imprime e devolve nada. Com :dados no segundo argumento,
+/// devolve uma lista de mapas: :nome (texto), :args (lista de textos) e
+/// :doc (documentação completa, ou "" se não houver).
+///
+/// Exemplo: dados = funcoes("arquivo", :dados)
+funcoes = funcao() { 0 }
+funcoes = funcao(alvo) { 0 }
+funcoes = funcao(alvo, modo) { 0 }
+
+/// Ficha de uma função nativa ou definida: assinatura, argumentos e documentação.
+///
+/// O alvo é um texto ("escreva", "matriz::zeros"), uma função ou uma nativa.
+/// A mesma ficha alimenta ajuda("escreva") no REPL e a janela Ajuda da Aula.
+///
+/// Exemplo: ajuda("matriz::zeros")
+ajuda = funcao(alvo) { 0 }
+
+/// Monta um mapa a partir de uma lista de pares chave -> valor.
+///
+/// Sem argumento (ou com []) o mapa é vazio. Chaves duplicadas são erro.
+/// Não preserva ordem de inserção. A impressão ordena as chaves.
+/// para p em m percorre os pares (p:chave, p:valor) na ordem da impressão.
+/// m + (chave -> valor) é um mapa novo com essa chave.
+///
+/// Exemplo: mapa([:nome -> "Ana", :idade -> 25])
+mapa = funcao() { 0 }
+mapa = funcao(pares) { 0 }
+
+/// Lista das chaves do mapa, na ordem da impressão.
+///
+/// Exemplo: chaves_de(mapa([:b -> 2, :a -> 1]))
+chaves_de = funcao(mapa) { 0 }
+
+/// Lista dos valores do mapa, na ordem das chaves na impressão.
+///
+/// Exemplo: valores_de(mapa([:b -> 2, :a -> 1]))
+valores_de = funcao(mapa) { 0 }
+
+/// Monta um conjunto a partir de uma lista (valores únicos).
+///
+/// Sem argumento (ou com []) o conjunto é vazio. Duplicatas caem.
+/// Elementos: texto, número inteiro ou bool. A iteração não tem ordem
+/// garantida; a impressão ordena os elementos.
+///
+/// Exemplo: conjunto([:ana, :bia])
+conjunto = funcao() { 0 }
+conjunto = funcao(xs) { 0 }
+
+/// Nome do tipo do valor: numero, intervalo, texto, bool, lista, par, mapa,
+/// conjunto, matriz, imagem, funcao, modulo, processo ou nada.
+///
+/// Serve para uma função aceitar mais de um tipo (se tipo(x) == "numero").
+/// Os nomes são os mesmos das mensagens de erro (sem acento).
+///
+/// Exemplo: tipo(10)
+tipo = funcao(valor) { 0 }
+
+/// Lista os nomes de tipo que tipo() pode devolver.
+///
+/// Exemplo: tipos()
+tipos = funcao() { 0 }
+
+/// Quantidade de caracteres, itens, pares ou linhas.
+///
+/// Texto usa caracteres Unicode, não bytes. Para colunas de matriz, use colunas.
+/// Quantos inteiros o intervalo gera: tamanho(0..3) é 3. Intervalo sem teto (0..) é erro.
+///
+/// Exemplo: tamanho("olá")
+tamanho = funcao(valor) { 0 }
+
+/// Primeiro elemento da lista (índice 0), primeiro caractere do texto ou
+/// primeiro número do intervalo. Erro se não houver elementos.
+///
+/// Exemplo: primeiro([10, 20])
+primeiro = funcao(lista) { 0 }
+
+/// Último elemento da lista, último caractere do texto ou último número
+/// gerado do intervalo. Erro se não houver elementos ou se não tiver teto.
+///
+/// Exemplo: ultimo([10, 20])
+ultimo = funcao(lista) { 0 }
+
+/// verdadeiro se o intervalo não tem teto (0..). Só vale para intervalo.
+/// Também é_infinito().
+///
+/// Exemplo: eh_infinito(0..)
+eh_infinito = funcao(r) { 0 }
+
+/// Copia o texto em letras maiúsculas. Também maiúscula().
+///
+/// Exemplo: maiuscula("olá")
+maiuscula = funcao(texto) { 0 }
+
+/// Copia o texto em letras minúsculas. Também minúscula().
+///
+/// Exemplo: minuscula("Olá")
+minuscula = funcao(texto) { 0 }
+
+/// Tira acentos e cedilha: ã/á→a, é→e, ç→c. Não muda maiúscula.
+///
+/// Exemplo: sem_acento("São Paulo")
+sem_acento = funcao(texto) { 0 }
+
+/// Devolve uma cópia sem o índice/intervalo (0…n−1) ou sem a chave do mapa.
+///
+/// Índices começam em 0. O intervalo é exclusivo no fim: remova(xs, 1..3) tira os
+/// índices 1 e 2. Use remova(xs, 1..=2) para incluir o 2. No conjunto, o elemento some.
+///
+/// Exemplo: xs = xs.remova(2)
+remova = funcao(lista, i) { 0 }
+remova = funcao(lista, r) { 0 }
+remova = funcao(mapa, chave) { 0 }
+
+/// Troca todas as ocorrências de antigo por novo.
+///
+/// Exemplo: substitua("aa", "a", "b")
+substitua = funcao(texto, antigo, novo) { 0 }
+
+/// Índice (0…n−1) da primeira ocorrência; nada se não achar.
+///
+/// No texto, trecho é um pedaço. Na lista, compara o item com ==.
+/// Trecho vazio ("") é erro.
+///
+/// Exemplo: procure("onde", "n")
+procure = funcao(texto, trecho) { 0 }
+procure = funcao(lista, item) { 0 }
+
+/// O texto que escreva mostraria para o valor. Números seguem a opção :formato_numero
+/// (2,5 em pt) fora de coleções; um mapa com :_como_texto usa essa função.
+///
+/// Exemplo: como_texto(2.5)
+como_texto = funcao(valor) { 0 }
+
+/// Parte o texto. Separador "" gera um item por caractere.
+///
+/// Trechos vazios entre separadores entram na lista.
+///
+/// Exemplo: separe("a,b", ",")
+separe = funcao(texto, separador) { 0 }
+
+/// Junta os itens da lista com o separador no meio.
+///
+/// Cada item é convertido para texto.
+///
+/// Exemplo: junte(["a", "b"], "-")
+junte = funcao(lista, separador) { 0 }
+
+/// Remove espaços do começo e do fim.
+///
+/// Exemplo: limpe("  x  ")
+limpe = funcao(texto) { 0 }
+
+/// Cópia da lista em ordem crescente. Com chave, ordena por chave(item).
+///
+/// Os itens (ou as chaves) têm que ser todos números ou todos textos,
+/// comparados como em <. Itens iguais mantêm a ordem original.
+/// Para ordem decrescente, use uma chave que inverte: funcao(x) { -x }.
+///
+/// Exemplo: ordene(pessoas, funcao(p) { p:idade })
+ordene = funcao(lista) { 0 }
+ordene = funcao(lista, chave) { 0 }
+
+/// Verdadeiro se o texto começa com o prefixo. Também começa_com.
+///
+/// Exemplo: comeca_com("relatorio.csv", "rel")
+comeca_com = funcao(texto, prefixo) { 0 }
+
+/// Verdadeiro se o texto termina com o sufixo.
+///
+/// Exemplo: termina_com("relatorio.csv", ".csv")
+termina_com = funcao(texto, sufixo) { 0 }
+
+/// Copia recursivamente dados, preservando ciclos e aliases internos.
+/// Funções sem capturas são permitidas; módulos, processos, recursos e
+/// mapas com :_clonavel = falso impedem a cópia. Textos têm comportamento
+/// de valor. Imagens clonadas são objetos independentes com pixels que
+/// podem ser compartilhados internamente até uma escrita.
+///
+/// Exemplo: b = clone([[1, 2]])
+clone = funcao(valor) { 0 }

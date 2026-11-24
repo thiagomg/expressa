@@ -1,0 +1,49 @@
+regras = importe "regras"
+
+vetor = funcao(tecla) {
+    se tecla == :direita ou tecla == :d { [1, 0] }
+    ou se tecla == :esquerda ou tecla == :a { [-1, 0] }
+    ou se tecla == :cima ou tecla == :w { [0, -1] }
+    ou se tecla == :baixo ou tecla == :s { [0, 1] }
+    senao { nada }
+}
+
+atualize = funcao(estado, ev, dt) {
+    segundos = se dt < 0 { 0 } ou se dt > 0.25 { 0.25 } senao { dt }
+    se ev:apertadas contem :r {
+        regras::reinicie(estado)
+        retorne nada
+    }
+    para acontecimento em ev:eventos {
+        se acontecimento:tipo == :desfoco {
+            estado:pausado = verdadeiro
+            estado:pendentes = []
+            retorne nada
+        }
+    }
+    se estado:terminou { retorne nada }
+    se ev:apertadas contem :p {
+        estado:pausado = nao estado:pausado
+        retorne nada
+    }
+    se estado:pausado { retorne nada }
+    recebeu_evento = falso
+    // Um conjunto não preserva a ordem. A lista :eventos preserva, por exemplo,
+    // a diferença entre apertar Cima e depois Esquerda ou fazer o contrário.
+    para acontecimento em ev:eventos {
+        se acontecimento:tipo == :tecla {
+            movimento = vetor(acontecimento:tecla)
+            se movimento != nada {
+                recebeu_evento = verdadeiro
+                regras::solicite_direcao(estado, movimento)
+            }
+        }
+    }
+    // Também permite simular entradas sem construir a lista completa de eventos.
+    se nao recebeu_evento {
+        para tecla em [:cima, :direita, :baixo, :esquerda, :w, :d, :s, :a] {
+            se ev:apertadas contem tecla { regras::solicite_direcao(estado, vetor(tecla)) }
+        }
+    }
+    regras::avance_tempo(estado, segundos)
+}

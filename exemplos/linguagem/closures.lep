@@ -1,0 +1,24 @@
+// Uma função que devolve outra: o somador "lembra" do n em que foi criado.
+
+faz_somador = funcao(n)
+inicio
+    funcao(x)
+    inicio
+        x + n
+    fim
+fim
+
+aplica = funcao(f, valor)
+inicio
+    f(valor)
+fim
+
+mais5 = faz_somador(5)
+mais100 = faz_somador(100)
+
+escreva("10 + 5 = " + mais5(10))
+escreva("10 + 100 = " + mais100(10))
+escreva("aplica(mais5, 7) = " + aplica(mais5, 7))
+
+// Dois somadores independentes: cada um capturou o seu n.
+escreva("mesma função? " + (mais5 == mais100))

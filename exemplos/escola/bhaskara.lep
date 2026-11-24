@@ -1,0 +1,29 @@
+// Equação do 2º grau: a·x² + b·x + c = 0.
+// x = (-b ± raiz(delta)) / (2a), delta = b² - 4ac.
+// Execute: cargo run -- exemplos/escola/bhaskara.lep
+importe "mat"
+entrada = importe "../lib/entrada"
+
+escreva("Equação do 2º grau. Para sair, pressione Enter sem digitar nada.")
+escreva("a·x² + b·x + c = 0")
+a = entrada::leia_numero("a: ", funcao(n) { n != 0 }, "Digite um número diferente de zero.")
+se a == falso { saia(0) }
+b = entrada::leia_numero("b: ", funcao(n) { verdadeiro }, "Digite um número válido.")
+se b == falso { saia(0) }
+c = entrada::leia_numero("c: ", funcao(n) { verdadeiro }, "Digite um número válido.")
+se c == falso { saia(0) }
+
+escreva("equação: " + a + "x² + (" + b + ")x + (" + c + ") = 0")
+delta = b * b - 4 * a * c
+escreva("delta (Δ = b² − 4ac) = " + delta)
+se delta < 0 {
+    escreva("Não há soluções reais para essa equação.")
+} ou se delta == 0 {
+    escreva("Uma solução real (raiz dupla): x = " + (-b / (2 * a)))
+} senao {
+    escreva("Duas soluções reais (raízes):")
+    r = raiz(delta)
+    escreva("x1 = " + ((-b + r) / (2 * a)))
+    escreva("x2 = " + ((-b - r) / (2 * a)))
+}
+escreva()

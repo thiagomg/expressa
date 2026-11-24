@@ -1,0 +1,34 @@
+/// Setas: andar. Shift: correr. R: reiniciar. Esc: sair.
+/// Colete os três cristais. --validar executa um roteiro automático.
+tela_grafica = importe "tela_grafica"
+mundo = importe "explorador/mundo"
+roteiro = importe "explorador/roteiro"
+
+g = tela_grafica::nova(240, 160, 3)
+l = g.tela_grafica::laço_gráfico()
+estado = mundo::novo()
+imagens = mundo::arte(estado)
+// O primeiro mostre do laço já carrega o cenário e o sprite inicial.
+mundo::desenhe(g, estado, imagens)
+validando = argumentos contem "--validar"
+teste = roteiro::novo()
+
+eventos = função(ev, dt) {
+    se ev:apertadas contem :escape { l.tela_grafica::pare() }
+    se ev:apertadas contem :r { mundo::reinicie(estado) }
+    teclas = se validando { roteiro::teclas(teste, estado, dt) } senao { ev:teclas }
+    mundo::avance(estado, teclas, dt)
+    se validando e roteiro::concluido(teste) { l.tela_grafica::pare() }
+}
+
+desenhe = função(tela) { mundo::desenhe(tela, estado, imagens) }
+l.tela_grafica::execute(mapa([
+    :fps -> se argumentos contem "--30fps" { 30 } senao { 60 },
+    :eventos -> eventos,
+    :desenho -> desenhe,
+]))
+
+se validando {
+    escreva(formate("validacao={} quadros={} tempo={}s dt_max={}s", roteiro::resultado(teste), teste:quadros, teste:tempo, teste:dt_max))
+    se nao roteiro::resultado(teste) { saia(1) }
+}

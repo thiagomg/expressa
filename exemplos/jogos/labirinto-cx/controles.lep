@@ -1,0 +1,57 @@
+regras = importe "regras"
+
+direcao = funcao(teclas) {
+    x = 0
+    y = 0
+    se (teclas contem :esquerda) ou (teclas contem :a) { x -= 1 }
+    se (teclas contem :direita) ou (teclas contem :d) { x += 1 }
+    se (teclas contem :cima) ou (teclas contem :w) { y -= 1 }
+    se (teclas contem :baixo) ou (teclas contem :s) { y += 1 }
+    // Na diagonal, a direção horizontal tem prioridade; nunca cortamos uma parede pelo canto.
+    se x != 0 { [x, 0] } senao { [0, y] }
+}
+
+atualize = funcao(estado, ev, dt) {
+    segundos = se dt < 0 { 0 } ou se dt > 0.1 { 0.1 } senao { dt }
+    se ev:apertadas contem :r {
+        regras::reinicie(estado)
+        retorne nada
+    }
+    para acontecimento em ev:eventos {
+        se acontecimento:tipo == :desfoco {
+            estado:pausado = verdadeiro
+            estado:direcao = [0, 0]
+            retorne nada
+        }
+    }
+    se estado:venceu { retorne nada }
+    se ev:apertadas contem :p {
+        estado:pausado = nao estado:pausado
+        estado:direcao = [0, 0]
+        retorne nada
+    }
+    se estado:pausado { retorne nada }
+    se ev:apertadas contem :h {
+        estado:mostrar_caminho = nao estado:mostrar_caminho
+        regras::atualize_caminho(estado)
+    }
+    estado:tempo += segundos
+    movimento = direcao(ev:teclas)
+    se movimento == [0, 0] {
+        estado:direcao = [0, 0]
+        movimento = direcao(ev:apertadas)
+        se movimento != [0, 0] { regras::mova(estado, movimento[0], movimento[1]) }
+        retorne nada
+    }
+    se movimento != estado:direcao {
+        estado:direcao = movimento
+        estado:espera = 0.18
+        regras::mova(estado, movimento[0], movimento[1])
+    } senao {
+        estado:espera -= segundos
+        enquanto estado:espera <= 0 {
+            regras::mova(estado, movimento[0], movimento[1])
+            estado:espera += 0.12
+        }
+    }
+}

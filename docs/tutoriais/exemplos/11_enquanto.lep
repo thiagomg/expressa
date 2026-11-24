@@ -1,0 +1,15 @@
+// enquanto: repete enquanto a condição for verdadeira.
+// pare sai na hora; continue pula para a próxima volta.
+
+i = 1
+enquanto i <= 5 {
+    se i == 3 {
+        i += 1
+        continue
+    }
+    escreva(i)
+    se i == 4 {
+        pare
+    }
+    i += 1
+}

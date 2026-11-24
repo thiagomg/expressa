@@ -1,0 +1,17 @@
+importe "crono"
+
+tarefa_texto = funcao(t) {
+    comp_t = se t:completo { "x" } senao { " " }
+    dt = t:data.formate_data("%Y-%m-%d")
+    formate("[{}] {} - {}", comp_t, dt, t:desc)
+}
+
+nova = funcao(desc, data, completo) {
+    mapa([
+        :desc -> desc,
+        :data -> data,
+        :completo -> completo,
+        :_como_texto -> tarefa_texto
+    ])
+}
+

@@ -1,0 +1,255 @@
+// Execute sem abrir janela: expressa exemplos/tetris-cx/validar.lep
+pecas = importe "pecas"
+regras = importe "regras"
+controles = importe "controles"
+desenho = importe "desenho"
+grafica = importe "tela_grafica"
+mat = importe "mat"
+
+relatorio = mapa([:verificacoes -> 0])
+confira = funcao(condicao, descricao) {
+    se nao condicao { falhe(descricao) }
+    relatorio:verificacoes += 1
+}
+
+codigo = funcao(celulas) {
+    resultado = []
+    para celula em celulas { resultado += [celula[1] * 4 + celula[0]] }
+    ordene(resultado)
+}
+
+entrada = funcao(mantidas, apertadas, acontecimentos) {
+    mapa([:teclas -> conjunto(mantidas), :apertadas -> conjunto(apertadas),
+        :soltas -> conjunto(), :eventos -> acontecimentos, :sair -> falso])
+}
+
+mat::semente(2026)
+
+// Formatos e cópias: girar quatro vezes deve devolver a geometria inicial.
+para indice em 0..7 {
+    peca = pecas::crie(indice)
+    original = codigo(peca:celulas)
+    confira(tamanho(conjunto(original)) == 4, "Cada peça precisa ter quatro células distintas")
+    para giro em 0..4 { peca:celulas = pecas::gire_celulas(peca, 1) }
+    confira(codigo(peca:celulas) == original, "Quatro rotações devem restaurar a peça")
+    peca:celulas = pecas::gire_celulas(peca, 1)
+    peca:celulas = pecas::gire_celulas(peca, -1)
+    confira(codigo(peca:celulas) == original, "Giros opostos devem se cancelar")
+    peca:celulas[0][0] = 99
+    confira(codigo(pecas::crie(indice):celulas) == original, "O catálogo não deve ser alterado")
+}
+
+// Sorteio sem reposição, incluindo a troca de sacola.
+sorteador = mapa([:sacola -> []])
+para rodada em 0..5 {
+    vistos = conjunto()
+    para indice em 0..7 { vistos += regras::sorteie(sorteador) }
+    confira(tamanho(vistos) == 7, "Cada sacola deve conter os sete tipos")
+}
+
+tabuleiro = regras::tabuleiro_vazio()
+tabuleiro[0][0] = 7
+confira(tabuleiro[1][0] == 0, "Linhas do tabuleiro devem ser independentes")
+
+// Colisão com paredes, piso, blocos e a região acima do topo.
+estado = regras::novo()
+quadrado = pecas::crie(1)
+confira(regras::cabe(estado, quadrado:celulas, 0, -1), "O nascimento acima do topo deve ser permitido")
+confira(nao regras::cabe(estado, quadrado:celulas, -1, 0), "A parede esquerda deve bloquear")
+confira(nao regras::cabe(estado, quadrado:celulas, 9, 0), "A parede direita deve bloquear")
+confira(nao regras::cabe(estado, quadrado:celulas, 0, 19), "O piso deve bloquear")
+estado:tabuleiro[1][1] = 1
+confira(nao regras::cabe(estado, quadrado:celulas, 0, 0), "Blocos fixos devem bloquear")
+
+// Ajuste lateral ao girar uma peça I vertical junto à parede direita.
+estado = regras::novo()
+estado:atual = pecas::crie(0)
+estado:atual:celulas = pecas::gire_celulas(estado:atual, 1)
+estado:atual:coluna = 7
+estado:atual:linha = 4
+confira(regras::gire(estado, 1), "Deve haver ajuste de rotação na parede")
+confira(estado:atual:coluna == 6, "O ajuste deve usar a primeira posição válida")
+
+// Uma cavidade vertical apertada impede o giro; nada deve ser alterado.
+estado = regras::novo()
+para linha em 0..20 {
+    para coluna em 0..10 { estado:tabuleiro[linha][coluna] = 1 }
+}
+estado:atual = pecas::crie(0)
+estado:atual:celulas = pecas::gire_celulas(estado:atual, 1)
+estado:atual:coluna = 3
+estado:atual:linha = 5
+para celula em estado:atual:celulas {
+    estado:tabuleiro[5 + celula[1]][3 + celula[0]] = 0
+}
+antes = clone(estado:atual)
+confira(nao regras::gire(estado, 1), "Não pode girar através de blocos ocupados")
+confira(estado:atual == antes, "Uma rotação recusada não deve modificar a peça")
+
+// Complete de uma a quatro linhas com uma peça I vertical.
+pontuacao = [0, 100, 300, 500, 800]
+para quantidade em 1..=4 {
+    estado = regras::novo()
+    para linha em (20 - quantidade)..20 {
+        para coluna em 0..10 {
+            se coluna != 4 { estado:tabuleiro[linha][coluna] = 1 }
+        }
+    }
+    estado:atual = pecas::crie(0)
+    estado:atual:celulas = pecas::gire_celulas(estado:atual, 1)
+    estado:atual:coluna = 2
+    estado:atual:linha = 16
+    regras::fixe(estado)
+    confira(estado:linhas == quantidade, "A limpeza deve contar todas as linhas completas")
+    confira(estado:pontos == pontuacao[quantidade], "A pontuação da limpeza deve seguir a tabela")
+    confira(estado:colocadas == 1, "Fixar deve contabilizar uma peça")
+}
+
+// Duas linhas separadas: as linhas intermediárias precisam manter a ordem.
+estado = regras::novo()
+para coluna em 0..10 {
+    estado:tabuleiro[19][coluna] = 1
+    estado:tabuleiro[17][coluna] = 1
+}
+estado:tabuleiro[18][0] = 2
+estado:tabuleiro[16][0] = 3
+estado:linhas = 9
+confira(regras::limpe_linhas(estado) == 2, "Linhas não consecutivas também devem ser removidas")
+confira(estado:tabuleiro[19][0] == 2 e estado:tabuleiro[18][0] == 3, "A compactação deve manter a ordem")
+estado:tabuleiro[0][0] = 7
+confira(estado:tabuleiro[1][0] == 0, "As novas linhas vazias também devem ser independentes")
+
+// A décima linha aumenta o nível, mas pontua usando o nível anterior.
+estado = regras::novo()
+estado:linhas = 9
+para coluna em 0..10 {
+    se coluna < 4 ou coluna > 5 { estado:tabuleiro[19][coluna] = 1 }
+}
+estado:atual = pecas::crie(1)
+estado:atual:coluna = 4
+estado:atual:linha = 18
+regras::fixe(estado)
+confira(estado:nivel == 2 e estado:pontos == 100, "A passagem de nível deve ocorrer depois da pontuação")
+
+estado = regras::novo()
+estado:atual = pecas::crie(1)
+estado:atual:coluna = 4
+estado:atual:linha = 0
+confira(regras::linha_fantasma(estado) == 18, "A peça fantasma deve prever a posição final")
+regras::derrube(estado)
+confira(estado:pontos == 36 e estado:colocadas == 1, "Queda direta deve pontuar e fixar imediatamente")
+confira(estado:tabuleiro[19][4] == 2, "A queda direta deve gravar a peça no piso")
+
+estado = regras::novo()
+estado:atual = pecas::crie(1)
+estado:atual:linha = 0
+regras::avance_tempo(estado, 0.04, verdadeiro)
+confira(estado:atual:linha == 1 e estado:pontos == 1, "Queda acelerada deve valer um ponto por linha")
+estado:atual:linha = 18
+regras::avance_tempo(estado, 0.2, falso)
+regras::avance_tempo(estado, 0.2, falso)
+confira(estado:colocadas == 0, "A peça deve aguardar o prazo de apoio")
+regras::avance_tempo(estado, 0.05, falso)
+confira(estado:colocadas == 1, "O prazo de apoio deve terminar em 0,45 segundo")
+
+estado = regras::novo()
+estado:atual = pecas::crie(1)
+antes = clone(estado:tabuleiro)
+regras::fixe(estado)
+confira(estado:terminou, "Fixar acima do topo deve terminar a partida")
+confira(estado:tabuleiro == antes, "Uma peça acima do topo não deve ser gravada parcialmente")
+estado = regras::novo()
+para coluna em 0..10 { estado:tabuleiro[0][coluna] = 1 }
+estado:proximas = [1, 2, 3]
+regras::nasca(estado)
+confira(estado:terminou, "Nascer sobre blocos deve terminar a partida")
+
+// Entrada: toques curtos, repetição, teclas opostas, pausa, foco e reinício.
+estado = regras::novo()
+estado:atual = pecas::crie(1)
+estado:atual:coluna = 4
+controles::atualize(estado, entrada([], [:esquerda], []), 0)
+confira(estado:atual:coluna == 3, "Um toque entre quadros não pode ser perdido")
+controles::atualize(estado, entrada([:direita], [:direita], []), 0)
+controles::atualize(estado, entrada([:direita], [], []), 0.1)
+confira(estado:atual:coluna == 4, "Segurar deve respeitar a espera inicial")
+controles::atualize(estado, entrada([:direita], [], []), 0.1)
+confira(estado:atual:coluna == 5, "Segurar deve repetir depois da espera")
+controles::atualize(estado, entrada([:direita, :esquerda], [], []), 0.1)
+confira(estado:atual:coluna == 5, "Setas opostas devem se cancelar")
+controles::atualize(estado, entrada([], [:p], []), 0)
+antes = clone(estado)
+controles::atualize(estado, entrada([:baixo, :direita], [:espaco], []), 0.1)
+confira(estado == antes, "Uma partida pausada não deve responder ao movimento")
+controles::atualize(estado, entrada([], [:p], []), 0)
+confira(nao estado:pausado, "P deve continuar a partida")
+controles::atualize(estado, entrada([], [], [mapa([:tipo -> :desfoco])]), 0)
+confira(estado:pausado, "Perder o foco deve pausar")
+controles::atualize(estado, entrada([], [:r], []), 0)
+confira(nao estado:pausado e estado:pontos == 0 e estado:colocadas == 0, "R deve reiniciar toda a partida")
+estado:atual = pecas::crie(1)
+estado:atual:linha = 0
+controles::atualize(estado, entrada([:baixo], [], []), 100)
+confira(estado:atual:linha == 2, "Atrasos grandes devem ser limitados a 0,1 segundo")
+controles::atualize(estado, entrada([:baixo], [:espaco], []), 0.1)
+confira(estado:colocadas == 1 e estado:tempo_queda == 0, "A queda direta não deve atualizar a próxima peça no mesmo quadro")
+
+estado = regras::novo()
+estado:atual = pecas::crie(1)
+estado:atual:linha = 0
+controles::atualize(estado, entrada([], [:baixo], []), 0)
+confira(estado:atual:linha == 1 e estado:pontos == 1, "Um toque curto em Baixo deve descer uma linha")
+
+// Dois segundos de gravidade devem produzir o mesmo resultado a 30 e 60 Hz.
+para frequencia em [30, 60] {
+    estado = regras::novo()
+    estado:atual = pecas::crie(1)
+    estado:atual:linha = 0
+    para quadro em 0..(frequencia * 2) {
+        regras::avance_tempo(estado, 1 / frequencia, falso)
+    }
+    confira(estado:atual:linha == 2, "A gravidade não deve depender da frequência de desenho")
+    confira(estado:pontos == 0, "A gravidade automática não deve dar pontos de descida")
+}
+
+estado = regras::novo()
+estado:atual = pecas::crie(1)
+estado:atual:linha = 18
+regras::avance_tempo(estado, 0.2, falso)
+regras::mova(estado, 1)
+regras::avance_tempo(estado, 0.25, falso)
+confira(estado:colocadas == 1, "Deslocar uma peça apoiada não deve reiniciar o prazo")
+
+// Sequência de entradas por várias partidas: usa o mesmo caminho do modo interativo.
+estado = regras::novo()
+total_colocadas = 0
+para quadro em 0..480 {
+    se estado:terminou { regras::reinicie(estado) }
+    mantidas = se quadro % 90 < 45 { [:direita] } senao { [:esquerda] }
+    apertadas = []
+    se quadro % 5 == 0 { mantidas += [:baixo] }
+    se quadro % 12 == 0 { apertadas += [:espaco] }
+    se quadro % 17 == 0 { apertadas += [:z] }
+    anteriores = estado:colocadas
+    controles::atualize(estado, entrada(mantidas, apertadas, []), 1 / 60)
+    total_colocadas += estado:colocadas - anteriores
+}
+// Algumas quedas podem terminar a partida acima do topo, sem fixar uma peça.
+confira(total_colocadas >= 30, "A sequência de entradas deve continuar fixando peças")
+confira(tamanho(estado:proximas) == 3, "A fila deve preservar três próximas peças")
+confira(tamanho(estado:tabuleiro) == 20, "A partida deve preservar a altura do tabuleiro")
+para linha em estado:tabuleiro {
+    confira(tamanho(linha) == 10, "A partida deve preservar a largura do tabuleiro")
+    para valor em linha {
+        confira(valor >= 0 e valor <= 7, "O tabuleiro só pode conter vazio ou um tipo de peça")
+    }
+}
+
+// O desenho não deve alterar a partida nem exigir uma janela.
+tela = desenho::nova_tela()
+antes = clone(estado)
+desenho::quadro(tela, estado)
+confira(estado == antes, "Desenhar não deve modificar o estado do jogo")
+confira(tela.grafica::pixel(0, 0) == :preto, "A tela deve usar o fundo esperado")
+
+escreva("Tetris: ", relatorio:verificacoes, " verificações passaram, sem abrir janela.")

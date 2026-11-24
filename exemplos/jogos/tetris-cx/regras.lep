@@ -1,0 +1,198 @@
+// Simulação sem janela. O tabuleiro usa 0 para vazio e 1 a 7 para as cores.
+// Todas as mudanças da partida passam pelo mapa estado; o catálogo de peças só é consultado.
+pecas = importe "pecas"
+mat = importe "mat"
+
+tabuleiro_vazio = funcao() {
+    tabuleiro = []
+    para linha em 0..20 {
+        // Uma lista nova em cada volta evita compartilhar a mesma linha.
+        nova_linha = []
+        para coluna em 0..10 { nova_linha += [0] }
+        tabuleiro += [nova_linha]
+    }
+    tabuleiro
+}
+
+// Retirar um item aleatório sem reposição produz uma sacola de sete peças.
+// Assim, cada grupo de sete sorteios contém todos os tipos uma vez.
+sorteie = funcao(estado) {
+    se tamanho(estado:sacola) == 0 { estado:sacola = [0, 1, 2, 3, 4, 5, 6] }
+    indice = mat::aleatorio(0, tamanho(estado:sacola) - 1)
+    sorteado = estado:sacola[indice]
+    estado:sacola = remova(estado:sacola, indice)
+    sorteado
+}
+
+// As células podem ficar acima do topo durante o nascimento e a rotação.
+// Antes de indexar o tabuleiro, verificamos todos os limites.
+cabe = funcao(estado, celulas, coluna, linha) {
+    para celula em celulas {
+        x = coluna + celula[0]
+        y = linha + celula[1]
+        se x < 0 ou x >= 10 ou y >= 20 { retorne falso }
+        se y >= 0 {
+            se estado:tabuleiro[y][x] != 0 { retorne falso }
+        }
+    }
+    verdadeiro
+}
+
+nasca = funcao(estado) {
+    proximo_tipo = estado:proximas[0]
+    estado:proximas = remova(estado:proximas, 0)
+    estado:proximas += [sorteie(estado)]
+    estado:atual = pecas::crie(proximo_tipo)
+    estado:atual:coluna = mat::piso((10 - estado:atual:lado) / 2)
+    estado:tempo_queda = 0
+    estado:tempo_apoio = 0
+    se nao cabe(estado, estado:atual:celulas, estado:atual:coluna, estado:atual:linha) {
+        estado:terminou = verdadeiro
+    }
+}
+
+novo = funcao() {
+    estado = mapa([
+        :tabuleiro -> tabuleiro_vazio(), :sacola -> [], :proximas -> [],
+        :atual -> nada, :pontos -> 0, :linhas -> 0, :nivel -> 1,
+        :colocadas -> 0, :terminou -> falso, :pausado -> falso,
+        :tempo_queda -> 0, :tempo_apoio -> 0,
+        :direcao -> 0, :espera_lateral -> 0,
+    ])
+    para i em 0..3 { estado:proximas += [sorteie(estado)] }
+    nasca(estado)
+    estado
+}
+
+reinicie = funcao(estado) {
+    // Preservar a identidade do mapa mantém válidas as referências dos controles e do desenho.
+    outro = novo()
+    para campo em outro { estado[campo:chave] = campo:valor }
+}
+
+mova = funcao(estado, deslocamento) {
+    peca = estado:atual
+    se cabe(estado, peca:celulas, peca:coluna + deslocamento, peca:linha) {
+        peca:coluna += deslocamento
+        verdadeiro
+    } senao { falso }
+}
+
+gire = funcao(estado, sentido) {
+    peca = estado:atual
+    novas = pecas::gire_celulas(peca, sentido)
+    // Ajustes simples, na ordem: posição original, lados e pequenas subidas.
+    // Esta tabela é intencionalmente menor que o sistema oficial SRS.
+    ajustes = [[0, 0], [-1, 0], [1, 0], [-2, 0], [2, 0], [0, -1], [0, -2]]
+    para ajuste em ajustes {
+        x = peca:coluna + ajuste[0]
+        y = peca:linha + ajuste[1]
+        se cabe(estado, novas, x, y) {
+            peca:celulas = novas
+            peca:coluna = x
+            peca:linha = y
+            retorne verdadeiro
+        }
+    }
+    falso
+}
+
+// Compactação de baixo para cima. As linhas restantes mantêm a ordem.
+// Ler e escrever na mesma tabela é seguro porque destino nunca fica acima da leitura.
+limpe_linhas = funcao(estado) {
+    destino = 19
+    origem = 19
+    removidas = 0
+    enquanto origem >= 0 {
+        completa = verdadeiro
+        para valor em estado:tabuleiro[origem] {
+            se valor == 0 { completa = falso }
+        }
+        se completa { removidas += 1 }
+        senao {
+            estado:tabuleiro[destino] = estado:tabuleiro[origem]
+            destino -= 1
+        }
+        origem -= 1
+    }
+    enquanto destino >= 0 {
+        linha_vazia = []
+        para coluna em 0..10 { linha_vazia += [0] }
+        estado:tabuleiro[destino] = linha_vazia
+        destino -= 1
+    }
+    removidas
+}
+
+fixe = funcao(estado) {
+    peca = estado:atual
+    // Não escrevemos uma peça parcialmente fora do topo no tabuleiro.
+    para celula em peca:celulas {
+        se peca:linha + celula[1] < 0 {
+            estado:terminou = verdadeiro
+            retorne nada
+        }
+    }
+    para celula em peca:celulas {
+        estado:tabuleiro[peca:linha + celula[1]][peca:coluna + celula[0]] = peca:tipo + 1
+    }
+    removidas = limpe_linhas(estado)
+    tabela = [0, 100, 300, 500, 800]
+    // Usamos o nível anterior à limpeza para pontuar a jogada que acabou.
+    estado:pontos += tabela[removidas] * estado:nivel
+    estado:linhas += removidas
+    estado:nivel = 1 + mat::piso(estado:linhas / 10)
+    estado:colocadas += 1
+    nasca(estado)
+}
+
+linha_fantasma = funcao(estado) {
+    peca = estado:atual
+    linha = peca:linha
+    enquanto cabe(estado, peca:celulas, peca:coluna, linha + 1) { linha += 1 }
+    linha
+}
+
+derrube = funcao(estado) {
+    destino = linha_fantasma(estado)
+    estado:pontos += 2 * (destino - estado:atual:linha)
+    estado:atual:linha = destino
+    fixe(estado)
+}
+
+intervalo_queda = funcao(estado) {
+    intervalo = 0.8 - (estado:nivel - 1) * 0.06
+    se intervalo < 0.08 { 0.08 } senao { intervalo }
+}
+
+desca = funcao(estado, pontuar) {
+    peca = estado:atual
+    se nao cabe(estado, peca:celulas, peca:coluna, peca:linha + 1) { retorne falso }
+    peca:linha += 1
+    estado:tempo_apoio = 0
+    se pontuar { estado:pontos += 1 }
+    verdadeiro
+}
+
+avance_tempo = funcao(estado, segundos, acelerando) {
+    // A pausa e o fim de jogo não acumulam gravidade.
+    se estado:pausado ou estado:terminou { retorne nada }
+    intervalo = se acelerando { 0.04 } senao { intervalo_queda(estado) }
+    estado:tempo_queda += segundos
+    enquanto estado:tempo_queda >= intervalo {
+        estado:tempo_queda -= intervalo
+        se nao desca(estado, acelerando) {
+            estado:tempo_queda = 0
+            pare
+        }
+    }
+    peca = estado:atual
+    se cabe(estado, peca:celulas, peca:coluna, peca:linha + 1) {
+        estado:tempo_apoio = 0
+    } senao {
+        // Meio segundo aproximado para ajustar a peça. Mover ou girar não
+        // reinicia o prazo enquanto a peça continuar apoiada.
+        estado:tempo_apoio += segundos
+        se estado:tempo_apoio >= 0.45 { fixe(estado) }
+    }
+}

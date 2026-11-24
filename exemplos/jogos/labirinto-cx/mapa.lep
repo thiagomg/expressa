@@ -1,0 +1,85 @@
+// Geração por busca em profundidade; solução por busca em largura.
+// A grade contém 0 para parede e 1 para passagem. Coordenadas são [coluna, linha].
+mat = importe "mat"
+direcoes = [[1, 0], [0, 1], [-1, 0], [0, -1]]
+
+grade = funcao(largura, altura, valor) {
+    resultado = []
+    para y em 0..altura {
+        linha = []
+        para x em 0..largura { linha += [valor] }
+        resultado += [linha]
+    }
+    resultado
+}
+
+passagem = funcao(mundo, x, y) {
+    se y < 0 ou y >= tamanho(mundo) { retorne falso }
+    se x < 0 ou x >= tamanho(mundo[0]) { retorne falso }
+    mundo[y][x] == 1
+}
+
+crie = funcao(largura, altura) {
+    garanta(largura >= 7 e altura >= 7 e largura % 2 == 1 e altura % 2 == 1)
+    mundo = grade(largura, altura, 0)
+    mundo[1][1] = 1
+    pilha = [[1, 1]]
+    enquanto tamanho(pilha) > 0 {
+        atual = ultimo(pilha)
+        opcoes = []
+        para direcao em direcoes {
+            x = atual[0] + 2 * direcao[0]
+            y = atual[1] + 2 * direcao[1]
+            se x > 0 e x < largura - 1 e y > 0 e y < altura - 1 {
+                se mundo[y][x] == 0 { opcoes += [direcao] }
+            }
+        }
+        se tamanho(opcoes) == 0 {
+            // Voltar pela pilha substitui a recursão e torna o algoritmo fácil de acompanhar.
+            pilha = remova(pilha, tamanho(pilha) - 1)
+        } senao {
+            direcao = opcoes[mat::aleatorio(0, tamanho(opcoes) - 1)]
+            x = atual[0] + 2 * direcao[0]
+            y = atual[1] + 2 * direcao[1]
+            mundo[atual[1] + direcao[1]][atual[0] + direcao[0]] = 1
+            mundo[y][x] = 1
+            pilha += [[x, y]]
+        }
+    }
+    mundo
+}
+
+// Encontra o menor caminho até qualquer alvo. A fila usa um índice de leitura:
+// não precisamos remover seu primeiro elemento a cada visita.
+caminho = funcao(mundo, origem, alvos) {
+    anteriores = grade(tamanho(mundo[0]), tamanho(mundo), nada)
+    anteriores[origem[1]][origem[0]] = origem
+    fila = [origem]
+    leitura = 0
+    enquanto leitura < tamanho(fila) {
+        atual = fila[leitura]
+        leitura += 1
+        para alvo em alvos {
+            se atual == alvo {
+                rota = [atual]
+                cursor = atual
+                enquanto cursor != origem {
+                    cursor = anteriores[cursor[1]][cursor[0]]
+                    rota = [cursor] + rota
+                }
+                retorne rota
+            }
+        }
+        para direcao em direcoes {
+            x = atual[0] + direcao[0]
+            y = atual[1] + direcao[1]
+            se passagem(mundo, x, y) {
+                se anteriores[y][x] == nada {
+                    anteriores[y][x] = atual
+                    fila += [[x, y]]
+                }
+            }
+        }
+    }
+    []
+}

@@ -1,0 +1,7 @@
+#!/usr/bin/env expressa
+escreva("Calculadora. Digite uma conta. Para sair, pressione Enter sem digitar nada.")
+
+conta = leia("> ") se_falhar { "" }
+se conta != "" { 
+    escreva("=", avalie(conta) se_falhar { "conta inválida" })
+}
