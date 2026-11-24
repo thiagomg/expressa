@@ -252,8 +252,6 @@ quadros de caminhada; também informa duração, quadros e maior `dt` observado.
 Esse roteiro simula os controles: não substitui a verificação manual do
 teclado físico e do foco em cada sistema.
 
-As medições e o procedimento estão em [Validação do caminho 2D](validacao-jogos-2d.md).
-
 Os testes automatizados também cobrem 30/60 atualizações por segundo,
 colisão em quadros lentos, câmera, coleta, reinício por toque rápido,
 fechamento da janela e um consumidor que só retira o último quadro no fim.
