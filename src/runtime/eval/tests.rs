@@ -753,7 +753,7 @@ escreva(res:args[0])
 fn matriz_ops() {
     let src = r#"
 importe "matriz"
-A = matriz([
+A = nova([
 [1, 2],
 [3, 4],
 ])
@@ -1365,7 +1365,7 @@ escreva(tamanho(conjunto()))
     assert_eq!(
         run(r#"
 importe "matriz"
-A = matriz([[1, 2], [3, 4]])
+A = nova([[1, 2], [3, 4]])
 escreva(A.transposta()[0, 1])
 m = importe "matriz"
 escreva(A.m::transposta()[0, 1])
@@ -1376,7 +1376,7 @@ escreva(m::linhas(A))
     assert_eq!(
         run(r#"
 matriz = importe "matriz"
-A = matriz::matriz([[1, 2], [3, 4]])
+A = matriz::nova([[1, 2], [3, 4]])
 escreva(A.matriz::transposta()[0, 1])
 "#),
         "3\n"

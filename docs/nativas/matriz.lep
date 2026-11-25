@@ -3,8 +3,8 @@
 /// Todas as linhas precisam ter o mesmo comprimento. Índices em 0: A[0, 1].
 /// A[0] é a linha como lista.
 ///
-/// Exemplo: matriz([[1, 2], [3, 4]])
-matriz = funcao(linhas) { 0 }
+/// Exemplo: nova([[1, 2], [3, 4]])
+nova = funcao(linhas) { 0 }
 
 /// Troca linhas por colunas.
 ///

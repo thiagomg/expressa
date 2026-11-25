@@ -193,7 +193,7 @@ fn compound_matrix_indices_and_map_receivers_are_evaluated_once() {
     assert_eq!(
         run(r#"
 importe "matriz"
-A = matriz([[5]])
+A = nova([[5]])
 m = mapa([:n -> 0, :value -> 7])
 idx = funcao() {
     m:n += 1
@@ -286,11 +286,11 @@ fn matrix_overflow_is_catchable_and_does_not_create_invalid_cells() {
     assert_eq!(
         run(r#"
 importe "matriz"
-A = matriz([[100000000000000000000]])
-B = matriz([[10000000000]])
+A = nova([[100000000000000000000]])
+B = nova([[10000000000]])
 escreva(A * B se_falhar { "range" })
 escreva(A * 10000000000 se_falhar { "range" })
-escreva(det(matriz([[100000000000000000000, 0], [0, 100000000000000000000]])) se_falhar { "range" })
+escreva(det(nova([[100000000000000000000, 0], [0, 100000000000000000000]])) se_falhar { "range" })
 escreva(A[0,0] == 100000000000000000000)
 "#),
         "range\nrange\nrange\nverdadeiro\n"
@@ -325,7 +325,7 @@ A = uns(4, 1)
 B = uns(1, 4)
 escreva(A * B se_falhar { "limit" })
 escreva(zeros(5, 1) se_falhar { "limit" })
-escreva(matriz([[1,2,3,4,5]]) se_falhar { "limit" })
+escreva(nova([[1,2,3,4,5]]) se_falhar { "limit" })
 escreva(tamanho(transposta(A)))
 escreva_erro("stderr")
 saia(7)
@@ -483,7 +483,7 @@ fn ponto_flutuante_de_mat_e_matriz_sem_ruido_no_modo_decimal() {
 importe "mat"
 importe "matriz"
 escreva(seno(radianos(30)), cosseno(radianos(60)), raiz(2))
-A = 3 * matriz([[0.1]])
+A = 3 * nova([[0.1]])
 escreva(A[0, 0], A)
 define_opcao(:tipo_numero, :float)
 escreva(seno(radianos(30)))

@@ -151,7 +151,7 @@ resultado = { 10 + 5 }    // igual
 
 Matrizes são retangulares, contêm apenas números e são criadas pelo módulo `matriz`. Suas células são armazenadas em ponto flutuante binário (`f64`).
 
-No modo decimal, pequenas diferenças de representação binária em torno de um número com até 15 algarismos significativos são eliminadas na conversão para `numero`. Assim, a célula resultante de `3 * matriz([[0.1]])` é apresentada como `0,3`. A mesma regra vale para resultados de `mat`, `cartesiano` e `tela_grafica`: `seno(radianos(30))` produz `0,5`. Outros resultados preservam seus dígitos, como `raiz(2)`, que produz `1,4142135623730951`. No modo `float`, essa correção não é aplicada. Um resultado que não possa ser representado pelo tipo `numero` produz erro, inclusive em operações com matrizes.
+No modo decimal, pequenas diferenças de representação binária em torno de um número com até 15 algarismos significativos são eliminadas na conversão para `numero`. Assim, a célula resultante de `3 * nova([[0.1]])` é apresentada como `0,3`. A mesma regra vale para resultados de `mat`, `cartesiano` e `tela_grafica`: `seno(radianos(30))` produz `0,5`. Outros resultados preservam seus dígitos, como `raiz(2)`, que produz `1,4142135623730951`. No modo `float`, essa correção não é aplicada. Um resultado que não possa ser representado pelo tipo `numero` produz erro, inclusive em operações com matrizes.
 
 Por padrão, o ambiente de execução limita cada matriz a 1.048.576 células. Esse limite pode ser configurado pela API Rust `ExecutionOptions::max_matrix_cells` e se aplica a cada matriz, não à memória total usada pelo programa. Os índices começam em 0: `A[linha, coluna]` acessa uma célula, e `A[i]` devolve uma linha como lista.
 
@@ -160,7 +160,7 @@ Por padrão, o ambiente de execução limita cada matriz a 1.048.576 células. E
 ```text
 importe "matriz"
 
-A = matriz([
+A = nova([
     [1, 2, 3],
     [4, 5, 6],
 ])
@@ -172,7 +172,7 @@ escreva(A + A)   // soma de matrizes com as mesmas dimensões
 escreva(3 * A)   // multiplicação por um número
 escreva(A * transposta(A))  // produto de matrizes com dimensões compatíveis
 transposta(A)    // ou A.transposta()
-det(matriz([[1, 2], [3, 4]]))  // determinante: matrizes 1×1, 2×2 ou 3×3
+det(nova([[1, 2], [3, 4]]))  // determinante: matrizes 1×1, 2×2 ou 3×3
 identidade(3)
 zeros(2, 5)      // só zeros; uns(2, 5); cheia(2, 5, 7)
 linhas(A)        // 2
@@ -180,7 +180,7 @@ colunas(A)       // 3
 tamanho(A)       // também linhas
 ```
 
-O construtor `matriz(linhas)` recebe uma lista de listas de números; todas as linhas devem ter o mesmo tamanho. Depois de `importe "matriz"`, o nome `matriz` identifica a função construtora. Nesse caso, use `A.transposta()`. Para escrever `A.matriz::transposta()`, importe o módulo com um apelido: `matriz = importe "matriz"`. O construtor passa a ser acessado por `matriz::matriz([[…]])`.
+O construtor `nova(linhas)` recebe uma lista de listas de números; todas as linhas devem ter o mesmo tamanho. Depois de `importe "matriz"`, o nome `nova` identifica a função construtora. Nesse caso, use `A.transposta()`. Para escrever `A.matriz::transposta()`, importe o módulo com um apelido: `matriz = importe "matriz"`. O construtor passa a ser acessado por `matriz::nova([[…]])`.
 
 ---
 
@@ -707,7 +707,7 @@ Os nomes `"tela_gráfica"` e `"tela_grafica"` identificam o mesmo módulo nativo
 
 Um nome **sem** `/`, `./` ou a extensão `.lep` é procurado primeiro entre os módulos nativos. Um caminho com `./`, `/` ou o sufixo `.lep` identifica um arquivo. Se um nome identificar tanto um módulo nativo quanto um arquivo no mesmo diretório, a importação é ambígua e produz erro. Por exemplo, se houver um arquivo `matriz.lep` ao lado do programa, `importe "matriz"` é inválido; use `importe "./matriz"` para importar o arquivo. Enquanto esse conflito existir, o módulo nativo não pode ser importado pelo nome `"matriz"`.
 
-Depois de `importe "matriz"`, o nome `matriz` identifica a função construtora; use `A.transposta()`. Com o apelido `matriz = importe "matriz"`, use `matriz::matriz([[…]])` e `A.matriz::transposta()`.
+Depois de `importe "matriz"`, o nome `nova` identifica a função construtora; use `A.transposta()`. Com o apelido `matriz = importe "matriz"`, use `matriz::nova([[…]])` e `A.matriz::transposta()`.
 
 ---
 

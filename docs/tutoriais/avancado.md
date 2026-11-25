@@ -434,7 +434,7 @@ Uma matriz organiza números em linhas e colunas. Para trabalhar com matrizes, u
 ```text
 importe "matriz"
 
-A = matriz([[1, 2, 3], [4, 5, 6]])
+A = nova([[1, 2, 3], [4, 5, 6]])
 escreva(A[0, 1])        // 2
 escreva(A.xy(1, 0))     // 2: x é coluna, y é linha
 A.xy(1, 0, 9)    // altera A[0, 1]

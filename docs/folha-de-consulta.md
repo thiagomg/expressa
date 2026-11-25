@@ -31,7 +31,7 @@ chmod +x prog.lep && ./prog.lep
 | lista | `[1, 2, 3]` |
 | par | `:nome -> "Ana"` |
 | mapa | `mapa([:nome -> "Ana"])` |
-| matriz | `matriz([[1, 2], [3, 4]])` só números; `importe "matriz"` |
+| matriz | `nova([[1, 2], [3, 4]])` só números; `importe "matriz"` |
 | conjunto | `conjunto([:ana, 1])` valores únicos |
 | intervalo | `0..3` `1..=3` `5..` inteiros gerados sob demanda |
 | `funcao` | `funcao(x) { x + 1 }` (também `função`) |
@@ -213,7 +213,7 @@ s += :carlos
 s = s.remova(:bia)
 
 importe "matriz"
-A = matriz([[1, 2, 3], [4, 5, 6]])
+A = nova([[1, 2, 3], [4, 5, 6]])
 A[0, 1]                        // 2
 A[0]                           // linha → lista
 A.xy(x, y)                     // A[y, x]; base zero

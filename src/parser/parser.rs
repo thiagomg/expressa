@@ -1705,7 +1705,7 @@ mod tests {
 
     #[test]
     fn matriz_call_and_index2() {
-        let p = parse_ok("A = matriz([[1, 2, 3], [4, 5, 6]])");
+        let p = parse_ok("A = nova([[1, 2, 3], [4, 5, 6]])");
         match &p.items[0] {
             Item::Stmt(Stmt::Assign { value, .. }) => {
                 assert!(matches!(value, Expr::Call { .. }));

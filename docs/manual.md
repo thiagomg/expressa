@@ -43,7 +43,7 @@ Em sistemas Unix, você pode colocar `#!/usr/bin/env expressa` na primeira linha
 | par | `:nome -> "Ana"` | `p:chave` `p:valor` |
 | mapa | `mapa([:nome -> "Ana"])` | `pessoa:nome` |
 | conjunto | `conjunto([:ana, 1])` | valores únicos |
-| matriz | `matriz([[1, 2], [3, 4]])` | só números; `importe "matriz"` |
+| matriz | `nova([[1, 2], [3, 4]])` | só números; `importe "matriz"` |
 | imagem | valor retornado por `carregue("figura.png")` | imagem em memória; `importe "imagem"` |
 | função | `função(x) { x + 1 }` | também `funcao` |
 | módulo | `importe "mat"` | |
@@ -964,15 +964,17 @@ O módulo `crono` oferece funções para trabalhar com datas e horários.
 
 Uma matriz organiza números em linhas e colunas. `A[0, 1]` acessa a linha 0 e a coluna 1. `A[0]` retorna a primeira linha como lista.
 
+O construtor é `matriz::nova(linhas)` quando o módulo tem o apelido `matriz`. Com `importe "matriz"` sem apelido, use `nova(linhas)`. Ao usar também `tela_grafica`, prefira apelidos para distinguir os dois construtores `nova`.
+
 Para gráficos, `A.xy(x, y)` lê `A[y, x]` e `A.xy(x, y, valor)` altera essa célula, devolvendo a mesma matriz para encadear chamadas. Ambas usam coordenadas inteiras em base zero e os mesmos limites do acesso por índices. A escrita exige um número e é visível por outras referências à matriz.
 
 ```text
-A = matriz([[1, 2, 3], [4, 5, 6]])
+A = nova([[1, 2, 3], [4, 5, 6]])
 A[0, 1]          // 2
 A.xy(1, 0)       // 2: x é coluna, y é linha
 A.xy(1, 0, 9)  // altera A[0, 1]; devolve A
 transposta(A)
-det(matriz([[1, 2], [3, 4]]))  // determinante; aceita matrizes 1×1, 2×2 ou 3×3
+det(nova([[1, 2], [3, 4]]))  // determinante; aceita matrizes 1×1, 2×2 ou 3×3
 identidade(3)
 zeros(2, 5)
 uns(3)
@@ -1147,6 +1149,6 @@ Literais no código: sempre ponto (`3.14`).
 
 `define_opcao(:tipo_numero, :decimal)`, o padrão, faz a aritmética em base 10. `define_opcao(:tipo_numero, :float)` usa números de ponto flutuante IEEE-754 nas operações `+`, `-`, `*`, `/` e `%`. Essa escolha é independente do formato textual `pt` ou `en`.
 
-Os módulos `mat`, `matriz`, `cartesiano` e `tela_grafica` calculam internamente com números de ponto flutuante binários (as células de matriz são sempre binárias). No modo decimal, um resultado que é só ruído binário em torno de um número com até 15 algarismos significativos volta como esse número: `seno(radianos(30))` é `0,5`, `cosseno(radianos(60))` é `0,5` e `3 * matriz([[0.1]])` mostra `0,3`. Outros resultados mantêm todos os dígitos: `raiz(2)` é `1,4142135623730951`. Com `define_opcao(:tipo_numero, :float)`, o valor binário exato é mantido: `seno(radianos(30))` mostra `0,49999999999999994`.
+Os módulos `mat`, `matriz`, `cartesiano` e `tela_grafica` calculam internamente com números de ponto flutuante binários (as células de matriz são sempre binárias). No modo decimal, um resultado que é só ruído binário em torno de um número com até 15 algarismos significativos volta como esse número: `seno(radianos(30))` é `0,5`, `cosseno(radianos(60))` é `0,5` e `3 * nova([[0.1]])` mostra `0,3`. Outros resultados mantêm todos os dígitos: `raiz(2)` é `1,4142135623730951`. Com `define_opcao(:tipo_numero, :float)`, o valor binário exato é mantido: `seno(radianos(30))` mostra `0,49999999999999994`.
 
 Toda função nativa cujo nome tem uma palavra acentuada aceita as duas grafias, como `maiuscula`/`maiúscula` e `laco_grafico`/`laço_gráfico`.

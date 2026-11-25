@@ -878,15 +878,15 @@
       "doc": "Inteiro mais próximo. Empate (n,5) afasta de zero.\n\narredonde(1.4) vale 1; arredonde(1.5) vale 2; arredonde(-1.5) vale -2.\n\nExemplo: arredonde(1.5)"
     },
     {
-      "name": "matriz",
+      "name": "nova",
       "aliases": [],
       "module": "matriz",
       "kind": "funcao",
       "signatures": [
-        "matriz(linhas)"
+        "nova(linhas)"
       ],
       "summary": "Monta uma matriz a partir de uma lista de listas de números.",
-      "doc": "Monta uma matriz a partir de uma lista de listas de números.\n\nTodas as linhas precisam ter o mesmo comprimento. Índices em 0: A[0, 1].\nA[0] é a linha como lista.\n\nExemplo: matriz([[1, 2], [3, 4]])"
+      "doc": "Monta uma matriz a partir de uma lista de listas de números.\n\nTodas as linhas precisam ter o mesmo comprimento. Índices em 0: A[0, 1].\nA[0] é a linha como lista.\n\nExemplo: nova([[1, 2], [3, 4]])"
     },
     {
       "name": "transposta",

@@ -337,7 +337,7 @@ pub const NATIVAS: &[Nativa] = &[
         module: Some("mat"),
     },
     Nativa {
-        names: &["matriz"],
+        names: &["nova"],
         module: Some("matriz"),
     },
     Nativa {
@@ -699,6 +699,8 @@ pub fn make_native_modules() -> HashMap<String, Rc<RefCell<Env>>> {
             .entry(mod_name.to_string())
             .or_insert_with(|| Env::new(FrameKind::Module, None));
         let canon = match (mod_name, n.names[0]) {
+            ("matriz", "nova") => "matriz::nova",
+            ("tela_grafica", "nova") => "tela_grafica::nova",
             ("tela_grafica", "execute") => "tela_grafica::execute",
             _ => n.names[0],
         };
@@ -787,7 +789,7 @@ impl Vm<'_, '_> {
             "piso" => self.bi_piso(args, span),
             "teto" => self.bi_teto(args, span),
             "arredonde" => self.bi_arredonde(args, span),
-            "matriz" => self.bi_matriz(args, span),
+            "matriz::nova" => self.bi_matriz(args, span),
             "transposta" => self.bi_transposta(args, span),
             "det" => self.bi_det(args, span),
             "identidade" => self.bi_identidade(args, span),
@@ -896,7 +898,7 @@ impl Vm<'_, '_> {
                 }
             }
             #[cfg(feature = "graphics")]
-            "nova" => self.bi_graf_nova(args, span),
+            "tela_grafica::nova" => self.bi_graf_nova(args, span),
             #[cfg(feature = "graphics")]
             "cor" => self.bi_graf_cor(args, span),
             #[cfg(feature = "graphics")]
@@ -991,6 +993,12 @@ fn strip_diacritic(c: char) -> char {
 }
 
 pub(crate) fn builtin_modulo(name: &str) -> &'static str {
+    if name == "matriz::nova" {
+        return "matriz";
+    }
+    if name == "tela_grafica::nova" {
+        return "tela_grafica";
+    }
     if name == "tela_grafica::execute" {
         return "tela_grafica";
     }
@@ -1109,7 +1117,7 @@ mod tests {
         assert!(names.contains(&"funções"));
         assert!(names.contains(&"mapa"));
         assert!(names.contains(&"conjunto"));
-        assert!(names.contains(&"matriz"));
+        assert!(names.contains(&"nova"));
         for (old, new) in [
             ("procurar", "procure"),
             ("avaliar", "avalie"),
@@ -1779,7 +1787,7 @@ escreva(C[0, 1])
     fn linhas_e_colunas_da_matriz() {
         assert_eq!(
             run(r#"
-A = matriz([
+A = nova([
     [1, 2, 3],
     [4, 5, 6],
 ])
@@ -1793,7 +1801,7 @@ escreva(A.colunas())
         assert_eq!(run("escreva(linhas(identidade(1)))"), "1\n");
         assert_eq!(run("escreva(colunas(identidade(1)))"), "1\n");
         assert_eq!(
-            run("escreva(colunas(transposta(matriz([[1, 2, 3]]))))"),
+            run("escreva(colunas(transposta(nova([[1, 2, 3]]))))"),
             "1\n"
         );
         assert!(run_err("linhas([1, 2])").contains("esperado matriz"));
@@ -1806,7 +1814,7 @@ escreva(A.colunas())
     fn matriz_xy_reads_and_writes_in_graphics_order() {
         assert_eq!(
             run(r#"
-A = matriz([[1, 2, 3], [4, 5, 6]])
+A = nova([[1, 2, 3], [4, 5, 6]])
 B = A
 escreva(A.xy(2, 0), xy(A, 0, 1))
 A.xy(2, 0, 9).xy(0, 1, 8)

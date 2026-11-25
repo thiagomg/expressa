@@ -24,7 +24,7 @@ pub const WORKLOADS: &[(&str, &str)] = &[
     ),
     (
         "matrix.lep",
-        "importe \"matriz\"\na = matriz([[1, 2], [3, 4]])\nb = a * a\nescreva(b[0, 0] == 7 e b[1, 1] == 22)",
+        "importe \"matriz\"\na = nova([[1, 2], [3, 4]])\nb = a * a\nescreva(b[0, 0] == 7 e b[1, 1] == 22)",
     ),
     (
         "recursion.lep",

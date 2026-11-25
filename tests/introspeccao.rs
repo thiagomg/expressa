@@ -48,6 +48,54 @@ fn check(source: &str, file: &str, expected: &str) {
 }
 
 #[test]
+fn matrix_nova_constructs_and_is_discovered_with_its_own_docs() {
+    check(
+        r#"
+m = importe "matriz"
+a = m::nova([[1, 2], [3, 4]])
+garanta(tipo(a) == "matriz" e a[1, 0] == 3)
+garanta(clone(m::nova)([[7]])[0, 0] == 7)
+nomes = []
+para f em funcoes(m, :dados) {
+    nomes += [f:nome]
+    se f:nome == :nova {
+        garanta(f:args == [:linhas])
+        garanta(f:doc contem "lista de listas")
+    }
+}
+garanta(nomes contem :nova)
+garanta(nao (nomes contem :matriz))
+garanta(ajuda(m::nova) contem "importe \"matriz\"")
+importe "matriz"
+escreva(nova([[9]])[0, 0])
+"#,
+        "matrix.lep",
+        "9\n",
+    );
+}
+
+#[test]
+#[cfg(feature = "graphics")]
+fn matrix_and_graphics_nova_keep_their_dispatch_and_help_separate() {
+    check(
+        r#"
+m = importe "matriz"
+tg = importe "tela_grafica"
+escreva(tipo(m::nova([[5]])))
+tela = tg::nova(2, 3)
+escreva(tela:largura, tela:altura)
+garanta(ajuda(m::nova) contem "lista de listas")
+garanta(ajuda(tg::nova) contem "Tela de pixels")
+para f em funcoes(tg, :dados) {
+    se f:nome == :nova { garanta(f:args == [:largura, :altura, :tamanho_pixel]) }
+}
+"#,
+        "constructors.lep",
+        "matriz\n2 3\n",
+    );
+}
+
+#[test]
 fn scope_data_has_full_docs_argument_lists_and_only_public_functions() {
     check(
         r#"
